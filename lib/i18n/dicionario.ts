@@ -11299,6 +11299,100 @@ export const DICIONARIO: Traducoes = {
   },
   "Esta mídia não pode ser encaminhada.": { es: "Este contenido multimedia no se puede reenviar." },
   "Só é possível encaminhar mensagens de texto ou mídia.": { es: "Solo se pueden reenviar mensajes de texto o multimedia." },
+  // Portes 23/10, grupo B (PR #3336): o motivo da falha numa frase só (bolha, reenvio,
+  // encaminhamento e modelo). As frases da plataforma oficial e as que o envio grava.
+  "A pessoa desligou as mensagens de marketing desta empresa no WhatsApp. Não tente de novo.": {
+    es: "La persona desactivó los mensajes de marketing de esta empresa en WhatsApp. No lo intentes de nuevo.",
+  },
+  "O WhatsApp limitou quantas promoções esta pessoa recebe. Dá para tentar de novo depois de 24 horas.": {
+    es: "WhatsApp limitó cuántas promociones recibe esta persona. Se puede intentar de nuevo después de 24 horas.",
+  },
+  "Não foi possível entregar: o número não tem WhatsApp ou o aplicativo está desatualizado.": {
+    es: "No se pudo entregar: el número no tiene WhatsApp o la aplicación está desactualizada.",
+  },
+  "A pessoa faz parte de um teste do WhatsApp que não recebe esta mensagem. Não foi cobrado.": {
+    es: "La persona forma parte de una prueba de WhatsApp que no recibe este mensaje. No se cobró.",
+  },
+  "O destinatário é o próprio número que envia.": { es: "El destinatario es el mismo número que envía." },
+  "Passaram mais de 24 horas da última mensagem do cliente: fora da janela, só modelo aprovado.": {
+    es: "Pasaron más de 24 horas desde el último mensaje del cliente: fuera de la ventana, solo plantilla aprobada.",
+  },
+  "Muitas mensagens seguidas para a mesma pessoa. Espere alguns minutos.": {
+    es: "Demasiados mensajes seguidos a la misma persona. Espera unos minutos.",
+  },
+  "O número atingiu o limite de envio por segundo. Tente de novo em instantes.": {
+    es: "El número alcanzó el límite de envío por segundo. Intenta de nuevo en unos instantes.",
+  },
+  "O modelo foi pausado pela plataforma por baixa qualidade.": { es: "La plataforma pausó la plantilla por baja calidad." },
+  "O modelo foi desativado pela plataforma.": { es: "La plataforma desactivó la plantilla." },
+  "Os valores enviados não batem com as variáveis do modelo.": {
+    es: "Los valores enviados no coinciden con las variables de la plantilla.",
+  },
+  "O modelo não existe neste número com este idioma.": { es: "La plantilla no existe en este número con este idioma." },
+  "O texto do modelo com os valores ficou longo demais.": {
+    es: "El texto de la plantilla con los valores quedó demasiado largo.",
+  },
+  "O conteúdo viola a política de modelos da plataforma.": {
+    es: "El contenido viola la política de plantillas de la plataforma.",
+  },
+  "O formato de um valor não confere com o modelo (por exemplo, falta o link da imagem do cabeçalho).": {
+    es: "El formato de un valor no coincide con la plantilla (por ejemplo, falta el enlace de la imagen del encabezado).",
+  },
+  "O número foi restringido pela plataforma por denúncias de spam.": {
+    es: "La plataforma restringió el número por denuncias de spam.",
+  },
+  "A conta do número está bloqueada na plataforma.": { es: "La cuenta del número está bloqueada en la plataforma." },
+  "A conta do número está bloqueada temporariamente por violar as políticas.": {
+    es: "La cuenta del número está bloqueada temporalmente por violar las políticas.",
+  },
+  "Há um problema com o pagamento da conta na plataforma.": { es: "Hay un problema con el pago de la cuenta en la plataforma." },
+  "Mensagens de marketing estão desativadas para esta conta na API.": {
+    es: "Los mensajes de marketing están desactivados para esta cuenta en la API.",
+  },
+  "O modelo foi recategorizado pela plataforma.": { es: "La plataforma cambió la categoría de la plantilla." },
+  "Faltam valores para as variáveis do modelo. Nada foi enviado.": {
+    es: "Faltan valores para las variables de la plantilla. No se envió nada.",
+  },
+  "O cabeçalho do modelo não confere (tipo de mídia ou link). Nada foi enviado.": {
+    es: "El encabezado de la plantilla no coincide (tipo de archivo o enlace). No se envió nada.",
+  },
+  "O valor de um botão não confere com o modelo. Nada foi enviado.": {
+    es: "El valor de un botón no coincide con la plantilla. No se envió nada.",
+  },
+  "O envio precisa de um modelo aprovado.": { es: "El envío necesita una plantilla aprobada." },
+  "Acabou a cota mensal de mensagens do provedor do número. Cadastre um meio de pagamento lá.": {
+    es: "Se agotó la cuota mensual de mensajes del proveedor del número. Registra un medio de pago allí.",
+  },
+  "O modelo não está aprovado na plataforma neste momento.": {
+    es: "La plantilla no está aprobada en la plataforma en este momento.",
+  },
+  "Falta o valor de uma variável do modelo para este contato.": {
+    es: "Falta el valor de una variable de la plantilla para este contacto.",
+  },
+  "Este modelo não está na lista de modelos do número. Sincronize em Conexões, na aba Modelos.": {
+    es: "Esta plantilla no está en la lista de plantillas del número. Sincroniza en Conexiones, en la pestaña Modelos.",
+  },
+  "O modelo mudou na plataforma depois de configurado. Configure o envio de novo.": {
+    es: "La plantilla cambió en la plataforma después de configurarse. Configura el envío de nuevo.",
+  },
+  "O acesso ao WhatsApp Oficial expirou ou foi revogado. Reconecte o número em Conexões.": {
+    es: "El acceso al WhatsApp Oficial expiró o fue revocado. Vuelve a conectar el número en Conexiones.",
+  },
+  "Falta permissão para este envio no WhatsApp Oficial. Revise as permissões do número em Conexões.": {
+    es: "Falta permiso para este envío en el WhatsApp Oficial. Revisa los permisos del número en Conexiones.",
+  },
+  "A conexão com o WhatsApp Oficial atingiu o limite de pedidos por agora. Tente de novo mais tarde.": {
+    es: "La conexión con el WhatsApp Oficial alcanzó el límite de solicitudes por ahora. Inténtalo de nuevo más tarde.",
+  },
+  "Envio automático bloqueado pelo modo de teste do canal.": {
+    es: "Envío automático bloqueado por el modo de prueba del canal.",
+  },
+  "Não foi possível verificar o acesso da IA. Nenhuma mensagem foi enviada.": {
+    es: "No fue posible verificar el acceso de la IA. No se envió ningún mensaje.",
+  },
+  "Não conseguimos montar os valores do modelo para este envio. Nada foi enviado.": {
+    es: "No pudimos armar los valores de la plantilla para este envío. No se envió nada.",
+  },
 };
 
 /**

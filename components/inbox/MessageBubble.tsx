@@ -17,7 +17,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ApiError } from "@/lib/api/types";
-import { FRASES_DE_FALHA, fraseDaFalhaDeCanal } from "@/lib/channels/frases-de-falha";
 import { reenvioDaMensagem } from "@/lib/messaging/reenvio";
 import { motivoDaFalhaDaMensagem } from "@/lib/inbox/motivo-da-falha";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -186,10 +185,7 @@ export const MessageBubble = memo(function MessageBubble({
     && !message.metadata?._optimistic;
   // O MOTIVO à vista, e não só no Tooltip: o dedo não abre Tooltip. O texto
   // cru do canal fica fora daqui — ele pode trazer endereço interno do serviço.
-  const codigoDaFalha = message.error_code ?? "";
-  const motivoDaFalha = fraseDaFalhaDeCanal(codigoDaFalha)
-    ? t(FRASES_DE_FALHA[codigoDaFalha] as string)
-    : t("Não foi possível enviar esta mensagem.");
+  const motivoDaFalha = motivoDaFalhaDaMensagem(message, t);
   // Encaminhar vale para qualquer mensagem com conteúdo — recebida ou enviada.
   // Só não se encaminha o que foi apagado: o conteúdo saiu do ar de propósito.
   const podeEncaminhar = Boolean(onEncaminhar) && !apagada;
@@ -457,9 +453,7 @@ export const MessageBubble = memo(function MessageBubble({
                     <WarningOctagon size={10} weight="fill" aria-hidden /> {t("Falhou")}
                   </span>
                 </TooltipTrigger>
-                <TooltipContent>
-                  {motivoDaFalhaDaMensagem(message, t)}
-                </TooltipContent>
+                <TooltipContent>{motivoDaFalha}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           )}
