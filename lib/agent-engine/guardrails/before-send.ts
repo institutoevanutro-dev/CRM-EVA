@@ -1532,7 +1532,9 @@ export async function readStopFlags(
   //
   // O ramo do comando humano NÃO lê a etiqueta: contato interno segue recebendo o
   // que uma PESSOA manda (é a promessa da feature). O passo fixo de fluxo, que
-  // também usa esse ramo, já foi barrado antes por `isLeadInHandoff`.
+  // também usa esse ramo, é barrado antes por `isLeadInHandoff`; a exceção é o
+  // acompanhamento de consulta com "Permitir durante handoff", que pula aquela
+  // guarda de propósito e segue mandando as fixas.
   const { rows } = await db.query<{ is_blocked: boolean; stopped: boolean; contato_interno?: boolean }>(
     humanMeetingCommand
       ? 'select is_blocked, is_blocked as stopped from contacts where organization_id = $1 and id = $2'
