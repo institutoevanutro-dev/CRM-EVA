@@ -8,6 +8,23 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.33.1] — 2026-10-23
+
+### Corrigido
+
+- **Correções de segurança no Next.js, no Sentry e no SDK do MCP** Atualiza três dependências com avisos de segurança publicados em 22/10/2026:
+
+  - Next.js 16.3.8 → 16.4.2: requisições montadas podiam esgotar a CPU com App Router e Server
+    Actions (GHSA-p3m5-59mp-jv5r), e a otimização de imagem tinha execução remota com SVG
+    (GHSA-2464-fhr4-w9xw; o CRM usa `images.unoptimized`, mas a versão corrigida fecha a porta).
+  - Sentry 10.74.0 → 10.76.2: desvio do middleware pela rota de túnel (GHSA-mchm-gjx6-7h55). O CRM
+    usa a rota de túnel `/monitoring`.
+  - SDK do MCP 1.31.0 → 1.32.1: quatro avisos no servidor e no cliente MCP, incluindo token de
+    portador emitido para outro servidor sendo aceito (GHSA-rvq5-wwqv-78pq) e requisição que
+    esgotava memória (GHSA-46jr-4wx8-v453).
+
+  Nada muda na tela nem na configuração.
+
 ## [4.33.0] — 2026-10-22
 
 ### Adicionado
@@ -8075,7 +8092,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.1...HEAD
+[4.33.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.0...v4.33.1
 [4.33.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.32.1...v4.33.0
 [4.32.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.32.0...v4.32.1
 [4.32.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.31.1...v4.32.0
