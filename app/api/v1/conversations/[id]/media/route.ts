@@ -7,6 +7,7 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
+import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
@@ -94,13 +95,22 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     return fail(verdict.code, verdict.message, status, { requestId });
   }
 
+  // A marca do gravador do composer (porte do original #3191): "isto é nota de
+  // voz". Só com ela o AAC do iPhone vira opus; sem ela, um m4a enviado por
+  // token segue intacto.
+  const marca = z.literal("1").nullable().safeParse(form.get("nota_de_voz") ?? null);
+  if (!marca.success) {
+    return fail("validation_failed", t("Campo 'nota_de_voz' inválido."), 422, { requestId });
+  }
+  const notaDeVoz = marca.data === "1";
+
   // Nota de voz gravada no browser sai em `webm` (o Chrome não grava ogg), e o
   // canal oficial recusa depois de aceitar — `131053 Media upload error`, que
   // culpa a URL quando o problema é o container. Converter AQUI faz todo canal
   // receber um arquivo válido, e o mesmo áudio poder ser reenviado depois sem
   // repetir o trabalho. Falha devolve o original: o canal que converte sozinho
   // continua funcionando como sempre.
-  const audio = await transcodificarNotaDeVoz({ buffer: bruto, mime });
+  const audio = await transcodificarNotaDeVoz({ buffer: bruto, mime, notaDeVoz });
   const mimeFinal = audio.mime;
   const buffer = audio.buffer;
 

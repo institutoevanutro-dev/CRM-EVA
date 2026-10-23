@@ -457,8 +457,17 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       }
     }
     if (e.key === "Enter" && !e.shiftKey) {
+      if (menuOpen) {
+        e.preventDefault(); // deixa o Enter pro menu; não envia /query como mensagem
+        return;
+      }
+      // No toque (porte do original #3191), a tecla de retorno do teclado
+      // virtual QUEBRA LINHA, como no próprio WhatsApp; quem envia é o botão.
+      // Ctrl/Cmd+Enter envia sempre (iPad com teclado físico). Lido aqui, no
+      // keydown, e não no render: o servidor não sabe o ponteiro.
+      const forcaEnvio = e.ctrlKey || e.metaKey;
+      if (!forcaEnvio && window.matchMedia?.("(pointer: coarse)").matches) return;
       e.preventDefault();
-      if (menuOpen) return; // deixa o Enter pro menu; não envia /query como mensagem
       handleSubmit();
     }
   }
@@ -516,7 +525,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             type="button"
             onClick={() => setMode("reply")}
             className={cn(
-              "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+              "min-h-11 rounded-full px-3 py-1 text-xs font-medium transition-colors lg:min-h-0 lg:px-2.5",
               mode === "reply"
                 ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:bg-muted",
@@ -528,7 +537,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             type="button"
             onClick={() => setMode("note")}
             className={cn(
-              "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+              "min-h-11 rounded-full px-3 py-1 text-xs font-medium transition-colors lg:min-h-0 lg:px-2.5",
               mode === "note"
                 ? "bg-warning text-warning-fg"
                 : "text-muted-foreground hover:bg-muted",
@@ -568,7 +577,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               type="button"
               onClick={onCancelarResposta}
               aria-label={t("Cancelar resposta")}
-              className="rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:size-auto lg:p-0.5"
             >
               <X className="size-4" />
             </button>
@@ -635,7 +644,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             type="button"
             variant="ghost"
             size="icon"
-            className={cn("h-9 w-9 shrink-0", ferramentas.visivel && "bg-muted")}
+            className={cn("shrink-0", ferramentas.visivel && "bg-muted")}
             aria-label={t("Opções de resposta")}
             title={t("Assistência do agente e nota interna")}
             disabled={mode === "note" || temSugestao}
@@ -691,7 +700,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             className={cn(
               // `text-base` no celular (porte do #3190): com menos de 16px o
               // iPhone amplia a página ao focar o campo.
-              "max-h-40 min-h-10 flex-1 resize-none rounded-xl border border-border bg-surface px-3.5 py-2.5 text-base text-ellipsis md:text-sm",
+              // `min-w-0`: com os alvos de 44px do toque (porte do #3191) a
+              // fileira de 390px não cabe o campo na largura intrínseca dele, e
+              // quem encolhe tem de ser o campo, não o botão de enviar.
+              "max-h-40 min-h-11 min-w-0 flex-1 resize-none rounded-xl border border-border bg-surface px-3.5 py-2.5 text-base text-ellipsis md:text-sm lg:min-h-10",
               "placeholder:truncate placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-hidden",
             )}
             disabled={mode === "note" ? isDisabled : respostaBarrada}
@@ -701,7 +713,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             <Button
               type="button"
               size="icon"
-              className="h-10 w-10 shrink-0 rounded-full"
+              className="shrink-0 rounded-full"
               onClick={handleSubmit}
               disabled={(mode === "note" ? isDisabled : envioBarrado) || !text.trim()}
               aria-label={t("Enviar")}

@@ -11231,6 +11231,19 @@ export const DICIONARIO: Traducoes = {
   // Portes 23/10, grupo A (PR #3043): recolher o painel do contato no Inbox.
   "Recolher painel do contato": { es: "Contraer panel del contacto" },
   "Expandir painel do contato": { es: "Expandir panel del contacto" },
+  // Portes 23/10, grupo A (PR #3191): nota de voz do iPhone e áudio convertido para tocar.
+  "Campo 'nota_de_voz' inválido.": { es: "Campo 'nota_de_voz' inválido." },
+  "Formato não suportado: use ?formato=aac.": { es: "Formato no admitido: use ?formato=aac." },
+  "Muitas conversões de áudio seguidas. Tente em um minuto.": {
+    es: "Demasiadas conversiones de audio seguidas. Inténtalo en un minuto.",
+  },
+  "Muitos áudios sendo preparados agora. Tente em alguns segundos.": {
+    es: "Se están preparando muchos audios ahora. Inténtalo en unos segundos.",
+  },
+  "Formato de áudio não suportado.": { es: "Formato de audio no admitido." },
+  "Não foi possível preparar o áudio para este aparelho.": {
+    es: "No fue posible preparar el audio para este dispositivo.",
+  },
 };
 
 /**

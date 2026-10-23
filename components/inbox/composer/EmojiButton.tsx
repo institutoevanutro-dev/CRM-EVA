@@ -25,7 +25,9 @@ export function EmojiButton({ disabled, onPick }: Props) {
           type="button"
           size="icon"
           variant="ghost"
-          className="h-9 w-9 shrink-0"
+          // Some no toque: o teclado do sistema já tem emoji, e o seletor de
+          // 352px disputa largura num celular de 390.
+          className="shrink-0 pointer-coarse:hidden"
           aria-label={t("Emoji")}
           disabled={disabled}
         >
