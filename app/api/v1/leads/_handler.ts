@@ -29,6 +29,7 @@ import { ehCorrecaoDeMovimentoDaIa } from "@/lib/leads/correcao-humana";
 import { clienteDaEquipe, responsavelValido } from "@/lib/tarefas/responsavel";
 import { idsForaDaOrg } from "@/lib/tenancy/pertence-a-org";
 import { ID, INSTANTE, lerCursorJson } from "@/lib/api/filtro-postgrest";
+import { ehRecusaDaVisibilidadeDoFunil } from "@/lib/leads/recusa-da-visibilidade";
 
 type SB = SupabaseClient;
 
@@ -192,7 +193,7 @@ function recusaDaRlsDosLeads(
   erro: { code?: string; message?: string } | null,
   ctx: HandlerCtx,
 ): ApiError | null {
-  if (erro?.code !== "42501" || !erro.message?.includes('"crm_leads"')) return null;
+  if (!ehRecusaDaVisibilidadeDoFunil(erro)) return null;
   return new ApiError(
     403,
     "forbidden",
