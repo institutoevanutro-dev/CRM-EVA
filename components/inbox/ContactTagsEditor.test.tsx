@@ -10,6 +10,8 @@ import { apiClient } from "@/lib/api/client";
 
 let papel = "manager";
 const mutateSpy = vi.fn();
+/** O vocabulário que o hook devolve: a ORDEM dele é a das sugestões (#3206). */
+const vocabularioRef: { current: string[] } = { current: [] };
 
 vi.mock("@/hooks/auth/AuthProvider", () => ({
   useAuth: () => ({ activeOrg: { role: papel } }),
@@ -18,7 +20,7 @@ vi.mock("@/hooks/contacts/useUpdateContact", () => ({
   useUpdateContact: () => ({ mutate: mutateSpy, isPending: false }),
 }));
 vi.mock("@/hooks/contacts/useContactTagVocabulary", () => ({
-  useContactTagVocabulary: () => ({ data: [] }),
+  useContactTagVocabulary: () => ({ data: vocabularioRef.current }),
 }));
 vi.mock("@/lib/api/client", () => ({
   apiClient: {
@@ -33,13 +35,13 @@ vi.mock("sonner", () => ({
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
-function renderEditor() {
+function renderEditor(tags: string[] = []) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <ContactTagsEditor contactId="k1" orgId="o1" tags={[]} />
+      <ContactTagsEditor contactId="k1" orgId="o1" tags={tags} />
     </QueryClientProvider>,
   );
 }
@@ -48,6 +50,7 @@ describe("ContactTagsEditor — cor na criação (#2718)", () => {
   beforeEach(() => {
     papel = "manager";
     vi.clearAllMocks();
+    vocabularioRef.current = [];
   });
   afterEach(() => cleanup());
 
@@ -82,5 +85,105 @@ describe("ContactTagsEditor — cor na criação (#2718)", () => {
     expect(
       screen.queryByRole("button", { name: "Cor da etiqueta" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * AS SUGESTÕES FILTRAM PELO QUE SE DIGITA (porte do original #3206).
+ *
+ * Eram as oito primeiras do vocabulário, e o texto digitado não entrava no
+ * filtro: com dezenas de etiquetas, digitar "carteira" não sugeria
+ * `carteira-andreia`, a pessoa digitava o nome inteiro de memória, e qualquer
+ * diferença (acento, hífen, plural) criava uma etiqueta nova. A chave é a MESMA
+ * da busca da ficha: sem caixa, sem acento, casando no MEIO da palavra. Com o
+ * campo vazio, a lista sai na ordem da FONTE, a de uso (a rota entrega as mais
+ * usadas primeiro), e por isso o primeiro do alfabeto do caso das mais usadas
+ * é o NONO.
+ */
+describe("ContactTagsEditor — sugestões filtram pelo digitado (#3206)", () => {
+  beforeEach(() => {
+    papel = "manager";
+    vi.clearAllMocks();
+    vocabularioRef.current = [];
+  });
+  afterEach(() => cleanup());
+
+  const campo = () => screen.getByLabelText("Adicionar tag ao contato");
+  const sugestao = (tag: string) => screen.queryByRole("button", { name: `+ ${tag}` });
+
+  it("digitar “CARTEIRA” acha carteira-* com hífen e acento fora da conta", async () => {
+    const user = userEvent.setup();
+    vocabularioRef.current = ["carteira-andreia", "carteira-danilo", "carteira-joão", "origem-site"];
+    renderEditor();
+
+    await user.type(campo(), "CARTEIRA");
+
+    expect(sugestao("carteira-andreia")).not.toBeNull();
+    expect(sugestao("carteira-danilo")).not.toBeNull();
+    expect(sugestao("carteira-joão")).not.toBeNull();
+    expect(sugestao("origem-site")).toBeNull();
+  });
+
+  it("digitado sem acento acha a etiqueta com acento", async () => {
+    const user = userEvent.setup();
+    vocabularioRef.current = ["carteira-andreia", "carteira-joão"];
+    renderEditor();
+
+    await user.type(campo(), "joao");
+
+    expect(sugestao("carteira-joão")).not.toBeNull();
+    expect(sugestao("carteira-andreia")).toBeNull();
+  });
+
+  it("casa no MEIO da palavra (“teira” em “carteira”), não só no começo", async () => {
+    const user = userEvent.setup();
+    vocabularioRef.current = ["carteira-andreia", "carteira-danilo", "origem-site"];
+    renderEditor();
+
+    await user.type(campo(), "teira");
+
+    expect(sugestao("carteira-andreia")).not.toBeNull();
+    expect(sugestao("carteira-danilo")).not.toBeNull();
+    expect(sugestao("origem-site")).toBeNull();
+  });
+
+  it("com o campo vazio mostra as mais usadas, não as primeiras do alfabeto", () => {
+    vocabularioRef.current = [
+      "zebra-frequente",
+      "yy-usada",
+      "xx-media",
+      "ww-media",
+      "vv-pouco",
+      "uu-pouco",
+      "tt-rara",
+      "ss-rara",
+      "aa-primeira-do-alfabeto",
+    ];
+    renderEditor();
+
+    expect(sugestao("zebra-frequente")).not.toBeNull();
+    expect(sugestao("ss-rara")).not.toBeNull();
+    expect(sugestao("aa-primeira-do-alfabeto")).toBeNull();
+  });
+
+  it("o filtro manda: sugere o que casa mesmo fora das oito primeiras", async () => {
+    const user = userEvent.setup();
+    vocabularioRef.current = [
+      ...Array.from({ length: 9 }, (_, i) => `tag-${String(i).padStart(2, "0")}`),
+      "carteira-alvo",
+    ];
+    renderEditor();
+
+    await user.type(campo(), "alvo");
+
+    expect(sugestao("carteira-alvo")).not.toBeNull();
+  });
+
+  it("a etiqueta que o contato já tem continua fora, mesmo em outra caixa e acento", () => {
+    vocabularioRef.current = ["carteira-andreia", "carteira-danilo"];
+    renderEditor(["Carteira-Andréia"]);
+
+    expect(sugestao("carteira-danilo")).not.toBeNull();
+    expect(sugestao("carteira-andreia")).toBeNull();
   });
 });

@@ -13,6 +13,7 @@ import {
   useConversationTagVocabulary,
 } from "@/hooks/inbox/useConversationTags";
 import { useDefinirCorDaEtiqueta } from "@/hooks/tags/useDefinirCorDaEtiqueta";
+import { sugestoesDeEtiqueta } from "@/lib/contacts/etiquetas";
 
 interface Props {
   conversationId: string;
@@ -54,7 +55,16 @@ export function ConversationTagsEditor({ conversationId, orgId, tags }: Props) {
     apply(tags.filter((v) => v !== tag));
   }
 
-  const suggestions = (vocabulary ?? []).filter((v) => !tags.includes(v)).slice(0, 8);
+  // #3180 — o texto digitado ENTRA no filtro: a mesma chave larga da busca
+  // (`lib/contacts/etiquetas`), sem caixa e sem acento, casando no MEIO da
+  // palavra. Sem texto, as sugestões saem na ordem da FONTE — e a fonte
+  // (`GET /api/v1/conversation-tags`) entrega as mais usadas primeiro, não as
+  // oito primeiras do alfabeto.
+  const suggestions = sugestoesDeEtiqueta({
+    conhecidas: vocabulary ?? [],
+    selecionadas: tags,
+    digitado: draft,
+  });
 
   return (
     <section>
