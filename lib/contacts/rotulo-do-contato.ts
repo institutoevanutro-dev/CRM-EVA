@@ -158,3 +158,42 @@ export function rotuloDoContato(
 
   return t(SEM_NOME);
 }
+
+/**
+ * NOME COMPLETO: nome e sobrenome, o que o prontuário precisa para abrir o
+ * atendimento ("Preencha o nome completo no cadastro do CRM").
+ *
+ * Duas palavras com letra, no mínimo, e nunca identificador técnico. "Maria 🌸"
+ * tem duas palavras e uma só com letra: não passa. A régua é mais exigente que
+ * a do prontuário, que recusa só o vazio, porque o nome que chega pelo WhatsApp
+ * costuma ser o primeiro nome ou um apelido, e é ele que a recepção confere.
+ */
+export function ehNomeCompleto(valor: string | null | undefined): boolean {
+  const v = (valor ?? "").trim();
+  if (ehIdentificadorTecnico(v)) return false;
+  return v.split(/\s+/).filter((palavra) => /\p{L}/u.test(palavra)).length >= 2;
+}
+
+/**
+ * O CADASTRO ainda não tem nome completo. Só `name` conta: é a coluna que o
+ * prontuário lê (`demographics.name`), e `display_name` é o perfil do WhatsApp,
+ * que nenhuma pessoa conferiu.
+ */
+export function faltaNomeCompleto(c: Pick<ContatoNomeavel, "name"> | null | undefined): boolean {
+  return !ehNomeCompleto(c?.name);
+}
+
+/**
+ * O que a recepção recebe para conferir: o nome que já parece completo (o do
+ * WhatsApp primeiro), senão o nome que a tela mostra, senão nada.
+ */
+export function sugestaoDeNomeCompleto(c: ContatoNomeavel | null | undefined): string {
+  if (!c) return "";
+  const completo = [c.display_name, c.name].map((v) => (v ?? "").trim()).find((v) => ehNomeCompleto(v));
+  return completo ?? nomeDoContato(c) ?? "";
+}
+
+/** Como o nome vai para o cadastro: sem espaço sobrando nas pontas nem no meio. */
+export function nomeCompletoLimpo(valor: string): string {
+  return valor.trim().replace(/\s+/g, " ");
+}

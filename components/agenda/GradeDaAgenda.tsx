@@ -27,6 +27,7 @@ import {
 } from "@/lib/agenda/grade-interativa";
 import { inicioDaGradeDoMes, SEMANAS_DA_GRADE_DO_MES } from "@/lib/agenda/recorte-da-grade";
 import { diaLocalISO, instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
+import { Warning } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -394,12 +395,18 @@ function BlocoDeAgendamento({
   const trilha = pessoa?.trilha ?? 1;
   const doGoogle = agendamento.origem === "google_sync";
   const cancelado = agendamento.situacao === "cancelled";
+  // Marcado pela IA, pela API ou pelo Google para quem só tem o nome do
+  // WhatsApp: o prontuário não abre o atendimento sem o nome completo. O aviso
+  // fica no bloco; o clique abre o painel, que tem o campo para completar.
+  const faltaNome = agendamento.faltaNomeCompleto === true && !doGoogle && !cancelado;
 
   return (
     <button
       type="button"
       data-testid={`agendamento-${agendamento.id}`}
       data-origem={agendamento.origem}
+      data-falta-nome={faltaNome || undefined}
+      title={faltaNome ? t("Falta o nome completo") : undefined}
       data-trilha={trilha}
       data-situacao={agendamento.situacao}
       data-colunas={colunas}
@@ -435,7 +442,7 @@ function BlocoDeAgendamento({
         agendamento.quemSeraAtendido ? `, ${t("com")} ${agendamento.quemSeraAtendido}` : ""
       }${pessoa ? `, ${t("atendido por")} ${pessoa.nome}` : ""}${
         doGoogle && !agendamento.bloqueio ? `, ${t("ocupado na agenda do Google")}` : ""
-      }`}
+      }${faltaNome ? `, ${t("falta o nome completo")}` : ""}`}
       className={cn(
         "absolute flex flex-col items-start overflow-hidden rounded-sm px-1.5 py-0.5 text-left",
         "border border-border/60 transition-colors duration-fast ease-out",
@@ -487,12 +494,22 @@ function BlocoDeAgendamento({
         className="absolute inset-y-0 left-0 w-[3px] rounded-l-sm"
         style={{ backgroundColor: doGoogle ? "var(--color-border-strong)" : corDaTrilha(trilha) }}
       />
+      {faltaNome ? (
+        <Warning
+          aria-hidden
+          data-testid={`falta-nome-${agendamento.id}`}
+          size={12}
+          weight="fill"
+          className="absolute right-0.5 top-0.5 text-warning"
+        />
+      ) : null}
       {/* Com espaço (1h ou mais), o nome do compromisso quebra em duas linhas
           em vez de virar "Consulta de acomp…" (print de 08/10/2026). */}
       <span
         className={cn(
           "ml-1 text-[11px] font-semibold leading-4 text-text",
           duracao >= 60 ? "line-clamp-2 break-words" : "truncate",
+          faltaNome && "pr-3",
         )}
       >
         {agendamento.titulo}
@@ -734,6 +751,7 @@ function VisaoDeMes({
   agendamentos: Agendamento[];
   pessoas: Pessoa[];
 }) {
+  const t = useT();
   const localeDaData = useLocaleDeData();
   // Mesma conta que a BUSCA usa (`lib/agenda/recorte-da-grade.ts`): o que se
   // desenha é o que se busca.
@@ -791,10 +809,13 @@ function VisaoDeMes({
               <div className="space-y-0.5">
                 {doDia.slice(0, 2).map((c) => {
                   const trilha = pessoas.find((p) => p.id === c.responsavelId)?.trilha ?? 1;
+                  const faltaNome = c.faltaNomeCompleto === true && c.situacao !== "cancelled";
                   return (
                     <div
                       key={c.id}
                       data-testid={`chip-mes-${c.id}`}
+                      data-falta-nome={faltaNome || undefined}
+                      title={faltaNome ? t("Falta o nome completo") : undefined}
                       // A mesma origem que o card da semana carrega: a ocupação
                       // do Google não tem id de compromisso (o `c.id` dela é
                       // derivado de dono + fatia), e é pela origem que se aponta
@@ -811,6 +832,9 @@ function VisaoDeMes({
                       <span className="truncate text-[10px] leading-4 text-text">
                         {rotuloHora(new Date(c.comeca), fuso)} {c.titulo}
                       </span>
+                      {faltaNome ? (
+                        <Warning aria-hidden size={10} weight="fill" className="ml-auto shrink-0 text-warning" />
+                      ) : null}
                     </div>
                   );
                 })}

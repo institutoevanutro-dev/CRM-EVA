@@ -1174,6 +1174,18 @@ Coberto por `lib/channels/vigia-de-surdez.test.ts`, `tests/unit/channel-health-v
 
 Não executado: a jornada pela tela e o push num celular de verdade, e o reinício nativo contra um WAHA real (só o caminho manual, em produção, provou que ele cura).
 
+## J39 — Marcar consulta para quem só tem o nome do WhatsApp `[P0]` (2026-10-23)
+
+O caso de campo: em 23/10/2026 o dono não conseguiu iniciar um atendimento no Prontuário, que recusa (de propósito) abrir prontuário sem o nome completo no cadastro do CRM. Havia 802 contatos sem nome no cadastro, 761 só com o nome do WhatsApp, e 8 deles com consulta marcada.
+
+- `[P0]` No "Novo agendamento", o paciente só com o nome do WhatsApp ganha o campo "Nome completo do paciente", já preenchido com ele; uma palavra só não libera o Confirmar e o rodapé diz por quê; ao confirmar, o `PATCH /api/v1/contacts/[id]` (auditado como `contact.updated`, com o nome antes e depois) vem ANTES do `POST /api/v1/agenda/agendamentos`.
+- `[P0]` O compromisso que a IA marca para quem não tem nome completo não é barrado: aparece na grade com o sinal de atenção, e o painel dele completa o nome; depois de salvar, o painel e a grade param de avisar.
+- `[P1]` Quem tem nome completo não vê campo nenhum, e "Compromisso pessoal, sem cliente" continua igual.
+
+Spec: `tests/e2e/agenda-nome-completo.spec.ts` (parte 5 do job e2e). Testes de componente e da régua em `tests/unit/agenda-nome-completo-do-paciente.test.tsx`.
+
+Não executado em tela local nesta rodada: a prova pela tela é o `e2e` do CI (as portas do Supabase local estavam ocupadas por outras sessões). Não coberto: o caminho da IA pedindo o nome na conversa (a ferramenta de marcação não mudou).
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

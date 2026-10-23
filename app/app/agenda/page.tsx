@@ -8,7 +8,7 @@ import { PROVEDOR_GOOGLE } from "@/lib/agenda/tipos";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { diaDeHojeNoFuso, semanaSemente } from "@/lib/agenda/semana-semente";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
-import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
+import { faltaNomeCompleto, nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
@@ -315,6 +315,12 @@ export default async function AgendaPage() {
         // são reescritas pelo cascade de LGPD, então nenhuma vaza titular
         // anonimizado.
         quemSeraAtendido: contatoDoEmbed(a.contacts),
+        // A mesma pergunta de `listaAgendamentos`, para a primeira pintura e o
+        // refetch avisarem igual: o cadastro tem o nome completo que o
+        // prontuário pede?
+        faltaNomeCompleto: a.contact_id
+          ? faltaNomeCompleto(Array.isArray(a.contacts) ? (a.contacts[0] ?? null) : a.contacts)
+          : false,
       })) as AgendamentoDaTela[]).concat(
         /**
          * A ocupação do Google entra na MESMA lista, com `origem: "google_sync"`.
