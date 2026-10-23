@@ -45,6 +45,8 @@ import {
   lerNumerosDeTeste,
   numeroPodeTestar,
 } from "./pre-go-live";
+import { ehContatoInterno } from "@/lib/contacts/tags-internas";
+import { tagsInternasDaOrg } from "@/lib/schemas/settings";
 
 /** Valores aceitos em `channel_sessions.metadata.ai_gate`. */
 export const AI_GATE_MODES = ["open", "allowlist"] as const;
@@ -69,6 +71,13 @@ export interface EstadoDeElegibilidade {
   modo: AiGateMode;
   /** `contacts.force_human` — a trava irrevogável pelo agente (regra dura 2). */
   forceHuman: boolean;
+  /**
+   * `contacts.tags` cruza com `organizations.settings.crm.internal_contact_tags`
+   * (#2353 do original): contato interno (equipe, sócio, família, fornecedor) não
+   * recebe atendimento automático, como numa conversa em "Assumir", sem pausar
+   * uma por uma.
+   */
+  contatoInterno: boolean;
   /** `conversations.bot_silenced_until` (ou o da conversa em questão). `'infinity'` do Postgres vira `Infinity`. */
   botSilencedUntil: Date | number | null;
   /** `conversations.assignee_kind` — `'user'` = uma pessoa é a dona do thread. */
@@ -91,6 +100,7 @@ export type MotivoDeElegibilidade =
   | "force_human"
   | "conversa_silenciada"
   | "conversa_de_humano"
+  | "contato_interno"
   | "fora_da_lista_de_teste"
   | "numero_de_teste"
   | "sem_autorizacao"
@@ -136,6 +146,12 @@ export function decidirElegibilidade(e: EstadoDeElegibilidade): DecisaoDeElegibi
   }
   if (e.assigneeKind === "user") {
     return { permite: false, motivo: "conversa_de_humano", bloqueioPorAllowlist: false };
+  }
+  // Contato interno (#2353 do original): veto de CONTATO que vale sempre, igual
+  // com o gate aberto. Quem ligou o robô no número não quer que ele responda a
+  // equipe, o sócio ou a família.
+  if (e.contatoInterno) {
+    return { permite: false, motivo: "contato_interno", bloqueioPorAllowlist: false };
   }
 
   if (e.modo === "open") {
@@ -207,6 +223,12 @@ export function montarEstadoDeElegibilidade(raw: {
   aiTestPhoneNumbers?: unknown;
   contactPhoneNumber?: string | null;
   forceHuman: unknown;
+  /** `contacts.tags` cru, para a régua de contato interno (#2353 do original). */
+  contactTags?: readonly string[] | null | undefined;
+  /** `organizations.settings` cru; a lista interna mora em `.crm.internal_contact_tags`. */
+  orgSettings?: unknown;
+  /** A lista interna já lida (quem decide para muitos contatos da mesma org lê uma vez). Vence `orgSettings`. */
+  tagsInternas?: readonly string[];
   assigneeKind: string | null;
   botSilencedUntil: Date | string | number | null | undefined;
   aiAuthorizedAt: Date | string | null | undefined;
@@ -226,6 +248,7 @@ export function montarEstadoDeElegibilidade(raw: {
     contatoOculto: raw.contatoOculto === true,
     modo,
     forceHuman: raw.forceHuman === true,
+    contatoInterno: ehContatoInterno(raw.contactTags, raw.tagsInternas ?? tagsInternasDaOrg(raw.orgSettings)),
     botSilencedUntil: raw.silencioEhRoteamento === true ? null : normalizarInstante(raw.botSilencedUntil),
     assigneeKind: raw.assigneeKind,
     aiAuthorizedAt: autorizadoEm instanceof Date ? autorizadoEm : null,

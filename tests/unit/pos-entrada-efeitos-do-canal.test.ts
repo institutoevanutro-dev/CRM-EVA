@@ -58,6 +58,12 @@ let leadsAbertos: Array<{ id: string }> = [];
 let leadsErro: { message: string } | null = null;
 /** Os `.eq()` da leitura de `crm_leads` — provam organização, contato e "só os abertos". */
 let filtrosDeLeads: Array<[string, unknown]> = [];
+/** As DEMANDAS ABERTAS do contato, como a leitura de `demandas` as devolve (#3288). */
+let demandasAbertas: Array<{ id: string; revision: number }> = [];
+/** Os `.eq()`/`.is()` da leitura de `demandas`: provam org, contato e "só as abertas". */
+let filtrosDeDemandas: Array<[string, unknown]> = [];
+/** Toda chamada de rpc, em ordem: o encerramento das demandas é uma por demanda. */
+let rpcChamadas: Array<{ nome: string; args: Record<string, unknown> }> = [];
 
 /** Imita o builder do PostgREST: encadeável, o efeito acontece no `await`. */
 function cadeia(rotulo: string): Record<string, unknown> {
@@ -88,11 +94,18 @@ const admin = {
         const consulta = {
           eq(coluna: string, valor: unknown) {
             if (tabela === "crm_leads") filtrosDeLeads.push([coluna, valor]);
+            if (tabela === "demandas") filtrosDeDemandas.push([coluna, valor]);
+            return consulta;
+          },
+          // A leitura de `demandas` (#3288) filtra `fechada_em is null`.
+          is(coluna: string, valor: unknown) {
+            if (tabela === "demandas") filtrosDeDemandas.push([coluna, valor]);
             return consulta;
           },
           then(resolve: (v: unknown) => void) {
             sequencia.push(`select:${tabela}`);
-            return Promise.resolve({ data: leadsAbertos, error: leadsErro }).then(resolve);
+            const dados = tabela === "demandas" ? demandasAbertas : leadsAbertos;
+            return Promise.resolve({ data: dados, error: tabela === "demandas" ? null : leadsErro }).then(resolve);
           },
         };
         return consulta;
@@ -100,6 +113,11 @@ const admin = {
     };
   },
   async rpc(nome: string, args: Record<string, unknown>) {
+    rpcChamadas.push({ nome, args });
+    if (nome === "fn_demanda_encerrar") {
+      sequencia.push(`rpc:${nome}`);
+      return { error: rpcErro };
+    }
     ultimaRpc = args;
     sequencia.push(`rpc:${args.p_event_type ?? nome}`);
     return { error: rpcErro };
@@ -132,6 +150,9 @@ beforeEach(() => {
   leadsAbertos = [];
   leadsErro = null;
   filtrosDeLeads = [];
+  demandasAbertas = [];
+  filtrosDeDemandas = [];
+  rpcChamadas = [];
   encerraDemanda.mockReset();
   encerraDemanda.mockResolvedValue({ lead: {}, jaEstava: false } as never);
   audit.mockClear();
@@ -421,6 +442,86 @@ describe("opt-out fecha o negócio aberto como perdido", () => {
 
     expect(encerraDemanda).not.toHaveBeenCalled();
     expect(sequencia).toContain("rpc:ai_agent.dispatch_requested");
+  });
+});
+
+describe("opt-out encerra as demandas abertas do contato (#3288)", () => {
+  const encerramentos = () => rpcChamadas.filter((c) => c.nome === "fn_demanda_encerrar");
+
+  it("cada demanda aberta é encerrada como encerrada_pelo_cliente, com a revisão lida", async () => {
+    demandasAbertas = [
+      { id: "dem-1", revision: 3 },
+      { id: "dem-2", revision: 7 },
+    ];
+    leadsAbertos = [{ id: "lead-1" }];
+
+    await rodar({ texto: "PARAR" });
+
+    const chamadas = encerramentos();
+    expect(chamadas).toHaveLength(2);
+    expect(chamadas[0]?.args).toMatchObject({
+      p_org: "org-1",
+      p_demanda: "dem-1",
+      p_expected: 3,
+      p_desfecho: "encerrada_pelo_cliente",
+      p_actor: null,
+    });
+    expect(chamadas[1]?.args).toMatchObject({ p_demanda: "dem-2", p_expected: 7 });
+    // A origem fica registrada: o MESMO ator do fechamento do card.
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "demanda.encerrada",
+        organizationId: "org-1",
+        resourceType: "demanda",
+        resourceId: "dem-1",
+        metadata: expect.objectContaining({ actor_id: "canal-inbound", desfecho: "encerrada_pelo_cliente" }),
+      }),
+    );
+    // O card continua indo para perdido, como antes.
+    expect(encerraDemanda).toHaveBeenCalledTimes(1);
+    expect(encerraDemanda).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ leadId: "lead-1", motivo: "opted_out_of_messages" }),
+    );
+  });
+
+  it("lê só as ABERTAS do contato, na organização certa", async () => {
+    await rodar({ texto: "PARAR" });
+
+    expect(filtrosDeDemandas).toEqual(
+      expect.arrayContaining([
+        ["organization_id", "org-1"],
+        ["contact_id", "contato-1"],
+        ["fechada_em", null],
+      ]),
+    );
+    expect(encerramentos()).toHaveLength(0);
+  });
+
+  it("contato sem demanda aberta percorre o caminho sem erro e sem rpc", async () => {
+    await expect(rodar({ texto: "PARAR" })).resolves.toBeUndefined();
+    expect(encerramentos()).toHaveLength(0);
+    expect(sequencia).toContain("rpc:ai_agent.dispatch_requested");
+  });
+
+  it("mensagem que não pede para sair não lê nem encerra demanda", async () => {
+    demandasAbertas = [{ id: "dem-1", revision: 1 }];
+
+    await rodar({ texto: "oi, tudo bem?" });
+
+    expect(sequencia).not.toContain("select:demandas");
+    expect(encerramentos()).toHaveLength(0);
+  });
+
+  it("falha ao encerrar uma demanda não derruba a ingestão", async () => {
+    demandasAbertas = [{ id: "dem-1", revision: 1 }];
+    rpcErro = { message: "demanda_stale" };
+
+    await expect(rodar({ texto: "PARAR" })).resolves.toBeUndefined();
+
+    expect(encerramentos()).toHaveLength(1);
+    expect(audit).not.toHaveBeenCalledWith(expect.objectContaining({ action: "demanda.encerrada" }));
   });
 });
 

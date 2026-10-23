@@ -26,6 +26,7 @@ const ORG = "00000000-0000-4000-8000-0000000000e5";
 
 const estado = vi.hoisted(() => ({ papelNoBanco: "viewer", papelDaMembresia: "viewer" }));
 const rpc = vi.hoisted(() => vi.fn());
+const from = vi.hoisted(() => vi.fn());
 const redirecionar = vi.hoisted(() =>
   vi.fn((destino: string) => {
     throw new Error(`REDIRECT:${destino}`);
@@ -47,7 +48,7 @@ vi.mock("@/lib/auth/server", () => ({
   resolveActiveOrg: async () => ({ orgId: ORG, name: "Org", role: estado.papelDaMembresia }),
   mfaEmDivida: async () => false,
 }));
-vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ rpc }) }));
+vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ rpc, from }) }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: async () => null }));
 vi.mock("next/navigation", () => ({ redirect: redirecionar, useRouter: () => ({ refresh: vi.fn() }) }));
@@ -72,6 +73,16 @@ beforeEach(() => {
   estado.papelNoBanco = "viewer";
   estado.papelDaMembresia = "viewer";
   redirecionar.mockClear();
+  // A página de Etiquetas também lê `organizations.settings` (a lista de contato
+  // interno, DeskcommCRM #2353) pela SESSÃO. A catraca daqui mede o PORTÃO.
+  from.mockReset();
+  from.mockImplementation(() => {
+    const chain: Record<string, unknown> = {};
+    chain.select = () => chain;
+    chain.eq = () => chain;
+    chain.maybeSingle = () => Promise.resolve({ data: { settings: {} }, error: null });
+    return chain;
+  });
   rpc.mockReset();
   rpc.mockImplementation(async (fn: string) => {
     if (fn === "fn_user_role_in_org") return { data: estado.papelNoBanco, error: null };

@@ -1,5 +1,6 @@
 import { protecaoAgendaSupabase } from "@/lib/agenda/protecao-followup";
 import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
+import { lerTagsInternas } from "@/lib/contacts/tags-internas";
 import { assertServiceBoundarySupabase } from "@/lib/atendimento/origem";
 import { StaleServiceBoundaryError, parseServiceBoundary, assertCurrentServiceBoundary, type ServiceBoundary } from "@/lib/atendimento/fronteira";
 /**
@@ -472,6 +473,11 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       const cutoff = new Date(cutoffIso).getTime();
       const agora = new Date();
       const ttlMs = ttlDaAutorizacaoMs(process.env);
+      // Contato interno não é inscrito (#2353 do original). A lista é da
+      // organização: lida UMA vez, e só quando algum contato TEM etiqueta.
+      const tagsInternas = rows.some((r) => (r.contacts?.tags?.length ?? 0) > 0)
+        ? await lerTagsInternas(admin, orgId)
+        : [];
       const latest = new Map<
         string,
         {
@@ -500,6 +506,8 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
               aiTestPhoneNumbers: metadata.ai_test_phone_numbers,
               contactPhoneNumber: row.contacts?.phone_number ?? null,
               forceHuman: false,
+              contactTags: row.contacts?.tags ?? null,
+              tagsInternas,
               assigneeKind: null,
               botSilencedUntil: null,
               aiAuthorizedAt: row.contacts?.ai_authorized_at ?? null,

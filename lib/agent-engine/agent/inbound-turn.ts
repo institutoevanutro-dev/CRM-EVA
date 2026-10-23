@@ -94,6 +94,7 @@ import {
   buildHandoffSummary,
   detectAmbiguousOptOut,
   detectHumanHandoffRequest,
+  ehRespostaDeRobo,
   isLeadInHandoff,
   performHumanHandoff,
 } from './human-handoff';
@@ -157,6 +158,7 @@ import {
 import {
   hasOpenCaseForContact,
   getCasesAwaitingLead,
+  instrucaoDePedidoNoCasoAberto,
   openCase,
   provideCaseUpdate,
   openHumanCaseInputSchema,
@@ -360,7 +362,9 @@ export const AGENT_TOOL_DEFS = {
             'código do motivo: requested_human quando o cliente pede uma pessoa; critical_stage ' +
               'quando uma etapa exige finalização humana (ex.: concluir um agendamento já coletado). ' +
               'Não use critical_stage só porque o cliente mencionou agendamento. ' +
-              'Sem este campo, mantém requested_human. Não altera as condições para encaminhar.',
+              'Sem este campo, a passagem fica registrada como low_confidence (você não resolveu ' +
+              'sozinho); quando o cliente pedir uma pessoa, informe requested_human. ' +
+              'Não altera as condições para encaminhar.',
           ),
         reason: z.string().optional().describe('por que passar ao humano (curto)'),
       })
@@ -1871,6 +1875,10 @@ export async function deteccoesDeterministicasDoAssistido(
   let optedOutThisTurn = false;
   let lgpd: AvisoDeEscalacaoOpts['lgpd'];
   let contextoLido = false;
+  // O histórico lido vive FORA do try: é dele que a guarda do menu de robô
+  // (#3106 do original) tira as marcas de automação. Sem contexto lido ele fica
+  // vazio, e a guarda devolve "é de gente": o lado seguro (a passagem é irrevogável).
+  let historicoDoTurno: readonly LeadContextMessage[] = [];
   try {
     const abertura = await getLeadContext(
       pool,
@@ -1886,6 +1894,7 @@ export async function deteccoesDeterministicasDoAssistido(
     if (abertura.ok) {
       contextoLido = true;
       inboundsPendentes = inboundsNaoRespondidos(abertura.context.messages);
+      historicoDoTurno = abertura.context.messages;
       optedOutThisTurn = abertura.context.contact.is_blocked;
       lgpd = abertura.lgpd;
     } else {
@@ -1964,10 +1973,17 @@ export async function deteccoesDeterministicasDoAssistido(
       : avisarLeadLendoOContato(pool, aviso.ids, { ...semInsumosDoContexto(aviso.base), motivo });
   };
 
+  // A GUARDA DO MENU DE ROBÔ (#3106 do original): o casamento determinístico não
+  // passa a conversa quando o que casou é fala de automação (menu numerado,
+  // mensagem que se declara robô, ou a saudação que chega segundos depois do nosso
+  // disparo; ver `ehRespostaDeRobo`). O turno segue para o rascunho, e quem lê a
+  // mensagem é o modelo. A palavra-chave CONFIGURADA na tela não passa pela
+  // guarda: é escolha de quem opera o agente.
   if (
     inboundsPendentes.some(
       (texto) =>
-        detectHumanHandoffRequest(texto) || matchesHandoffKeyword(texto, agent.handoffKeywords),
+        (detectHumanHandoffRequest(texto) && !ehRespostaDeRobo(texto, historicoDoTurno)) ||
+        matchesHandoffKeyword(texto, agent.handoffKeywords),
     )
   ) {
     const desfecho = await avisar('pediu_humano');
@@ -2170,6 +2186,35 @@ function turnoVaiFalarComOLead(job: JobRow): boolean {
   if (job.kind !== 'followup_turn') return false;
   const purpose = (job.payload as { purpose?: unknown } | null)?.purpose;
   return purpose === undefined || purpose === 'send_message';
+}
+
+/**
+ * O MESMO job já gravou uma decisão de roteamento? (#3143 do original)
+ *
+ * `rescheduleJob` NÃO cria outro job: o adiamento pela janela de funcionamento do
+ * agente (que roda DEPOIS do roteador) devolve a MESMA linha de `job_queue` para
+ * 'pending', e a reexecução roda com o mesmo `job_id`. Quem escreve às 19h para um
+ * agente 8h-18h é roteado às 19h e de novo às 8h; sem esta pergunta, cada passagem
+ * insere uma linha em `ai_router_decisions` e o painel que conta roteamento
+ * (`app/api/v1/ai/evolution`) lê o dobro para um job que teve uma decisão só.
+ *
+ * `desde` é a criação do job (a decisão nunca é anterior a ele): sem índice com
+ * `job_id`, é o limite que faz a consulta entrar pelo índice de `created_at`.
+ * Erro de leitura sobe: quem chama degrada aberto e grava como antes.
+ */
+async function decisaoDeRoteamentoDoJobJaGravada(
+  pool: pg.Pool,
+  organizationId: string,
+  jobId: string,
+  desde: Date,
+): Promise<boolean> {
+  const { rows } = await pool.query(
+    `select 1 from ai_router_decisions
+      where organization_id = $1 and job_id = $2 and created_at >= $3
+      limit 1`,
+    [organizationId, jobId, desde],
+  );
+  return rows.length > 0;
 }
 
 async function executarTurnoDoAgente(
@@ -2465,6 +2510,22 @@ async function executarTurnoDoAgente(
   // trocou o dono e deixou a linha do destino. Gravar de novo seria uma segunda
   // decisão para a mesma mensagem.
   if (!preview && routed.routerId !== null && input.passagem === undefined) {
+    // UM TURNO, UMA DECISÃO (#3143 do original): o turno adiado pela janela do
+    // agente volta como o MESMO job, e a decisão da primeira passagem é reusada.
+    // A guarda é de telemetria e degrada ABERTO: leitura que falha grava como antes.
+    let decisaoJaGravada = false;
+    try {
+      decisaoJaGravada = await decisaoDeRoteamentoDoJobJaGravada(
+        pool,
+        tenantId,
+        liveJob().id,
+        liveJob().created_at,
+      );
+    } catch (err) {
+      runLog.warn('não consegui conferir a decisão de roteamento deste job — gravando como antes', {
+        error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
+      });
+    }
     try {
       if (agentConfig !== null) {
         await pool.query(
@@ -2474,21 +2535,23 @@ async function executarTurnoDoAgente(
           [tenantId, input.conversationId, agentConfig.agentId, routed.intentName],
         );
       }
-      await pool.query(
-        `insert into ai_router_decisions
-           (organization_id, router_id, conversation_id, intent_name, confidence, agent_id, outcome, job_id)
-         values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [
-          tenantId,
-          routed.routerId,
-          input.conversationId,
-          routed.intentName,
-          routed.confidence,
-          agentConfig?.agentId ?? null,
-          routed.outcome,
-          liveJob().id,
-        ],
-      );
+      if (!decisaoJaGravada) {
+        await pool.query(
+          `insert into ai_router_decisions
+             (organization_id, router_id, conversation_id, intent_name, confidence, agent_id, outcome, job_id)
+           values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            tenantId,
+            routed.routerId,
+            input.conversationId,
+            routed.intentName,
+            routed.confidence,
+            agentConfig?.agentId ?? null,
+            routed.outcome,
+            liveJob().id,
+          ],
+        );
+      }
     } catch (err) {
       runLog.warn('decisão do router não gravada', {
         error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
@@ -2692,11 +2755,17 @@ async function executarTurnoDoAgente(
   const mensagemDoJob =
     currentInboundText ?? latestInboundSignal(openingContext.context.messages);
   const inboundsPendentes = inboundsNaoRespondidos(openingContext.context.messages);
+  // A GUARDA DO MENU DE ROBÔ (#3106 do original): o casamento determinístico segue
+  // existindo, mas NÃO passa a conversa quando o que casou é fala de automação do
+  // outro lado (`ehRespostaDeRobo`). Nesses casos o turno segue para o MODELO,
+  // que vê a mensagem e sabe reconhecer robô. O laço com robô (a mesma mensagem
+  // de novo e de novo) já foi barrado antes, por `pararSeForRoboDoOutroLado`.
   if (
     !preview &&
     inboundsPendentes.some(
       (texto) =>
-        detectHumanHandoffRequest(texto) ||
+        (detectHumanHandoffRequest(texto) &&
+          !ehRespostaDeRobo(texto, openingContext.context.messages)) ||
         (agentConfig !== null && matchesHandoffKeyword(texto, agentConfig.handoffKeywords)),
     )
   ) {
@@ -4474,14 +4543,18 @@ async function executarTurnoDoAgente(
           // consultar existia, estava ligada e montada no turno, e ele não a
           // usou. Capacidade que depende de o modelo lembrar não existe metade
           // das vezes; esta o sistema garante.
+          //
+          // Pendência anotada num caso que JÁ estava aberto não avisa ninguém, e
+          // a frase de disponibilidade autorizaria "alguém continua em seguida":
+          // ali vai a instrução que proíbe a promessa (#3097 do original).
+          if (res.merged) {
+            return { ok: true, case_id: res.caseId, message: instrucaoDePedidoNoCasoAberto() };
+          }
           const { frase } = await expectativaDeAtendimento(pool, tenantId, new Date());
           return {
             ok: true,
             case_id: res.caseId,
-            message: res.merged
-              ? `já havia um caso deste assunto aguardando a equipe; a pendência foi registrada nele ` +
-                `(nenhum caso novo). Continue a conversa com o lead normalmente. ${frase}`
-              : `caso aberto; continue a conversa com o lead normalmente. ${frase}`,
+            message: `caso aberto; continue a conversa com o lead normalmente. ${frase}`,
           };
         } catch (err) {
           noteRunError(err instanceof Error ? err : new Error(String(err)));

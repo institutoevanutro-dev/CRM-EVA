@@ -30,10 +30,12 @@ import { redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { tagsInternasDaOrg } from "@/lib/schemas/settings";
 import type { LinhaDeVocabulario } from "@/lib/schemas/tags";
 import { createClient } from "@/lib/supabase/server";
 
 import { PainelDeTags } from "./_painel";
+import { TagsInternasForm } from "./_tags-internas-form";
 
 export const metadata = { title: "Etiquetas" };
 export const dynamic = "force-dynamic";
@@ -65,6 +67,15 @@ export default async function TagsPage() {
     p_org: activeOrg.orgId,
   });
 
+  // A lista de contato interno (#2353 do original) lê o `settings` da própria
+  // organização pela SESSÃO: a policy de leitura isola a linha.
+  const { data: linhaDaOrganizacao } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", activeOrg.orgId)
+    .maybeSingle();
+  const tagsInternas = tagsInternasDaOrg((linhaDaOrganizacao as { settings?: unknown } | null)?.settings);
+
   const idioma = user.idioma;
   const t = (texto: string) => traduzir(texto, idioma);
 
@@ -88,6 +99,9 @@ export default async function TagsPage() {
       ) : (
         <PainelDeTags tags={(data ?? []) as LinhaDeVocabulario[]} idioma={idioma} />
       )}
+
+      {/* A lista de contato interno vive em `settings`, independente do vocabulário acima. */}
+      <TagsInternasForm tags={tagsInternas} idioma={idioma} />
     </div>
   );
 }

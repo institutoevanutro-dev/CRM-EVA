@@ -40,6 +40,25 @@ export const routingConfigSchema = z.object({
     .max(PRAZO_MAX_MINUTOS)
     .nullable()
     .default(null),
+  /**
+   * Prazo, em minutos, para DEVOLVER AO RODÍZIO a conversa que o rodízio
+   * entregou e ninguém respondeu (#2985 do original, fatia 1). `null` = desligado,
+   * o padrão. Ligado, o cron `rodizio-devolucao` solta o dono da conversa entregue
+   * por `routing` sem nenhuma mensagem humana e a devolve à distribuição; a pessoa
+   * devolvida fica fora DESTA conversa por 24 h. Regra pura em
+   * `lib/escalacao/devolucao-ao-rodizio.ts`. Faixa igual à da devolução ao agente.
+   *
+   * Sem tela nesta fatia (é a fatia 2 do original): liga-se pela API de
+   * configuração de atendimento. Portado do projeto original (PR #2988 de
+   * @webtecnica).
+   */
+  unanswered_return_minutes: z
+    .number()
+    .int()
+    .min(PRAZO_MIN_MINUTOS)
+    .max(PRAZO_MAX_MINUTOS)
+    .nullable()
+    .default(null),
 });
 export type RoutingConfig = z.infer<typeof routingConfigSchema>;
 
@@ -79,19 +98,28 @@ export const atendimentoConfigPatchSchema = routingConfigSchema.extend({
     .max(PRAZO_MAX_MINUTOS)
     .nullable()
     .optional(),
+  /** Opcional pela mesma razão: omitido, preserva o que já valia (padrão `null`). */
+  unanswered_return_minutes: z
+    .number()
+    .int()
+    .min(PRAZO_MIN_MINUTOS)
+    .max(PRAZO_MAX_MINUTOS)
+    .nullable()
+    .optional(),
 });
 export type AtendimentoConfigPatch = z.infer<typeof atendimentoConfigPatchSchema>;
 
 /**
  * O `settings` da organização depois de um PATCH. Merge não-destrutivo em DOIS
  * níveis: preserva as demais chaves de `settings` e, para o que veio OMITIDO
- * (`visibility_mode`, `handoff_return_after_minutes`), preserva o que já valia.
+ * (`visibility_mode`, `handoff_return_after_minutes`, `unanswered_return_minutes`),
+ * preserva o que já valia.
  */
 export function mesclarSettingsDeAtendimento(
   atual: Record<string, unknown>,
   input: AtendimentoConfigPatch,
 ): { settings: Record<string, unknown>; routing: RoutingConfig } {
-  const { visibility_mode, handoff_return_after_minutes, ...routingInput } = input;
+  const { visibility_mode, handoff_return_after_minutes, unanswered_return_minutes, ...routingInput } = input;
   const routingAtual = routingConfigSchema.catch(routingConfigSchema.parse({})).parse(atual.routing ?? {});
   const routing: RoutingConfig = {
     ...routingInput,
@@ -99,6 +127,10 @@ export function mesclarSettingsDeAtendimento(
       handoff_return_after_minutes !== undefined
         ? handoff_return_after_minutes
         : routingAtual.handoff_return_after_minutes,
+    unanswered_return_minutes:
+      unanswered_return_minutes !== undefined
+        ? unanswered_return_minutes
+        : routingAtual.unanswered_return_minutes,
   };
   const settings: Record<string, unknown> = { ...atual, routing };
   if (visibility_mode !== undefined) settings.visibility_mode = visibility_mode;

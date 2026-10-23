@@ -37,6 +37,20 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  // Configurações › Etiquetas: contato interno (#2353 do original).
+  "Etiquetas de contato interno": { es: "Etiquetas de contacto interno" },
+  "Para equipe, sócio, família ou fornecedor. O contato com uma destas etiquetas não vira card no funil e não recebe mensagens automáticas da IA nem dos acompanhamentos. A conversa continua normal no Inbox, e a equipe responde por lá como sempre. Uma etiqueta por linha.": {
+    es: "Para equipo, socio, familia o proveedor. El contacto con una de estas etiquetas no se convierte en tarjeta en el embudo y no recibe mensajes automáticos de la IA ni de los seguimientos. La conversación sigue normal en el Inbox, y el equipo responde allí como siempre. Una etiqueta por línea.",
+  },
+  "Em branco, nenhum contato é interno, como antes.": { es: "En blanco, ningún contacto es interno, como antes." },
+  "Lista salva.": { es: "Lista guardada." },
+  "Confira a lista: alguma etiqueta passou do tamanho ou do limite.": {
+    es: "Revisa la lista: alguna etiqueta superó el tamaño o el límite.",
+  },
+  "Só um gerente ou administrador pode mudar esta lista.": {
+    es: "Solo un gerente o administrador puede cambiar esta lista.",
+  },
+  "Não consegui salvar agora.": { es: "No pude guardar ahora." },
   // Agenda: modal simples de marcação e aba de bloqueio.
   "Marque um atendimento ou bloqueie um horário da agenda.": { es: "Agende una atención o bloquee un horario de la agenda." },
   "A partir de": { es: "A partir del" },
