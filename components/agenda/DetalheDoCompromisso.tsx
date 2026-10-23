@@ -108,7 +108,8 @@ export function DetalheDoCompromisso({
   // Marcado pela IA, pela API ou pelo Google para quem só tem o nome do
   // WhatsApp: o modal de marcar pede o nome antes, esses caminhos não. O aviso
   // mora aqui, com o campo para completar, e some quando o cadastro é relido.
-  const faltaNome = Boolean(a?.contact_id && a.contato) && faltaNomeCompleto(a?.contato);
+  const faltaNome =
+    Boolean(a?.contact_id && a.contato && a.status !== "cancelled" && !a.excluded_at) && faltaNomeCompleto(a?.contato);
   const nomeCompleto = nomeEditado ?? sugestaoDeNomeCompleto(a?.contato);
   const gravarNome = useUpdateContact(a?.contact_id ?? "");
   const formatoDeData =

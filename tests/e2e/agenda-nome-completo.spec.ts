@@ -31,7 +31,9 @@ import { esperarAgenda } from "./helpers/tela-agenda";
  * fictícios.
  */
 const credenciais = credenciaisSupabaseDeTeste();
-const db = createClient(credenciais.url, credenciais.serviceRole, { auth: { persistSession: false } });
+const db = createClient(credenciais.url, credenciais.serviceRole, {
+  auth: { persistSession: false },
+});
 const senha = `Local-${randomUUID()}!`;
 
 test.describe.configure({ timeout: 180_000 });
@@ -47,7 +49,11 @@ async function inserir(tabela: string, valor: Record<string, unknown>): Promise<
 
 async function organizacaoDeTeste() {
   const email = `nome-completo-${randomUUID()}@invariant.test`;
-  const { data, error } = await db.auth.admin.createUser({ email, password: senha, email_confirm: true });
+  const { data, error } = await db.auth.admin.createUser({
+    email,
+    password: senha,
+    email_confirm: true,
+  });
   if (error || !data.user) throw error ?? new Error("usuário não criado");
   const usuario = data.user.id;
   usuarios.push(usuario);
@@ -180,22 +186,34 @@ test("o Novo agendamento pede o nome completo de quem só tem o do WhatsApp e gr
   const pedidos: string[] = [];
   page.on("request", (r) => {
     const u = new URL(r.url());
-    if (r.method() === "PATCH" && u.pathname === `/api/v1/contacts/${contato}`) pedidos.push("nome");
-    if (r.method() === "POST" && u.pathname === "/api/v1/agenda/agendamentos") pedidos.push("agendamento");
+    if (r.method() === "PATCH" && u.pathname === `/api/v1/contacts/${contato}`)
+      pedidos.push("nome");
+    if (r.method() === "POST" && u.pathname === "/api/v1/agenda/agendamentos")
+      pedidos.push("agendamento");
   });
   const gravouNome = page.waitForResponse(
-    (r) => new URL(r.url()).pathname === `/api/v1/contacts/${contato}` && r.request().method() === "PATCH",
+    (r) =>
+      new URL(r.url()).pathname === `/api/v1/contacts/${contato}` &&
+      r.request().method() === "PATCH",
   );
   const marcou = page.waitForResponse(
-    (r) => new URL(r.url()).pathname === "/api/v1/agenda/agendamentos" && r.request().method() === "POST",
+    (r) =>
+      new URL(r.url()).pathname === "/api/v1/agenda/agendamentos" &&
+      r.request().method() === "POST",
   );
   await page.getByTestId("confirmar-marcacao").click();
   const respostaDoNome = await gravouNome;
   expect(respostaDoNome.ok(), `o nome foi recusado: ${await respostaDoNome.text()}`).toBe(true);
   const respostaDaMarcacao = await marcou;
-  expect(respostaDaMarcacao.ok(), `a marcação foi recusada: ${await respostaDaMarcacao.text()}`).toBe(true);
+  expect(
+    respostaDaMarcacao.ok(),
+    `a marcação foi recusada: ${await respostaDaMarcacao.text()}`,
+  ).toBe(true);
   await expect(page.getByTestId("ver-na-agenda")).toBeVisible();
-  expect(pedidos, "o nome tem de ir para o cadastro ANTES de o agendamento nascer").toEqual(["nome", "agendamento"]);
+  expect(pedidos, "o nome tem de ir para o cadastro ANTES de o agendamento nascer").toEqual([
+    "nome",
+    "agendamento",
+  ]);
 
   expect(await nomeNoCadastro(contato)).toBe("Carla Fictícia Souza");
   const { data: agendamento } = await db
@@ -259,7 +277,9 @@ test("o que a IA marca para quem não tem nome completo aparece marcado na grade
   await evidencia(page, info, "1-painel-completa-o-nome");
 
   const gravou = page.waitForResponse(
-    (r) => new URL(r.url()).pathname === `/api/v1/contacts/${contato}` && r.request().method() === "PATCH",
+    (r) =>
+      new URL(r.url()).pathname === `/api/v1/contacts/${contato}` &&
+      r.request().method() === "PATCH",
   );
   await aviso.getByTestId("salvar-nome-completo").click();
   expect((await gravou).ok()).toBe(true);

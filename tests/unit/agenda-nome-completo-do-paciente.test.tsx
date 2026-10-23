@@ -46,15 +46,26 @@ import { MarcacaoSimples } from "@/components/agenda/MarcacaoSimples";
 import type { Agendamento, Pessoa } from "@/components/agenda/tipos";
 import { listaAgendamentos } from "@/lib/agenda/consulta";
 import { ApiError } from "@/lib/api/types";
-import { ehNomeCompleto, faltaNomeCompleto, sugestaoDeNomeCompleto } from "@/lib/contacts/rotulo-do-contato";
+import {
+  ehNomeCompleto,
+  faltaNomeCompleto,
+  sugestaoDeNomeCompleto,
+} from "@/lib/contacts/rotulo-do-contato";
 
 const ANA = "11111111-1111-4111-8111-111111111111";
 const CONTATO = "44444444-4444-4444-8444-444444444444";
 const PESSOAS = [{ id: ANA, nome: "Dra. Ana Teste", trilha: 1 }] as unknown as Pessoa[];
-const TIPOS = [{ id: "t-ana", nome: "Avaliação facial", duracaoMin: 45, donoId: ANA, localDetalhes: null }];
+const TIPOS = [
+  { id: "t-ana", nome: "Avaliação facial", duracaoMin: 45, donoId: ANA, localDetalhes: null },
+];
 const INSTANTE = "2026-10-22T16:00:00.000Z";
 
-type Contato = { id: string; name: string | null; display_name: string | null; phone_number: string | null };
+type Contato = {
+  id: string;
+  name: string | null;
+  display_name: string | null;
+  phone_number: string | null;
+};
 
 let contatoNoBanco: Contato | null = null;
 let ordem: string[] = [];
@@ -94,8 +105,12 @@ describe("a régua do nome completo", () => {
   });
 
   it("a sugestão é o nome do WhatsApp quando ele já parece completo, senão o que a tela mostra", () => {
-    expect(sugestaoDeNomeCompleto({ name: null, display_name: "Carla Fictícia" })).toBe("Carla Fictícia");
-    expect(sugestaoDeNomeCompleto({ name: "Carla", display_name: "Carla Fictícia" })).toBe("Carla Fictícia");
+    expect(sugestaoDeNomeCompleto({ name: null, display_name: "Carla Fictícia" })).toBe(
+      "Carla Fictícia",
+    );
+    expect(sugestaoDeNomeCompleto({ name: "Carla", display_name: "Carla Fictícia" })).toBe(
+      "Carla Fictícia",
+    );
     expect(sugestaoDeNomeCompleto({ name: "Carla", display_name: "Mãe 🌸" })).toBe("Carla");
     expect(sugestaoDeNomeCompleto({ name: null, display_name: "Contato 543134@lid" })).toBe("");
     expect(sugestaoDeNomeCompleto(null)).toBe("");
@@ -127,14 +142,18 @@ function agendaCom(contactId: string | null, contacts: unknown): SupabaseClient 
     in: () => chain,
     gte: () => chain,
     lt: () => chain,
-    then: (res: (v: unknown) => unknown) => Promise.resolve({ data: [linha], error: null }).then(res),
+    then: (res: (v: unknown) => unknown) =>
+      Promise.resolve({ data: [linha], error: null }).then(res),
   };
   return { from: () => chain } as unknown as SupabaseClient;
 }
 
 describe("a listagem da agenda diz quem está sem nome completo (leitura computada, sem schema)", () => {
   async function marcado(contactId: string | null, contacts: unknown) {
-    const r = await listaAgendamentos(agendaCom(contactId, contacts), "org", { ownerUserId: ANA, limite: 20 });
+    const r = await listaAgendamentos(agendaCom(contactId, contacts), "org", {
+      ownerUserId: ANA,
+      limite: 20,
+    });
     if (!r.ok) throw new Error(r.codigo);
     return r.agendamentos[0]!.contatoSemNomeCompleto;
   }
@@ -151,7 +170,9 @@ describe("a listagem da agenda diz quem está sem nome completo (leitura computa
 });
 
 function montarMarcacao(props: Partial<ComponentProps<typeof MarcacaoSimples>> = {}) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
   const onConfirmar = vi.fn(async () => {
     ordem.push("agendar");
   });
@@ -194,7 +215,12 @@ function montarMarcacao(props: Partial<ComponentProps<typeof MarcacaoSimples>> =
 
 describe("Novo agendamento: paciente sem nome completo", () => {
   it("mostra o campo com o nome do WhatsApp, grava o nome e DEPOIS agenda", async () => {
-    contatoNoBanco = { id: CONTATO, name: null, display_name: "Carla Fictícia", phone_number: "+5527999990000" };
+    contatoNoBanco = {
+      id: CONTATO,
+      name: null,
+      display_name: "Carla Fictícia",
+      phone_number: "+5527999990000",
+    };
     const { onConfirmar } = montarMarcacao();
 
     const campo = (await screen.findByTestId("campo-nome-completo")) as HTMLInputElement;
@@ -221,7 +247,9 @@ describe("Novo agendamento: paciente sem nome completo", () => {
     expect(campo.value).toBe("Carla");
     expect(campo).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByTestId("confirmar-marcacao")).toBeDisabled();
-    expect(screen.getByTestId("falta-nome-na-marcacao").textContent).toBe("Complete o nome do paciente para marcar.");
+    expect(screen.getByTestId("falta-nome-na-marcacao").textContent).toBe(
+      "Complete o nome do paciente para marcar.",
+    );
 
     fireEvent.click(screen.getByTestId("confirmar-marcacao"));
     expect(onConfirmar).not.toHaveBeenCalled();
@@ -233,8 +261,15 @@ describe("Novo agendamento: paciente sem nome completo", () => {
   });
 
   it("gravação do nome recusada: nada é marcado, e a recusa aparece", async () => {
-    contatoNoBanco = { id: CONTATO, name: null, display_name: "Carla Fictícia", phone_number: null };
-    api.patch.mockRejectedValue(new ApiError(403, "forbidden", undefined, "r", "Sem permissão para editar o contato."));
+    contatoNoBanco = {
+      id: CONTATO,
+      name: null,
+      display_name: "Carla Fictícia",
+      phone_number: null,
+    };
+    api.patch.mockRejectedValue(
+      new ApiError(403, "forbidden", undefined, "r", "Sem permissão para editar o contato."),
+    );
     const { onConfirmar } = montarMarcacao();
 
     await screen.findByTestId("campo-nome-completo");
@@ -247,7 +282,12 @@ describe("Novo agendamento: paciente sem nome completo", () => {
   });
 
   it("paciente com nome completo no cadastro não vê campo nenhum e agenda direto", async () => {
-    contatoNoBanco = { id: CONTATO, name: "Carla Fictícia", display_name: "Carlinha", phone_number: null };
+    contatoNoBanco = {
+      id: CONTATO,
+      name: "Carla Fictícia",
+      display_name: "Carlinha",
+      phone_number: null,
+    };
     const { onConfirmar } = montarMarcacao();
 
     await waitFor(() => expect(screen.getByTestId("confirmar-marcacao")).toBeEnabled());
@@ -334,7 +374,9 @@ describe("o painel do compromisso completa o nome", () => {
   };
 
   function abrir(podeCompletarNome: boolean) {
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
     render(
       <QueryClientProvider client={qc}>
         <DetalheDoCompromisso id="ag-ia" onClose={() => {}} podeCompletarNome={podeCompletarNome} />
@@ -357,7 +399,9 @@ describe("o painel do compromisso completa o nome", () => {
     fireEvent.click(screen.getByTestId("salvar-nome-completo"));
 
     await waitFor(() =>
-      expect(ordem).toEqual([`patch /api/v1/contacts/${CONTATO} ${JSON.stringify({ name: "Carla Fictícia Souza" })}`]),
+      expect(ordem).toEqual([
+        `patch /api/v1/contacts/${CONTATO} ${JSON.stringify({ name: "Carla Fictícia Souza" })}`,
+      ]),
     );
   });
 
@@ -370,7 +414,17 @@ describe("o painel do compromisso completa o nome", () => {
   });
 
   it("com nome completo no cadastro, nada a avisar", async () => {
-    api.get.mockResolvedValue({ data: { ...compromisso, contato: { name: "Carla Fictícia", display_name: "Carla" } } });
+    api.get.mockResolvedValue({
+      data: { ...compromisso, contato: { name: "Carla Fictícia", display_name: "Carla" } },
+    });
+    abrir(true);
+
+    await screen.findByTestId("compromisso-horario");
+    expect(screen.queryByTestId("falta-nome-completo")).toBeNull();
+  });
+
+  it("compromisso cancelado não pede nome: não vai haver atendimento", async () => {
+    api.get.mockResolvedValue({ data: { ...compromisso, status: "cancelled" } });
     abrir(true);
 
     await screen.findByTestId("compromisso-horario");

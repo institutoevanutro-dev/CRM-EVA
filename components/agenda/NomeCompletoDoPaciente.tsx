@@ -47,8 +47,13 @@ export function NomeCompletoDoPaciente({
           !valido && "border-warning",
         )}
       />
-      <p id={`${id}-ajuda`} className={cn("mt-1 text-xs", valido ? "text-text-muted" : "text-warning")}>
-        {valido ? t("Vai para o cadastro do paciente. Confira nome e sobrenome.") : t("Escreva nome e sobrenome.")}
+      <p
+        id={`${id}-ajuda`}
+        className={cn("mt-1 text-xs", valido ? "text-text-muted" : "text-warning")}
+      >
+        {valido
+          ? t("Vai para o cadastro do paciente. Confira nome e sobrenome.")
+          : t("Escreva nome e sobrenome.")}
       </p>
     </div>
   );
