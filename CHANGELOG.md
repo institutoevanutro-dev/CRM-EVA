@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.34.1] — 2026-10-23
+
+### Corrigido
+
+- **O funil por origem responde ao painel de anúncios** A rota do funil por origem, publicada na 4.34.0, era barrada pela checagem de sessão antes de conferir a chave do
+  painel, como acontecia com qualquer rota fora da lista. Agora ela segue o mesmo caminho do relatório de totais: a chave
+  é conferida dentro da rota, e nenhum caminho abaixo dela herda a passagem.
+
 ## [4.34.0] — 2026-10-23
 
 ### Adicionado
@@ -8113,7 +8121,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.1...HEAD
+[4.34.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.0...v4.34.1
 [4.34.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.2...v4.34.0
 [4.33.2]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.1...v4.33.2
 [4.33.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.0...v4.33.1
