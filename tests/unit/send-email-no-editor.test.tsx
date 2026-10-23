@@ -90,7 +90,7 @@ describe("ActionConfigForm: o formulário do e-mail", () => {
   it("defaultActionConfig nasce com destinatário Contato e o endereço fixo vazio", () => {
     expect(defaultActionConfig("send_email")).toEqual({
       type: "send_email",
-      config: { destinatario: "contato", email_fixo: "", assunto: "", corpo: "", formato: "texto" },
+      config: { destinatario: "contato", email_fixo: "", membro_id: "", assunto: "", corpo: "", formato: "texto" },
     });
   });
 
@@ -118,6 +118,23 @@ describe("ActionConfigForm: o formulário do e-mail", () => {
       expect.objectContaining({ type: "send_email", config: expect.objectContaining({ destinatario: "fixo" }) }),
     );
     expect(screen.getByText("Endereço de e-mail")).toBeInTheDocument();
+  });
+
+  it("escolher uma pessoa da equipe revela a lista da equipe (porte do upstream #2834)", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: [{ user_id: "66666666-6666-4666-8666-666666666666", role: "agent", full_name: "Pessoa Fictícia" }],
+    } as never);
+    const { container, onChange } = montar(defaultActionConfig("send_email"));
+    fireEvent.click(container.querySelector("button")!);
+    fireEvent.click(screen.getByText("E-mail de uma pessoa da equipe"));
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ config: expect.objectContaining({ destinatario: "membro_da_equipe" }) }),
+    );
+    expect(screen.getByText("Pessoa da equipe")).toBeInTheDocument();
+    // A lista vem da equipe da organização, não de um campo de e-mail.
+    expect(vi.mocked(apiClient.get)).toHaveBeenCalledWith("/api/v1/team/assignable");
+    expect(screen.queryByText("Endereço de e-mail")).not.toBeInTheDocument();
   });
 
   it("o que a pessoa escreve no assunto chega na regra", () => {
@@ -176,6 +193,14 @@ describe("o que o editor produz passa no schema da regra", () => {
     );
     expect(r.success).toBe(false);
     expect(r.error?.issues[0]?.message).toBe("E-mail inválido");
+  });
+
+  it("pessoa da equipe SEM a pessoa escolhida é recusada na porta, com frase em português", () => {
+    const r = createAutomationRuleSchema.safeParse(regraComEmail({ destinatario: "membro_da_equipe" }));
+    expect(r.success).toBe(false);
+    const issue = r.error?.issues[0];
+    expect(issue?.path).toEqual(["actions", 0, "config", "membro_id"]);
+    expect(issue?.message).toBe("Escolha a pessoa da equipe que recebe os envios desta regra.");
   });
 
   it("endereço fixo com endereço válido salva e grava o endereço", () => {

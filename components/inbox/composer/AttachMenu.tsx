@@ -39,7 +39,7 @@ export function AttachMenu({ disabled, onPick, onPickContact, soFoto }: Props) {
             type="button"
             size="icon"
             variant="ghost"
-            className="h-9 w-9 shrink-0"
+            className="shrink-0"
             aria-label={t("Anexar")}
             disabled={disabled}
           >
@@ -49,7 +49,7 @@ export function AttachMenu({ disabled, onPick, onPickContact, soFoto }: Props) {
         <PopoverContent align="start" side="top" className="w-52 p-1">
           <button
             type="button"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted"
+            className="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted lg:min-h-0"
             onClick={() => mediaRef.current?.click()}
           >
             <ImageSquare size={18} weight="duotone" className="text-primary" aria-hidden />
@@ -58,7 +58,7 @@ export function AttachMenu({ disabled, onPick, onPickContact, soFoto }: Props) {
           {!soFoto && (
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted"
+              className="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted lg:min-h-0"
               onClick={() => docRef.current?.click()}
             >
               <FileText size={18} weight="duotone" className="text-primary" aria-hidden />
@@ -68,7 +68,7 @@ export function AttachMenu({ disabled, onPick, onPickContact, soFoto }: Props) {
           {!soFoto && onPickContact && (
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted"
+              className="flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted lg:min-h-0"
               onClick={onPickContact}
             >
               <UserCircle size={18} weight="duotone" className="text-primary" aria-hidden />

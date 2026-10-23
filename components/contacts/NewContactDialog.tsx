@@ -75,8 +75,10 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
 
     const parsed = contactCreateSchema.safeParse(payload);
     if (!parsed.success) {
+      // A frase vem do schema em português; `t()` a traduz quando há entrada
+      // (a do telefone tem) e a devolve como veio quando não há.
       const first = parsed.error.issues[0];
-      setServerError(first?.message ?? t("Dados inválidos"));
+      setServerError(first?.message ? t(first.message) : t("Dados inválidos"));
       return;
     }
 
@@ -115,7 +117,7 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
             <Input id="email" type="email" {...form.register("email")} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="phone_number">{t("Telefone (E.164)")}</Label>
+            <Label htmlFor="phone_number">{t("Telefone (DDD + número)")}</Label>
             <Input
               id="phone_number"
               placeholder="+5511999998888"

@@ -122,7 +122,12 @@ export async function PATCH(
     return ok(contact, { requestId });
   } catch (err) {
     if (err instanceof ApiError) {
-      return fail(err.code, err.message, err.status, { requestId });
+      // `details` leva o `contact_id` do 409 `contact_exists` (porte do
+      // original #3197): sem ele a tela e a integração não têm o que abrir.
+      return fail(err.code, err.message, err.status, {
+        details: err.details as Record<string, unknown> | undefined,
+        requestId,
+      });
     }
     throw err;
   }

@@ -15,6 +15,7 @@ import {
   contactPatchSchema,
   isValidCpf,
   lgpdAnonymizeSchema,
+  MSG_TELEFONE_INVALIDO,
 } from "./contacts";
 import { campoVisivel, camposVisiveis, mostrarQuandoSchema } from "./mostrar-quando";
 import { customFieldSchema } from "./settings";
@@ -54,8 +55,8 @@ describe("contactCreateSchema", () => {
     expect(parsed.source).toBe("manual");
   });
 
-  it("rejects non-E.164 phones", () => {
-    const r = contactCreateSchema.safeParse({ phone_number: "11999998888" });
+  it("rejects phones that are neither national BR nor E.164", () => {
+    const r = contactCreateSchema.safeParse({ phone_number: "999998888" });
     expect(r.success).toBe(false);
   });
 
@@ -104,6 +105,76 @@ describe("contactCreateSchema", () => {
   it("recusa chave vazia em campos personalizados", () => {
     const r = contactCreateSchema.safeParse({ custom_fields: { "": "valor" } });
     expect(r.success).toBe(false);
+  });
+});
+
+describe("telefone como o brasileiro escreve (porte do original #3305)", () => {
+  it("aceita DDD + número com e sem máscara, e grava E.164 com +55", () => {
+    // DDD + 9 dígitos (celular) e DDD + 8 (fixo), com a máscara que as pessoas
+    // usam de fato. O que a API grava é sempre a forma canônica.
+    const digitado = {
+      "(11) 99999-8888": "+5511999998888",
+      "11 99999-8888": "+5511999998888",
+      "11999998888": "+5511999998888",
+      "(11) 3322-4455": "+551133224455",
+      "1133224455": "+551133224455",
+      // O DDI colado sem o `+`: entra uma vez só.
+      "5511999998888": "+5511999998888",
+      "55 11 99999-8888": "+5511999998888",
+      "55 (11) 3322-4455": "+551133224455",
+    };
+    for (const [entrada, esperado] of Object.entries(digitado)) {
+      const r = contactCreateSchema.safeParse({ phone_number: entrada });
+      expect(r.success, `recusou ${entrada}`).toBe(true);
+      expect(r.success && r.data.phone_number, entrada).toBe(esperado);
+    }
+  });
+
+  it("o PATCH aceita e normaliza pela MESMA régua", () => {
+    const r = contactPatchSchema.safeParse({ phone_number: "(11) 99999-8888" });
+    expect(r.success).toBe(true);
+    expect(r.success && r.data.phone_number).toBe("+5511999998888");
+  });
+
+  it("o fixo de 8 dígitos não ganha nono dígito inventado", () => {
+    const r = contactCreateSchema.safeParse({ phone_number: "(42) 3333-4444" });
+    expect(r.success && r.data.phone_number).toBe("+554233334444");
+  });
+
+  it("número com `+` e máscara mantém o DDI que a pessoa escreveu, nunca vira +55", () => {
+    // 10/11 dígitos de outro país cabem na régua nacional; sem respeitar o `+`,
+    // o DDI viraria DDD e o contato seria de outra pessoa.
+    const digitado = {
+      "+1 (415) 555-1234": "+14155551234",
+      "+33 1 23 45 67 89": "+33123456789",
+      "+55 (11) 99999-8888": "+5511999998888",
+    };
+    for (const [entrada, esperado] of Object.entries(digitado)) {
+      const r = contactCreateSchema.safeParse({ phone_number: entrada });
+      expect(r.success && r.data.phone_number, entrada).toBe(esperado);
+    }
+    expect(contactCreateSchema.safeParse({ phone_number: "+12" }).success).toBe(false);
+    expect(
+      contactCreateSchema.safeParse({ phone_number: "+55 (11) 99999-8888 ramal 22" }).success,
+    ).toBe(false);
+  });
+
+  it("E.164 continua aceito sem ser reescrito", () => {
+    const r = contactCreateSchema.safeParse({ phone_number: "+5511999998888" });
+    expect(r.success && r.data.phone_number).toBe("+5511999998888");
+  });
+
+  it("recusa DDD inválido e tamanho errado, com os dois exemplos na mensagem", () => {
+    // DDD 09 não existe (o primeiro dígito é de 1 a 9), 9 dígitos não têm DDD, e
+    // 12 dígitos sem o 55 não são nem nacional nem E.164.
+    for (const entrada of ["09999998888", "119999888", "119999988887", "abc"]) {
+      const r = contactCreateSchema.safeParse({ phone_number: entrada });
+      expect(r.success, `aceitou ${entrada}`).toBe(false);
+      const mensagem = r.success ? "" : (r.error.issues[0]?.message ?? "");
+      expect(mensagem, entrada).toBe(MSG_TELEFONE_INVALIDO);
+      expect(mensagem).toContain("11999998888");
+      expect(mensagem).toContain("+5511999998888");
+    }
   });
 });
 

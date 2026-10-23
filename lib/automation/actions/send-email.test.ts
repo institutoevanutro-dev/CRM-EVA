@@ -90,10 +90,15 @@ function ctx(
   override: Record<string, unknown> = {},
   vinculos: Vinculo[] = EQUIPE_ATIVA,
   falhaDaConsulta: { message: string } | null = null,
+  emailDoAcesso: (id: string) => string | null = () => "dono@estudio.com",
 ): ActionCtx {
   return {
     admin: {
-      auth: { admin: { getUserById: vi.fn(async () => ({ data: { user: { email: "dono@estudio.com" } } })) } },
+      auth: {
+        admin: {
+          getUserById: vi.fn(async (id: string) => ({ data: { user: { email: emailDoAcesso(id) } } })),
+        },
+      },
       from: (tabela: string) => {
         if (tabela !== "user_organizations") throw new Error(`tabela inesperada: ${tabela}`);
         return tabelaDeVinculos(vinculos, falhaDaConsulta);
@@ -412,5 +417,98 @@ describe("limites de envio: por regra e por organização", () => {
     for (let i = 0; i <= LIMITE_DE_EMAILS_POR_REGRA; i++) {
       expect(await acao()!.postponeUntil!(c, FIXO)).toBeNull();
     }
+  });
+});
+
+/**
+ * O destinatário "pessoa da equipe" (porte do upstream #2834, issue #2642 lá).
+ *
+ *   1. o endereço vem do ACESSO da pessoa, nunca de um campo da regra;
+ *   2. o vínculo é conferido NO ENVIO: quem foi removido da organização não
+ *      recebe. É o teste que fica vermelho se alguém voltar a resolver o
+ *      destinatário sem olhar `user_organizations`.
+ */
+const MEMBRO_ID = "66666666-6666-4666-8666-666666666666";
+const EQUIPE_COM_MEMBRO: Vinculo[] = [{ user_id: MEMBRO_ID, organization_id: "org-1", revoked_at: null }];
+const ACESSO_DO_MEMBRO = (id: string) => (id === MEMBRO_ID ? "pessoa@estudio.com" : null);
+
+const CONFIG_MEMBRO = {
+  destinatario: "membro_da_equipe",
+  membro_id: MEMBRO_ID,
+  assunto: "Negócio ganho: {{lead.title}}",
+  corpo: "Oi! O negócio {{lead.title}} foi ganho.",
+  formato: "texto",
+};
+
+describe("send_email: o destinatário \"pessoa da equipe\"", () => {
+  it("no schema: aceita com a pessoa escolhida, e recusa sem ela", () => {
+    expect(actionSchema.safeParse({ type: "send_email", config: CONFIG_MEMBRO }).success).toBe(true);
+    expect(
+      actionSchema.safeParse({ type: "send_email", config: { ...CONFIG_MEMBRO, membro_id: "" } }).success,
+    ).toBe(false);
+  });
+
+  it("entrega no e-mail do ACESSO da pessoa, não num endereço da regra", async () => {
+    enviar.mockResolvedValue({ ok: true, id: "e-mail-membro" });
+
+    const r = await acao()!.execute(ctx({}, EQUIPE_COM_MEMBRO, null, ACESSO_DO_MEMBRO), CONFIG_MEMBRO);
+
+    expect(enviar).toHaveBeenCalledTimes(1);
+    expect(enviar.mock.calls[0]![0].to).toBe("pessoa@estudio.com");
+    expect(enviar.mock.calls[0]![0].subject).toBe("Negócio ganho: Lua de mel");
+    expect(r).toEqual({
+      type: "send_email",
+      status: "success",
+      detail: { destinatario: "membro_da_equipe", via: "resend", email_id: "e-mail-membro" },
+    });
+  });
+
+  it("MEMBRO REMOVIDO da organização não recebe: o vínculo é conferido no envio", async () => {
+    const vinculos: Vinculo[] = [
+      { user_id: MEMBRO_ID, organization_id: "org-1", revoked_at: "2026-01-01T00:00:00Z" },
+    ];
+    const r = await acao()!.execute(ctx({}, vinculos, null, ACESSO_DO_MEMBRO), CONFIG_MEMBRO);
+
+    expect(r.status).toBe("skipped");
+    expect((r.detail as { reason: string }).reason).toBe("membro_fora_da_equipe");
+    expect(enviar, "e-mail saiu para quem já não é da equipe").not.toHaveBeenCalled();
+  });
+
+  it("membro de OUTRA organização também não recebe", async () => {
+    const vinculos: Vinculo[] = [{ user_id: MEMBRO_ID, organization_id: "org-2", revoked_at: null }];
+    const r = await acao()!.execute(ctx({}, vinculos, null, ACESSO_DO_MEMBRO), CONFIG_MEMBRO);
+
+    expect(r.status).toBe("skipped");
+    expect((r.detail as { reason: string }).reason).toBe("membro_fora_da_equipe");
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it("consulta do vínculo que não volta não envia, e diz que foi a consulta", async () => {
+    const r = await acao()!.execute(
+      ctx({}, EQUIPE_COM_MEMBRO, { message: "timeout" }, ACESSO_DO_MEMBRO),
+      CONFIG_MEMBRO,
+    );
+
+    expect(r.status).toBe("skipped");
+    expect((r.detail as { reason: string }).reason).toBe("membro_indeterminado");
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it("pessoa sem e-mail no acesso: skipped com o motivo, sem tentar enviar", async () => {
+    const r = await acao()!.execute(ctx({}, EQUIPE_COM_MEMBRO, null, () => null), CONFIG_MEMBRO);
+
+    expect(r.status).toBe("skipped");
+    expect((r.detail as { reason: string }).reason).toBe("membro_sem_email");
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it("sem a pessoa escolhida na execução, a regra não roda (missing_config)", async () => {
+    const r = await acao()!.execute(
+      ctx({}, EQUIPE_COM_MEMBRO, null, ACESSO_DO_MEMBRO),
+      { ...CONFIG_MEMBRO, membro_id: "" },
+    );
+
+    expect(r).toEqual({ type: "send_email", status: "failed", error: "missing_config" });
+    expect(enviar).not.toHaveBeenCalled();
   });
 });

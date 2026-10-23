@@ -1,8 +1,16 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 
 import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
+import {
+  avisosDoNegocio,
+  carimbosDoNovo,
+  estadoDoAntigo,
+  estadoDoNovo,
+  type AvisoDeNegocio,
+  type EstadoVisto,
+} from "./aviso-de-negocio";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
 import { entregarAviso } from "@/lib/notifications/deliver";
 import { mencaoAtingeUsuario, textoLegivelDeMencao } from "@/lib/notifications/mentions";
@@ -28,49 +36,46 @@ function sides(payload: unknown): {
   };
 }
 
+/** Título do aviso; o `kind` e a `category` têm o mesmo nome do aviso. */
+const TITULO_DO_AVISO: Record<AvisoDeNegocio, string> = {
+  lead_assigned: "Lead atribuído a você",
+  lead_won: "Lead ganho",
+  lead_lost: "Lead perdido",
+};
+
 export function useCrmAlerts(): void {
   const orgId = useActiveOrg()?.orgId ?? null;
   const user = useUser();
+  // ⚠️ O histórico vem DAQUI, não do `old` do Realtime, que sem REPLICA
+  // IDENTITY FULL traz só o `id` (o porquê em `./aviso-de-negocio.ts`).
+  const vistos = useRef(new Map<string, EstadoVisto>());
 
   const onLead = useCallback(
     (payload: unknown) => {
       const { novo, antigo } = sides(payload);
       if (!novo) return;
+      const leadId = str(novo.id);
+      if (!leadId) return;
+
+      // A memória do cliente; na falta dela, o `old` só se ele carregar os
+      // campos. Sem nenhum dos dois o histórico é desconhecido e nada sai.
+      const anterior = vistos.current.get(leadId) ?? estadoDoAntigo(antigo);
+      const estado = estadoDoNovo(novo);
+      vistos.current.set(leadId, estado);
+
+      const avisos = avisosDoNegocio(anterior, estado, user.id, carimbosDoNovo(novo));
+      if (avisos.length === 0) return;
+
       const title = str(novo.title) || "Lead";
       const pipelineId = str(novo.pipeline_id);
       const href = pipelineId ? `/app/pipelines/${pipelineId}` : "/app/kanban";
-      const owner = str(novo.owner_user_id);
-      const ownerAntes = str(antigo?.owner_user_id);
-      const status = str(novo.status);
-      const statusAntes = str(antigo?.status);
-
-      if (owner && owner === user.id && owner !== ownerAntes) {
+      for (const aviso of avisos) {
         entregarAviso({
-          category: "lead_assigned",
-          kind: "lead_assigned",
-          title: "Lead atribuído a você",
+          category: aviso,
+          kind: aviso,
+          title: TITULO_DO_AVISO[aviso],
           body: title,
-          tag: str(novo.id) ?? undefined,
-          href,
-        });
-      }
-      if (owner === user.id && status === "won" && statusAntes !== "won") {
-        entregarAviso({
-          category: "lead_won",
-          kind: "lead_won",
-          title: "Lead ganho",
-          body: title,
-          tag: str(novo.id) ?? undefined,
-          href,
-        });
-      }
-      if (owner === user.id && status === "lost" && statusAntes !== "lost") {
-        entregarAviso({
-          category: "lead_lost",
-          kind: "lead_lost",
-          title: "Lead perdido",
-          body: title,
-          tag: str(novo.id) ?? undefined,
+          tag: leadId,
           href,
         });
       }

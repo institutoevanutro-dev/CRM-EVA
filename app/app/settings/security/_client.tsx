@@ -48,8 +48,16 @@ export function SecurityClient({
       if (r.ok) {
         setCodes(r.recovery_codes);
         toast.success(t("Novos códigos gerados."));
+      } else if (r.error === "mfa_required") {
+        // A sessão não provou o código de 6 dígitos: pede o código e volta para cá.
+        window.location.assign("/login/mfa?next=/app/settings/security");
+      } else if (r.error === "service_unavailable") {
+        toast.error(t("Gerar códigos de recuperação não está disponível nesta instalação."));
+      } else if (r.error === "mfa_not_enrolled") {
+        toast.error(t("Ative a verificação em duas etapas antes de gerar os códigos."));
       } else {
-        toast.error(`${t("Erro:")} ${r.error}`);
+        // O resto (falha do banco ao trocar o conjunto) não é frase para a tela.
+        toast.error(t("Não foi possível gerar os códigos. Tente de novo."));
       }
     });
   }

@@ -64,8 +64,10 @@ vi.mock("@/lib/channels", () => ({
 }));
 
 async function baixar() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return GET({} as any, { params: Promise.resolve({ id: "m1" }) });
+  // Um pedido de verdade: a rota lê `?formato=` da URL (porte do original #3191).
+  return GET(new Request("http://localhost/api/v1/messages/m1/media") as never, {
+    params: Promise.resolve({ id: "m1" }),
+  });
 }
 
 beforeEach(() => {

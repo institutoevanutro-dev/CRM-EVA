@@ -1,7 +1,7 @@
 "use client";
 
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
@@ -15,6 +15,7 @@ import { ScoreSlot } from "./ScoreSlot";
 import { LeadTimeline } from "./LeadTimeline";
 import { TarefasDoNegocio } from "./TarefasDoNegocio";
 import { OwnerBadge } from "./OwnerBadge";
+import { SecaoDoDossie, useSecoesRecolhidas } from "./SecaoDoDossie";
 import { resolveLeadOwner } from "@/lib/kanban/owner";
 import type { CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 
@@ -41,13 +42,22 @@ function formatBRL(cents: number | null, currency: string | null): string {
   }
 }
 
+/** Quantas entradas a linha do tempo mostra com a seção recolhida (#3181). */
+const ENTRADAS_COM_A_LINHA_RECOLHIDA = 3;
+
 /**
- * O dossiê do negócio: cabeçalho vivo → timeline → campos.
+ * O dossiê do negócio: cabeçalho vivo → Dados do negócio → Tarefas → Linha do
+ * tempo (upstream #3181).
  *
- * A ORDEM É a mudança em relação ao diálogo de edição: quem abre um lead quer
- * primeiro saber O QUE ACONTECEU, e só depois mexer. O formulário íntegro fica
- * por último, e o cabeçalho tem um atalho para ele — ordem preservada, custo de
- * rolagem resolvido.
+ * A ordem antiga punha a linha do tempo antes dos campos ("primeiro saber o que
+ * aconteceu"). Com uso real a linha do tempo cresce (mensagens, etapas,
+ * automações, follow-ups) e empurra os CAMPOS DO FUNIL, que são o que se
+ * preenche durante o atendimento, para baixo de uma parede de rolagem. Agora o
+ * que se PREENCHE vem antes do que se CONSULTA, e as duas seções são
+ * recolhíveis com o estado lembrado no navegador (`SecaoDoDossie.tsx`).
+ *
+ * Fora: a ordem configurável por funil (sugestão 3 do upstream), que pediria
+ * uma preferência por funil que não existe.
  *
  * SALVAR NÃO FECHA. Quem edita precisa ver a atividade que acabou de gerar
  * entrar na timeline; fechar esconderia o registro justamente de quem o
@@ -67,6 +77,21 @@ export function LeadDossier({
   const t = useT();
   const campos = useRef<HTMLDivElement | null>(null);
   const timeline = useLeadTimeline(open ? lead.id : null, lead.contact_id);
+  const { fechadas, alternar, abrir } = useSecoesRecolhidas();
+  const timelineRecolhida = fechadas.has("linha-do-tempo");
+  // As três MAIS RECENTES: a rota devolve `performed_at` decrescente, então o
+  // corte é no início da lista.
+  const itensDaTimeline = timelineRecolhida
+    ? timeline.itens.slice(0, ENTRADAS_COM_A_LINHA_RECOLHIDA)
+    : timeline.itens;
+  const temMaisNaTimeline = timeline.itens.length > ENTRADAS_COM_A_LINHA_RECOLHIDA;
+  // O atalho "Editar campos" rola DEPOIS de a seção abrir: rolar no mesmo tique
+  // mediria a posição com os campos ainda escondidos.
+  const [pedidoDeRolagem, setPedidoDeRolagem] = useState(0);
+  useEffect(() => {
+    if (pedidoDeRolagem === 0) return;
+    campos.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [pedidoDeRolagem]);
   const owner = resolveLeadOwner(lead, ownerNames);
   const score = lead.score ?? null;
   // Tarefas são de `agent` para cima, a mesma régua da tela de Tarefas e da
@@ -76,6 +101,18 @@ export function LeadDossier({
   const podeEditarTarefas =
     (user.is_platform_admin && !user.support) ||
     (activeOrg ? ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent : false);
+
+  // Montadas uma vez e usadas nos dois estados da seção: duplicar o bloco é o
+  // jeito mais fácil de o estado recolhido (o menos olhado) divergir. Props, e
+  // não o elemento numa variável: `tests/unit/dossie-atalho-conversa` mede a
+  // posição do elemento da linha do tempo no arquivo (por isso este comentário
+  // não escreve a tag).
+  const propsDaLinhaDoTempo = {
+    itens: itensDaTimeline,
+    chegouAoVivo: timeline.chegouAoVivo,
+    isLoading: timeline.isLoading,
+    isError: timeline.isError,
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -122,7 +159,12 @@ export function LeadDossier({
 
           <button
             type="button"
-            onClick={() => campos.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            onClick={() => {
+              // Recolhidos, os campos também abrem: rolar até um título
+              // fechado entregaria um destino vazio.
+              abrir("dados-do-negocio");
+              setPedidoDeRolagem((n) => n + 1);
+            }}
             className="ml-auto text-text-muted underline-offset-2 hover:text-text hover:underline"
           >
             {t("Editar campos")}
@@ -142,6 +184,18 @@ export function LeadDossier({
 
         <ConversaNoDossie conversa={lead.conversa} />
 
+        {/* ② Dados do negócio: o que se PREENCHE, antes da linha do tempo. */}
+        <SecaoDoDossie
+          id="dados-do-negocio"
+          titulo={t("Dados do negócio")}
+          recolhida={fechadas.has("dados-do-negocio")}
+          aoAlternar={alternar}
+        >
+          <div ref={campos}>
+            <LeadFieldsForm lead={lead} pipelineId={pipelineId} fieldDefs={fieldDefs} />
+          </div>
+        </SecaoDoDossie>
+
         {/* As tarefas ANTES da linha do tempo: a timeline conta o que já
             aconteceu, a tarefa é o que ainda falta fazer. Quem abre o card
             para agir procura o próximo passo primeiro. */}
@@ -152,26 +206,33 @@ export function LeadDossier({
           aberto={open}
         />
 
-        {/* ② timeline */}
-        <section className="flex-1 py-3">
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-            {t("Linha do tempo")}
-          </h3>
-          <LeadTimeline
-            itens={timeline.itens}
-            chegouAoVivo={timeline.chegouAoVivo}
-            isLoading={timeline.isLoading}
-            isError={timeline.isError}
-          />
-        </section>
-
-        {/* ③ campos, por último */}
-        <div ref={campos} className="border-t border-border pt-3">
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-            {t("Dados do negócio")}
-          </h3>
-          <LeadFieldsForm lead={lead} pipelineId={pipelineId} fieldDefs={fieldDefs} />
-        </div>
+        {/* ③ Linha do tempo: a CONSULTA, por último. Recolhida, mostra as três
+            entradas mais recentes e o "ver tudo". */}
+        <SecaoDoDossie
+          id="linha-do-tempo"
+          titulo={t("Linha do tempo")}
+          recolhida={timelineRecolhida}
+          aoAlternar={alternar}
+          className="flex-1 border-b-0"
+          conteudoRecolhido={
+            <>
+              <LeadTimeline {...propsDaLinhaDoTempo} />
+              {/* Só quando há o que ver: "ver tudo" numa lista de três não
+                  levaria a lugar nenhum. */}
+              {temMaisNaTimeline && (
+                <button
+                  type="button"
+                  onClick={() => alternar("linha-do-tempo")}
+                  className="mt-2 text-xs text-text-muted underline-offset-2 hover:text-text hover:underline"
+                >
+                  {t("Ver tudo")}
+                </button>
+              )}
+            </>
+          }
+        >
+          <LeadTimeline {...propsDaLinhaDoTempo} />
+        </SecaoDoDossie>
       </SheetContent>
     </Sheet>
   );

@@ -779,7 +779,7 @@ Gerados na ativação de MFA. 10 códigos de 8 chars alfanuméricos. Cada um uso
 create table public.user_recovery_codes (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users(id) on delete cascade,
-  code_hash   bytea not null, -- sha256
+  code_hash   bytea not null, -- hashRecoveryCode (lib/auth/recovery-codes.ts)
   used_at     timestamptz,
   used_ip     inet,
   created_at  timestamptz not null default now()

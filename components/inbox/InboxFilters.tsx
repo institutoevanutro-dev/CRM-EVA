@@ -411,7 +411,9 @@ export function InboxFilters({ value, onChange }: Props) {
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder={t("Nome, telefone ou última msg.")}
             title={t("Buscar por nome, telefone ou última mensagem…")}
-            className="h-9 rounded-full border-transparent bg-surface-elevated pl-9 text-[13px] shadow-none focus-visible:border-border focus-visible:bg-background"
+            // 16px no celular (porte do #3190): com menos, o iPhone amplia a
+            // página ao focar a busca. A partir do `md`, os 13px de antes.
+            className="h-9 rounded-full border-transparent bg-surface-elevated pl-9 text-base shadow-none focus-visible:border-border focus-visible:bg-background md:text-[13px]"
             aria-label={t("Buscar conversas")}
           />
         </div>

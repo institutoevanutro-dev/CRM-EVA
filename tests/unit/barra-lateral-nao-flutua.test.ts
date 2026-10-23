@@ -51,7 +51,10 @@ describe("a barra ocupa lugar, em vez de flutuar", () => {
   it("é `sticky` e ocupa a altura da tela", () => {
     // O efeito visual precisa continuar: a barra não rola com a página.
     expect(BARRA).toMatch(/\bsticky\b/);
-    expect(BARRA).toMatch(/h-screen/);
+    // A altura é a da tela MENOS `--faixas-de-cima` (as faixas de aviso grudam
+    // acima dela; sem o desconto o pé da barra fica abaixo da borda).
+    expect(BARRA).toMatch(/h-\[calc\(100dvh-var\(--faixas-de-cima,0px\)\)\]/);
+    expect(BARRA, "`h-screen` não acompanha a barra do navegador móvel").not.toMatch(/h-screen/);
   });
 
   it("não encolhe", () => {

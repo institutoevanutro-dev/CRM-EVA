@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useTransferConversation } from "@/hooks/inbox/useTransferConversation";
+import { rotuloDoAtendente } from "@/lib/users/rotulo-do-atendente";
 
 interface Props {
   conversationId: string;
@@ -82,7 +83,9 @@ export function ReassignDialog({ conversationId, open, onOpenChange }: Props) {
               <SelectContent>
                 {options.map((m) => (
                   <SelectItem key={m.user_id} value={m.user_id}>
-                    {m.full_name ?? `${t("Atendente")} ${m.user_id.slice(0, 8)}`}
+                    {/* Sem nome cadastrado, "Atendente sem nome" (#3298): nunca
+                        os primeiros dígitos do `user_id`. */}
+                    {rotuloDoAtendente(m.full_name, t)}
                     <span className="ml-1 text-muted-foreground">
                       · {t(ROLE_LABEL[m.role] ?? m.role)}
                     </span>

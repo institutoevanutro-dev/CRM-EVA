@@ -57,9 +57,12 @@ describe("no celular o botão de responder aparece", () => {
 
   it("os DOIS botões (entrada e saída) seguem a mesma regra", () => {
     // São dois elementos espelhados. Consertar um e esquecer o outro deixaria a
-    // metade da conversa sem resposta possível no celular.
+    // metade da conversa sem resposta possível no celular. A terceira ocorrência
+    // é a classe do "Encaminhar" (porte do DeskcommCRM #2841), uma só para os
+    // dois lados da conversa.
     const comRegra = [...BOLHA.matchAll(/\[@media\(hover:hover\)\]:opacity-0/g)];
-    expect(comRegra.length, "um dos dois botões ficou de fora").toBe(2);
+    expect(comRegra.length, "um dos botões ao lado da bolha ficou de fora").toBe(3);
+    expect([...BOLHA.matchAll(/className=\{GESTO_AO_LADO_DA_BOLHA\}/g)], "o Encaminhar de um dos lados").toHaveLength(2);
   });
 
   it("o teclado também alcança", () => {

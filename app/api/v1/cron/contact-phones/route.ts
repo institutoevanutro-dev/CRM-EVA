@@ -49,6 +49,7 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { emitirTelefoneGanho } from "@/lib/contacts/telefone-ganho";
 
 export const dynamic = "force-dynamic";
 
@@ -189,8 +190,21 @@ async function handle(req: NextRequest): Promise<Response> {
     }
 
     const gravou = await carimbar(phone);
-    if (phone && gravou) resolvidos++;
-    else semResposta++;
+    if (phone && gravou) {
+      resolvidos++;
+      // (porte do original #3317) O cron acabou de tirar a ficha do vazio:
+      // `gravou` é o UPDATE ter casado UMA linha com `.is("phone_number", null)`
+      // no filtro, o MESMO critério dos outros caminhos. O `carimbar(null)` dos
+      // desfechos sem resposta não emite, porque não há telefone nenhum.
+      await emitirTelefoneGanho(admin, {
+        organizationId: c.organization_id,
+        contactId: c.id,
+        telefone: canonicalPhoneBR(phone),
+        origem: "cron.contact-phones",
+      });
+    } else {
+      semResposta++;
+    }
   }
 
   return ok(

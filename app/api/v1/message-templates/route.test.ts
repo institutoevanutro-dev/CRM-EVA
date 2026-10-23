@@ -50,7 +50,19 @@ function banco() {
 
   h.from.mockImplementation((tabela: string) => {
     if (tabela === "message_templates") {
+      // A leitura da PRIMEIRA da lista: a criação nasce um passo acima dela (0394).
+      const leitura = {
+        select: () => leitura,
+        eq: () => leitura,
+        order: () => leitura,
+        limit: () => leitura,
+        maybeSingle: async () => {
+          const [primeira] = [...templates].sort((a, b) => Number(a.ordem) - Number(b.ordem));
+          return { data: primeira ? { ordem: primeira.ordem } : null, error: null };
+        },
+      };
       return {
+        ...leitura,
         insert: (linha: Linha) => ({
           select: () => ({
             single: async () => {
@@ -185,7 +197,16 @@ describe("POST /api/v1/message-templates — imagens da biblioteca", () => {
   });
 
   it("item que o gatilho recusa (de outra organização): 422 legível, sem auditoria", async () => {
+    // A leitura da primeira da lista (0394) passa; quem recusa é o insert.
+    const leitura = {
+      select: () => leitura,
+      eq: () => leitura,
+      order: () => leitura,
+      limit: () => leitura,
+      maybeSingle: async () => ({ data: null, error: null }),
+    };
     h.from.mockImplementation(() => ({
+      ...leitura,
       insert: () => ({
         select: () => ({
           single: async () => ({

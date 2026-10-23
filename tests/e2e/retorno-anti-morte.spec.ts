@@ -115,7 +115,9 @@ test("a linha do tempo do negócio mostra o retorno em português de gente", asy
 
   // O que o operador LÊ, não o que a API devolve: rótulo humano, sem
   // identificador técnico e sem a frase repetida.
-  const linha = (await dossie.innerText()).split("LINHA DO TEMPO")[1] ?? "";
+  // A seção pelo atributo, não por um `split` no texto do título: desde o porte
+  // do #3232 o título é um botão de recolher, e o dossiê pode reordenar.
+  const linha = await dossie.locator('[data-secao="linha-do-tempo"]').innerText();
   expect(linha).not.toMatch(/followup_scheduled|followup_cancelled|demand_closed/);
   expect(linha).not.toContain("Atividade registrada");
   await captura(page, "w2-retorno-na-linha-do-tempo.png");

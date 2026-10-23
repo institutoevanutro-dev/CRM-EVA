@@ -130,6 +130,38 @@ describe("header do inbox — não trava a largura da tela", () => {
     }
   });
 
+  it("no celular Assumir vem primeiro, a fileira mostra que rola e some com o teclado (porte do #3190)", () => {
+    // Só CSS: a ordem do DOM (a do computador e a do teclado) não muda.
+    const { container } = renderHeader();
+    const assumir = screen.getByRole("button", { name: "Assumir" });
+    expect(assumir.className.split(/\s+/)).toContain("max-md:order-first");
+
+    const header = container.firstElementChild as HTMLElement;
+    const faixa = header.children[1] as HTMLElement;
+    const classes = faixa.className.split(/\s+/);
+    expect(faixa.className, "sem a máscara nada indica que há botões à direita").toMatch(
+      /max-md:\[mask-image:linear-gradient\(/,
+    );
+    expect(classes).toContain("max-md:pr-8");
+    // Com o teclado aberto a faixa sai e o fio fica com a altura. `max-md:` é
+    // obrigatório: no computador encolher a janela não é teclado.
+    expect(classes).toContain("max-md:group-data-[teclado-aberto]/conversa:hidden");
+    expect(faixa.className).not.toMatch(/(?:^|\s)group-data-\[teclado-aberto\]/);
+  });
+
+  it("no celular o telefone sai do cabeçalho (continua na Ficha) e a porta das ações tem 44px (porte do #3190)", () => {
+    renderHeader();
+    const telefone = screen.getByText(/5511999|\+55/).closest("p") as HTMLElement;
+    expect(telefone.className.split(/\s+/)).toContain("max-md:hidden");
+    // `size="sm"` dá `h-11` (44px) abaixo do `lg`; o `md:h-9` devolve os 36px
+    // a partir do `md`. Um `h-9` sem prefixo voltaria a 36px no toque.
+    const portaDasAcoes = screen.getByRole("button", { name: "Ações da conversa" });
+    const classesDaPorta = portaDasAcoes.className.split(/\s+/);
+    expect(classesDaPorta).toContain("h-11");
+    expect(classesDaPorta).toContain("md:h-9");
+    expect(classesDaPorta).not.toContain("h-9");
+  });
+
   it('"Ver contato" existe no DOM e só se cala onde há outra porta', () => {
     renderHeader();
     // Ele NÃO sai do markup: some por CSS a partir de `xl`, exatamente a largura

@@ -1,5 +1,6 @@
 "use client";
 import { useT } from "@/hooks/i18n/useT";
+import { rotuloDoAtendente, type Tradutor } from "@/lib/users/rotulo-do-atendente";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,28 +48,25 @@ export function resolverMencao(texto: string, caret: number): { start: number; q
 }
 
 /**
- * O rótulo de quem não tem `full_name` no cadastro.
+ * Lista filtrada pela query, já com o rótulo de cada um (puro, testável).
  *
- * É o MESMO arranjo do ReassignDialog (`t("Atendente")` + o começo do id): se
- * o nome não existe, a lista não pode some a pessoa — ela é justamente quem
- * precisa poder ser mencionada. O id nunca aparece inteiro: o rótulo vira
- * `@Asesor 2f9c1d80` na nota, legível e único sem expor o uuid inteiro.
+ * O rótulo sai de `rotuloDoAtendente` (#3298), a MESMA fonte do seletor de
+ * transferência. Antes, quem não tinha nome virava `Atendente 2f9c1d80` (o
+ * começo do `user_id`), e esse código ia gravado no corpo da nota e na
+ * notificação. Sem nome, a pessoa continua na lista como "Atendente sem nome",
+ * e o id segue só no token da menção. O filtro casa pelo rótulo exibido: membro
+ * sem nome não é achável por um pedaço de id, de propósito.
  */
-export function rotuloSemNome(user_id: string, padrao: string): string {
-  return `${padrao} ${user_id.slice(0, 8)}`;
-}
-
-/** Lista filtrada pela query, já com o rótulo de cada um (puro, testável). */
 export function opcoesDeMencao(
   membros: readonly MembroDeMencao[],
   query: string,
-  padrao: string,
+  t: Tradutor,
 ): OpcaoDeMencao[] {
   const q = query.trim().toLowerCase();
   return membros
     .map((membro) => ({
       membro,
-      rotulo: membro.full_name?.trim() || rotuloSemNome(membro.user_id, padrao),
+      rotulo: rotuloDoAtendente(membro.full_name, t),
     }))
     .filter((opcao) => opcao.rotulo.toLowerCase().includes(q));
 }

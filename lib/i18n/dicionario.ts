@@ -4152,8 +4152,8 @@ export const DICIONARIO: Traducoes = {
     es: "El mensaje está en la cola y sale en cuanto el canal lo acepte.",
   },
   // ─── lib/channels/frases-de-falha.ts (texto de tela por código do adapter) ───
-  "O número escolhido não está conectado no momento. Reconecte em Conexões — a mensagem sai sozinha quando ele voltar.": {
-    es: "El número elegido no está conectado en este momento. Reconéctalo en Conexiones — el mensaje sale solo cuando vuelva.",
+  "O número escolhido não está conectado no momento. Reconecte em Conexões: a mensagem sai sozinha quando ele voltar.": {
+    es: "El número elegido no está conectado en este momento. Reconéctalo en Conexiones: el mensaje sale solo cuando vuelva.",
   },
   "A conexão de WhatsApp ainda não foi configurada nesta instalação.": {
     es: "La conexión de WhatsApp todavía no fue configurada en esta instalación.",
@@ -6587,7 +6587,6 @@ export const DICIONARIO: Traducoes = {
   "Contato atualizado": { es: "Contacto actualizado" },
   "Editar contato": { es: "Editar contacto" },
   "Atualize os dados deste contato.": { es: "Actualiza los datos de este contacto." },
-  "Telefone (E.164)": { es: "Teléfono (E.164)" },
   // Autocompletar de etiquetas na ficha do contato (issue #2732).
   "Nenhuma etiqueta neste contato.": { es: "Ninguna etiqueta en este contacto." },
   "Digite para buscar etiquetas…": { es: "Escribe para buscar etiquetas…" },
@@ -11252,6 +11251,208 @@ export const DICIONARIO: Traducoes = {
   "Opções de resposta": { es: "Opciones de respuesta" },
   "Nome, telefone ou última msg.": { es: "Nombre, teléfono o último msj." },
   "Suas organizações": { es: "Tus organizaciones" },
+  // Portes 23/10, grupo A (PR #3043): recolher o painel do contato no Inbox.
+  "Recolher painel do contato": { es: "Contraer panel del contacto" },
+  "Expandir painel do contato": { es: "Expandir panel del contacto" },
+  // Portes 23/10, grupo A (PR #3191): nota de voz do iPhone e áudio convertido para tocar.
+  "Campo 'nota_de_voz' inválido.": { es: "Campo 'nota_de_voz' inválido." },
+  "Formato não suportado: use ?formato=aac.": { es: "Formato no admitido: use ?formato=aac." },
+  "Muitas conversões de áudio seguidas. Tente em um minuto.": {
+    es: "Demasiadas conversiones de audio seguidas. Inténtalo en un minuto.",
+  },
+  "Muitos áudios sendo preparados agora. Tente em alguns segundos.": {
+    es: "Se están preparando muchos audios ahora. Inténtalo en unos segundos.",
+  },
+  "Formato de áudio não suportado.": { es: "Formato de audio no admitido." },
+  "Não foi possível preparar o áudio para este aparelho.": {
+    es: "No fue posible preparar el audio para este dispositivo.",
+  },
+  // Portes 23/10, grupo C (PR #3261): a ordem das respostas rápidas por arrastar e soltar.
+  "Arrastar para reordenar": { es: "Arrastrar para reordenar" },
+  "Vizinho que não pertence a esta organização.": { es: "Vecino que no pertenece a esta organización." },
+  "Você não pode reordenar esta resposta rápida.": { es: "No puedes reordenar esta respuesta rápida." },
+  "Não foi possível reordenar a lista inteira. Recarregue a página.": {
+    es: "No fue posible reordenar la lista completa. Recarga la página.",
+  },
+  // Portes 23/10, grupo B (PR #3192): reenviar a mensagem que falhou, pela própria conversa.
+  "Não foi possível enviar esta mensagem.": { es: "No se pudo enviar este mensaje." },
+  "A mensagem não saiu de novo.": { es: "El mensaje no salió de nuevo." },
+  "Aguardando conexão": { es: "Esperando conexión" },
+  "Não enviada: sem conexão": { es: "No enviado: sin conexión" },
+  "Enviar esta mensagem de novo?": { es: "¿Enviar este mensaje de nuevo?" },
+  "Pode ser que esta mensagem já tenha chegado. Confira no WhatsApp do cliente antes de enviar de novo.": {
+    es: "Puede que este mensaje ya haya llegado. Verifica en el WhatsApp del cliente antes de enviarlo de nuevo.",
+  },
+  "Enviar de novo": { es: "Enviar de nuevo" },
+  "O WhatsApp não confirmou o envio a tempo. Pode ser que a mensagem tenha chegado.": {
+    es: "WhatsApp no confirmó el envío a tiempo. Puede que el mensaje haya llegado.",
+  },
+  "Este número não tem WhatsApp.": { es: "Este número no tiene WhatsApp." },
+  "A janela de 24 horas fechou. Envie um modelo aprovado ou aguarde o cliente escrever.": {
+    es: "La ventana de 24 horas se cerró. Envía una plantilla aprobada o espera a que el cliente escriba.",
+  },
+  "Esta mensagem não pode ser reenviada.": { es: "Este mensaje no se puede volver a enviar." },
+  "Confirme antes de enviar de novo.": { es: "Confirma antes de enviar de nuevo." },
+  "Esta mensagem já está sendo reenviada.": { es: "Este mensaje ya se está volviendo a enviar." },
+  "Muitas tentativas seguidas. Tente em um minuto.": { es: "Demasiados intentos seguidos. Intenta en un minuto." },
+  "Mensagem não encontrada.": { es: "Mensaje no encontrado." },
+  "A credencial desta conexão não pôde ser lida nesta instalação. Reconecte em Conexões: a mensagem sai sozinha quando ela voltar.": {
+    es: "La credencial de esta conexión no se pudo leer en esta instalación. Vuelve a conectar en Conexiones: el mensaje sale solo cuando vuelva.",
+  },
+  // Portes 23/10, grupo B (PR #3279): a bolha apagada diz quem apagou.
+  "Esta mensagem foi apagada pelo contato": { es: "Este mensaje fue eliminado por el contacto" },
+  "Esta mensagem foi apagada pelo atendente": { es: "Este mensaje fue eliminado por el agente" },
+  // Portes 23/10, grupo B (PR #2841): encaminhar mensagem para outra conversa.
+  Encaminhar: { es: "Reenviar" },
+  "Encaminhar mensagem": { es: "Reenviar mensaje" },
+  "Escolha a conversa que vai receber esta mensagem.": { es: "Elige la conversación que recibirá este mensaje." },
+  "Buscar conversa": { es: "Buscar conversación" },
+  "Mensagem encaminhada.": { es: "Mensaje reenviado." },
+  // A rota responde 201 mesmo quando o envio falhou (`status: "failed"`): o
+  // toast precisa dizer isso, com o motivo que o envio gravou.
+  "Não foi possível encaminhar: {motivo}": { es: "No se pudo reenviar: {motivo}" },
+  "Escolha uma conversa de destino.": { es: "Elige una conversación de destino." },
+  "Escolha uma conversa de destino desta organização.": { es: "Elige una conversación de destino de esta organización." },
+  "Esta mensagem foi apagada e não pode ser encaminhada.": { es: "Este mensaje fue eliminado y no se puede reenviar." },
+  "A mídia desta mensagem ainda não chegou ao CRM. Tente encaminhar de novo em alguns segundos.": {
+    es: "El contenido multimedia de este mensaje aún no llegó al CRM. Intenta reenviarlo de nuevo en unos segundos.",
+  },
+  "Não consegui preparar a mídia desta mensagem para o encaminhamento. Tente de novo em instantes.": {
+    es: "No pude preparar el contenido multimedia de este mensaje para reenviarlo. Inténtalo de nuevo en unos instantes.",
+  },
+  "Esta mídia não pode ser encaminhada.": { es: "Este contenido multimedia no se puede reenviar." },
+  "A mensagem foi para a conversa, mas não saiu: o número está sem conexão.": {
+    es: "El mensaje fue a la conversación, pero no salió: el número está sin conexión.",
+  },
+  "Só é possível encaminhar mensagens de texto ou mídia.": { es: "Solo se pueden reenviar mensajes de texto o multimedia." },
+  // Portes 23/10, grupo B (PR #3336): o motivo da falha numa frase só (bolha, reenvio,
+  // encaminhamento e modelo). As frases da plataforma oficial e as que o envio grava.
+  "A pessoa desligou as mensagens de marketing desta empresa no WhatsApp. Não tente de novo.": {
+    es: "La persona desactivó los mensajes de marketing de esta empresa en WhatsApp. No lo intentes de nuevo.",
+  },
+  "O WhatsApp limitou quantas promoções esta pessoa recebe. Dá para tentar de novo depois de 24 horas.": {
+    es: "WhatsApp limitó cuántas promociones recibe esta persona. Se puede intentar de nuevo después de 24 horas.",
+  },
+  "Não foi possível entregar: o número não tem WhatsApp ou o aplicativo está desatualizado.": {
+    es: "No se pudo entregar: el número no tiene WhatsApp o la aplicación está desactualizada.",
+  },
+  "A pessoa faz parte de um teste do WhatsApp que não recebe esta mensagem. Não foi cobrado.": {
+    es: "La persona forma parte de una prueba de WhatsApp que no recibe este mensaje. No se cobró.",
+  },
+  "O destinatário é o próprio número que envia.": { es: "El destinatario es el mismo número que envía." },
+  "Passaram mais de 24 horas da última mensagem do cliente: fora da janela, só modelo aprovado.": {
+    es: "Pasaron más de 24 horas desde el último mensaje del cliente: fuera de la ventana, solo plantilla aprobada.",
+  },
+  "Muitas mensagens seguidas para a mesma pessoa. Espere alguns minutos.": {
+    es: "Demasiados mensajes seguidos a la misma persona. Espera unos minutos.",
+  },
+  "O número atingiu o limite de envio por segundo. Tente de novo em instantes.": {
+    es: "El número alcanzó el límite de envío por segundo. Intenta de nuevo en unos instantes.",
+  },
+  "O modelo foi pausado pela plataforma por baixa qualidade.": { es: "La plataforma pausó la plantilla por baja calidad." },
+  "O modelo foi desativado pela plataforma.": { es: "La plataforma desactivó la plantilla." },
+  "Os valores enviados não batem com as variáveis do modelo.": {
+    es: "Los valores enviados no coinciden con las variables de la plantilla.",
+  },
+  "O modelo não existe neste número com este idioma.": { es: "La plantilla no existe en este número con este idioma." },
+  "O texto do modelo com os valores ficou longo demais.": {
+    es: "El texto de la plantilla con los valores quedó demasiado largo.",
+  },
+  "O conteúdo viola a política de modelos da plataforma.": {
+    es: "El contenido viola la política de plantillas de la plataforma.",
+  },
+  "O formato de um valor não confere com o modelo (por exemplo, falta o link da imagem do cabeçalho).": {
+    es: "El formato de un valor no coincide con la plantilla (por ejemplo, falta el enlace de la imagen del encabezado).",
+  },
+  "O número foi restringido pela plataforma por denúncias de spam.": {
+    es: "La plataforma restringió el número por denuncias de spam.",
+  },
+  "A conta do número está bloqueada na plataforma.": { es: "La cuenta del número está bloqueada en la plataforma." },
+  "A conta do número está bloqueada temporariamente por violar as políticas.": {
+    es: "La cuenta del número está bloqueada temporalmente por violar las políticas.",
+  },
+  "Há um problema com o pagamento da conta na plataforma.": { es: "Hay un problema con el pago de la cuenta en la plataforma." },
+  "Mensagens de marketing estão desativadas para esta conta na API.": {
+    es: "Los mensajes de marketing están desactivados para esta cuenta en la API.",
+  },
+  "O modelo foi recategorizado pela plataforma.": { es: "La plataforma cambió la categoría de la plantilla." },
+  "Faltam valores para as variáveis do modelo. Nada foi enviado.": {
+    es: "Faltan valores para las variables de la plantilla. No se envió nada.",
+  },
+  "O cabeçalho do modelo não confere (tipo de mídia ou link). Nada foi enviado.": {
+    es: "El encabezado de la plantilla no coincide (tipo de archivo o enlace). No se envió nada.",
+  },
+  "O valor de um botão não confere com o modelo. Nada foi enviado.": {
+    es: "El valor de un botón no coincide con la plantilla. No se envió nada.",
+  },
+  "O envio precisa de um modelo aprovado.": { es: "El envío necesita una plantilla aprobada." },
+  "Acabou a cota mensal de mensagens do provedor do número. Cadastre um meio de pagamento lá.": {
+    es: "Se agotó la cuota mensual de mensajes del proveedor del número. Registra un medio de pago allí.",
+  },
+  "O modelo não está aprovado na plataforma neste momento.": {
+    es: "La plantilla no está aprobada en la plataforma en este momento.",
+  },
+  "Falta o valor de uma variável do modelo para este contato.": {
+    es: "Falta el valor de una variable de la plantilla para este contacto.",
+  },
+  "Este modelo não está na lista de modelos do número. Sincronize em Conexões, na aba Modelos.": {
+    es: "Esta plantilla no está en la lista de plantillas del número. Sincroniza en Conexiones, en la pestaña Modelos.",
+  },
+  "O modelo mudou na plataforma depois de configurado. Configure o envio de novo.": {
+    es: "La plantilla cambió en la plataforma después de configurarse. Configura el envío de nuevo.",
+  },
+  "O acesso ao WhatsApp Oficial expirou ou foi revogado. Reconecte o número em Conexões.": {
+    es: "El acceso al WhatsApp Oficial expiró o fue revocado. Vuelve a conectar el número en Conexiones.",
+  },
+  "Falta permissão para este envio no WhatsApp Oficial. Revise as permissões do número em Conexões.": {
+    es: "Falta permiso para este envío en el WhatsApp Oficial. Revisa los permisos del número en Conexiones.",
+  },
+  "A conexão com o WhatsApp Oficial atingiu o limite de pedidos por agora. Tente de novo mais tarde.": {
+    es: "La conexión con el WhatsApp Oficial alcanzó el límite de solicitudes por ahora. Inténtalo de nuevo más tarde.",
+  },
+  "Envio automático bloqueado pelo modo de teste do canal.": {
+    es: "Envío automático bloqueado por el modo de prueba del canal.",
+  },
+  "Não foi possível verificar o acesso da IA. Nenhuma mensagem foi enviada.": {
+    es: "No fue posible verificar el acceso de la IA. No se envió ningún mensaje.",
+  },
+  "Não conseguimos montar os valores do modelo para este envio. Nada foi enviado.": {
+    es: "No pudimos armar los valores de la plantilla para este envío. No se envió nada.",
+  },
+  // Portes 23/10, grupo D (PR #3305): o telefone do cadastro manual aceita DDD + número.
+  "Telefone (DDD + número)": { es: "Teléfono (código de área + número)" },
+  "Telefone deve ter DDD + número (ex.: 11999998888) ou o formato E.164 (+5511999998888)": {
+    es: "El teléfono debe tener código de área + número (ej.: 11999998888) o el formato E.164 (+5511999998888)",
+  },
+  // Portes 23/10, grupo F (PR #3339): gerar códigos de recuperação sem mostrar o código cru do erro.
+  "Gerar códigos de recuperação não está disponível nesta instalação.": {
+    es: "Generar códigos de recuperación no está disponible en esta instalación.",
+  },
+  "Ative a verificação em duas etapas antes de gerar os códigos.": {
+    es: "Active la verificación en dos pasos antes de generar los códigos.",
+  },
+  "Não foi possível gerar os códigos. Tente de novo.": { es: "No se pudieron generar los códigos. Intente de nuevo." },
+  // Portes 23/10, grupo D (PR #3197): CPF ou e-mail repetido responde 409 contact_exists.
+  "Já existe um contato com este CPF.": { es: "Ya existe un contacto con este CPF." },
+  "Já existe um contato com este e-mail.": { es: "Ya existe un contacto con este correo electrónico." },
+  // Portes 23/10, grupo D (PR #2834): o e-mail da automação para uma pessoa da equipe.
+  "E-mail de uma pessoa da equipe": { es: "Correo de una persona del equipo" },
+  "Pessoa da equipe": { es: "Persona del equipo" },
+  "A pessoa recebe no e-mail cadastrado no acesso dela, e o vínculo com a empresa é conferido no momento do envio.": {
+    es: "La persona recibe en el correo registrado en su acceso, y el vínculo con la empresa se comprueba en el momento del envío.",
+  },
+  "Escolha a pessoa da equipe que recebe os envios desta regra.": {
+    es: "Elige la persona del equipo que recibe los envíos de esta regla.",
+  },
+  "A regra não tem a pessoa da equipe escolhida. Abra a automação e escolha quem deve receber.": {
+    es: "La regla no tiene la persona del equipo elegida. Abre la automatización y elige quién debe recibir.",
+  },
+  "A pessoa escolhida não faz mais parte da equipe, então o e-mail não foi enviado. Escolha outra pessoa na automação.": {
+    es: "La persona elegida ya no forma parte del equipo, así que el correo no se envió. Elige otra persona en la automatización.",
+  },
+  "A pessoa escolhida não tem e-mail cadastrado no acesso dela.": {
+    es: "La persona elegida no tiene correo registrado en su acceso.",
+  },
 };
 
 /**

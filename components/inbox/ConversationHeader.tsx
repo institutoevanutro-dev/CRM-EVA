@@ -265,8 +265,10 @@ export function ConversationHeader({
             {conversation.contato_oculto && (
               <SeloDeOculto className="h-4 shrink-0 px-1.5 text-[10px] leading-none" />
             )}
+            {/* No celular o telefone sai (porte do #3190): cada linha do
+                cabeçalho é altura tirada do fio, e o número continua na Ficha. */}
             {phone && (
-              <p className="flex min-w-0 items-center gap-1 text-xs text-text-muted">
+              <p className="flex min-w-0 items-center gap-1 text-xs text-text-muted max-md:hidden">
                 <Phone size={11} weight="regular" aria-hidden className="shrink-0" />
                 <span className="truncate">{phone}</span>
               </p>
@@ -292,7 +294,9 @@ export function ConversationHeader({
           type="button"
           size="sm"
           variant={revelacao.visivel ? "secondary" : "ghost"}
-          className="h-9 shrink-0 gap-1 px-2.5"
+          // 44px no celular (o `size="sm"` dá `h-11` abaixo do `lg`): é a porta
+          // das ações no toque (porte do #3190). A partir do `md`, os 36px de antes.
+          className="shrink-0 gap-1 px-2.5 md:h-9"
           title={t("Ações da conversa")}
           aria-label={t("Ações da conversa")}
           {...revelacao.alternadorProps}
@@ -316,6 +320,12 @@ export function ConversationHeader({
         className={cn(
           "flex min-w-0 flex-wrap items-center gap-1.5 bg-background",
           "max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-1 max-md:[&>*]:shrink-0",
+          // NO CELULAR (porte do #3190): a máscara apaga a borda direita para
+          // dizer que a fileira rola, e o `pr-8` deixa o último botão fora dela
+          // quando rolada até o fim. Com o teclado aberto a faixa sai e o fio
+          // fica com a altura (`data-teclado-aberto`, de `useAlturaVisivel`).
+          // Tudo `max-md:`: no computador encolher a janela não é teclado.
+          "max-md:pr-8 max-md:[mask-image:linear-gradient(to_right,black_calc(100%_-_2rem),transparent)] max-md:group-data-[teclado-aberto]/conversa:hidden",
           revelacao.noFluxo
             ? "w-full"
             : "absolute inset-x-0 top-full z-20 border-b border-border px-3 py-2 shadow-md md:px-4",
@@ -363,6 +373,9 @@ export function ConversationHeader({
           <Button
             size="sm"
             variant="default"
+            // No celular, a ação que a pessoa veio fazer abre a fileira, sem
+            // rolar para achá-la (porte do #3190). Só CSS: a ordem do DOM não muda.
+            className="max-md:order-first"
             disabled={claim.isPending}
             // O rótulo NÃO muda (é contrato: `inbox-header-nao-trava` e o
             // dicionário de espanhol o citam). O que faltava era a consequência
@@ -389,6 +402,7 @@ export function ConversationHeader({
           <Button
             size="sm"
             variant="outline"
+            className="max-md:order-first"
             disabled={release.isPending}
             onClick={() => release.mutate({ conversation_id: conversation.id })}
           >

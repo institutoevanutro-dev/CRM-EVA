@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { motivoDaFalhaDaMensagem } from "@/lib/inbox/motivo-da-falha";
 
 import { Button } from "@/components/ui/button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -214,7 +215,9 @@ export function JanelaFechadaAviso({
         onSuccess: (res) => {
           const enviada = res.data;
           if (enviada?.status === "failed") {
-            toast.error(enviada.error_message ?? t("Não consegui enviar o modelo."));
+            // O motivo pela mesma régua da bolha: sem o texto cru do canal, e
+            // com a causa da recusa do modelo quando ela vem no texto.
+            toast.error(t("Não consegui enviar o modelo."), { description: motivoDaFalhaDaMensagem(enviada, t) });
             return;
           }
           salvarNoModelo(modelo, enviados);
@@ -256,7 +259,9 @@ export function JanelaFechadaAviso({
             disabled={send.isPending}
             aria-label={t("Modelo aprovado")}
             className={cn(
-              "h-9 min-w-[16rem] flex-1 rounded-md border border-input bg-background px-2 text-sm",
+              // 16px e 44px no toque (porte do #3191): o Safari do iPhone amplia
+              // a página ao focar campo com fonte menor.
+              "h-11 min-w-[16rem] flex-1 rounded-md border border-input bg-background px-2 text-base md:text-sm lg:h-9",
               "focus:outline-hidden focus:ring-1 focus:ring-ring",
             )}
           >
@@ -297,7 +302,7 @@ export function JanelaFechadaAviso({
                 disabled={send.isPending}
                 placeholder={ehMidia(slot) ? "https://…" : ""}
                 className={cn(
-                  "h-9 rounded-md border border-input bg-background px-2 text-sm",
+                  "h-11 rounded-md border border-input bg-background px-2 text-base md:text-sm lg:h-9",
                   "focus:outline-hidden focus:ring-1 focus:ring-ring",
                 )}
               />

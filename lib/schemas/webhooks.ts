@@ -67,13 +67,23 @@ export const actionSchema = z.discriminatedUnion("type", [
   // O e-mail como SAÍDA (porte do upstream #2794). O transporte não é da regra:
   // é o serviço de e-mail da instalação (`lib/email/resend.ts`). `email_fixo`
   // só existe para o modo `fixo`; "" do input controlado vira ausência.
+  //
+  // `membro_da_equipe` (porte do upstream #2834): o e-mail para uma PESSOA da
+  // equipe. A regra guarda só o vínculo (`membro_id`); o endereço sai do acesso
+  // da própria pessoa, e o vínculo é conferido NO ENVIO (send-email.ts).
   z.object({
     type: z.literal("send_email"),
     config: z.object({
-      destinatario: z.enum(["contato", "dono_do_lead", "fixo"]),
+      destinatario: z.enum(["contato", "dono_do_lead", "membro_da_equipe", "fixo"]),
       email_fixo: z.preprocess(
         (v) => (v === "" ? undefined : v),
         z.string().email("E-mail inválido").max(320).optional(),
+      ),
+      // Mesma tolerância de `email_fixo`: o editor deixa "" quando o modo não é
+      // `membro_da_equipe`.
+      membro_id: z.preprocess(
+        (v) => (v === "" ? undefined : v),
+        z.string().uuid().optional(),
       ),
       assunto: z.string().min(1).max(200),
       corpo: z.string().min(1).max(5000),
@@ -85,6 +95,15 @@ export const actionSchema = z.discriminatedUnion("type", [
           code: "custom",
           path: ["email_fixo"],
           message: "Informe o endereço de e-mail que recebe os envios desta regra.",
+        });
+      }
+      // Mesma régua do endereço fixo: sem a pessoa escolhida, a regra salvaria
+      // e só falharia no disparo (`sem_membro` em send-email.ts).
+      if (config.destinatario === "membro_da_equipe" && !config.membro_id) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["membro_id"],
+          message: "Escolha a pessoa da equipe que recebe os envios desta regra.",
         });
       }
     }),

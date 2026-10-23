@@ -17,17 +17,22 @@
  * frase tem que dizer o que ele faz a respeito. "waha_error" não diz.
  */
 
-const FRASES: Record<string, string> = {
+/**
+ * Exportada para a bolha da conversa poder escrever `t(FRASES_DE_FALHA[codigo])`.
+ * A cerca de i18n deste fork não resolve tabela importada de outro módulo, então
+ * quem cobra o espanhol de cada frase é `lib/channels/frases-de-falha.test.ts`.
+ */
+export const FRASES_DE_FALHA: Record<string, string> = {
   // Sessão do canal fora de WORKING — o número está desconectado.
   channel_session_not_working:
-    "O número escolhido não está conectado no momento. Reconecte em Conexões — a mensagem sai sozinha quando ele voltar.",
+    "O número escolhido não está conectado no momento. Reconecte em Conexões: a mensagem sai sozinha quando ele voltar.",
   // Credencial do transporte ausente no ambiente da instalação.
   waha_not_configured: "A conexão de WhatsApp ainda não foi configurada nesta instalação.",
   meta_not_configured: "A conexão de WhatsApp ainda não foi configurada nesta instalação.",
   zernio_not_configured: "A conexão de WhatsApp ainda não foi configurada nesta instalação.",
   // Credencial da sessão gravada, mas que não decifra (chave mestra trocada, GUC ausente).
   meta_creds_decrypt_failed:
-    "A credencial desta conexão não pôde ser lida nesta instalação. Reconecte em Conexões — a mensagem sai sozinha quando ela voltar.",
+    "A credencial desta conexão não pôde ser lida nesta instalação. Reconecte em Conexões: a mensagem sai sozinha quando ela voltar.",
   // Canal excluído da Central de Conexões (migration 0106).
   channel_archived:
     "Esse número foi excluído da Central de Conexões. Escolha outro número nesta automação.",
@@ -38,6 +43,12 @@ const FRASES: Record<string, string> = {
   zernio_error: "O canal recusou o envio. Confira a conexão em Conexões.",
   // Falha do NOSSO Storage ao preparar a mídia — não é do canal.
   storage_sign_failed: "Não conseguimos preparar o arquivo para envio.",
+  // O watchdog desistiu de uma linha parada em `sending`: o canal pode ter
+  // aceitado sem confirmar, então a frase não promete que não saiu.
+  send_timeout: "O WhatsApp não confirmou o envio a tempo. Pode ser que a mensagem tenha chegado.",
+  // Recusas assíncronas da plataforma oficial, gravadas pelo código numérico.
+  "131026": "Este número não tem WhatsApp.",
+  "131047": "A janela de 24 horas fechou. Envie um modelo aprovado ou aguarde o cliente escrever.",
 };
 
 /**
@@ -48,5 +59,5 @@ const FRASES: Record<string, string> = {
  */
 export function fraseDaFalhaDeCanal(codigo: string | null | undefined): string | null {
   if (!codigo) return null;
-  return FRASES[codigo] ?? null;
+  return Object.hasOwn(FRASES_DE_FALHA, codigo) ? FRASES_DE_FALHA[codigo]! : null;
 }

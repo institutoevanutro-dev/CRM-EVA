@@ -8,7 +8,6 @@ import { test, expect, type Page, type TestInfo, type Locator } from "@playwrigh
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { createApprovedReplyHandler } from "../../lib/agent-engine/agent/approved-reply";
 import { seedPlatformPlaybook } from "../../lib/agent-engine/agent/playbook-seed";
-import { abrirOpcoesDeResposta } from "./helpers/acoes-da-conversa";
 
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
@@ -213,12 +212,19 @@ async function receiver() {
   };
 }
 const panel = (page: Page) => page.locator('section[aria-label="Assistência do agente"]');
+/**
+ * O MESMO gesto, nas DUAS superfícies (porte do original #3234): sem rascunho o
+ * bloco não é montado e quem oferece a sugestão é o ícone da linha de ações do
+ * compositor; com rascunho, é o botão de texto do bloco. Nunca os dois ao mesmo
+ * tempo, por isso um localizador de página serve aos dois estados.
+ */
+const botaoSugerir = (page: Page) =>
+  page.getByRole("button", { name: "Sugerir resposta", exact: true });
 async function generate(page: Page) {
   const response = page.waitForResponse(
     (r) => r.url().endsWith("/draft-reply") && r.request().method() === "POST",
   );
-  await abrirOpcoesDeResposta(page);
-  await panel(page).getByRole("button", { name: "Sugerir resposta", exact: true }).click();
+  await botaoSugerir(page).click();
   const r = await response;
   expect(r.status(), await r.text()).toBe(200);
   await expect(panel(page).getByText("Sugestão para revisar", { exact: true })).toBeVisible();
@@ -340,10 +346,14 @@ test("testa sem enviar, pausa preserva publicação e duas aprovações entregam
     // Não é tempo: subir o teto para 15s não mudou nada, porque o elemento não
     // existe em instante nenhum.
     //
-    // O que a tela faz agora é o que se prova aqui: a sugestão SAI e o painel
-    // volta ao neutro — título genérico, e nada a aprovar.
-    await expect(panel(page).getByText("Assistência do agente", { exact: true })).toBeVisible();
-    await expect(panel(page).getByRole("button", { name: "Aprovar e enviar" })).toHaveCount(0);
+    // O que a tela faz agora é o que se prova aqui: a sugestão SAI e, com ela, o
+    // BLOCO inteiro (#3234). Sobra o ícone "Sugerir resposta" do compositor.
+    await expect(
+      panel(page),
+      "o bloco 'Assistência do agente' continuou na tela sem rascunho",
+    ).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Aprovar e enviar" })).toHaveCount(0);
+    await expect(botaoSugerir(page)).toBeVisible();
     await inbound(f, "Obrigada, pode continuar");
     const second = await generate(page);
     await panel(page)
@@ -385,11 +395,23 @@ test("testa sem enviar, pausa preserva publicação e duas aprovações entregam
     // Os três rótulos de `statuses` cobertos por esse conjunto (`sent`, `stale`,
     // `dismissed`) são hoje código inalcançável no componente. Está anotado; o
     // teste não é o lugar de decidir se eles voltam a aparecer.
-    await expect(panel(page).getByText("Assistência do agente", { exact: true })).toBeVisible();
-    await expect(panel(page).getByRole("button", { name: "Aprovar e enviar" })).toHaveCount(0);
+    await expect(
+      panel(page),
+      "o bloco 'Assistência do agente' continuou na tela sem rascunho",
+    ).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Aprovar e enviar" })).toHaveCount(0);
+    // A confirmação de aprovação virou toast (#3234): o que se prova é que ela
+    // não volta a morar num bloco que já saiu da tela.
     await expect(panel(page).getByText("Resposta aprovada. Acompanhe o envio aqui.", { exact: true })).toHaveCount(0);
     await page.setViewportSize({ width: 390, height: 844 });
-    await capture(page, panel(page), info, "obsoleta-mobile");
+    // O recorte era o BLOCO; sem rascunho ele não existe, e o que precisa caber
+    // nos 390px é a linha de ações do compositor, com o ícone no lugar dele.
+    await capture(
+      page,
+      page.getByRole("textbox", { name: "Mensagem", exact: true }).locator("xpath=.."),
+      info,
+      "obsoleta-mobile",
+    );
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(`/app/ai/agents/${f.agent}`);
     await page.getByLabel("Modo de operação").selectOption("automatic");

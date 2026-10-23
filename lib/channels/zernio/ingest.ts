@@ -25,6 +25,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 import { encontrarContatoPorTelefone } from "@/lib/channels/contato-por-telefone";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
+import { emitirTelefoneGanho } from "@/lib/contacts/telefone-ganho";
 import { marcarConversaComMensagem } from "@/lib/channels/marcar-conversa";
 
 import { extrairAtribuicaoMeta } from "@/lib/channels/atribuicao-de-anuncio-oficial";
@@ -119,12 +120,29 @@ export async function ingestZernioInbound(
       msg,
     });
     // O telefone pode chegar agora e faltar no contato — vale gravar.
+    //
+    // (porte do original #3317) E vale AVISAR: a ficha que estava sem número
+    // passou a ter um, que é exatamente a transição que `contact.phone_added`
+    // nomeia. O `select("id")` é o que prova que ESTA gravação foi a que
+    // preencheu (o filtro `.is("phone_number", null)` recusa a ficha que já
+    // tinha número).
     if (msg.identity.phone) {
-      await admin
+      const telefone = canonicalPhoneBR(msg.identity.phone);
+      const { data: afetadas } = await admin
         .from("contacts")
-        .update({ phone_number: canonicalPhoneBR(msg.identity.phone) })
+        .update({ phone_number: telefone })
         .eq("id", existente.contact_id)
-        .is("phone_number", null);
+        .eq("organization_id", input.organizationId)
+        .is("phone_number", null)
+        .select("id");
+      if (((afetadas as { id: string }[] | null) ?? []).length > 0) {
+        await emitirTelefoneGanho(admin, {
+          organizationId: input.organizationId,
+          contactId: existente.contact_id,
+          telefone,
+          origem: "zernio.ingest.thread_existente",
+        });
+      }
     }
     if (inseridaNaExistente !== "duplicate") {
       await marcarConversa(admin, input.organizationId, existente.id, msg);
@@ -377,12 +395,30 @@ async function upsertContact(
   // `is null` no filtro: só preenche o que está vazio. Sobrescrever apagaria
   // uma correção feita à mão na tela por um valor que a plataforma pode mandar
   // diferente entre eventos.
+  //
+  // (porte do original #3317) O mesmo filtro é o CRITÉRIO da emissão de
+  // `contact.phone_added`: o `select("id")` diz se a gravação casou linha, isto
+  // é, se o contato estava MESMO sem número até agora. Quando a RPC já
+  // preencheu a ficha (kind phone), este `update` não casa linha nenhuma e não
+  // emite. ⚠️ Neste CRM a RPC (`fn_upsert_wa_contact`) ainda NÃO emite o
+  // evento: a parte SQL do original exige migration e ficou de fora.
   if (msg.identity.phone) {
-    await admin
+    const telefone = canonicalPhoneBR(msg.identity.phone);
+    const { data: afetadas } = await admin
       .from("contacts")
-      .update({ phone_number: canonicalPhoneBR(msg.identity.phone) })
+      .update({ phone_number: telefone })
       .eq("id", contactId)
-      .is("phone_number", null);
+      .eq("organization_id", organizationId)
+      .is("phone_number", null)
+      .select("id");
+    if (((afetadas as { id: string }[] | null) ?? []).length > 0) {
+      await emitirTelefoneGanho(admin, {
+        organizationId,
+        contactId,
+        telefone,
+        origem: "zernio.ingest.upsert_contato",
+      });
+    }
   }
 
   return contactId;

@@ -3,8 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
 /**
- * A FAIXA "ASSISTÊNCIA DO AGENTE" (Sugerir resposta / Responder / Nota interna)
- * começa recolhida — pedido do dono, ela comia a conversa o tempo todo — e
+ * A FAIXA DE CIMA DO CAMPO (Responder / Nota interna, e o bloco da assistência
+ * quando há sugestão; sem sugestão, "Sugerir resposta" é um ícone na linha de
+ * ações, porte do original #3234) começa recolhida — pedido do dono, ela comia
+ * a conversa o tempo todo — e
  * aparece pelo mouse, pelo foco ou pelo botão "Opções de resposta". O que este
  * arquivo prende é o lado que NÃO pode quebrar: o interruptor Responder/Nota
  * continua alcançável por teclado e toque, e o modo Nota nunca fica escondido.

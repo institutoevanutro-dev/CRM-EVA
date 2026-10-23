@@ -77,6 +77,19 @@ export const ApiErrorCodes = {
   unprocessable_entity: "unprocessable_entity",
   channel_without_session: "channel_without_session", // operação de sessão (reiniciar, parear) pedida a canal que não tem sessão no transporte — o oficial
   janela_fechada: "janela_fechada", // POST /messages por token/agente com texto livre fora das 24h do canal oficial (131047) — a saída é modelo aprovado (porte do original #1677)
+  // POST /api/v1/messages/{id}/retry (lib/messaging/reenvio.ts): a regra não permite reenviar (403),
+  // a mensagem pode ter chegado e falta a confirmação (409), ou outro toque já travou a linha (409).
+  reenvio_indisponivel: "reenvio_indisponivel",
+  confirmacao_necessaria: "confirmacao_necessaria",
+  reenvio_em_curso: "reenvio_em_curso",
+  // POST /api/v1/messages/{id}/forward (lib/inbox/encaminhar-mensagem.ts): a origem não tem o que
+  // encaminhar (apagada, sem conteúdo, cartão de contato, mídia que não chegou) ou o destino não é desta organização.
+  nao_encaminhavel: "nao_encaminhavel",
+  destino_invalido: "destino_invalido",
+  // GET /api/v1/messages/{id}/media?formato=aac: o conversor do processo está cheio (503 com Retry-After)
+  // ou o ffmpeg não converteu (502).
+  conversor_ocupado: "conversor_ocupado",
+  conversao_indisponivel: "conversao_indisponivel",
   invalid_state_transition: "invalid_state_transition",
   invalid_owner: "invalid_owner", // novo dono não é membro ativo agent+ da org (bulk assign, G3-04)
   trigger_kind_not_implemented: "trigger_kind_not_implemented", // publish de followup-flow com kind sem motor de enrollment (stage_change/conversation_end)

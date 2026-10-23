@@ -20,7 +20,9 @@ export function DraftReplyButton({ conversationId, onDraft, disabled }: Props) {
       type="button"
       size="icon"
       variant="ghost"
-      className="h-9 w-9 shrink-0"
+      // Sem altura fixa: o `size="icon"` dá 44px no toque e 36px no computador,
+      // como o anexar e o emoji ao lado (porte do #3191).
+      className="shrink-0"
       aria-label={t("Sugerir resposta")}
       aria-busy={mutation.isPending}
       disabled={disabled || mutation.isPending}

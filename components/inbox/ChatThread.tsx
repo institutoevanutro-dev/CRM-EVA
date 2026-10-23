@@ -4,7 +4,7 @@ import { APARENCIA_PADRAO, estiloDaAparencia, type AparenciaDaConversa } from "@
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import type { Locale } from "date-fns";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { format, isToday, isYesterday } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { NoteCard } from "./NoteCard";
 import { useMessagesRealtime } from "@/hooks/inbox/useMessagesRealtime";
 import { useConversationNotes } from "@/hooks/inbox/useConversationNotes";
 import { useDeleteNote } from "@/hooks/inbox/useDeleteNote";
+import { useAlterarMensagem } from "@/hooks/inbox/useAlterarMensagem";
 import { useDebugToggle } from "@/hooks/ai/useDebugToggle";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
@@ -26,6 +27,8 @@ interface Props {
   searchTerm?: string;
   /** Escolher uma mensagem para responder. Sobe até o composer. */
   onResponder?: (m: Message) => void;
+  /** Escolher uma mensagem para encaminhar a outra conversa (DeskcommCRM #2835). */
+  onEncaminhar?: (m: Message) => void;
   /** Fundo e balões que a pessoa escolheu (ver `lib/inbox/aparencia-da-conversa.ts`). */
   aparencia?: AparenciaDaConversa;
 }
@@ -53,7 +56,7 @@ function dayLabel(d: Date, t: (texto: string) => string = (texto) => texto, loca
   return format(d, "dd/MM/yyyy", { locale: locale });
 }
 
-export function ChatThread({ conversationId, onResponder, searchTerm = "", aparencia = APARENCIA_PADRAO }: Props) {
+export function ChatThread({ conversationId, onResponder, onEncaminhar, searchTerm = "", aparencia = APARENCIA_PADRAO }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const q = useMessagesRealtime(conversationId);
@@ -73,6 +76,17 @@ export function ChatThread({ conversationId, onResponder, searchTerm = "", apare
   );
   const deleteNote = useDeleteNote(conversationId ?? "");
   const canManage = activeOrg != null && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
+  // Reenviar é envio: a rota exige `agent`, e quem só lê não ganha um botão que ela recusa.
+  const podeEnviar = activeOrg != null && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent;
+  const { reenviar } = useAlterarMensagem(conversationId);
+  const reenviarMutateAsync = reenviar.mutateAsync;
+  // UMA função para todas as bolhas: o `MessageBubble` é `memo`, e uma closure
+  // nova por bolha a cada render o redesenharia inteiro.
+  const reenviarMensagem = useCallback(
+    (m: Message, confirmado: boolean) =>
+      reenviarMutateAsync({ id: m.id, confirmado }).then(() => undefined),
+    [reenviarMutateAsync],
+  );
   const { enabled: debugCitations } = useDebugToggle(activeOrg?.role ?? null);
 
   const messages: Message[] = useMemo(
@@ -162,6 +176,41 @@ export function ChatThread({ conversationId, onResponder, searchTerm = "", apare
 
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [items.length, conversationId, paginas]);
+
+  /**
+   * QUANDO A ALTURA DO FIO MUDA, QUEM ESTAVA NO FIM CONTINUA NO FIM (porte do
+   * original #3190).
+   *
+   * O efeito acima só reancora quando o CONTEÚDO muda. No celular o fio também
+   * encolhe sem conteúdo novo (o teclado abre, a faixa de citação aparece), e
+   * aí o último balão sumia atrás do composer.
+   *
+   * A distância até o fim é a de ANTES da mudança, guardada no `scroll`: dentro
+   * do callback do `ResizeObserver` o `clientHeight` já encolheu, e medir ali
+   * daria a distância nova, maior que a régua de 120px ("está lendo o
+   * histórico" para quem não rolou nada). Encolher o fio não dispara `scroll`,
+   * então o valor guardado é o certo. A régua é a mesma do efeito acima.
+   */
+  const fioMontado = !!conversationId && !q.isLoading && !q.isError && items.length > 0;
+  const distanciaDoFim = useRef(0);
+  useEffect(() => {
+    const sc = scrollerRef.current;
+    if (!fioMontado || !sc || typeof ResizeObserver === "undefined") return;
+    const medir = () => {
+      distanciaDoFim.current = sc.scrollHeight - sc.scrollTop - sc.clientHeight;
+    };
+    medir();
+    sc.addEventListener("scroll", medir, { passive: true });
+    const observador = new ResizeObserver(() => {
+      if (distanciaDoFim.current <= 120) sc.scrollTop = sc.scrollHeight;
+      medir();
+    });
+    observador.observe(sc);
+    return () => {
+      sc.removeEventListener("scroll", medir);
+      observador.disconnect();
+    };
+  }, [fioMontado, conversationId]);
 
   /**
    * O ESTADO DO CANAL DESTE THREAD, PUBLICADO SEMPRE — inclusive quando não há
@@ -301,6 +350,7 @@ export function ChatThread({ conversationId, onResponder, searchTerm = "", apare
                   searchMatch={resultados.has(item.data.id)}
                   debugCitations={debugCitations}
                   onResponder={onResponder}
+                  onEncaminhar={onEncaminhar}
                   // A citada sai da MESMA lista já carregada: buscar no servidor
                   // por cada citação faria uma consulta por bolha. Quando a
                   // citada é antiga demais e ficou fora da página, o fio some —
@@ -311,6 +361,8 @@ export function ChatThread({ conversationId, onResponder, searchTerm = "", apare
                   // registra que um humano digitou, nunca qual.
                   viewerUserId={currentUser.id}
                   nomeDoAutor={item.data.sent_by_user_id ? (nomePorUsuario.get(item.data.sent_by_user_id) ?? null) : null}
+                  onReenviar={podeEnviar && item.data.direction === "outbound" ? reenviarMensagem : undefined}
+                  podeReenviarDeOutros={canManage}
                 />
               ),
             )}

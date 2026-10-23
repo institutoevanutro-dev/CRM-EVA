@@ -143,6 +143,11 @@ export const AUTH_LIMITS = {
   // usado UMA vez na vida de uma conta — 3 por hora por identidade já é
   // folga para quem errou o nome duas vezes.
   org_recovery: { ip: 5, id: 3, windowSec: 3600 },
+  // Código de recuperação do MFA ("Perdi acesso ao autenticador"): a porta é
+  // pública e cada acerto APAGA o autenticador da conta. 5 tentativas por conta
+  // em 15 min sobram para quem digitou errado; o teto por IP tira o custo zero
+  // de quem varre contas (cada tentativa também lista os usuários no GoTrue).
+  recovery_code: { ip: 20, id: 5, windowSec: 900 },
   // Login pela Conta EvaLink (entrar e volta): o mesmo teto por IP do login.
   evalink: { ip: 60, windowSec: 300 },
   // Aviso da Conta: já protegido por HMAC; o teto folgado só impede que uma

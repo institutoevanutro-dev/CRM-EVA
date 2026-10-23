@@ -126,6 +126,11 @@ export const AUDIT_ACTIONS = [
   // Uma rodada do cron `recover-stuck-messages` que de fato marcou mensagem
   // como falha (rodada vazia não vira linha — varredura não é mutação).
   "message.recover_stuck_run",
+  // Reenvio de mensagem que falhou, na mesma linha (POST /api/v1/messages/{id}/retry).
+  "message.retried",
+  // A revogação chegou pelo CANAL: o autor apagou no aplicativo do WhatsApp.
+  // É a única trilha de quem apaga sem passar por tela nenhuma (DeskcommCRM #3277).
+  "message.revoked_in_channel",
   "contact.blocked",
   // O pedido de descadastro é do cliente e o padrão é irreversível — mas a
   // regra W-02 do catálogo de negócio prevê o override: admin desbloqueia à
@@ -323,6 +328,9 @@ export const AUDIT_ACTIONS = [
   "template.created",
   "template.updated",
   "template.deleted",
+  // A reordenação (porte do #3261) é um ato próprio, e não `template.updated`:
+  // "quem mudou este texto?" não pode receber junto "quem mudou de lugar".
+  "template.reordered",
   "auth.signup_requested",
   "auth.signup_failed",
   "auth.signup_confirmed",

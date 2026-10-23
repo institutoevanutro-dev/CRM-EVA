@@ -9,7 +9,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
-import { PaperPlaneTilt, Sparkle } from "@/lib/ui/icons";
+import { DotsThree, PaperPlaneTilt } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
 import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentPreviewDialog";
@@ -20,6 +20,7 @@ import {
 import { ContactPickerDialog } from "@/components/inbox/composer/ContactPickerDialog";
 import { AudioRecorder } from "@/components/inbox/composer/AudioRecorder";
 import { ReplyReviewPanel } from "@/components/inbox/composer/ReplyReviewPanel";
+import { DraftReplyButton } from "@/components/inbox/composer/DraftReplyButton";
 import { EmojiButton } from "@/components/inbox/composer/EmojiButton";
 import {
   MentionMenu,
@@ -31,6 +32,7 @@ import { resolveSlash, TemplateMenu } from "@/components/inbox/composer/Template
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useCreateNote } from "@/hooks/inbox/useCreateNote";
 import { useMessageTemplates, type MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
+import { useRascunhoAssistido } from "@/hooks/inbox/useRascunhoAssistido";
 import { BarraDeRecursos } from "@/components/inbox/composer/BarraDeRecursos";
 import { X } from "lucide-react";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
@@ -165,7 +167,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
    * revisar ela fica aberta e no fluxo (`forcado`), porque escrever achando que
    * é nota quando é resposta ao cliente é o erro que não tem volta.
    */
-  const [temSugestao, setTemSugestao] = useState(false);
+  // "Há sugestão" é a MESMA consulta que o `ReplyReviewPanel` lê (porte do
+  // original #3234): uma chave, um cache, sem um segundo estado para divergir.
+  // Desligada em nota e com o compositor bloqueado (o GET exige `agent`; quem
+  // só lê levaria 403 a cada 4s).
+  const { sugestao, invalidar } = useRascunhoAssistido(
+    conversationId,
+    mode === "reply" && !blockedReason,
+  );
+  const temSugestao = !!sugestao;
   const ferramentas = useRevelacao({
     forcado: mode === "note" || temSugestao,
     chave: conversationId,
@@ -187,7 +197,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   // SÓ em nota: menção no campo de resposta sairia para o cliente.
   const gatilho = mode === "note" && !mencaoDispensada ? resolverMencao(text, caret) : null;
   const membros = useAssignableMembers(gatilho !== null);
-  const opcoes = gatilho ? opcoesDeMencao(membros.data ?? [], gatilho.query, t("Atendente")) : [];
+  const opcoes = gatilho ? opcoesDeMencao(membros.data ?? [], gatilho.query, t) : [];
   const mencaoAberta = gatilho !== null;
   const opcaoAtual = opcoes[mencaoIndice] ?? opcoes[0];
 
@@ -457,8 +467,17 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       }
     }
     if (e.key === "Enter" && !e.shiftKey) {
+      if (menuOpen) {
+        e.preventDefault(); // deixa o Enter pro menu; não envia /query como mensagem
+        return;
+      }
+      // No toque (porte do original #3191), a tecla de retorno do teclado
+      // virtual QUEBRA LINHA, como no próprio WhatsApp; quem envia é o botão.
+      // Ctrl/Cmd+Enter envia sempre (iPad com teclado físico). Lido aqui, no
+      // keydown, e não no render: o servidor não sabe o ponteiro.
+      const forcaEnvio = e.ctrlKey || e.metaKey;
+      if (!forcaEnvio && window.matchMedia?.("(pointer: coarse)").matches) return;
       e.preventDefault();
-      if (menuOpen) return; // deixa o Enter pro menu; não envia /query como mensagem
       handleSubmit();
     }
   }
@@ -504,19 +523,27 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             classeDaFaixa(ferramentas.visivel),
           )}
         >
-        {mode === "reply" && (
-          <ReplyReviewPanel
-            conversationId={conversationId}
-            disabled={isDisabled}
-            onTemSugestao={setTemSugestao}
-          />
+        {/* O bloco só existe COM sugestão (#3234): sem ela, quem oferece o gesto
+            é o ícone "Sugerir resposta" da linha de ações, lá embaixo. Com o
+            teclado virtual aberto (#3191), ele sai da frente: num iPhone sobram
+            ~250px de tela, e o fio da conversa vale mais. O marcador é da camada
+            da conversa (`useAlturaVisivel`); o `max-md:` deixa o computador igual.
+            `not-focus-within`: se o teclado abriu para editar a PRÓPRIA sugestão
+            (ou escrever o motivo da rejeição), o bloco fica onde a pessoa digita. */}
+        {mode === "reply" && sugestao && (
+          <div
+            data-testid="sugestao-sai-com-teclado"
+            className="max-md:group-data-[teclado-aberto]/conversa:not-focus-within:hidden"
+          >
+            <ReplyReviewPanel conversationId={conversationId} disabled={isDisabled} />
+          </div>
         )}
         <div className="flex gap-1">
           <button
             type="button"
             onClick={() => setMode("reply")}
             className={cn(
-              "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+              "min-h-11 rounded-full px-3 py-1 text-xs font-medium transition-colors lg:min-h-0 lg:px-2.5",
               mode === "reply"
                 ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:bg-muted",
@@ -528,7 +555,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             type="button"
             onClick={() => setMode("note")}
             className={cn(
-              "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
+              "min-h-11 rounded-full px-3 py-1 text-xs font-medium transition-colors lg:min-h-0 lg:px-2.5",
               mode === "note"
                 ? "bg-warning text-warning-fg"
                 : "text-muted-foreground hover:bg-muted",
@@ -568,7 +595,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               type="button"
               onClick={onCancelarResposta}
               aria-label={t("Cancelar resposta")}
-              className="rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:size-auto lg:p-0.5"
             >
               <X className="size-4" />
             </button>
@@ -626,23 +653,37 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               });
             }}
           />
-          {/* A porta explícita da faixa de cima (toque e teclado). Faísca
-              porque o que mora lá é sobretudo a assistência do agente; o nome
-              diz as duas coisas. Desabilitada enquanto a faixa está presa
-              aberta por estado (nota, sugestão): ali fechar não é opção, e o
-              botão continua no lugar para o campo não mudar de largura. */}
+          {/* "Sugerir resposta" em um clique, sem faixa (porte do original
+              #3234): gera pelo MESMO POST do bloco, e o rascunho criado chega
+              pela consulta compartilhada, que monta o bloco com o texto e as
+              ações. Nunca os dois juntos: com o bloco na tela, o botão de
+              gerar outra é o dele. O texto não cai no campo: quem revisa é o
+              bloco. */}
+          {mode === "reply" && !sugestao && (
+            <DraftReplyButton
+              conversationId={conversationId}
+              disabled={isDisabled}
+              onDraft={() => void invalidar()}
+            />
+          )}
+          {/* A porta explícita da faixa de cima (toque e teclado). Três
+              pontos, e não faísca: a faísca é do "Sugerir resposta" ao lado,
+              e sem sugestão o que mora na faixa é o Responder/Nota interna.
+              Desabilitada enquanto a faixa está presa aberta por estado
+              (nota, sugestão): ali fechar não é opção, e o botão continua no
+              lugar para o campo não mudar de largura. */}
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className={cn("h-9 w-9 shrink-0", ferramentas.visivel && "bg-muted")}
+            className={cn("shrink-0", ferramentas.visivel && "bg-muted")}
             aria-label={t("Opções de resposta")}
             title={t("Assistência do agente e nota interna")}
             disabled={mode === "note" || temSugestao}
             {...ferramentas.alternadorProps}
             onClick={ferramentas.alternar}
           >
-            <Sparkle size={16} aria-hidden />
+            <DotsThree size={16} weight="bold" aria-hidden />
           </Button>
           <textarea
             ref={taRef}
@@ -689,7 +730,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             // linhas cortadas dentro do campo de uma linha (medido pelo
             // `scrollHeight` no e2e). O texto digitado continua quebrando.
             className={cn(
-              "max-h-40 min-h-10 flex-1 resize-none rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-ellipsis",
+              // `text-base` no celular (porte do #3190): com menos de 16px o
+              // iPhone amplia a página ao focar o campo.
+              // `min-w-0`: com os alvos de 44px do toque (porte do #3191) a
+              // fileira de 390px não cabe o campo na largura intrínseca dele, e
+              // quem encolhe tem de ser o campo, não o botão de enviar.
+              "max-h-40 min-h-11 min-w-0 flex-1 resize-none rounded-xl border border-border bg-surface px-3.5 py-2.5 text-base text-ellipsis md:text-sm lg:min-h-10",
               "placeholder:truncate placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-hidden",
             )}
             disabled={mode === "note" ? isDisabled : respostaBarrada}
@@ -699,7 +745,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             <Button
               type="button"
               size="icon"
-              className="h-10 w-10 shrink-0 rounded-full"
+              className="shrink-0 rounded-full"
               onClick={handleSubmit}
               disabled={(mode === "note" ? isDisabled : envioBarrado) || !text.trim()}
               aria-label={t("Enviar")}

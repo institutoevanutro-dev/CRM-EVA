@@ -38,37 +38,19 @@ export async function regenerateRecoveryCodes(): Promise<RegenerateRecoveryCodes
   // sozinha em "desligar a verificação em duas etapas" (auditoria 2026-09-29, C2).
   if ((await sessionAal()) !== "aal2") return { ok: false, error: "mfa_required" };
 
-  const codes = generateRecoveryCodes();
-  const rows = codes.map((c) => ({ user_id: user.id, code_hash: hashRecoveryCode(c) }));
+  // Só o client de serviço grava os códigos, depois das checagens de sessão
+  // acima. Sem ele a resposta diz isso, em vez de tentar pelo client do usuário.
+  if (!isServiceRoleConfigured()) return { ok: false, error: "service_unavailable" };
 
-  // Delete + insert. Use admin client when available (RLS for delete may be
-  // tighter than insert). Fall back to user-scoped.
-  let delErr: unknown = null;
-  let insErr: unknown = null;
-  if (isServiceRoleConfigured()) {
-    const admin = createAdminClient();
-    const d = await admin.from("user_recovery_codes").delete().eq("user_id", user.id);
-    delErr = d.error;
-    if (!delErr) {
-      const ins = await admin.from("user_recovery_codes").insert(rows);
-      insErr = ins.error;
-    }
-  } else {
-    const d = await supabase.from("user_recovery_codes").delete().eq("user_id", user.id);
-    delErr = d.error;
-    if (!delErr) {
-      const ins = await supabase.from("user_recovery_codes").insert(rows);
-      insErr = ins.error;
-    }
-  }
-  if (delErr) {
-    const msg = (delErr as { message?: string }).message ?? "delete_failed";
-    return { ok: false, error: msg };
-  }
-  if (insErr) {
-    const msg = (insErr as { message?: string }).message ?? "insert_failed";
-    return { ok: false, error: msg };
-  }
+  // O hash lança sem o INTERNAL_SECRET: antes de apagar os códigos atuais.
+  const codes = generateRecoveryCodes();
+  const rows = codes.map((c) => ({ user_id: user.id, code_hash: hashRecoveryCode(user.id, c) }));
+
+  const admin = createAdminClient();
+  const { error: delErr } = await admin.from("user_recovery_codes").delete().eq("user_id", user.id);
+  if (delErr) return { ok: false, error: delErr.message ?? "delete_failed" };
+  const { error: insErr } = await admin.from("user_recovery_codes").insert(rows);
+  if (insErr) return { ok: false, error: insErr.message ?? "insert_failed" };
 
   await audit({
     action: "mfa.recovery_codes_regenerated",
