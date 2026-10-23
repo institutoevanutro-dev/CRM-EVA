@@ -9,8 +9,9 @@
  *   2. Cabeçalho da conversa com só nome, telefone e responsável fixos; as ações
  *      aparecem com o mouse, com o foco, ou pelo botão "Ações da conversa" — a
  *      porta do toque e do teclado.
- *   3. A faixa "Assistência do agente" (Sugerir resposta / Responder / Nota
- *      interna) recolhida, com o interruptor alcançável pelo TECLADO.
+ *   3. A faixa de cima do composer (Responder / Nota interna) recolhida, com o
+ *      interruptor alcançável pelo TECLADO; "Sugerir resposta" fica à vista,
+ *      como ícone na linha de ações (porte do original #3234).
  *   4. "Janela 23h 59m" numa linha só, dentro da pílula, em 1280, 1440 e 390.
  *   5. Nenhum transbordo horizontal da página nessas três larguras.
  *
@@ -286,7 +287,10 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
     await abrirConversa(page);
     const opcoes = page.getByRole("button", { name: "Opções de resposta" });
     const nota = page.getByRole("button", { name: "Nota interna", exact: true });
-    await expect(page.getByRole("button", { name: "Sugerir resposta" })).toBeHidden();
+    // Sem rascunho, "Sugerir resposta" é o ícone da linha de ações: à vista e
+    // único, sem abrir faixa nenhuma (#3234).
+    await expect(page.getByRole("button", { name: "Sugerir resposta" })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Sugerir resposta" })).toBeVisible();
     await expect(nota).toBeHidden();
     await foto(page, "composer-recolhido");
 

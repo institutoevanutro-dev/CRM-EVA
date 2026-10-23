@@ -19,21 +19,3 @@ export async function abrirAcoesDaConversa(page: Page): Promise<void> {
   if ((await botao.getAttribute("aria-expanded")) !== "true") await botao.click();
   await expect(botao).toHaveAttribute("aria-expanded", "true");
 }
-
-/**
- * Abre (e fixa) a faixa de cima do composer — "Assistência do agente"
- * (Sugerir resposta) e o interruptor Responder / Nota interna —, recolhida por
- * padrão desde 16/10/2026. Mesmo caminho do toque e do teclado: o botão
- * "Opções de resposta" ao lado do emoji. Com sugestão na tela ou em Nota
- * interna a faixa já está presa aberta (e o botão desabilitado): não há o que
- * fazer, e a função só confere.
- */
-export async function abrirOpcoesDeResposta(page: Page): Promise<void> {
-  const botao = page.getByRole("button", { name: /^(Opções de resposta|Opciones de respuesta)$/ });
-  await expect(botao).toBeVisible({ timeout: 30_000 });
-  await page.mouse.move(0, 0);
-  if ((await botao.getAttribute("aria-expanded")) !== "true" && (await botao.isEnabled())) {
-    await botao.click();
-  }
-  await expect(botao).toHaveAttribute("aria-expanded", "true");
-}

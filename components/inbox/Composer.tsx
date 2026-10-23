@@ -9,7 +9,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
-import { PaperPlaneTilt, Sparkle } from "@/lib/ui/icons";
+import { DotsThree, PaperPlaneTilt } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
 import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentPreviewDialog";
@@ -20,6 +20,7 @@ import {
 import { ContactPickerDialog } from "@/components/inbox/composer/ContactPickerDialog";
 import { AudioRecorder } from "@/components/inbox/composer/AudioRecorder";
 import { ReplyReviewPanel } from "@/components/inbox/composer/ReplyReviewPanel";
+import { DraftReplyButton } from "@/components/inbox/composer/DraftReplyButton";
 import { EmojiButton } from "@/components/inbox/composer/EmojiButton";
 import {
   MentionMenu,
@@ -31,6 +32,7 @@ import { resolveSlash, TemplateMenu } from "@/components/inbox/composer/Template
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useCreateNote } from "@/hooks/inbox/useCreateNote";
 import { useMessageTemplates, type MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
+import { useRascunhoAssistido } from "@/hooks/inbox/useRascunhoAssistido";
 import { BarraDeRecursos } from "@/components/inbox/composer/BarraDeRecursos";
 import { X } from "lucide-react";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
@@ -165,7 +167,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
    * revisar ela fica aberta e no fluxo (`forcado`), porque escrever achando que
    * é nota quando é resposta ao cliente é o erro que não tem volta.
    */
-  const [temSugestao, setTemSugestao] = useState(false);
+  // "Há sugestão" é a MESMA consulta que o `ReplyReviewPanel` lê (porte do
+  // original #3234): uma chave, um cache, sem um segundo estado para divergir.
+  // Desligada em nota e com o compositor bloqueado (o GET exige `agent`; quem
+  // só lê levaria 403 a cada 4s).
+  const { sugestao, invalidar } = useRascunhoAssistido(
+    conversationId,
+    mode === "reply" && !blockedReason,
+  );
+  const temSugestao = !!sugestao;
   const ferramentas = useRevelacao({
     forcado: mode === "note" || temSugestao,
     chave: conversationId,
@@ -513,12 +523,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             classeDaFaixa(ferramentas.visivel),
           )}
         >
-        {mode === "reply" && (
-          <ReplyReviewPanel
-            conversationId={conversationId}
-            disabled={isDisabled}
-            onTemSugestao={setTemSugestao}
-          />
+        {/* O bloco só existe COM sugestão (#3234): sem ela, quem oferece o gesto
+            é o ícone "Sugerir resposta" da linha de ações, lá embaixo. */}
+        {mode === "reply" && sugestao && (
+          <ReplyReviewPanel conversationId={conversationId} disabled={isDisabled} />
         )}
         <div className="flex gap-1">
           <button
@@ -635,11 +643,25 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               });
             }}
           />
-          {/* A porta explícita da faixa de cima (toque e teclado). Faísca
-              porque o que mora lá é sobretudo a assistência do agente; o nome
-              diz as duas coisas. Desabilitada enquanto a faixa está presa
-              aberta por estado (nota, sugestão): ali fechar não é opção, e o
-              botão continua no lugar para o campo não mudar de largura. */}
+          {/* "Sugerir resposta" em um clique, sem faixa (porte do original
+              #3234): gera pelo MESMO POST do bloco, e o rascunho criado chega
+              pela consulta compartilhada, que monta o bloco com o texto e as
+              ações. Nunca os dois juntos: com o bloco na tela, o botão de
+              gerar outra é o dele. O texto não cai no campo: quem revisa é o
+              bloco. */}
+          {mode === "reply" && !sugestao && (
+            <DraftReplyButton
+              conversationId={conversationId}
+              disabled={isDisabled}
+              onDraft={() => void invalidar()}
+            />
+          )}
+          {/* A porta explícita da faixa de cima (toque e teclado). Três
+              pontos, e não faísca: a faísca é do "Sugerir resposta" ao lado,
+              e sem sugestão o que mora na faixa é o Responder/Nota interna.
+              Desabilitada enquanto a faixa está presa aberta por estado
+              (nota, sugestão): ali fechar não é opção, e o botão continua no
+              lugar para o campo não mudar de largura. */}
           <Button
             type="button"
             variant="ghost"
@@ -651,7 +673,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             {...ferramentas.alternadorProps}
             onClick={ferramentas.alternar}
           >
-            <Sparkle size={16} aria-hidden />
+            <DotsThree size={16} weight="bold" aria-hidden />
           </Button>
           <textarea
             ref={taRef}
