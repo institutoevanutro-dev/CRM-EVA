@@ -158,6 +158,7 @@ import {
 import {
   hasOpenCaseForContact,
   getCasesAwaitingLead,
+  instrucaoDePedidoNoCasoAberto,
   openCase,
   provideCaseUpdate,
   openHumanCaseInputSchema,
@@ -4489,14 +4490,18 @@ async function executarTurnoDoAgente(
           // consultar existia, estava ligada e montada no turno, e ele não a
           // usou. Capacidade que depende de o modelo lembrar não existe metade
           // das vezes; esta o sistema garante.
+          //
+          // Pendência anotada num caso que JÁ estava aberto não avisa ninguém, e
+          // a frase de disponibilidade autorizaria "alguém continua em seguida":
+          // ali vai a instrução que proíbe a promessa (DeskcommCRM #3097).
+          if (res.merged) {
+            return { ok: true, case_id: res.caseId, message: instrucaoDePedidoNoCasoAberto() };
+          }
           const { frase } = await expectativaDeAtendimento(pool, tenantId, new Date());
           return {
             ok: true,
             case_id: res.caseId,
-            message: res.merged
-              ? `já havia um caso deste assunto aguardando a equipe; a pendência foi registrada nele ` +
-                `(nenhum caso novo). Continue a conversa com o lead normalmente. ${frase}`
-              : `caso aberto; continue a conversa com o lead normalmente. ${frase}`,
+            message: `caso aberto; continue a conversa com o lead normalmente. ${frase}`,
           };
         } catch (err) {
           noteRunError(err instanceof Error ? err : new Error(String(err)));
