@@ -20,6 +20,14 @@
  * adivinhar o formato de envio a partir do cadastro.
  */
 
+/**
+ * DDD brasileiro: dois dígitos, o primeiro de 1 a 9 (11..99). É a régua da busca
+ * por variantes e também a do cadastro manual (`lib/schemas/contacts.ts`): duas
+ * réguas divergiriam no dia em que uma aprendesse um caso novo, e o número que o
+ * cadastro aceita deixaria de casar na busca por duplicados.
+ */
+export const DDD_BR = /^[1-9][0-9]$/;
+
 /** Só dígitos, sem `+`. */
 function digitsOf(raw: string): string {
   return raw.replace(/\D/g, "");
@@ -42,7 +50,7 @@ export function phoneLookupVariants(raw: string): string[] {
   const ddd = d.slice(2, 4);
   const local = d.slice(4);
   // DDD brasileiro válido começa em 1 (11..99). Fora disso não arriscamos nada.
-  if (ddd.length !== 2 || !/^[1-9][0-9]$/.test(ddd)) return [original];
+  if (ddd.length !== 2 || !DDD_BR.test(ddd)) return [original];
 
   // 12 dígitos: 55 + DDD + 8 locais. Celular antigo perdeu o 9 → a variante o devolve.
   // Só quando o local começa em 6-9, que é a faixa de celular; 2-5 é fixo e fica fora.

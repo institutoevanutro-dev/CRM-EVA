@@ -133,7 +133,8 @@ export function EditContactDialog({
 
     const parsed = contactPatchSchema.safeParse(payload);
     if (!parsed.success) {
-      setServerError(parsed.error.issues[0]?.message ?? t("Dados inválidos"));
+      const first = parsed.error.issues[0];
+      setServerError(first?.message ? t(first.message) : t("Dados inválidos"));
       return;
     }
     try {
@@ -162,7 +163,7 @@ export function EditContactDialog({
             <Input id="ec-email" type="email" {...form.register("email")} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ec-phone">{t("Telefone (E.164)")}</Label>
+            <Label htmlFor="ec-phone">{t("Telefone (DDD + número)")}</Label>
             <Input id="ec-phone" {...form.register("phone_number")} />
           </div>
           <div className="space-y-2">

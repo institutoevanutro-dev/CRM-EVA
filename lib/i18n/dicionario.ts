@@ -6563,7 +6563,6 @@ export const DICIONARIO: Traducoes = {
   "Contato atualizado": { es: "Contacto actualizado" },
   "Editar contato": { es: "Editar contacto" },
   "Atualize os dados deste contato.": { es: "Actualiza los datos de este contacto." },
-  "Telefone (E.164)": { es: "Teléfono (E.164)" },
   // Autocompletar de etiquetas na ficha do contato (issue #2732).
   "Nenhuma etiqueta neste contato.": { es: "Ninguna etiqueta en este contacto." },
   "Digite para buscar etiquetas…": { es: "Escribe para buscar etiquetas…" },
@@ -11392,6 +11391,11 @@ export const DICIONARIO: Traducoes = {
   },
   "Não conseguimos montar os valores do modelo para este envio. Nada foi enviado.": {
     es: "No pudimos armar los valores de la plantilla para este envío. No se envió nada.",
+  },
+  // Portes 23/10, grupo D (PR #3305): o telefone do cadastro manual aceita DDD + número.
+  "Telefone (DDD + número)": { es: "Teléfono (código de área + número)" },
+  "Telefone deve ter DDD + número (ex.: 11999998888) ou o formato E.164 (+5511999998888)": {
+    es: "El teléfono debe tener código de área + número (ej.: 11999998888) o el formato E.164 (+5511999998888)",
   },
 };
 
