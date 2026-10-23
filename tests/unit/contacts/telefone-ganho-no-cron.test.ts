@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as Canais from "@/lib/channels";
+
 /**
  * #3315 — o CRON de telefones emite `contact.phone_added` quando descobre o
  * número por trás da identidade opaca e tira a ficha do vazio.
@@ -92,7 +94,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 vi.mock("@/lib/channels", async (orig) => {
-  const real = await orig<typeof import("@/lib/channels")>();
+  const real = await orig<typeof Canais>();
   return {
     ...real,
     getAdapter: () => ({

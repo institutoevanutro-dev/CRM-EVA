@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as Credenciais from "@/lib/channels/zernio/credentials";
+
 /**
  * #3315 — a INGESTÃO do canal emite `contact.phone_added` quando a ficha que
  * estava SEM número ganha um.
@@ -114,7 +116,7 @@ const admin = {
 } as never;
 
 vi.mock("@/lib/channels/zernio/credentials", async (orig) => ({
-  ...(await orig<typeof import("@/lib/channels/zernio/credentials")>()),
+  ...(await orig<typeof Credenciais>()),
   // Sem retorno configurado = sem credencial: a busca do pino nem começa.
   resolveZernioCreds: vi.fn(),
 }));
