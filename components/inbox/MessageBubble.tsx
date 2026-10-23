@@ -4,8 +4,21 @@ import { memo, useEffect, useState } from "react";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { ArrowBendUpLeft, Check, Checks, Robot, WarningOctagon } from "@/lib/ui/icons";
+import { ArrowBendUpLeft, Check, Checks, Clock, Robot, WarningOctagon } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ApiError } from "@/lib/api/types";
+import { FRASES_DE_FALHA, fraseDaFalhaDeCanal } from "@/lib/channels/frases-de-falha";
+import { reenvioDaMensagem } from "@/lib/messaging/reenvio";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Message } from "@/lib/types/messaging";
 import { CitationButton } from "@/components/ai/CitationButton";
@@ -40,9 +53,37 @@ interface Props {
   viewerUserId?: string | null;
   /** Nome de quem da equipe enviou, quando a lista da equipe o conhece. */
   nomeDoAutor?: string | null;
+  /**
+   * Enviar de novo uma mensagem que falhou ou ficou parada. Só quem tem a
+   * conversa na mão passa (o `ChatThread`); a leitura do super-admin não
+   * passa, e a bolha não desenha o botão. Quem decide SE a mensagem pode ser
+   * reenviada é `reenvioDaMensagem`, a mesma regra da rota. Recebe a mensagem
+   * para o `ChatThread` passar UMA função estável e o `memo` seguir valendo.
+   */
+  onReenviar?: (m: Message, confirmado: boolean) => Promise<void>;
+  /** Gerente para cima reenvia mensagem de colega — a mesma régua da rota. */
+  podeReenviarDeOutros?: boolean;
 }
 
-function AckIndicator({ status, t }: { status: string; t: (texto: string) => string }) {
+function AckIndicator({ status, paradaSemConexao, saiSozinha, t }: {
+  status: string; paradaSemConexao: boolean; saiSozinha: boolean; t: (texto: string) => string;
+}) {
+  // Só a linha que o envio PAROU por falta de conexão (`queued_reason`). Todo
+  // envio nasce `queued` por um instante; mostrar o relógio nele diria
+  // "aguardando" a cada mensagem que sai normalmente.
+  if (paradaSemConexao) {
+    // "Aguardando" só promete o que acontece: o watchdog reenvia sozinho só a
+    // linha da IA quando o número volta; a de pessoa fica com o botão.
+    return saiSozinha ? (
+      <span className="inline-flex items-center gap-0.5 font-semibold">
+        <Clock size={10} weight="bold" aria-hidden /> {t("Aguardando conexão")}
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-0.5 font-semibold">
+        <WarningOctagon size={10} weight="bold" aria-hidden /> {t("Não enviada: sem conexão")}
+      </span>
+    );
+  }
   if (status === "read") {
     return <Checks size={12} weight="bold" className="text-info" aria-label={t("Lida")} />;
   }
@@ -69,7 +110,11 @@ export const MessageBubble = memo(function MessageBubble({
   citada,
   viewerUserId,
   nomeDoAutor,
+  onReenviar,
+  podeReenviarDeOutros = false,
 }: Props) {
+  const [ocupado, setOcupado] = useState(false);
+  const [confirmandoReenvio, setConfirmandoReenvio] = useState(false);
   // Relógio de 60s: tira da tela o "Transcrevendo…" vencido sem chamar
   // `Date.now()` no render (DeskcommCRM e5216e26a).
   const [agora, setAgora] = useState(() => Date.now());
@@ -116,6 +161,17 @@ export const MessageBubble = memo(function MessageBubble({
   // para tirar do ar.
   const apagada = Boolean(message.revoked_at);
   const editada = Boolean(message.edited_at) && !apagada;
+  const reenvio = onReenviar
+    ? reenvioDaMensagem(message, { userId: viewerUserId, podeReenviarDeOutros, agora })
+    : "nenhum";
+  const paradaSemConexao = message.status === "queued" && Boolean(message.metadata?.queued_reason)
+    && !message.metadata?._optimistic;
+  // O MOTIVO à vista, e não só no Tooltip: o dedo não abre Tooltip. O texto
+  // cru do canal fica fora daqui — ele pode trazer endereço interno do serviço.
+  const codigoDaFalha = message.error_code ?? "";
+  const motivoDaFalha = fraseDaFalhaDeCanal(codigoDaFalha)
+    ? t(FRASES_DE_FALHA[codigoDaFalha] as string)
+    : t("Não foi possível enviar esta mensagem.");
   const aiGenerated = isAiGeneratedMessage(message.metadata);
   const citations = extractCitations(message.metadata);
   const showCitationButton =
@@ -156,6 +212,18 @@ export const MessageBubble = memo(function MessageBubble({
     }
     return null;
   })();
+
+  async function reenviar(confirmado: boolean) {
+    if (!onReenviar || ocupado) return;
+    setOcupado(true);
+    try { await onReenviar(message, confirmado); setConfirmandoReenvio(false); }
+    catch (err) {
+      // A rota viu "pode ter chegado" onde a bolha viu "nada saiu": pergunta antes.
+      // Os outros erros o hook mostra; a bolha continua com o botão.
+      if (err instanceof ApiError && err.code === "confirmacao_necessaria") setConfirmandoReenvio(true);
+    }
+    finally { setOcupado(false); }
+  }
 
   return (
     <div
@@ -340,7 +408,8 @@ export const MessageBubble = memo(function MessageBubble({
           {showCitationButton && (
             <CitationButton citations={citations} messageId={message.id} />
           )}
-          {isOutbound && !isFailed && <AckIndicator status={message.status} t={t} />}
+          {isOutbound && !isFailed && <AckIndicator status={message.status} paradaSemConexao={paradaSemConexao}
+            saiSozinha={message.sent_via === "ai"} t={t} />}
           {isFailed && (
             // Provider local: o painel do inbox não tem TooltipProvider ancestral e
             // este Tooltip só monta em mensagem failed — sem o provider, abrir uma
@@ -359,6 +428,17 @@ export const MessageBubble = memo(function MessageBubble({
             </TooltipProvider>
           )}
         </div>
+        {(isFailed || reenvio !== "nenhum") && (
+          <div className="mt-1.5 space-y-1.5 border-t border-current/20 pt-1.5">
+            {isFailed && <p data-testid="motivo-da-falha" className="text-xs leading-snug">{motivoDaFalha}</p>}
+            {reenvio !== "nenhum" && (
+              <Button size="sm" variant="secondary" disabled={ocupado}
+                onClick={() => (reenvio === "confirmar" ? setConfirmandoReenvio(true) : void reenviar(false))}>
+                {t("Tentar de novo")}
+              </Button>
+            )}
+          </div>
+        )}
       </div>
       {onResponder && !isOutbound && (
         <button
@@ -385,6 +465,18 @@ export const MessageBubble = memo(function MessageBubble({
           <ArrowBendUpLeft size={14} />
         </button>
       )}
+      <AlertDialog open={confirmandoReenvio} onOpenChange={setConfirmandoReenvio}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("Enviar esta mensagem de novo?")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("Pode ser que esta mensagem já tenha chegado. Confira no WhatsApp do cliente antes de enviar de novo.")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={ocupado}>{t("Cancelar")}</AlertDialogCancel>
+            <Button disabled={ocupado} onClick={() => void reenviar(true)}>{t("Enviar de novo")}</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 });

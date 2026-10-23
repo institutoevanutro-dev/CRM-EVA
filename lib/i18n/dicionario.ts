@@ -11251,6 +11251,31 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível reordenar a lista inteira. Recarregue a página.": {
     es: "No fue posible reordenar la lista completa. Recarga la página.",
   },
+  // Portes 23/10, grupo B (PR #3192): reenviar a mensagem que falhou, pela própria conversa.
+  "Não foi possível enviar esta mensagem.": { es: "No se pudo enviar este mensaje." },
+  "A mensagem não saiu de novo.": { es: "El mensaje no salió de nuevo." },
+  "Aguardando conexão": { es: "Esperando conexión" },
+  "Não enviada: sem conexão": { es: "No enviado: sin conexión" },
+  "Enviar esta mensagem de novo?": { es: "¿Enviar este mensaje de nuevo?" },
+  "Pode ser que esta mensagem já tenha chegado. Confira no WhatsApp do cliente antes de enviar de novo.": {
+    es: "Puede que este mensaje ya haya llegado. Verifica en el WhatsApp del cliente antes de enviarlo de nuevo.",
+  },
+  "Enviar de novo": { es: "Enviar de nuevo" },
+  "O WhatsApp não confirmou o envio a tempo. Pode ser que a mensagem tenha chegado.": {
+    es: "WhatsApp no confirmó el envío a tiempo. Puede que el mensaje haya llegado.",
+  },
+  "Este número não tem WhatsApp.": { es: "Este número no tiene WhatsApp." },
+  "A janela de 24 horas fechou. Envie um modelo aprovado ou aguarde o cliente escrever.": {
+    es: "La ventana de 24 horas se cerró. Envía una plantilla aprobada o espera a que el cliente escriba.",
+  },
+  "Esta mensagem não pode ser reenviada.": { es: "Este mensaje no se puede reenviar." },
+  "Confirme antes de enviar de novo.": { es: "Confirma antes de enviar de nuevo." },
+  "Esta mensagem já está sendo reenviada.": { es: "Este mensaje ya se está reenviando." },
+  "Muitas tentativas seguidas. Tente em um minuto.": { es: "Demasiados intentos seguidos. Intenta en un minuto." },
+  "Mensagem não encontrada.": { es: "Mensaje no encontrado." },
+  "A credencial desta conexão não pôde ser lida nesta instalação. Reconecte em Conexões — a mensagem sai sozinha quando ela voltar.": {
+    es: "La credencial de esta conexión no se pudo leer en esta instalación. Vuelve a conectar en Conexiones: el mensaje sale solo cuando vuelva.",
+  },
 };
 
 /**

@@ -4,7 +4,7 @@ import { APARENCIA_PADRAO, estiloDaAparencia, type AparenciaDaConversa } from "@
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import type { Locale } from "date-fns";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { format, isToday, isYesterday } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { NoteCard } from "./NoteCard";
 import { useMessagesRealtime } from "@/hooks/inbox/useMessagesRealtime";
 import { useConversationNotes } from "@/hooks/inbox/useConversationNotes";
 import { useDeleteNote } from "@/hooks/inbox/useDeleteNote";
+import { useAlterarMensagem } from "@/hooks/inbox/useAlterarMensagem";
 import { useDebugToggle } from "@/hooks/ai/useDebugToggle";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
@@ -73,6 +74,17 @@ export function ChatThread({ conversationId, onResponder, searchTerm = "", apare
   );
   const deleteNote = useDeleteNote(conversationId ?? "");
   const canManage = activeOrg != null && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
+  // Reenviar é envio: a rota exige `agent`, e quem só lê não ganha um botão que ela recusa.
+  const podeEnviar = activeOrg != null && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent;
+  const { reenviar } = useAlterarMensagem(conversationId);
+  const reenviarMutateAsync = reenviar.mutateAsync;
+  // UMA função para todas as bolhas: o `MessageBubble` é `memo`, e uma closure
+  // nova por bolha a cada render o redesenharia inteiro.
+  const reenviarMensagem = useCallback(
+    (m: Message, confirmado: boolean) =>
+      reenviarMutateAsync({ id: m.id, confirmado }).then(() => undefined),
+    [reenviarMutateAsync],
+  );
   const { enabled: debugCitations } = useDebugToggle(activeOrg?.role ?? null);
 
   const messages: Message[] = useMemo(
@@ -346,6 +358,8 @@ export function ChatThread({ conversationId, onResponder, searchTerm = "", apare
                   // registra que um humano digitou, nunca qual.
                   viewerUserId={currentUser.id}
                   nomeDoAutor={item.data.sent_by_user_id ? (nomePorUsuario.get(item.data.sent_by_user_id) ?? null) : null}
+                  onReenviar={podeEnviar && item.data.direction === "outbound" ? reenviarMensagem : undefined}
+                  podeReenviarDeOutros={canManage}
                 />
               ),
             )}

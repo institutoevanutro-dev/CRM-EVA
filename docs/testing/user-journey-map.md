@@ -2869,3 +2869,18 @@ Porte do upstream melgarafael/DeskcommCRM#2790. Sem migration, sem rota nova e s
 - [ ] Papel "próprio" (`provider`, ou `agent` em modo próprio) vendo só os seus negócios no calendário: vale por construção (a lista é a do quadro, cortada pela RLS `crm_leads_select`), mas **não foi dirigido pela tela com esse papel**
 - [ ] Arrastar o negócio para outro dia: **não existe** (o upstream não tem). A data se muda pela ficha do negócio, como antes
 - [ ] Ganhos e perdidos fechados há mais de 30 dias só entram no calendário depois de "Ver mais", como no quadro: mês antigo pode parecer mais vazio do que foi
+
+## J39 — Reenviar uma mensagem que falhou `[P0]` (2026-10-23)
+
+Porte do upstream melgarafael/DeskcommCRM#3192 (F2 da ADR-0006 de lá). Antes, a bolha que falhava mostrava só «Falhou», com o motivo num Tooltip que o dedo não abre, e não havia como enviar de novo sem redigitar (e arriscar mandar em dobro). Agora a bolha diz o motivo em frase de tela e, quando a regra permite, oferece «Tentar de novo». P0 porque o atendente no celular não tem outra saída, e mandar em dobro ao cliente é o pior erro que a tela pode induzir.
+
+Regra única em `lib/messaging/reenvio.ts` (lida pela rota e pela bolha): `seguro` quando nada saiu, `confirmar` quando pode ter saído (o desconhecido cai aqui), `nenhum` em voo, já saída, IA, ou quando reenviar não resolve. A rota `POST /api/v1/messages/{id}/retry` reenvia na MESMA linha, travada pelo `updated_at` lido (dois toques = um envio), e audita `message.retried`.
+
+- [x] A bolha que falhou diz o motivo em frase, sem o texto cru do canal; código sem frase cai na genérica (`components/inbox/MessageBubble.falha.test.tsx`)
+- [x] «Tentar de novo» quando nada saiu; confirmação quando pode ter chegado (`send_timeout`, código desconhecido); a rota pedindo confirmação abre o mesmo aviso (mesmo arquivo)
+- [x] Parada sem conexão: a da IA diz «Aguardando conexão» (o watchdog a reenvia); a do atendente diz «Não enviada: sem conexão» e fica com o botão (mesmo arquivo)
+- [x] Rota: autorização antes da validação, 403 da regra, 409 da confirmação, 422 da janela de 24h, 409 do compare-and-swap, devolução do estado lido em qualquer erro, filtro de organização e audit (`tests/unit/mensagem-retry-rota.test.ts`)
+- [x] O eco do reenvio no WhatsApp não pausa a IA (`tests/unit/eco-do-envio-nao-silencia-o-bot.test.ts`)
+- [ ] **Pela tela, em e2e: não portado.** A spec do upstream (`reenvio-pelo-celular.spec.ts`) produz a falha desativando o canal, e o fork não tem canal desativado
+- [ ] O composer reaproveitar a chave de idempotência depois de um erro de rede (parte do #3192): **não portado**, porque o `POST /api/v1/messages` do fork não honra `Idempotency-Key`
+- [ ] Que o canal de verdade entrega o reenvio, e o toque num iPhone e num Android reais
