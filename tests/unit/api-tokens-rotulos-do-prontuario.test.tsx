@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/hooks/team/useApiTokens", () => ({
   useApiTokens: () => ({ data: { data: [] }, isLoading: false, isError: false }),
+  useApiTokensTemporarias: () => ({ data: undefined, isLoading: false, isError: false }),
   useCreateApiToken: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRevokeApiToken: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));

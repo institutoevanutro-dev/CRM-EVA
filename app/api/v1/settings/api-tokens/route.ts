@@ -15,6 +15,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createApiTokenSchema, validateRequest } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
+import { EPHEMERAL_TOKEN_PREFIX } from "@/lib/ai/runtime/mcp_token";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -22,20 +23,44 @@ export const dynamic = "force-dynamic";
 const SELECT_COLS =
   "id, name, prefix, scopes, last_used_at, expires_at, revoked_at, created_at";
 
-export async function GET(_req: NextRequest): Promise<Response> {
+/**
+ * `?origem=pessoas` | `?origem=ia` separa as chaves criadas por gente das
+ * efêmeras que o runtime da IA cria a cada execução (`mintEphemeralToken`).
+ * Sem o parâmetro a resposta é a de sempre (todas). Com `pessoas`, o
+ * `meta.temporarias_da_ia` traz a contagem das outras, sem trazê-las.
+ *
+ * O `_` do LIKE é curinga, mas não há falso positivo: o prefixo humano é
+ * `dsk_<8 hex>`, e "run" não é hex.
+ */
+const PADRAO_TEMPORARIA = `${EPHEMERAL_TOKEN_PREFIX}%`;
+
+export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
   const authz = await requireRole("admin", { requestId, resource: "api_tokens" });
   if (!authz.ok) return authz.response;
   const { org: activeOrg } = authz;
 
+  const origem = new URL(req.url).searchParams.get("origem");
+
   const supabase = await createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("api_tokens")
     .select(SELECT_COLS)
-    .eq("organization_id", activeOrg.orgId)
-    .order("created_at", { ascending: false });
+    .eq("organization_id", activeOrg.orgId);
+  if (origem === "ia") query = query.like("prefix", PADRAO_TEMPORARIA);
+  if (origem === "pessoas") query = query.not("prefix", "like", PADRAO_TEMPORARIA);
+  const { data, error } = await query.order("created_at", { ascending: false });
   if (error) return fail("internal_error", error.message, 500, { requestId });
-  return ok(data ?? [], { requestId });
+
+  if (origem !== "pessoas") return ok(data ?? [], { requestId });
+
+  const { count, error: countErr } = await supabase
+    .from("api_tokens")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", activeOrg.orgId)
+    .like("prefix", PADRAO_TEMPORARIA);
+  if (countErr) return fail("internal_error", countErr.message, 500, { requestId });
+  return ok(data ?? [], { requestId, meta: { temporarias_da_ia: count ?? 0 } });
 }
 
 export async function POST(req: NextRequest): Promise<Response> {

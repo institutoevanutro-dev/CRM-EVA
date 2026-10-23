@@ -61,8 +61,10 @@ export interface EphemeralToken {
  * continuaria verde depois de alguém reverter o conserto aqui — seria a segunda
  * lista, que é o defeito que ele existe para pegar.
  */
+export const EPHEMERAL_TOKEN_PREFIX = "dsk_run_";
+
 export function buildEphemeralPrefix(runId: string): string {
-  return `dsk_run_${runId.slice(0, 8)}_${randomBytes(4).toString("hex")}`;
+  return `${EPHEMERAL_TOKEN_PREFIX}${runId.slice(0, 8)}_${randomBytes(4).toString("hex")}`;
 }
 
 async function resolveCreatedBy(

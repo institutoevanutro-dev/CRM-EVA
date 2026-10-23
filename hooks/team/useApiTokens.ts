@@ -20,12 +20,26 @@ export interface CreatedApiToken extends ApiTokenRow {
   _warning: string;
 }
 
+/** Chaves criadas por pessoas; `meta.temporarias_da_ia` conta as da IA. */
 export function useApiTokens() {
   return useQuery({
-    queryKey: ["api-tokens"],
+    queryKey: ["api-tokens", "pessoas"],
     queryFn: async () =>
-      apiClient.get<{ data: ApiTokenRow[] }>("/api/v1/settings/api-tokens"),
+      apiClient.get<{ data: ApiTokenRow[]; meta?: { temporarias_da_ia?: number } }>(
+        "/api/v1/settings/api-tokens?origem=pessoas",
+      ),
     staleTime: 30_000,
+  });
+}
+
+/** As chaves de 5 minutos que cada execução da IA cria. Só busca quando aberto. */
+export function useApiTokensTemporarias(enabled: boolean) {
+  return useQuery({
+    queryKey: ["api-tokens", "ia"],
+    queryFn: async () =>
+      apiClient.get<{ data: ApiTokenRow[] }>("/api/v1/settings/api-tokens?origem=ia"),
+    staleTime: 30_000,
+    enabled,
   });
 }
 
