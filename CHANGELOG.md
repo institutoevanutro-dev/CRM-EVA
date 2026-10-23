@@ -8,6 +8,104 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.36.0] — 2026-10-23
+
+### Adicionado
+
+- **Mensagem apagada fica cinza, diz quem apagou, e o apagamento pelo aplicativo entra na auditoria** Quando alguém apaga uma mensagem ("apagar para todos"), a bolha agora sai das cores da conversa e vira cinza, com o aviso dizendo quem apagou: o contato ou o atendente. Antes, a única diferença era o texto mais apagado. A auditoria passa a registrar quem apaga pelo aplicativo do WhatsApp (o contato, ou o próprio número da clínica pelo celular), que não deixava rastro nenhum. Um aviso repetido pelo WhatsApp não gera um segundo registro. A trilha guarda o evento, nunca o texto da mensagem. O texto apagado continua fora da conversa e do PDF da conversa, como antes.
+
+  Portado do projeto original (DeskcommCRM, PR #3279 de @webtecnica).
+
+- **Com o painel do contato recolhido, a lista de conversas pode ficar mais larga** Com o painel do contato recolhido, o divisor da lista de conversas passa a usar o espaço que o painel liberou: arrastando ou pelas setas do teclado, a lista chega à largura máxima dela. Ao abrir o painel de novo, a lista volta a respeitar o espaço mínimo da conversa. Com o painel aberto nada muda, e a largura que cada pessoa ajustou continua guardada do mesmo jeito.
+
+  Portado do projeto original (DeskcommCRM, PR #3152 de @webtecnica).
+
+- **O e-mail da automação pode ir para uma pessoa da equipe** Na ação "Enviar e-mail" das automações, o destinatário ganha a opção "E-mail de uma pessoa da equipe": você escolhe a pessoa na lista da equipe, e o e-mail vai para o endereço cadastrado no acesso dela, sem digitar endereço na regra. Com o gatilho "Quando um negócio for ganho", serve para avisar alguém da equipe da venda fechada. O vínculo com a empresa é conferido na hora do envio: quem foi removido da organização não recebe, e a aba Atividade diz por quê. Os limites de envio por regra e por organização valem igual. Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #2834 de @webtecnica), só a parte do e-mail. A ação "Mensagem para a equipe" pelo WhatsApp de Avisos e a variável {{resumo}} dependem de peças que este CRM ainda não tem e ficaram para depois.
+
+- **No chat, uma mensagem pode ser encaminhada para outra conversa** A bolha ganha o botão Encaminhar, ao lado do Responder: escolha a conversa de destino entre as conversas já carregadas na lista, e a mensagem vai para lá pelo mesmo caminho do envio normal, com texto e mídia (a mídia é copiada para a conversa de destino). Quando a mídia ainda não chegou ao CRM, a recusa pede para tentar de novo em instantes; a mídia que nunca poderá ser encaminhada, como a proposta em PDF ou a imagem que a retenção já apagou, recebe uma recusa própria. Dois toques seguidos encaminham uma vez só, e quando o envio para o destino falha o aviso diz isso, com o motivo. Mensagem apagada não se encaminha.
+
+  Portado do projeto original (DeskcommCRM, PR #2841 de @webtecnica).
+
+- **Escolha do número que envia os lembretes da Agenda** Em Configurações › Agenda há um novo campo, "Número que envia os lembretes". No padrão, "Automático (como hoje)", nada muda: o lembrete continua saindo pelo número da conversa em que o horário foi marcado, ou pelo da conversa mais recente do cliente, ou pelo primeiro número conectado.
+
+  Com um número escolhido, todos os lembretes saem por ele, mesmo quando o cliente conversou por outro número da organização. Se o número escolhido estiver desconectado ou não puder enviar naquele momento, o lembrete sai pela regra automática, para o cliente não ficar sem aviso, e o motivo fica no log. A troca fica registrada na auditoria. Nada a fazer na atualização.
+
+- **Recolher o painel do contato no Inbox** O painel do contato, à direita da conversa, ganhou o botão de recolher no alto, com o mesmo ícone do recolher do menu da esquerda. Recolhido, ele vira um trilho estreito com o botão de expandir, e a conversa fica com a largura que era do painel. A escolha fica lembrada neste navegador e já vale ao abrir o Inbox de novo. No celular nada muda: a ficha continua abrindo pelo botão Ficha.
+
+  Portado do projeto original (DeskcommCRM, PR #3043 de @webtecnica).
+
+- **Mensagem que falhou mostra o motivo e pode ser enviada de novo pela própria conversa** A bolha que falhou passa a dizer o motivo em frase legível (antes ficava só num balão que o toque não abre) e ganha o botão "Tentar de novo", também no celular. Quando a mensagem pode ter chegado ao cliente, a tela pede confirmação antes de enviar de novo; o reenvio usa a mesma mensagem, então dois toques nunca mandam duas vezes. Mensagem da IA parada sem conexão passa a dizer "Aguardando conexão", porque sai sozinha quando o número volta; a do atendente diz "Não enviada: sem conexão" e fica com o botão, porque ninguém a reenvia sozinho. Mensagens da IA continuam sem botão, porque já têm quem tente de novo. Cada reenvio fica registrado na auditoria. Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3192 de @melgarafael).
+
+- **Respostas rápidas na ordem que você define, por arrastar e soltar, e o Inbox segue a mesma ordem** Na tela de Respostas rápidas, cada resposta que você pode editar ganhou uma alça de arrastar: solte em outro lugar do mesmo assunto e a ordem nova fica gravada, inclusive ao recarregar a página. Editar o texto de uma resposta não a leva mais para o topo. No Inbox, a barra "Respostas rápidas" e a lista que abre ao digitar / no campo mostram a mesma ordem da tela. Na atualização, a ordem que a tela mostra hoje é preservada, assunto por assunto; por isso, no Inbox, as respostas passam a aparecer agrupadas como na tela, em vez da mais editada primeiro. Resposta nova entra no topo. Com uma busca ativa, a alça some até a busca ser limpa. Só a posição muda: título, texto, atalho e imagens ficam como estão. Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3261 de @webtecnica).
+
+- **Cadastro de contato aceita o telefone como o brasileiro escreve e grava o +55 sozinho** O Novo contato e a edição da ficha aceitam `(42) 99873-7374`, `42998737374`, fixo como `(42) 3333-4444` e o número colado com `55` sem o `+`, e gravam em formato internacional, como antes. DDD inválido e tamanho errado continuam recusados, com os dois exemplos na mensagem; número com `+` mantém o país digitado. Vale também para a API de contatos. O rótulo do campo vira "Telefone (DDD + número)". Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3305 de @webtecnica).
+
+### Alterado
+
+- **No celular, a conversa aberta ocupa a tela inteira e o voltar leva de volta à lista** No celular, a conversa aberta cobre a barra de cima e sobra mais altura para as mensagens; o aviso de WhatsApp desconectado continua visível. Com o teclado aberto, a fileira de ações sai da frente. Tocar em Conversas, ou o gesto de voltar, devolve a lista em vez de sair do Inbox. Assumir vem primeiro, os botões têm tamanho de dedo, o telefone fica só na ficha e os campos não ampliam a tela no iPhone. No computador o Inbox fica igual, mas em qualquer tela os avisos do topo ficam presos no alto, um abaixo do outro, e a página deixa de ficar maior que a tela.
+
+  Portado do projeto original (DeskcommCRM, PR #3190 de @melgarafael).
+
+- **Dossiê do negócio com os campos antes da linha do tempo e seções recolhíveis** O dossiê do negócio passa a mostrar Dados do negócio, Tarefas e Linha do tempo, nessa ordem. Os campos do funil deixam de ficar atrás de uma linha do tempo que só cresce com o uso. Dados do negócio e Linha do tempo podem ser recolhidas, e a escolha fica lembrada neste navegador (outro computador ou navegador abre tudo aberto). Com a linha do tempo recolhida aparecem as três entradas mais recentes e um "Ver tudo". Fechar Dados do negócio no meio de uma edição não perde o que foi digitado, e o atalho "Editar campos" abre a seção se ela estiver fechada.
+
+  Portado do projeto original (DeskcommCRM, PR #3232 de @webtecnica).
+
+- **Sugerir resposta fica à vista no Inbox, e o bloco da assistência só aparece com sugestão** No campo de resposta do Inbox, "Sugerir resposta" passou a ser um ícone na linha de ações, ao lado do emoji: um clique pede a sugestão ao agente, sem abrir a faixa de cima. O bloco "Assistência do agente" só aparece quando há sugestão para revisar, sendo preparada, aprovada ou enviando, e sai quando ela é enviada ou rejeitada. A confirmação de que a sugestão foi aprovada ou rejeitada aparece como aviso no canto da tela. O botão que abre a faixa com Responder e Nota interna ganhou o ícone de três pontos. Nada muda no que é enviado ao cliente.
+
+  Portado do projeto original (DeskcommCRM, PR #3234 de @webtecnica).
+
+### Corrigido
+
+- **Quem não tem nome no cadastro aparece como "Atendente sem nome", e não como um código** Membro da equipe sem nome cadastrado aparecia no "Transferir para" e na lista de menções da nota interna como "Atendente" seguido dos oito primeiros caracteres do identificador interno, e esse código ia gravado na nota e na notificação de quem foi mencionado. Agora os dois lugares mostram "Atendente sem nome". Quem tem nome cadastrado continua aparecendo pelo nome. Dois membros sem nome mostram a mesma linha: no "Transferir para", o papel ao lado ajuda a escolher, e cadastrar o nome resolve de vez.
+
+  Portado do projeto original (DeskcommCRM, PR #3298 de @webtecnica).
+
+- **"Lead atribuído a você" só avisa quando o responsável muda de verdade** O aviso de negócio atribuído (e os de ganho e perdido) aparecia para quem já era o responsável a cada novidade do negócio. Agora ele sai só quando o responsável (ou o status) muda em relação ao que a sua tela viu; num negócio que a tela ainda não tinha visto, sai quando a própria atualização foi a atribuição a você, o ganho ou a perda. Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3183 de @webtecnica). No CRM da clínica o negócio ainda não visto também avisa, pelo horário da atribuição gravado nele.
+
+- **Códigos de recuperação passam a funcionar no login, e gerar novos leva ao código do aplicativo** Os códigos de recuperação da verificação em duas etapas nunca funcionaram: "Perdi acesso ao autenticador" recusava qualquer código. Agora cada código entra uma vez, aceita minúsculas, espaço e hífen, vale só na conta que o gerou e é protegido pelo segredo da instalação (`INTERNAL_SECRET`; trocá-lo invalida os códigos emitidos). Depois de 5 tentativas erradas na mesma conta em 15 minutos, a tela recusa até a janela passar. Quem guardou códigos antigos precisa gerar novos em Configurações › Segurança.
+
+  Gerar códigos, e cadastrar outro autenticador numa conta que já tem um, pedem o código de 6 dígitos nesta sessão: sem ele, a tela leva ao código e volta para Segurança. Se os códigos não puderem ser gravados, a tela avisa em vez de mostrar códigos que não valem.
+
+  Portado do projeto original (DeskcommCRM, PR #3339 de @melgarafael). No CRM da clínica o código fica preso à conta que o gerou, porque a mudança de banco do original ainda não entrou.
+
+- **No celular, a tecla de retorno quebra linha e o áudio que o aparelho não toca é convertido na hora** Na tela de toque, a tecla de retorno quebra a linha e quem envia é o botão (Ctrl ou Cmd + Enter também envia). Os botões do compositor têm tamanho de dedo, o emoji sai da frente (o teclado já tem) e, com o teclado aberto, a sugestão do agente sai da frente, menos quando é ela que está sendo editada. A nota de voz gravada no iPhone chega como nota de voz também nos canais oficiais, e o áudio recebido que o iPhone não toca (sistema anterior ao iOS 18.4) é convertido na hora, sem ficar guardado. No computador nada muda. Nada a fazer na atualização: o conversor já vem na imagem.
+
+  Portado do projeto original (DeskcommCRM, PR #3191 de @melgarafael).
+
+- **CPF ou e-mail já usado por outro contato responde 409, não "erro interno"** Ao criar um contato com um CPF que já pertencia a outro contato da mesma organização, a API devolvia 500 com `duplicate key value violates unique constraint "uniq_contacts_org_cpf"` e a tela mostrava "Erro interno" para um simples duplicado. O mesmo acontecia ao editar um contato com o e-mail (ou o telefone) de outro. Agora o CPF, o e-mail e o telefone respondem igual, na criação e na edição: 409 `contact_exists` com o `contact_id` de quem já tem o dado, e a tela mostra "Já existe um contato com este CPF." (ou e-mail, ou telefone). Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3197 de @webtecnica).
+
+- **As etiquetas sugeridas no Inbox filtram pelo que se digita, e as mais usadas vêm primeiro** Nos editores de etiquetas do Inbox (da conversa e do contato), as sugestões eram sempre as oito primeiras em ordem alfabética, e o que se digitava não entrava no filtro: quem procurava "retorno" não via "retorno-30-dias" e acabava criando uma etiqueta nova com outra grafia. Agora as sugestões filtram pelo texto digitado com a mesma régua da busca da ficha do contato, sem diferenciar maiúsculas e acentos e casando no meio da palavra, e com o campo vazio aparecem as etiquetas mais usadas na organização. A etiqueta que a conversa ou o contato já tem continua fora da lista. Na ficha do contato, as sugestões com o campo vazio também passam a começar pelas mais usadas.
+
+  Portado do projeto original (DeskcommCRM, PR #3206 de @webtecnica).
+
+- **Mensagem que falhou não mostra mais o texto técnico do canal, e a recusa de um modelo diz a causa** O motivo de uma mensagem que não saiu aparece igual nos cinco lugares (selo "Falhou", linha da bolha, "Tentar de novo", encaminhar e envio de modelo com a janela fechada), sem o texto técnico do canal, como o endereço interno do serviço. A recusa do WhatsApp Oficial mostra a causa em frase ("Os valores enviados não batem com as variáveis do modelo.") ou, sem frase nossa, o texto do WhatsApp com o código, em até 300 caracteres. Acesso expirado e falta de permissão mandam a Conexões; limite de pedidos, modelo fora da lista e modelo alterado ganharam frase própria. O texto original segue guardado na mensagem.
+
+  Portado do projeto original (DeskcommCRM, PR #3336 de @melgarafael).
+
+- **O telefone gravado sozinho na ficha também aciona a regra "Quando um contato ganhar um telefone"** Quando o cliente informa o telefone na conversa e a ficha está sem número, o número entra sozinho no cadastro (com a opção da organização ligada), mas a regra "Quando um contato ganhar um telefone" não rodava por esse caminho. Agora ela roda, com o mesmo conteúdo da edição da ficha e só depois de o número estar gravado. Quem já tinha número, a corrida perdida e o número de outro contato seguem sem disparar.
+
+  Portado do projeto original (DeskcommCRM, PR #3307 de @webtecnica).
+
+  **Para quem tem regras próprias:** se uma regra usa esse gatilho e a opção "Telefone informado pelo cliente entra sozinho na ficha sem número" está ligada, ela passa a disparar também por esse caminho. Antes de atualizar, confira o que ela faz.
+
+- **Automação "contato ganhou telefone" passa a rodar também na ingestão do canal Zernio e no cron de telefones** O gatilho "Quando um contato ganhar um telefone" passa a sair também quando o número chega pela ingestão do canal Zernio e pelo cron que descobre o número por trás da identidade opaca do WhatsApp, uma vez e só se a ficha estava sem número. O cadastro feito pela ingestão do WhatsApp por QR ainda não emite nesta versão, e a junção de dois cadastros continua sem emitir, de propósito.
+
+  Portado do projeto original (DeskcommCRM, PR #3317 de @webtecnica), só a parte que não muda o banco.
+
+  **Para quem tem regras próprias:** uma regra com esse gatilho passa a disparar nesses caminhos, inclusive para contatos antigos sem telefone que o cron ainda vai encontrar. Antes de atualizar, confira o que ela faz.
+
 ## [4.35.0] — 2026-10-23
 
 ### Adicionado
@@ -8184,7 +8282,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.35.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.36.0...HEAD
+[4.36.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.35.0...v4.36.0
 [4.35.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.2...v4.35.0
 [4.34.2]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.1...v4.34.2
 [4.34.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.0...v4.34.1
