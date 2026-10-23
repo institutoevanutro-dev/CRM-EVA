@@ -57,13 +57,44 @@ export type Admin = ReturnType<typeof createAdminClient>;
 const JANELA_DO_ECO_MS = 60_000;
 
 /**
+ * Os estados em que uma linha NOSSA já saiu (ou está saindo) para o canal, e
+ * portanto o eco dela pode estar voltando.
+ *
+ * `sent` SEM `external_id` não é estado impossível: é o desfecho escrito de
+ * propósito quando o eco vence o `unique (organization_id, external_id)`, em
+ * `app/api/v1/messages/_handler.ts` ("fica `sent` sem o id") e no redrive do
+ * `session-reconciler.ts` (`stampExternalIdAfterEcho` blindado). Exigir só
+ * `queued|sending` fazia a reentrega desse eco ser lida como pessoa no celular:
+ * IA pausada, linha duplicada e lead nascido pelo celular (DeskcommCRM #3138).
+ * `delivered`/`read` cobrem o ack que chega logo depois do carimbo (#3165).
+ *
+ * `failed` fica FORA: ali nada foi ao canal, não existe eco que explique a
+ * mensagem.
+ */
+const STATUS_DE_ENVIO_NOSSO = ["queued", "sending", "sent", "delivered", "read"];
+
+/**
  * A mensagem `fromMe` que chegou é o eco de um envio que ESTE CRM acabou de
  * fazer — e não alguém digitando no celular?
  *
- * A prova exigida é forte: uma linha nossa na MESMA conversa, ainda sem
- * `external_id` (portanto ainda em voo), com o MESMO corpo, dentro da janela.
+ * A prova exigida é forte: uma linha nossa na MESMA conversa, dentro da janela,
+ * e UMA destas duas marcas:
+ *
+ *   - já com `external_id` igual a um dos ids que o CANAL entregou nesta
+ *     mensagem: o carimbo do envio caiu DURANTE a ingestão, depois da
+ *     re-checagem pós-insert e antes desta decisão (DeskcommCRM #3165). O id do
+ *     canal não se repete entre mensagens, então o corpo nem é comparado;
+ *   - ainda SEM `external_id`, num dos estados em que a linha saiu
+ *     (`STATUS_DE_ENVIO_NOSSO`, `sent` inclusive: DeskcommCRM #3138), com o
+ *     MESMO corpo.
+ *
  * Qualquer uma dessas faltando, a resposta é "não sei" — e "não sei" silencia,
  * porque é o desfecho seguro do lado do atendente humano (#371).
+ *
+ * ⚠️ O que fecha a janela do carimbo é a LEITURA ÚNICA: o id e o texto saem da
+ * MESMA linha do MESMO instante. Duas consultas em sequência (o id numa, o texto
+ * na outra) só encolhem a janela: o carimbo que cai entre elas pausa a IA de novo.
+ * Catraca: `lib/waha/ingest-eco-carimbado-no-meio.test.ts`.
  *
  * Mídia não tem corpo comparável (o eco traz `media_url`, não texto): ali a
  * prova cai para "existe envio nosso em voo do mesmo tipo na janela", que é mais
@@ -74,21 +105,22 @@ async function ehEcoDeEnvioNosso(
   organizationId: string,
   conversationId: string,
   p: WahaPayload,
+  /** As formas do id desta mensagem no banco (composto e cauda): as mesmas da re-checagem pós-insert. */
+  idsDaMensagem: string[],
 ): Promise<boolean> {
   const desde = new Date(Date.now() - JANELA_DO_ECO_MS).toISOString();
   const { data, error } = await admin
     .from("messages")
-    .select("id, body, type")
+    .select("id, body, type, external_id")
     .eq("organization_id", organizationId)
     .eq("conversation_id", conversationId)
     .eq("direction", "outbound")
     // `sent_via` separa o que NASCEU aqui do que veio do celular: a linha do
     // celular é gravada como `external_device` e nunca pode servir de álibi.
     .in("sent_via", ["ai", "user"])
-    // Sem `external_id` = ainda não confirmada pelo canal = ainda em voo. É esta
-    // a janela exata em que o eco é indistinguível de digitação humana.
-    .is("external_id", null)
-    .in("status", ["queued", "sending"])
+    // ⚠️ O `external_id` NÃO é filtro aqui, de propósito (#3165): as duas marcas
+    // da prova são decididas sobre a MESMA linha desta leitura, no laço abaixo.
+    .in("status", STATUS_DE_ENVIO_NOSSO)
     .gte("created_at", desde)
     .limit(20);
 
@@ -101,7 +133,11 @@ async function ehEcoDeEnvioNosso(
 
   const corpo = (p.body ?? "").trim();
   for (const linha of data ?? []) {
-    const l = linha as { body: string | null; type?: string | null };
+    const l = linha as { body: string | null; type?: string | null; external_id?: string | null };
+    // MARCA do carimbo: o id do canal que acabou de chegar já está NESTA linha.
+    if (l.external_id != null && idsDaMensagem.includes(l.external_id)) return true;
+    // Linha com id de OUTRO envio nosso na mesma janela não explica este eco.
+    if (l.external_id != null) continue;
     if (p.type && p.type !== "chat") {
       // Mídia: sem corpo para comparar, a existência do envio em voo é a prova
       // possível. Mais fraco, e escrito para ninguém supor o contrário.
@@ -1206,7 +1242,7 @@ async function handleOutboundFromUserPhone(
   //   silenciar o bot -> ESTRITO    (na dúvida NÃO cala; calar a IA por engano é
   //                                  pior que não calar)
   // Quem reaproveitar esta condição para pular o INSERT reabre o #108.
-  if (!(await ehEcoDeEnvioNosso(admin, session.organization_id, conversationId, p))) {
+  if (!(await ehEcoDeEnvioNosso(admin, session.organization_id, conversationId, p, idCandidates))) {
     await pausarIaPorAtendimentoManual(admin, {
       organizationId: session.organization_id,
       conversationId,
