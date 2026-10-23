@@ -33,7 +33,12 @@ import { cabecalhosDeMidia } from "@/lib/messaging/media/servir";
 import { eCaminhoDeOrganizacaoApagada } from "@/lib/messaging/media/caminho-legado";
 import { isMessageMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import { logger } from "@/lib/logger";
-import { ConversorOcupado, TETO_REPRODUCAO_BYTES, paraReproducaoAac } from "@/lib/messaging/media/voice-transcode";
+import {
+  AudioGrandeDemais,
+  ConversorOcupado,
+  TETO_REPRODUCAO_BYTES,
+  paraReproducaoAac,
+} from "@/lib/messaging/media/voice-transcode";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -302,6 +307,11 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
  * `media_size_bytes` do que o worker ainda não persistiu pode faltar. Mídia
  * da biblioteca não passa por aqui (ela não é nota de voz recebida).
  */
+/** O canal não devolveu mais o arquivo: 404, como no caminho sem conversão. */
+class MidiaAusente extends Error {}
+/** O download falhou (Storage ou canal): 502, nunca confundido com a falha do ffmpeg. */
+class FalhaAoBaixar extends Error {}
+
 async function converterParaTocar(
   orgId: string,
   msg: Linha,
@@ -314,34 +324,48 @@ async function converterParaTocar(
   }
   const grandeDemais = () =>
     fail("payload_too_large", t("Não foi possível preparar o áudio para este aparelho."), 413, { requestId });
+  const semMidia = () => fail("not_found", t("Mensagem sem mídia."), 404, { requestId });
+  const indisponivel = () => fail("bad_gateway", t("Mídia indisponível no momento."), 502, { requestId });
   if ((msg.media_size_bytes ?? 0) > TETO_REPRODUCAO_BYTES) return grandeDemais();
 
-  let bytes: Buffer;
-  try {
-    if (msg.media_storage_path) {
-      const admin = createAdminClient();
+  const caminho = msg.media_storage_path;
+  const admin = caminho ? createAdminClient() : null;
+  if (admin && caminho) {
+    try {
       // A mesma régua da URL assinada: arquivo de outra mensagem é 404.
-      if (!(await caminhoDaMensagem(admin, orgId, msg, msg.media_storage_path))) {
+      if (!(await caminhoDaMensagem(admin, orgId, msg, caminho))) {
         logger.warn("messages.media.path_fora_da_mensagem", { message_id: msg.id });
-        return fail("not_found", t("Mensagem sem mídia."), 404, { requestId });
+        return semMidia();
       }
-      const { data, error } = await admin.storage.from("whatsapp-media").download(msg.media_storage_path);
-      if (error || !data) throw new Error(error?.message ?? "download_vazio");
-      bytes = Buffer.from(await data.arrayBuffer());
-    } else {
-      const media = await buscarNoCanal(orgId, msg);
-      if (!media) return fail("not_found", t("Mensagem sem mídia."), 404, { requestId });
-      bytes = Buffer.from(media.buffer);
+    } catch {
+      return indisponivel();
     }
-  } catch {
-    return fail("bad_gateway", t("Mídia indisponível no momento."), 502, { requestId });
   }
-  if (bytes.length > TETO_REPRODUCAO_BYTES) return grandeDemais();
+
+  // O download roda DENTRO da vaga do conversor (ver `paraReproducaoAac`): o
+  // `media_size_bytes` acima é o que a linha diz, e não segura sozinho a memória.
+  const baixar = async (): Promise<Buffer> => {
+    try {
+      if (admin && caminho) {
+        const { data, error } = await admin.storage.from("whatsapp-media").download(caminho);
+        if (error || !data) throw new Error(error?.message ?? "download_vazio");
+        return Buffer.from(await data.arrayBuffer());
+      }
+      const media = await buscarNoCanal(orgId, msg);
+      if (!media) throw new MidiaAusente();
+      return Buffer.from(media.buffer);
+    } catch (err) {
+      throw err instanceof MidiaAusente ? err : new FalhaAoBaixar();
+    }
+  };
 
   let aac: Buffer;
   try {
-    aac = await paraReproducaoAac(bytes, orgId);
+    aac = await paraReproducaoAac(baixar, orgId);
   } catch (err) {
+    if (err instanceof MidiaAusente) return semMidia();
+    if (err instanceof FalhaAoBaixar) return indisponivel();
+    if (err instanceof AudioGrandeDemais) return grandeDemais();
     if (err instanceof ConversorOcupado) {
       return fail("conversor_ocupado", t("Muitos áudios sendo preparados agora. Tente em alguns segundos."), 503, {
         requestId,

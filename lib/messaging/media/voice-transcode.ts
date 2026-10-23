@@ -91,6 +91,14 @@ export class ConversorOcupado extends Error {
   }
 }
 
+/** O áudio passa de `TETO_REPRODUCAO_BYTES` (conferido também depois de baixar). */
+export class AudioGrandeDemais extends Error {
+  constructor() {
+    super("audio_grande_demais");
+    this.name = "AudioGrandeDemais";
+  }
+}
+
 /** Prazo de qualquer ffmpeg daqui: sem ele, um arquivo patológico prende o processo. */
 const PRAZO_FFMPEG_MS = 30_000;
 
@@ -217,11 +225,11 @@ export async function transcodificarNotaDeVoz(
  * só com o expurgo e a anonimização cobrindo a cópia, provados por teste.
  */
 export async function paraReproducaoAac(
-  buffer: Buffer,
+  origem: Buffer | (() => Promise<Buffer>),
   organizationId: string,
   deps: { run?: typeof runFfmpeg } = {},
 ): Promise<Buffer> {
-  if (buffer.length > TETO_REPRODUCAO_BYTES) throw new Error("audio_grande_demais");
+  if (Buffer.isBuffer(origem) && origem.length > TETO_REPRODUCAO_BYTES) throw new AudioGrandeDemais();
   const daOrganizacao = emCursoPorOrganizacao.get(organizationId) ?? 0;
   if (conversoesEmCurso >= CONVERSOES_SIMULTANEAS || daOrganizacao >= CONVERSOES_POR_ORGANIZACAO) {
     throw new ConversorOcupado();
@@ -231,6 +239,12 @@ export async function paraReproducaoAac(
   emCursoPorOrganizacao.set(organizationId, daOrganizacao + 1);
   let dir: string | null = null;
   try {
+    // `origem` como função é o DOWNLOAD, e ele roda já com a vaga: quem segura
+    // o áudio na memória é a vaga, então o teto de conversões simultâneas é
+    // também o teto de áudios baixados ao mesmo tempo. Baixar antes da vaga
+    // deixava N pedidos segurarem N arquivos enquanto esperavam o 503.
+    const buffer = Buffer.isBuffer(origem) ? origem : await origem();
+    if (buffer.length > TETO_REPRODUCAO_BYTES) throw new AudioGrandeDemais();
     dir = await mkdtemp(join(tmpdir(), "tocar-"));
     const entrada = join(dir, "in.audio");
     const saida = join(dir, "out.m4a");

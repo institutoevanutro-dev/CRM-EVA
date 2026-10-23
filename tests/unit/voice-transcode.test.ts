@@ -28,6 +28,7 @@ import { describe, expect, it, vi } from "vitest";
 import { extFromMime } from "@/lib/messaging/media/types";
 import { validateOutboundMedia } from "@/lib/messaging/media/upload-validation";
 import {
+  AudioGrandeDemais,
   CONVERSOES_POR_ORGANIZACAO,
   ENTRADA_ACEITA,
   CONVERSOES_SIMULTANEAS,
@@ -254,6 +255,43 @@ describe("paraReproducaoAac", () => {
     const run = vi.fn(async () => {});
     await expect(paraReproducaoAac(Buffer.alloc(TETO_REPRODUCAO_BYTES + 1), "org-a", { run })).rejects.toThrow();
     expect(run).not.toHaveBeenCalled();
+  });
+
+  it("com o download como função, ele só roda depois da vaga, e o teto vale para o que chegou", async () => {
+    const run = vi.fn(async (args: string[], _cwd: string) => {
+      const { writeFile } = await import("node:fs/promises");
+      await writeFile(args[args.length - 1]!, Buffer.from("mp4-aac"));
+    });
+    const baixar = vi.fn(async () => Buffer.from("ogg"));
+    await expect(paraReproducaoAac(baixar, "org-baixa", { run })).resolves.toBeInstanceOf(Buffer);
+    expect(baixar).toHaveBeenCalledTimes(1);
+
+    const grande = vi.fn(async () => Buffer.alloc(TETO_REPRODUCAO_BYTES + 1));
+    await expect(paraReproducaoAac(grande, "org-baixa", { run })).rejects.toBeInstanceOf(AudioGrandeDemais);
+    expect(run).toHaveBeenCalledTimes(1);
+    // A vaga voltou mesmo com a recusa: a próxima da mesma organização entra.
+    await expect(paraReproducaoAac(baixar, "org-baixa", { run })).resolves.toBeInstanceOf(Buffer);
+  });
+
+  it("conversor cheio: o download nem começa", async () => {
+    let soltar: () => void = () => {};
+    const presa = vi.fn(
+      (args: string[], _cwd: string) =>
+        new Promise<void>((resolve) => {
+          soltar = async () => {
+            const { writeFile } = await import("node:fs/promises");
+            await writeFile(args[args.length - 1]!, Buffer.from("mp4"));
+            resolve();
+          };
+        }),
+    );
+    const emCurso = paraReproducaoAac(Buffer.from("ogg"), "org-cheia", { run: presa });
+    await vi.waitFor(() => expect(presa).toHaveBeenCalledTimes(1));
+    const baixar = vi.fn(async () => Buffer.from("ogg"));
+    await expect(paraReproducaoAac(baixar, "org-cheia", { run: presa })).rejects.toBeInstanceOf(ConversorOcupado);
+    expect(baixar).not.toHaveBeenCalled();
+    soltar();
+    await emCurso;
   });
 
   it("ffmpeg falhando REJEITA — quem chama responde 502, não devolve o ogg intocável", async () => {

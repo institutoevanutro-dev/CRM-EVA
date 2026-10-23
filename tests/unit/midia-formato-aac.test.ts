@@ -26,9 +26,15 @@ const estado = vi.hoisted(() => ({
   baixados: [] as string[],
 }));
 
-const converter = vi.hoisted(() =>
-  vi.fn<typeof VoiceTranscode.paraReproducaoAac>(async () => Buffer.from("mp4-aac")),
-);
+const converter = vi.hoisted(() => vi.fn<typeof VoiceTranscode.paraReproducaoAac>());
+/** O que o conversor recebeu depois de rodar o download que a rota entrega a ele. */
+const recebidos = vi.hoisted(() => [] as string[]);
+/** O conversor de verdade só baixa depois de pegar a vaga: o dublê roda o download e converte. */
+async function converterBaixando(entrada: Buffer | (() => Promise<Buffer>)): Promise<Buffer> {
+  const bytes = Buffer.isBuffer(entrada) ? entrada : await entrada();
+  recebidos.push(bytes.toString());
+  return Buffer.from("mp4-aac");
+}
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -71,6 +77,7 @@ vi.mock("@/lib/supabase/admin", () => ({
       from: () => ({
         download: async (caminho: string) => {
           estado.baixados.push(caminho);
+          if (caminho.endsWith("falha.ogg")) return { data: null, error: { message: "storage fora" } };
           return { data: new Blob([estado.baixado]), error: null };
         },
         createSignedUrl: async () => ({ data: { signedUrl: "https://storage/x" }, error: null }),
@@ -122,7 +129,8 @@ beforeEach(() => {
   estado.limite = { allowed: true, count: 1, limit: 30, window_sec: 60 };
   estado.baixado = Buffer.from("ogg-bytes");
   converter.mockReset();
-  converter.mockResolvedValue(Buffer.from("mp4-aac"));
+  converter.mockImplementation(converterBaixando);
+  recebidos.length = 0;
 });
 
 describe("?formato=aac", () => {
@@ -134,7 +142,7 @@ describe("?formato=aac", () => {
     expect(r.headers.get("x-content-type-options")).toBe("nosniff");
     expect(r.headers.get("x-request-id")).toBeTruthy();
     expect(Buffer.from(await r.arrayBuffer()).toString()).toBe("mp4-aac");
-    expect(converter.mock.calls[0]?.[0].toString()).toBe("ogg-bytes");
+    expect(recebidos).toEqual(["ogg-bytes"]);
     // A vaga é contada pela organização da SESSÃO, nunca por algo do pedido.
     expect(converter.mock.calls[0]?.[1]).toBe("org-1");
   });
@@ -201,6 +209,32 @@ describe("?formato=aac", () => {
     const r = await pedir("aac");
     expect(r.status).toBe(502);
     expect(await codigo(r)).toBe("conversao_indisponivel");
+  });
+
+  it("413 também quando o arquivo baixado passa do teto (o tamanho da linha pode mentir)", async () => {
+    const { AudioGrandeDemais } = await vi.importActual<typeof VoiceTranscode>("@/lib/messaging/media/voice-transcode");
+    converter.mockImplementation(async (entrada) => {
+      if (!Buffer.isBuffer(entrada)) await entrada();
+      throw new AudioGrandeDemais();
+    });
+    const r = await pedir("aac");
+    expect(r.status).toBe(413);
+  });
+
+  it("com o conversor cheio, o arquivo nem é baixado: a vaga vem antes do download", async () => {
+    const { ConversorOcupado } = await vi.importActual<typeof VoiceTranscode>("@/lib/messaging/media/voice-transcode");
+    converter.mockRejectedValue(new ConversorOcupado());
+    const r = await pedir("aac");
+    expect(r.status).toBe(503);
+    expect(estado.baixados).toEqual([]);
+  });
+
+  it("502 bad_gateway quando o download falha, sem confundir com a falha do ffmpeg", async () => {
+    estado.mensagem = { ...audio, media_storage_path: "org-1/conv-1/falha.ogg" };
+    const r = await pedir("aac");
+    expect(r.status).toBe(502);
+    expect(await codigo(r)).toBe("bad_gateway");
+    expect(estado.baixados).toEqual(["org-1/conv-1/falha.ogg"]);
   });
 
   it("503 com Retry-After quando o conversor do processo está cheio: espera, não defeito", async () => {
