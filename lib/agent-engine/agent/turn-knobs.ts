@@ -59,6 +59,7 @@ export function turnKnobsFromEnv(env: Env): InboundTurnKnobs {
     repeticao: {
       janelaMs: env.AI_REPEAT_GUARD_WINDOW_MS,
       limiar: env.AI_REPEAT_GUARD_SIMILARITY,
+      limiarAposConfirmacao: env.AI_REPEAT_GUARD_SIMILARITY_APOS_CONFIRMACAO,
       minTokens: env.AI_REPEAT_GUARD_MIN_TOKENS,
       ultimas: env.AI_REPEAT_GUARD_LAST_N,
       // `off` desliga a frase (vazio no .env vira o padrão, como toda variável).

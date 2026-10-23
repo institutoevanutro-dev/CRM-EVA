@@ -256,6 +256,9 @@ const envSchema = z.object({
   // de MIN_TOKENS palavras nunca é pulada. WINDOW_MS=0 desliga.
   AI_REPEAT_GUARD_WINDOW_MS: z.coerce.number().int().min(0).default(1_800_000),
   AI_REPEAT_GUARD_SIMILARITY: z.coerce.number().min(0).max(1).default(0.8),
+  // Quando a última mensagem do cliente é só "ok"/"sim"/"obrigada": o modelo
+  // parafraseia em vez de repetir, então o limiar aperta. Nunca afrouxa SIMILARITY.
+  AI_REPEAT_GUARD_SIMILARITY_APOS_CONFIRMACAO: z.coerce.number().min(0).max(1).default(0.5),
   AI_REPEAT_GUARD_MIN_TOKENS: z.coerce.number().int().min(1).default(4),
   AI_REPEAT_GUARD_LAST_N: z.coerce.number().int().min(1).default(5),
   // Frase curta que sai no lugar da repetida (no máximo 1 por conversa na janela;

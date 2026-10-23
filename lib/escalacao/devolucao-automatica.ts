@@ -316,8 +316,12 @@ const PALAVRAS_MAXIMAS_DA_DESPEDIDA = 6;
  * de responder: pergunta (`?`), frase com palavra de fora da lista ou com mais
  * de 6 palavras NÃO é despedida — "ok, mas qual o horário?" é conversa. Áudio,
  * imagem, documento e o resto: não é despedida (pode ser qualquer coisa).
+ *
+ * `extras`: frases a mais que contam como encerramento para QUEM chama (a guarda
+ * de repetição da IA aceita "sim" e "no aguardo"; o cron não, porque "sim" sozinho
+ * responde a uma pergunta da equipe). Mesma forma de `DESPEDIDAS`, já normalizada.
  */
-export function ehSoDespedida(m: UltimaEntrada): boolean {
+export function ehSoDespedida(m: UltimaEntrada, extras: readonly (readonly string[])[] = []): boolean {
   if (m.type === "sticker" || m.type === "reaction") return true;
   if (m.type !== null && m.type !== "text") return false;
   const bruto = m.body ?? "";
@@ -334,7 +338,7 @@ export function ehSoDespedida(m: UltimaEntrada): boolean {
   let achouDespedida = false;
   let i = 0;
   while (i < palavras.length) {
-    const frase = DESPEDIDAS.filter((f) => f.every((p, k) => palavras[i + k] === p)).sort((a, b) => b.length - a.length)[0];
+    const frase = [...DESPEDIDAS, ...extras].filter((f) => f.every((p, k) => palavras[i + k] === p)).sort((a, b) => b.length - a.length)[0];
     if (frase) {
       achouDespedida = true;
       i += frase.length;
@@ -353,7 +357,7 @@ export function ehSoDespedida(m: UltimaEntrada): boolean {
  * = `false`: sem prova de que é despedida, a regra fica do lado de responder.
  */
 export function todasSaoDespedida(pendentes: readonly UltimaEntrada[]): boolean {
-  return pendentes.length > 0 && pendentes.every(ehSoDespedida);
+  return pendentes.length > 0 && pendentes.every((m) => ehSoDespedida(m));
 }
 
 /**
