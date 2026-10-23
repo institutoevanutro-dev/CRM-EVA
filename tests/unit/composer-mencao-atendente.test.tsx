@@ -43,8 +43,25 @@ vi.mock("@/hooks/inbox/useDraftReply", () => ({
 vi.mock("@/hooks/inbox/useAssignableMembers", () => ({
   useAssignableMembers: () => ({ data: membros, isLoading: false }),
 }));
+// O seletor de transferência lê a MESMA lista (`membros`) do compositor: é o que
+// deixa o teste afirmar que os dois pontos mostram o MESMO rótulo (#3298).
+vi.mock("@/hooks/auth/AuthProvider", () => ({
+  useAuth: () => ({ user: { id: "eu-mesmo-0000" } }),
+  usePermission: () => true,
+}));
+vi.mock("@/hooks/inbox/useTransferConversation", () => ({
+  useTransferConversation: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 
+// O Radix (Dialog e Select) exige recursos que o jsdom não tem.
+window.HTMLElement.prototype.scrollIntoView = vi.fn();
+window.HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
+window.HTMLElement.prototype.setPointerCapture = vi.fn();
+window.HTMLElement.prototype.releasePointerCapture = vi.fn();
+
+import { rotuloDoAtendente } from "@/lib/users/rotulo-do-atendente";
 import { Composer } from "@/components/inbox/Composer";
+import { ReassignDialog } from "@/components/inbox/ReassignDialog";
 
 function renderComposer() {
   const qc = new QueryClient();
@@ -95,12 +112,30 @@ describe("Composer — menção de atendentes em nota interna", () => {
     expect(within(filtrada).getByRole("option", { name: /carlos dias/i })).toBeInTheDocument();
   });
 
-  it("quem não tem nome no cadastro continua na lista, com o id curto", async () => {
+  it("quem não tem nome no cadastro continua na lista, com o rótulo único e nunca o id (#3298)", async () => {
     abrirModoNota();
     await digitar("@");
 
     const lista = await listaDeMencao();
-    expect(within(lista).getByRole("option", { name: /sem-nome/i })).toBeInTheDocument();
+    const opcao = within(lista).getByRole("option", { name: /atendente sem nome/i });
+    expect(opcao.textContent).toBe("Atendente sem nome");
+    expect(opcao.textContent).not.toMatch(/sem-nome/);
+  });
+
+  it("escolher quem não tem nome põe o rótulo no campo e o id SÓ no token (#3298)", async () => {
+    abrirModoNota();
+    const campo = await digitar("fala com @");
+    const lista = await listaDeMencao();
+    fireEvent.click(within(lista).getByRole("option", { name: /atendente sem nome/i }));
+
+    expect(campo).toHaveValue("fala com @Atendente sem nome ");
+    fireEvent.click(screen.getByRole("button", { name: /^enviar$/i }));
+
+    await waitFor(() => expect(createNoteMock).toHaveBeenCalled());
+    const enviado = createNoteMock.mock.calls[0]![0] as { body: string };
+    // O id viaja no token (é assim que a notificação acerta a pessoa); o que a
+    // tela e a nota mostram é o rótulo.
+    expect(enviado.body).toBe("fala com @[Atendente sem nome](mencao:sem-nome-0004)");
   });
 
   it("escolher grava no corpo o id da ESCOLHIDA — e o da colega de mesmo nome não", async () => {
@@ -178,5 +213,47 @@ describe("Composer — menção de atendentes em nota interna", () => {
       expect.objectContaining({ conversation_id: "conv-1", body: "cliente ligou" }),
       expect.anything(),
     );
+  });
+});
+
+/**
+ * O RÓTULO ÚNICO DE QUEM NÃO TEM NOME (#3298), no SEGUNDO ponto que o inventava.
+ *
+ * `ReassignDialog` e `MentionMenu` montavam o rótulo cada um por si, e os dois
+ * do mesmo jeito errado: `Atendente` + os oito primeiros dígitos do `user_id`.
+ * O caso do seletor vive aqui porque a lista de membros é mockada uma vez só
+ * (`membros`), a MESMA para o compositor e para a transferência.
+ */
+describe("o rótulo do atendente sem nome, num lugar só (#3298)", () => {
+  it("a lista de transferência mostra o mesmo rótulo, nunca os dígitos do user_id", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ReassignDialog conversationId="conv-1" open onOpenChange={() => {}} />
+      </QueryClientProvider>,
+    );
+    // `fireEvent` cru: o Dialog modal do Radix põe `pointer-events: none` no
+    // body, e o user-event recusaria o clique. O gatilho mora no portal.
+    const gatilho = document.getElementById("reassign-target");
+    expect(gatilho).not.toBeNull();
+    fireEvent.click(gatilho as HTMLElement);
+
+    const lista = await screen.findByRole("listbox");
+    const rotulos = within(lista)
+      .getAllByRole("option")
+      .map((o) => o.textContent ?? "");
+
+    expect(rotulos.some((r) => r.includes("Atendente sem nome"))).toBe(true);
+    for (const rotulo of rotulos) {
+      expect(rotulo).not.toMatch(/sem-nome|ana-lima|ana-souza|carlos-/);
+    }
+  });
+
+  it("o helper é a fonte: nome cadastrado passa; vazio, em branco ou nulo cai no rótulo único", () => {
+    const t = (chave: string) => chave;
+    expect(rotuloDoAtendente("Ana Lima", t)).toBe("Ana Lima");
+    expect(rotuloDoAtendente(" Ana Lima ", t)).toBe("Ana Lima");
+    expect(rotuloDoAtendente(null, t)).toBe("Atendente sem nome");
+    expect(rotuloDoAtendente(undefined, t)).toBe("Atendente sem nome");
+    expect(rotuloDoAtendente("   ", t)).toBe("Atendente sem nome");
   });
 });

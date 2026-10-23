@@ -197,7 +197,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   // SÓ em nota: menção no campo de resposta sairia para o cliente.
   const gatilho = mode === "note" && !mencaoDispensada ? resolverMencao(text, caret) : null;
   const membros = useAssignableMembers(gatilho !== null);
-  const opcoes = gatilho ? opcoesDeMencao(membros.data ?? [], gatilho.query, t("Atendente")) : [];
+  const opcoes = gatilho ? opcoesDeMencao(membros.data ?? [], gatilho.query, t) : [];
   const mencaoAberta = gatilho !== null;
   const opcaoAtual = opcoes[mencaoIndice] ?? opcoes[0];
 
