@@ -33,8 +33,23 @@
  * Chris." e "Perfeito." são a mesma frase. Mensagem com menos de `minTokens`
  * tokens normalizados nunca é pulada: um "Perfeito" ou "Combinado!" curto pode e
  * deve se repetir ao longo de uma conversa.
+ *
+ * DEPOIS DE UMA CONFIRMAÇÃO CURTA o limiar aperta (`limiarAposConfirmacao`, 0.5).
+ * Medido em produção (23/10/2026): depois de um "Ok"/"sim" o modelo não repete a
+ * frase, PARAFRASEIA — "Assim que o financeiro confirmar o comprovante, eu sigo
+ * com você..." vira "Assim que o financeiro confirmar, eu sigo por aqui com
+ * você...", Jaccard abaixo de 0.8. Quando o cliente só confirmou, não há pergunta
+ * nova a responder, e a mesma ideia reescrita é o defeito. Confirmação = a regra
+ * do cron de devolução (`ehSoDespedida`) mais "sim"/"no aguardo"/"por gentileza".
+ * A última entrada do cliente é que decide: se ela é uma pergunta, vale o 0.8.
+ * E só aperta se a fala anterior (a que o cliente confirmou) NÃO era pergunta de
+ * verdade: "Posso marcar quinta às 10h?" → "sim" → "Pronto, marquei quinta às 10h!"
+ * ecoa a pergunta e é a resposta certa. Pergunta-muleta ("..., combinado?",
+ * "tudo bem?") não conta como pergunta: é o padrão do defeito.
  */
 import type pg from 'pg';
+
+import { ehSoDespedida, type UltimaEntrada } from '@/lib/escalacao/devolucao-automatica';
 
 import type { Logger } from '../obs/logger';
 import { jaccard, tokens } from '../spinning/engine';
@@ -44,6 +59,8 @@ export interface RepeticaoKnobs {
   janelaMs: number;
   /** Jaccard ≥ isto conta como a mesma mensagem. */
   limiar: number;
+  /** Idem, quando a última entrada do cliente é só uma confirmação curta ("ok", "sim"). Nunca afrouxa `limiar`. */
+  limiarAposConfirmacao: number;
   /** Candidata com menos tokens (normalizados) que isto nunca é pulada. */
   minTokens: number;
   /** Quantas falas da IA, das mais recentes, entram na comparação. */
@@ -55,6 +72,7 @@ export interface RepeticaoKnobs {
 export const REPETICAO_PADRAO: RepeticaoKnobs = {
   janelaMs: 30 * 60 * 1000,
   limiar: 0.8,
+  limiarAposConfirmacao: 0.5,
   minTokens: 4,
   ultimas: 5,
   frases: ['Ficou alguma dúvida sobre isso?'],
@@ -78,14 +96,75 @@ export function primeiroNomeDoContato(nome: string | null | undefined): string |
   return /\p{L}/u.test(primeiro) ? primeiro : null;
 }
 
+/** O que, além das despedidas do cron, conta como "o cliente só confirmou". Normalizado. */
+const CONFIRMACOES: readonly (readonly string[])[] = [
+  'sim', 'ss', 'uhum', 'aham', 'entendi', 'certinho', 'aguardo', 'no aguardo', 'fico no aguardo',
+  'aguardando', 'por gentileza', 'por favor',
+].map((f) => f.split(' '));
+
+/** A última entrada do cliente é só uma confirmação/encerramento curto? Sem entrada = não. */
+export function ehConfirmacaoCurta(m: UltimaEntrada | null | undefined): boolean {
+  return m != null && ehSoDespedida(m, CONFIRMACOES);
+}
+
+/** A última mensagem do cliente no transcript do turno (o contexto só leva `type` em mídia: ausente = texto). */
+export function ultimaEntradaDoCliente(
+  mensagens: readonly { direction: string; body: string; type?: string }[],
+): UltimaEntrada | null {
+  for (let i = mensagens.length - 1; i >= 0; i -= 1) {
+    const m = mensagens[i]!;
+    if (m.direction === 'inbound') return { type: m.type ?? 'text', body: m.body };
+  }
+  return null;
+}
+
+/** Pergunta-muleta no fim da frase: confirma o dito, não pede decisão. Normalizada. */
+const PERGUNTAS_MULETA = new Set([
+  'combinado', 'tudo bem', 'ta bem', 'ok', 'ta', 'ta bom', 'certo', 'tudo certo', 'pode ser', 'beleza', 'fechado', 'ne',
+]);
+
+/**
+ * A fala termina numa pergunta de verdade? Olha só a última frase, e dela o último
+ * trecho entre vírgulas, sem o primeiro nome do contato: "…, combinado?" e
+ * "Tudo bem, Chris? 😊" são muleta; "Posso marcar quinta às 10h?" é pergunta.
+ */
+export function terminaEmPerguntaReal(texto: string | null | undefined, primeiroNome: string | null = null): boolean {
+  const s = (texto ?? '').replace(/[^\p{L}\p{N}?]+$/u, '');
+  if (!s.endsWith('?')) return false;
+  const frase = s.replace(/\?+$/, '').split(/[.!?\n]/).pop() ?? '';
+  const trechos = frase
+    .split(/[,;:]/)
+    .map((t) => normalizarParaRepeticao(t, primeiroNome))
+    .filter((t) => t !== '');
+  const fim = trechos[trechos.length - 1];
+  return fim !== undefined && !PERGUNTAS_MULETA.has(fim);
+}
+
+/** A última fala NOSSA antes da última entrada do cliente (a que ele respondeu). */
+export function falaAntesDaEntrada(
+  mensagens: readonly { direction: string; body: string }[],
+): string | null {
+  let i = mensagens.length - 1;
+  while (i >= 0 && mensagens[i]!.direction !== 'inbound') i -= 1;
+  while (i >= 0 && mensagens[i]!.direction === 'inbound') i -= 1;
+  return i >= 0 ? mensagens[i]!.body : null;
+}
+
 export type DecisaoDeRepeticao = { repetida: false } | { repetida: true; similaridade: number };
 
-/** Decisão PURA: `recentes` são os corpos das últimas falas da IA, mais recente primeiro. */
+/**
+ * Decisão PURA: `recentes` são os corpos das últimas falas da IA, mais recente
+ * primeiro; `ultimaEntrada` é a última mensagem do cliente (aperta o limiar se
+ * for só confirmação).
+ */
 export function decidirRepeticao(input: {
   candidata: string;
   recentes: readonly string[];
   primeiroNome: string | null;
   knobs: RepeticaoKnobs;
+  ultimaEntrada?: UltimaEntrada | null;
+  /** A fala que o cliente confirmou; se era pergunta de verdade, o limiar não aperta. */
+  falaAnterior?: string | null;
 }): DecisaoDeRepeticao {
   const { knobs, primeiroNome } = input;
   const alvo = tokens(normalizarParaRepeticao(input.candidata, primeiroNome));
@@ -95,7 +174,10 @@ export function decidirRepeticao(input: {
     const s = jaccard(alvo, tokens(normalizarParaRepeticao(anterior, primeiroNome)));
     if (s > melhor) melhor = s;
   }
-  return melhor >= knobs.limiar ? { repetida: true, similaridade: melhor } : { repetida: false };
+  const limiar = ehConfirmacaoCurta(input.ultimaEntrada) && !terminaEmPerguntaReal(input.falaAnterior, primeiroNome)
+    ? Math.min(knobs.limiar, knobs.limiarAposConfirmacao)
+    : knobs.limiar;
+  return melhor >= limiar ? { repetida: true, similaridade: melhor } : { repetida: false };
 }
 
 /**
@@ -111,6 +193,10 @@ export async function repetiuNaConversa(
     /** O job deste turno: o que ELE já mandou é retry (o ledger cuida), nunca repetição. */
     jobId?: string;
     nomeDoContato: string | null | undefined;
+    /** Última mensagem do cliente no contexto do turno (aperta o limiar se for só "ok"). */
+    ultimaEntrada?: UltimaEntrada | null;
+    /** A fala que o cliente confirmou (ver `falaAntesDaEntrada`). */
+    falaAnterior?: string | null;
     agora: Date;
     knobs: RepeticaoKnobs;
     log: Logger;
@@ -151,6 +237,8 @@ export async function repetiuNaConversa(
       recentes: rows.map((r) => r.body),
       primeiroNome,
       knobs,
+      ultimaEntrada: args.ultimaEntrada ?? null,
+      falaAnterior: args.falaAnterior ?? null,
     });
   } catch (err) {
     args.log.warn('checagem de repetição na conversa falhou — enviando', {

@@ -196,12 +196,14 @@ import {
 import {
   CASO_DE_REPETICAO,
   decidirSaidaDaRepeticao,
+  falaAntesDaEntrada,
   fraseDeRepeticaoJaSaiu,
   MENSAGEM_DE_REPETICAO,
   MENSAGEM_DO_CASO_DE_REPETICAO,
   REPETICAO_PADRAO,
   repetiuNaConversa,
   type RepeticaoKnobs,
+  ultimaEntradaDoCliente,
 } from '../guardrails/repeticao-na-conversa';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 import { resolveActiveLeadForContact, type LeadCandidate } from '@/lib/leads/active-lead';
@@ -3751,6 +3753,8 @@ async function executarTurnoDoAgente(
             candidata: body,
             jobId: liveJob().id,
             nomeDoContato: effectiveContext.contact.name,
+            ultimaEntrada: ultimaEntradaDoCliente(effectiveContext.messages),
+            falaAnterior: falaAntesDaEntrada(effectiveContext.messages),
             agora: clock(),
             knobs: deps.knobs.repeticao ?? REPETICAO_PADRAO,
             log: runLog,
