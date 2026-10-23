@@ -6,8 +6,10 @@ import { toast } from "sonner";
 
 import {
   useApiTokens,
+  useApiTokensTemporarias,
   useCreateApiToken,
   useRevokeApiToken,
+  type ApiTokenRow,
   type CreatedApiToken,
 } from "@/hooks/team/useApiTokens";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -65,7 +67,6 @@ const SCOPES: { id: string; label: string }[] = [
 ];
 
 export function ApiTokensClient() {
-  const tagDoIdioma = useTagDeIdioma();
   const t = useT();
   const { data, isLoading, isError } = useApiTokens();
   const create = useCreateApiToken();
@@ -78,6 +79,9 @@ export function ApiTokensClient() {
   const [created, setCreated] = useState<CreatedApiToken | null>(null);
 
   const tokens = data?.data ?? [];
+  const temporariasTotal = data?.meta?.temporarias_da_ia ?? 0;
+  const [temporariasAbertas, setTemporariasAbertas] = useState(false);
+  const temporarias = useApiTokensTemporarias(temporariasAbertas);
 
   const onCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,65 +125,38 @@ export function ApiTokensClient() {
       ) : tokens.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("Nenhum token criado ainda.")}</p>
       ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("Nome")}</TableHead>
-                <TableHead>{t("Prefixo")}</TableHead>
-                <TableHead>{t("Escopos")}</TableHead>
-                <TableHead>{t("Situação")}</TableHead>
-                <TableHead>{t("Expira")}</TableHead>
-                <TableHead className="w-[120px]" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tokens.map((tok) => (
-                <TableRow key={tok.id}>
-                  <TableCell className="font-medium">{tok.name}</TableCell>
-                  <TableCell>
-                    <code className="text-xs">{tok.prefix}…</code>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {tok.scopes.map((s) => (
-                        <Badge key={s} variant="secondary" className="text-xs">
-                          {s}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {tok.revoked_at ? (
-                      <Badge variant="destructive">{t("Revogado")}</Badge>
-                    ) : (
-                      <Badge variant="default">{t("Ativo")}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {tok.expires_at ? new Date(tok.expires_at).toLocaleDateString(tagDoIdioma) : "—"}
-                  </TableCell>
-                  <TableCell>
-                    {!tok.revoked_at ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={revoke.isPending}
-                        onClick={async () => {
-                          await revoke.mutateAsync(tok.id);
-                          toast.success(t("Token revogado."));
-                        }}
-                      >
-                        {t("Revogar")}
-                      </Button>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <TabelaDeChaves
+          tokens={tokens}
+          onRevogar={async (id) => {
+            await revoke.mutateAsync(id);
+            toast.success(t("Token revogado."));
+          }}
+          revogando={revoke.isPending}
+        />
       )}
+
+      {temporariasTotal > 0 ? (
+        <details
+          className="rounded-md border p-4"
+          onToggle={(e) => setTemporariasAbertas(e.currentTarget.open)}
+        >
+          <summary className="cursor-pointer text-sm font-medium">
+            {t("Chaves temporárias da IA")} ({temporariasTotal})
+          </summary>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {t("Cada atendimento da IA cria uma chave de 5 minutos que se desliga sozinha. Elas ficam guardadas para a auditoria.")}
+          </p>
+          <div className="mt-3">
+            {temporarias.isLoading ? (
+              <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>
+            ) : temporarias.isError ? (
+              <p className="text-sm text-muted-foreground" role="alert">{t("Não foi possível carregar as chaves. Recarregue a página.")}</p>
+            ) : (
+              <TabelaDeChaves tokens={temporarias.data?.data ?? []} temporarias />
+            )}
+          </div>
+        </details>
+      ) : null}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
@@ -280,5 +257,78 @@ export function ApiTokensClient() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** A mesma tabela serve às duas listas; nas temporárias o "Revogado" é neutro, porque é o fim normal delas. */
+function TabelaDeChaves({
+  tokens,
+  temporarias = false,
+  onRevogar,
+  revogando = false,
+}: {
+  tokens: ApiTokenRow[];
+  temporarias?: boolean;
+  onRevogar?: (id: string) => Promise<void>;
+  revogando?: boolean;
+}) {
+  const tagDoIdioma = useTagDeIdioma();
+  const t = useT();
+  return (
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t("Nome")}</TableHead>
+            <TableHead>{t("Prefixo")}</TableHead>
+            <TableHead>{t("Escopos")}</TableHead>
+            <TableHead>{t("Situação")}</TableHead>
+            <TableHead>{t("Expira")}</TableHead>
+            <TableHead className="w-[120px]" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {tokens.map((tok) => (
+            <TableRow key={tok.id}>
+              <TableCell className="font-medium">{tok.name}</TableCell>
+              <TableCell>
+                <code className="text-xs">{tok.prefix}…</code>
+              </TableCell>
+              <TableCell>
+                <div className="flex flex-wrap gap-1">
+                  {tok.scopes.map((s) => (
+                    <Badge key={s} variant="secondary" className="text-xs">
+                      {s}
+                    </Badge>
+                  ))}
+                </div>
+              </TableCell>
+              <TableCell>
+                {tok.revoked_at ? (
+                  <Badge variant={temporarias ? "secondary" : "destructive"}>{t("Revogado")}</Badge>
+                ) : (
+                  <Badge variant="default">{t("Ativo")}</Badge>
+                )}
+              </TableCell>
+              <TableCell className="text-sm text-muted-foreground">
+                {tok.expires_at ? new Date(tok.expires_at).toLocaleDateString(tagDoIdioma) : "—"}
+              </TableCell>
+              <TableCell>
+                {!tok.revoked_at && onRevogar ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={revogando}
+                    onClick={() => void onRevogar(tok.id)}
+                  >
+                    {t("Revogar")}
+                  </Button>
+                ) : null}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

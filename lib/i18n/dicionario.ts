@@ -11060,6 +11060,8 @@ export const DICIONARIO: Traducoes = {
   "Histórico de alterações": { es: "Historial de cambios" },
   "Tudo o que foi criado, alterado ou apagado na clínica, e por quem. Visível para gestores e administradores.": { es: "Todo lo que se creó, cambió o borró en la clínica, y por quién. Visible para gerentes y administradores." },
   "Chaves de integração": { es: "Claves de integración" },
+  "Chaves temporárias da IA": { es: "Claves temporales de la IA" },
+  "Cada atendimento da IA cria uma chave de 5 minutos que se desliga sozinha. Elas ficam guardadas para a auditoria.": { es: "Cada atención de la IA crea una clave de 5 minutos que se desactiva sola. Se guardan para la auditoría." },
   "Chaves para outros sistemas acessarem o CRM. A chave aparece": { es: "Claves para que otros sistemas accedan al CRM. La clave aparece" },
   "Plano e cobrança": { es: "Plan y cobro" },
   "Em breve": { es: "Pronto" },

@@ -5,6 +5,7 @@ import { ApiTokensClient } from "./ApiTokensClient";
 const create = vi.hoisted(() => vi.fn(async () => ({ data: null })));
 vi.mock("@/hooks/team/useApiTokens", () => ({
   useApiTokens: () => ({ data: { data: [] }, isLoading: false, isError: false }),
+  useApiTokensTemporarias: () => ({ data: undefined, isLoading: false, isError: false }),
   useCreateApiToken: () => ({ mutateAsync: create, isPending: false }),
   useRevokeApiToken: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
