@@ -27,7 +27,8 @@ export type ActionItem =
   | { type: "create_or_move_lead"; config: { pipeline_id: string; stage_id: string } }
   | { type: "send_whatsapp_message"; config: { channel_session_id: string; template: string } }
   // O e-mail de saída (porte do upstream #2794): `email_fixo` só vale quando o
-  // destinatário é o endereço gravado na regra.
+  // destinatário é o endereço gravado na regra, e `membro_id` só no destinatário
+  // "pessoa da equipe" (porte do upstream #2834).
   | { type: "send_email"; config: SendEmailConfig }
   | {
       type: "send_ai_message";
@@ -47,7 +48,7 @@ export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
     case "send_email":
       return {
         type,
-        config: { destinatario: "contato", email_fixo: "", assunto: "", corpo: "", formato: "texto" },
+        config: { destinatario: "contato", email_fixo: "", membro_id: "", assunto: "", corpo: "", formato: "texto" },
       };
     case "send_ai_message":
       return { type, config: { agent_id: "", channel_session_id: "", instruction: "" } };
@@ -63,8 +64,9 @@ export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
 }
 
 interface SendEmailConfig {
-  destinatario: "contato" | "dono_do_lead" | "fixo";
+  destinatario: "contato" | "dono_do_lead" | "membro_da_equipe" | "fixo";
   email_fixo: string;
+  membro_id: string;
   assunto: string;
   corpo: string;
   formato: string;
@@ -241,6 +243,8 @@ function SendWhatsappForm({
 function SendEmailForm({ config, onChange }: FormProps<SendEmailConfig>) {
   const t = useT();
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  // A lista da equipe só é pedida quando o destinatário é uma pessoa dela.
+  const { data: membros } = useAssignableMembers(config.destinatario === "membro_da_equipe");
 
   const insertVar = (token: string) => {
     const el = textareaRef.current;
@@ -270,6 +274,7 @@ function SendEmailForm({ config, onChange }: FormProps<SendEmailConfig>) {
             <SelectContent>
               <SelectItem value="contato">{t("E-mail do contato")}</SelectItem>
               <SelectItem value="dono_do_lead">{t("E-mail do responsável do negócio")}</SelectItem>
+              <SelectItem value="membro_da_equipe">{t("E-mail de uma pessoa da equipe")}</SelectItem>
               <SelectItem value="fixo">{t("Endereço fixo")}</SelectItem>
             </SelectContent>
           </Select>
@@ -293,6 +298,28 @@ function SendEmailForm({ config, onChange }: FormProps<SendEmailConfig>) {
           />
           <p className="text-xs text-muted-foreground">
             {t("Um endereço fixo recebe todos os envios desta regra.")}
+          </p>
+        </div>
+      ) : null}
+      {config.destinatario === "membro_da_equipe" ? (
+        <div className="space-y-1">
+          <Label>{t("Pessoa da equipe")}</Label>
+          <Select value={config.membro_id} onValueChange={(v) => onChange({ ...config, membro_id: v })}>
+            <SelectTrigger>
+              <SelectValue placeholder={t("Escolha quem recebe")} />
+            </SelectTrigger>
+            <SelectContent>
+              {(membros ?? []).map((m) => (
+                <SelectItem key={m.user_id} value={m.user_id}>
+                  {m.full_name ?? m.user_id.slice(0, 8)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {t(
+              "A pessoa recebe no e-mail cadastrado no acesso dela, e o vínculo com a empresa é conferido no momento do envio.",
+            )}
           </p>
         </div>
       ) : null}

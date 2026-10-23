@@ -9,8 +9,8 @@
  * sai. Ela não lança, e não gasta o teto.
  *
  * O que ela faz:
- *   1. resolve PARA QUEM (contato do negócio, responsável do negócio ou um
- *      endereço fixo escrito na regra);
+ *   1. resolve PARA QUEM (contato do negócio, responsável do negócio, uma
+ *      PESSOA DA EQUIPE ou um endereço fixo escrito na regra);
  *   2. renderiza assunto e corpo com as MESMAS variáveis do WhatsApp;
  *   3. registra o desfecho honesto: sucesso só com o id do provedor na mão,
  *      recusa de destinatário como `skipped`, falha do transporte como
@@ -21,6 +21,12 @@
  * sozinha: há teto por REGRA e teto por ORGANIZAÇÃO, por hora.
  *
  * O consentimento segue o gate de `guarda-do-contato.ts` (lê `declined_at`).
+ *
+ * O destinatário "membro da equipe" (porte do upstream #2834, issue #2642 lá)
+ * é uma PESSOA (`user_organizations.user_id`), com o endereço lido do acesso
+ * dela, nunca digitado na regra. O VÍNCULO é conferido NO MOMENTO DO ENVIO, e
+ * não no save: a regra é salva uma vez e dispara para sempre, então quem foi
+ * removido da organização continuaria recebendo se a checagem morasse na tela.
  */
 import { registerAction } from "@/lib/automation/actions";
 import type { ActionCtx, ActionResultDetail } from "@/lib/automation/types";
@@ -66,8 +72,8 @@ async function postponeUntil(ctx: ActionCtx): Promise<string | null> {
   return proximaJanela();
 }
 
-/** Quem recebe: o contato, o responsável do negócio ou um endereço gravado na regra. */
-type Destinatario = "contato" | "dono_do_lead" | "fixo";
+/** Quem recebe: o contato, o responsável do negócio, uma pessoa da equipe ou um endereço gravado na regra. */
+type Destinatario = "contato" | "dono_do_lead" | "membro_da_equipe" | "fixo";
 
 /**
  * Endereço com cara de endereço. NÃO é validação de entregabilidade: é o
@@ -103,8 +109,34 @@ async function resolverDestinatario(
   ctx: ActionCtx,
   destinatario: Destinatario,
   fixo: string,
+  membroId: string,
 ): Promise<DestinatarioResolvido> {
   if (destinatario === "fixo") return { ok: true, endereco: fixo };
+
+  if (destinatario === "membro_da_equipe") {
+    if (membroId === "") return { ok: false, motivo: "sem_membro" };
+    // O VÍNCULO, conferido AGORA: revogar a pessoa não reescreve a regra.
+    // Mesmo filtro do caminho do dono logo abaixo: só membro ativo DESTA
+    // organização.
+    const { data: membro, error: erroDaConsulta } = await ctx.admin
+      .from("user_organizations")
+      .select("user_id")
+      .eq("organization_id", ctx.organizationId)
+      .eq("user_id", membroId)
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (erroDaConsulta) return { ok: false, motivo: "membro_indeterminado" };
+    if (!membro) return { ok: false, motivo: "membro_fora_da_equipe" };
+    try {
+      const { data } = await ctx.admin.auth.admin.getUserById(membroId);
+      const email = emailValido(data?.user?.email);
+      return email ? { ok: true, endereco: email } : { ok: false, motivo: "membro_sem_email" };
+    } catch {
+      // Mesma tolerância do caminho do dono: o acesso da pessoa nunca derruba o
+      // envio inteiro, aqui ele só não tem endereço para mandar.
+      return { ok: false, motivo: "membro_sem_email" };
+    }
+  }
 
   if (destinatario === "dono_do_lead") {
     const lead = ctx.context.lead as { owner_user_id?: string | null } | undefined;
@@ -200,15 +232,24 @@ async function execute(
 ): Promise<ActionResultDetail> {
   const bruto = config.destinatario;
   const destinatario: Destinatario | null =
-    bruto === "contato" || bruto === "dono_do_lead" || bruto === "fixo" ? bruto : null;
+    bruto === "contato" || bruto === "dono_do_lead" || bruto === "membro_da_equipe" || bruto === "fixo"
+      ? bruto
+      : null;
   const assunto = typeof config.assunto === "string" ? config.assunto.trim() : "";
   const corpo = typeof config.corpo === "string" ? config.corpo.trim() : "";
   const formato = config.formato === "html" ? "html" : "texto";
   const fixo = typeof config.email_fixo === "string" ? config.email_fixo.trim() : "";
+  const membroId = typeof config.membro_id === "string" ? config.membro_id.trim() : "";
 
   // Mesma recusa de `send-whatsapp.ts`: sem o essencial a regra não roda, e
   // dizer "failed silencioso" aqui deixaria quem opera procurando o transporte.
-  if (!destinatario || !assunto || !corpo || (destinatario === "fixo" && !fixo)) {
+  if (
+    !destinatario ||
+    !assunto ||
+    !corpo ||
+    (destinatario === "fixo" && !fixo) ||
+    (destinatario === "membro_da_equipe" && !membroId)
+  ) {
     return { type: "send_email", status: "failed", error: "missing_config" };
   }
 
@@ -218,7 +259,7 @@ async function execute(
     return { type: "send_email", status: "failed", error: "email_nao_configurado", detail: { destinatario, via: null } };
   }
 
-  const para = await resolverDestinatario(ctx, destinatario, fixo);
+  const para = await resolverDestinatario(ctx, destinatario, fixo, membroId);
   if (!para.ok) {
     return { type: "send_email", status: "skipped", detail: { reason: para.motivo } };
   }

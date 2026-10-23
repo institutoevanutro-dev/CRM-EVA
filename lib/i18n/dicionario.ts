@@ -11400,6 +11400,24 @@ export const DICIONARIO: Traducoes = {
   // Portes 23/10, grupo D (PR #3197): CPF ou e-mail repetido responde 409 contact_exists.
   "Já existe um contato com este CPF.": { es: "Ya existe un contacto con este CPF." },
   "Já existe um contato com este e-mail.": { es: "Ya existe un contacto con este correo electrónico." },
+  // Portes 23/10, grupo D (PR #2834): o e-mail da automação para uma pessoa da equipe.
+  "E-mail de uma pessoa da equipe": { es: "Correo de una persona del equipo" },
+  "Pessoa da equipe": { es: "Persona del equipo" },
+  "A pessoa recebe no e-mail cadastrado no acesso dela, e o vínculo com a empresa é conferido no momento do envio.": {
+    es: "La persona recibe en el correo registrado en su acceso, y el vínculo con la empresa se comprueba en el momento del envío.",
+  },
+  "Escolha a pessoa da equipe que recebe os envios desta regra.": {
+    es: "Elige la persona del equipo que recibe los envíos de esta regla.",
+  },
+  "A regra não tem a pessoa da equipe escolhida. Abra a automação e escolha quem deve receber.": {
+    es: "La regla no tiene la persona del equipo elegida. Abre la automatización y elige quién debe recibir.",
+  },
+  "A pessoa escolhida não faz mais parte da equipe, então o e-mail não foi enviado. Escolha outra pessoa na automação.": {
+    es: "La persona elegida ya no forma parte del equipo, así que el correo no se envió. Elige otra persona en la automatización.",
+  },
+  "A pessoa escolhida não tem e-mail cadastrado no acesso dela.": {
+    es: "La persona elegida no tiene correo registrado en su acceso.",
+  },
 };
 
 /**

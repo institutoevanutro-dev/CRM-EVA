@@ -126,6 +126,13 @@ const MOTIVO_DA_PARADA: Record<string, string> = {
     "O negócio não tem responsável com e-mail cadastrado, então não havia endereço para onde enviar. Escolha outro destinatário na automação.",
   dono_fora_da_equipe:
     "O responsável do negócio não faz mais parte da equipe, então o e-mail não foi enviado. Troque o responsável do negócio ou escolha outro destinatário na automação.",
+  // O destinatário "pessoa da equipe" (porte do upstream #2834): o vínculo é
+  // conferido no envio, e `membro_indeterminado` (acima) cobre a consulta que
+  // não voltou.
+  sem_membro: "A regra não tem a pessoa da equipe escolhida. Abra a automação e escolha quem deve receber.",
+  membro_fora_da_equipe:
+    "A pessoa escolhida não faz mais parte da equipe, então o e-mail não foi enviado. Escolha outra pessoa na automação.",
+  membro_sem_email: "A pessoa escolhida não tem e-mail cadastrado no acesso dela.",
   email_nao_configurado:
     "Nenhum serviço de e-mail está configurado nesta instalação, então nada foi enviado. Peça a quem administra o servidor para configurar o envio de e-mail.",
   email_recusado:
