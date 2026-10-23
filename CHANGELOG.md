@@ -8,6 +8,21 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.34.2] — 2026-10-23
+
+### Corrigido
+
+- **A IA não reescreve a mesma frase depois de um "ok" do cliente** Quando o cliente só confirmava ("ok", "sim", "no aguardo", "obrigada"), a IA às vezes
+  respondia de novo a mesma ideia com outras palavras, e a guarda de repetição não pegava
+  porque o texto não era quase idêntico. Agora, se a última mensagem do cliente é só uma
+  confirmação curta e a fala que ele confirmou não era uma pergunta de verdade ("posso marcar
+  quinta às 10h?" → "sim" → "marquei quinta às 10h" segue saindo), a guarda compara com mais rigor e
+  barra também a paráfrase; o que sai no
+  lugar é o mesmo de antes (a frase curta e, se repetir, um caso para a equipe). Quando o
+  cliente pergunta algo novo, vale a régua de sempre. O nível é ajustável por
+  `AI_REPEAT_GUARD_SIMILARITY_APOS_CONFIRMACAO` (padrão 0.5); quem não mexe no `.env` não
+  precisa fazer nada.
+
 ## [4.34.1] — 2026-10-23
 
 ### Corrigido
@@ -8121,7 +8136,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.2...HEAD
+[4.34.2]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.1...v4.34.2
 [4.34.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.0...v4.34.1
 [4.34.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.2...v4.34.0
 [4.33.2]: https://github.com/melgarafael/DeskcommCRM/compare/v4.33.1...v4.33.2
