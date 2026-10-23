@@ -341,6 +341,11 @@ export const AUDIT_ACTIONS = [
   // Rodada do cron que devolve ao agente o atendimento parado além do prazo da
   // organização — só quando devolveu (ou falhou) alguma.
   "conversation.handoff_auto_return_run",
+  // A devolução AO RODÍZIO (DeskcommCRM #2985, fatia 1): a conversa que o rodízio
+  // entregou e ninguém respondeu volta para a fila, e a pessoa fica fora dela
+  // por 24 h. Uma linha por conversa devolvida e uma por rodada com efeito.
+  "conversation.returned_to_routing_queue",
+  "conversation.routing_return_run",
   "conversation.note_added",
   "conversation.note_deleted",
   "ai.case_replied",
