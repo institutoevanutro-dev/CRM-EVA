@@ -243,22 +243,49 @@ vi.mock("@/hooks/auth/AuthProvider", () => ({ useAuth: () => ({ user: { support:
 
 
 describe("demandas abertas — recolhida por padrão", () => {
-  it("nasce recolhida, abre com o mouse e fecha ao sair; o clique fixa", async () => {
+  it("nasce recolhida; o mouse parado no título abre e sair fecha", async () => {
     get.mockResolvedValue({ data: RESPOSTA });
     renderPainel();
     const titulo = await screen.findByRole("button", { name: /Demandas abertas/ });
-    expect(titulo).toHaveAttribute("aria-expanded", "false");
     await screen.findByText(/Demandas abertas \(\d+\)/);
+    expect(titulo).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: "Encerrar demanda" })).toBeNull();
     const secao = screen.getByTestId("inbox-demandas");
+    // Passar pela SEÇÃO não abre: só o título, e só depois de parar ali.
     fireEvent.mouseEnter(secao);
-    expect(titulo).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getAllByRole("button", { name: "Encerrar demanda" }).length).toBeGreaterThan(0);
+    expect(titulo).toHaveAttribute("aria-expanded", "false");
+    fireEvent.mouseEnter(titulo);
+    await waitFor(() => expect(titulo).toHaveAttribute("aria-expanded", "true"));
     fireEvent.mouseLeave(secao);
     expect(titulo).toHaveAttribute("aria-expanded", "false");
-    await userEvent.click(titulo);
+  });
+
+  it("o clique abre e FECHA de verdade, e o foco do clique não a prende aberta", async () => {
+    get.mockResolvedValue({ data: RESPOSTA });
+    renderPainel();
+    const titulo = await screen.findByRole("button", { name: /Demandas abertas/ });
+    await screen.findByText(/Demandas abertas \(\d+\)/);
+    const secao = screen.getByTestId("inbox-demandas");
+    fireEvent.click(titulo);
+    expect(titulo).toHaveAttribute("aria-expanded", "true");
     fireEvent.mouseLeave(secao);
     expect(titulo).toHaveAttribute("aria-expanded", "true");
+    titulo.focus();
+    fireEvent.click(titulo);
+    expect(titulo).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("outra conversa começa recolhida, mesmo que a anterior estivesse fixa", async () => {
+    get.mockResolvedValue({ data: RESPOSTA });
+    const view = renderPainel();
+    const titulo = await screen.findByRole("button", { name: /Demandas abertas/ });
+    await screen.findByText(/Demandas abertas \(\d+\)/);
+    fireEvent.click(titulo);
+    expect(titulo).toHaveAttribute("aria-expanded", "true");
+    view.mudarConversa({ ...conversation!, id: "cv-2" });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Demandas abertas/ })).toHaveAttribute("aria-expanded", "false"),
+    );
   });
 });
 
@@ -296,9 +323,18 @@ describe("desfecho — rascunho atravessa somente lacuna transitória do mesmo c
     await userEvent.selectOptions(screen.getByLabelText("Desfecho da demanda"), "perdida");
     view.mudarConversa(null);
     view.mudarConversa(kind === "conversa" ? { ...conversation!, id: "cv-2" } : { ...conversation!, contact_id: "outro", contacts: { ...conversation!.contacts!, id: "outro" } });
+    // Conversa nova começa recolhida: abre pelo título para conferir.
+    await screen.findByText(/Demandas abertas \(\d+\)/);
+    if (screen.getByRole("button", { name: /Demandas abertas/ }).getAttribute("aria-expanded") === "false") {
+      fireEvent.click(screen.getByRole("button", { name: /Demandas abertas/ }));
+    }
     await screen.findByRole("button", { name: "Encerrar demanda" });
     expect(screen.queryByLabelText("Desfecho da demanda")).toBeNull();
     view.mudarConversa(conversation);
+    await screen.findByText(/Demandas abertas \(\d+\)/);
+    if (screen.getByRole("button", { name: /Demandas abertas/ }).getAttribute("aria-expanded") === "false") {
+      fireEvent.click(screen.getByRole("button", { name: /Demandas abertas/ }));
+    }
     await screen.findByRole("button", { name: "Encerrar demanda" });
     expect(screen.queryByLabelText("Desfecho da demanda")).toBeNull();
     expect(patch).not.toHaveBeenCalled();

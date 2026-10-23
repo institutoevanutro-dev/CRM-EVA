@@ -583,6 +583,22 @@ export function CRMSidePanel({ conversation }: Props) {
   const [desfechoDraft, setDesfechoDraft] = useState<DesfechoDraft | null>(null);
   const [demandasFixas, setDemandasFixas] = useState(false);
   const [demandasSobMouse, setDemandasSobMouse] = useState(false);
+  const esperaDoMouse = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Cada conversa começa com as demandas recolhidas: fixar vale só para a
+  // conversa em que a pessoa clicou.
+  // A lacuna transitória (conversa `null` entre duas leituras da MESMA
+  // conversa) não conta como troca: só um id diferente do último recolhe.
+  const ultimaConversaDasDemandas = useRef<string | null>(null);
+  useEffect(() => {
+    const id = conversation?.id ?? null;
+    if (!id) return;
+    if (ultimaConversaDasDemandas.current !== null && ultimaConversaDasDemandas.current !== id) {
+      setDemandasFixas(false);
+      setDemandasSobMouse(false);
+    }
+    ultimaConversaDasDemandas.current = id;
+  }, [conversation?.id]);
+  useEffect(() => () => { if (esperaDoMouse.current) clearTimeout(esperaDoMouse.current); }, []);
   // A saída do filtro produz null enquanto o detalhe carrega. O rascunho não
   // some nessa lacuna; outra conversa/contato real o descarta, sem expô-lo.
   useEffect(() => {
@@ -729,22 +745,33 @@ export function CRMSidePanel({ conversation }: Props) {
 
   return (
     <aside className="flex h-full flex-col gap-4 overflow-y-auto border-l border-border bg-background p-4">
-      {/* RECOLHIDA por padrão (pedido da clínica, 22/10): abre ao passar o mouse
-          ou com o foco do teclado, e um clique a deixa fixa. Fica aberta
-          enquanto houver um desfecho sendo escrito, para o formulário não sumir. */}
+      {/* RECOLHIDA por padrão (pedido da clínica, 22/10): abre quando o mouse
+          PARA sobre o título (300 ms) e fecha ao sair da seção; o clique no
+          título abre e fecha de verdade. Fica aberta enquanto houver um
+          desfecho sendo escrito, para o formulário não sumir. Sem abrir por
+          foco: o foco do próprio clique a prendia aberta (relato de 23/10). */}
       <section
         data-testid="inbox-demandas"
-        onMouseEnter={() => setDemandasSobMouse(true)}
-        onMouseLeave={() => setDemandasSobMouse(false)}
-        onFocus={() => setDemandasSobMouse(true)}
-        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDemandasSobMouse(false); }}
+        onMouseLeave={() => {
+          if (esperaDoMouse.current) clearTimeout(esperaDoMouse.current);
+          setDemandasSobMouse(false);
+        }}
       >
         <h3 className="text-xs font-semibold text-text">
           <button
             type="button"
             aria-expanded={demandasVisiveis}
             aria-controls="inbox-demandas-lista"
-            onClick={() => setDemandasFixas((v) => !v)}
+            onMouseEnter={() => {
+              if (esperaDoMouse.current) clearTimeout(esperaDoMouse.current);
+              esperaDoMouse.current = setTimeout(() => setDemandasSobMouse(true), 300);
+            }}
+            onClick={() => {
+              if (esperaDoMouse.current) clearTimeout(esperaDoMouse.current);
+              const abrir = !demandasVisiveis;
+              setDemandasFixas(abrir);
+              setDemandasSobMouse(false);
+            }}
             className="flex w-full items-center justify-between gap-2 text-left"
           >
             <span>
