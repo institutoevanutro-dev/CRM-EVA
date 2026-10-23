@@ -298,7 +298,7 @@ export function detectAmbiguousOptOut(message: string): boolean {
  * futuro — 'infinity' sempre vale). Lido no INÍCIO do turno, antes de qualquer chamada
  * de modelo. Só o humano (via CRM) libera.
  *
- * A MESMA guarda barra o CONTATO INTERNO (DeskcommCRM #2353): quem tem uma etiqueta
+ * A MESMA guarda barra o CONTATO INTERNO (#2353 do original): quem tem uma etiqueta
  * da lista da organização (`organizations.settings.crm.internal_contact_tags`) não
  * recebe atendimento automático, nem o passo fixo de fluxo (`ignorarTravaDoContato`
  * não a solta: ela não é trava de pessoa). Entra pela forma SQL da régua única
@@ -517,10 +517,10 @@ export async function applyRequestHumanHandoff(
 
   // O código só classifica a passagem quando a IA não escreveu o motivo: não
   // escolhe destino nem muda as condições do handoff. Portado do projeto original
-  // (DeskcommCRM, PR #3068 de @vitor-licassali), sem o briefing da passagem, que
+  // (PR #3068 de @vitor-licassali), sem o briefing da passagem, que
   // este fork não tem.
   //
-  // ⚠️ AUSENTE NÃO É "O CLIENTE PEDIU" (DeskcommCRM #3310). Era `?? 'requested_human'`,
+  // ⚠️ AUSENTE NÃO É "O CLIENTE PEDIU" (#3310 do original). Era `?? 'requested_human'`,
   // e a passagem que o próprio modelo decidiu (faltou informação, regra do prompt)
   // ficava gravada em `last_handoff_reason` e no aviso da Central como pedido do
   // cliente. `low_confidence` diz o que houve sem afirmar nada sobre o cliente;

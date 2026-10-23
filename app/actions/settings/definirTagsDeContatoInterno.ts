@@ -1,9 +1,9 @@
 "use server";
 
 /**
- * GRAVA A LISTA DE ETIQUETAS DE CONTATO INTERNO (DeskcommCRM #2353).
+ * GRAVA A LISTA DE ETIQUETAS DE CONTATO INTERNO (#2353 do original).
  *
- * Portado do projeto original (DeskcommCRM, PR #2857 de @webtecnica).
+ * Portado do projeto original (PR #2857 de @webtecnica).
  *
  * Contato com uma dessas etiquetas não vira card no funil nem recebe
  * atendimento da IA, mas segue normal na Inbox — inclusive para envio manual.

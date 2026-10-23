@@ -30,7 +30,7 @@ import type { McpToolDefinition } from "../types";
 const inputShape = {
   conversation_id: z.string().uuid(),
   /**
-   * SEM DEFAULT (DeskcommCRM #3310). Era `.default("requested_human")`, e o agente
+   * SEM DEFAULT (#3310 do original). Era `.default("requested_human")`, e o agente
    * externo que passava a conversa sem declarar o motivo (ou com o próprio texto)
    * gravava "o cliente pediu uma pessoa", e o cliente recebia a abertura de quem
    * pediu um humano. Agora o texto vira código por `motivoDoAgenteExterno`.
@@ -204,7 +204,7 @@ const MOTIVOS_DO_AGENTE_EXTERNO: readonly HandoffReason[] = [
  * O `reason` do agente externo no vocabulário do orquestrador. Texto livre, ausente
  * ou motivo que ele não pode declarar vira `low_confidence` ("o assistente não
  * resolveu sozinho"), nunca `requested_human`: só o pedido escrito com todas as
- * letras afirma que o cliente pediu uma pessoa (DeskcommCRM #3310). O texto
+ * letras afirma que o cliente pediu uma pessoa (#3310 do original). O texto
  * inteiro não se perde: segue em `metadata.original_reason`.
  */
 export function motivoDoAgenteExterno(texto: string | null | undefined): HandoffReason {

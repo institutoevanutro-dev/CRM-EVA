@@ -162,7 +162,7 @@ export type OpenCaseResult =
 
 /**
  * A FRASE AO CLIENTE quando o pedido novo entra num caso que JÁ estava aberto
- * (DeskcommCRM #3097).
+ * (#3097 do original).
  *
  * Ela existe porque a alternativa era a IA improvisar, e o que ela improvisava
  * era "a equipe foi acionada", que é FALSO neste caminho: a nota (`agent_noted`)

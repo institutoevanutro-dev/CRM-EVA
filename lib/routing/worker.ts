@@ -190,7 +190,7 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
     }
   }
 
-  // A EXCLUSÃO DE 24 H DA DEVOLUÇÃO AO RODÍZIO (DeskcommCRM #2985). Quem recebeu
+  // A EXCLUSÃO DE 24 H DA DEVOLUÇÃO AO RODÍZIO (#2985 do original). Quem recebeu
   // esta conversa do rodízio e não respondeu no prazo fica fora dela por um dia
   // (`conversations.metadata.devolucao_ao_rodizio`, escrito pelo cron
   // `rodizio-devolucao`). Sem este corte, o próximo tick entregaria a conversa à

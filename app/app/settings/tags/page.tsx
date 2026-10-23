@@ -67,7 +67,7 @@ export default async function TagsPage() {
     p_org: activeOrg.orgId,
   });
 
-  // A lista de contato interno (DeskcommCRM #2353) lê o `settings` da própria
+  // A lista de contato interno (#2353 do original) lê o `settings` da própria
   // organização pela SESSÃO: a policy de leitura isola a linha.
   const { data: linhaDaOrganizacao } = await supabase
     .from("organizations")

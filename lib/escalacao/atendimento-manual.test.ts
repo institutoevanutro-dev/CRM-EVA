@@ -200,7 +200,7 @@ function adminComAjuste(
 }
 
 /**
- * A pausa tem que ser OBSERVÁVEL (DeskcommCRM #534). O supabase-js devolve
+ * A pausa tem que ser OBSERVÁVEL (#534 do original). O supabase-js devolve
  * `error: null` quando o UPDATE não casa linha nenhuma; sem conferir as linhas
  * afetadas, a função dizia "pausei" sem ter gravado.
  */

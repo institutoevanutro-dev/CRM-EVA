@@ -170,7 +170,7 @@ export async function pausarIaPorAtendimentoManual(
           : silenciadaAte;
     if (atualMs >= proposto.getTime()) return false;
 
-    // A LINHA VOLTA (DeskcommCRM #534). Um UPDATE pode devolver `error: null` sem
+    // A LINHA VOLTA (#534 do original). Um UPDATE pode devolver `error: null` sem
     // ter tocado em nada (corrida com um DELETE entre a leitura acima e esta
     // escrita). Sem ler de volta, a função dizia "pausei" com o banco intacto, e a
     // IA voltava a falar por cima de quem atende. `select("id")` torna a pausa

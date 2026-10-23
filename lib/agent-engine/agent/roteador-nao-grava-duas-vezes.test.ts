@@ -34,7 +34,7 @@
  * de config de LLM na org (`/config LLM/`) — o mesmo ponto de parada de
  * `tests/unit/filtro-de-palavra-chave-no-turno.test.ts`.
  *
- * Portado do projeto original (DeskcommCRM, PR #3215 de @webtecnica).
+ * Portado do projeto original (PR #3215 de @webtecnica).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

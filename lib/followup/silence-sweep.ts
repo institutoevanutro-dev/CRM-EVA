@@ -473,7 +473,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       const cutoff = new Date(cutoffIso).getTime();
       const agora = new Date();
       const ttlMs = ttlDaAutorizacaoMs(process.env);
-      // Contato interno não é inscrito (DeskcommCRM #2353). A lista é da
+      // Contato interno não é inscrito (#2353 do original). A lista é da
       // organização: lida UMA vez, e só quando algum contato TEM etiqueta.
       const tagsInternas = rows.some((r) => (r.contacts?.tags?.length ?? 0) > 0)
         ? await lerTagsInternas(admin, orgId)

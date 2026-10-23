@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * A LISTA DE ETIQUETAS DE CONTATO INTERNO (DeskcommCRM #2353), na tela de Etiquetas.
+ * A LISTA DE ETIQUETAS DE CONTATO INTERNO (#2353 do original), na tela de Etiquetas.
  *
  * ─── Por que mora nesta tela, e não numa tela de "atendimento" ───────────────
  *

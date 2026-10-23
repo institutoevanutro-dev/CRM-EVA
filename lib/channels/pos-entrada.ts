@@ -290,7 +290,7 @@ async function aplicarOptOut(admin: Admin, entrada: EntradaDeMensagem): Promise<
 const MOTIVO_DA_PERDA_POR_OPT_OUT = "opted_out_of_messages" satisfies CanonicalLostReason;
 
 /**
- * O DESFECHO do opt-out nas DEMANDAS (DeskcommCRM #3288): `encerrada_pelo_cliente`,
+ * O DESFECHO do opt-out nas DEMANDAS (#3288 do original): `encerrada_pelo_cliente`,
  * já aceito por `fn_demanda_encerrar` (sem schema novo).
  */
 const DESFECHO_DA_DEMANDA_POR_OPT_OUT = "encerrada_pelo_cliente" as const;
@@ -372,7 +372,7 @@ async function fecharNegociosAbertosDeQuemPediuParar(
 }
 
 /**
- * O opt-out TAMBÉM encerra as DEMANDAS ABERTAS do contato (DeskcommCRM #3288).
+ * O opt-out TAMBÉM encerra as DEMANDAS ABERTAS do contato (#3288 do original).
  *
  * Quem pediu para parar saía do funil (o card vai para perdido acima), mas a
  * demanda aberta dele seguia viva no Radar, empurrando o operador a resgatar o

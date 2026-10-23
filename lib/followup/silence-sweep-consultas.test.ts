@@ -101,7 +101,7 @@ describe("loadSilentContacts — anonimizado fica fora", () => {
   });
 });
 
-describe("loadSilentContacts — contato interno fica fora (DeskcommCRM #2353)", () => {
+describe("loadSilentContacts — contato interno fica fora (#2353 do original)", () => {
   /** O mesmo dublê, com `organizations` devolvendo a lista interna da organização. */
   function comListaInterna(linhas: ReturnType<typeof conversa>[], lista: string[]) {
     const base = supabaseDeConversas(linhas);

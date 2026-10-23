@@ -73,7 +73,7 @@ export interface EstadoDeElegibilidade {
   forceHuman: boolean;
   /**
    * `contacts.tags` cruza com `organizations.settings.crm.internal_contact_tags`
-   * (DeskcommCRM #2353): contato interno (equipe, sócio, família, fornecedor) não
+   * (#2353 do original): contato interno (equipe, sócio, família, fornecedor) não
    * recebe atendimento automático, como numa conversa em "Assumir", sem pausar
    * uma por uma.
    */
@@ -147,7 +147,7 @@ export function decidirElegibilidade(e: EstadoDeElegibilidade): DecisaoDeElegibi
   if (e.assigneeKind === "user") {
     return { permite: false, motivo: "conversa_de_humano", bloqueioPorAllowlist: false };
   }
-  // Contato interno (DeskcommCRM #2353): veto de CONTATO que vale sempre, igual
+  // Contato interno (#2353 do original): veto de CONTATO que vale sempre, igual
   // com o gate aberto. Quem ligou o robô no número não quer que ele responda a
   // equipe, o sócio ou a família.
   if (e.contatoInterno) {
@@ -223,7 +223,7 @@ export function montarEstadoDeElegibilidade(raw: {
   aiTestPhoneNumbers?: unknown;
   contactPhoneNumber?: string | null;
   forceHuman: unknown;
-  /** `contacts.tags` cru, para a régua de contato interno (DeskcommCRM #2353). */
+  /** `contacts.tags` cru, para a régua de contato interno (#2353 do original). */
   contactTags?: readonly string[] | null | undefined;
   /** `organizations.settings` cru; a lista interna mora em `.crm.internal_contact_tags`. */
   orgSettings?: unknown;

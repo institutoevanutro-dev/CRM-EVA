@@ -37,7 +37,7 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
-  // Configurações › Etiquetas: contato interno (DeskcommCRM #2353).
+  // Configurações › Etiquetas: contato interno (#2353 do original).
   "Etiquetas de contato interno": { es: "Etiquetas de contacto interno" },
   "Para equipe, sócio, família ou fornecedor. O contato com uma destas etiquetas não vira card no funil e não recebe mensagens automáticas da IA nem dos acompanhamentos. A conversa continua normal no Inbox, e a equipe responde por lá como sempre. Uma etiqueta por linha.": {
     es: "Para equipo, socio, familia o proveedor. El contacto con una de estas etiquetas no se convierte en tarjeta en el embudo y no recibe mensajes automáticos de la IA ni de los seguimientos. La conversación sigue normal en el Inbox, y el equipo responde allí como siempre. Una etiqueta por línea.",

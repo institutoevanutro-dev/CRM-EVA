@@ -40,7 +40,7 @@ interface ConversaEmbed {
     ai_authorized_at: string | null;
     phone_number: string | null;
     inbox_hidden_at?: string | null;
-    /** `contacts.tags`: a régua de contato interno (DeskcommCRM #2353). */
+    /** `contacts.tags`: a régua de contato interno (#2353 do original). */
     tags?: string[] | null;
   } | null;
   channel_sessions: { metadata: Record<string, unknown> | null; provider?: string | null } | null;

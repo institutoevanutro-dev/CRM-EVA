@@ -1,6 +1,6 @@
 /**
  * PEDIDO NOVO NUM CASO JÁ ABERTO: NINGUÉM É AVISADO, ENTÃO A IA NÃO PODE DIZER
- * QUE AVISOU (DeskcommCRM #3097, porte do PR #3173 adaptado ao fork).
+ * QUE AVISOU (#3097 do original, porte do PR #3173 adaptado ao fork).
  *
  * No original a guarda de caso aberto RECUSA o pedido novo e a recusa virou
  * instrução. No fork o pedido do mesmo assunto não é recusado: entra no caso que

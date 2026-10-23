@@ -166,7 +166,7 @@ export function createMeetDeliveryHandler(deps: {
 export function motivoDoBloqueioDaEntrega(code: string): string {
   if (code === "contato_bloqueado") return "opt_out";
   // A conversa está com a equipe (`force_human` sem bloqueio): não é opt-out, e
-  // `force_human` é o nome exato, já na lista do banco (DeskcommCRM #3310).
+  // `force_human` é o nome exato, já na lista do banco (#3310 do original).
   if (code === "conversa_com_humano") return "force_human";
   if (code.startsWith("lgpd_")) return "lgpd";
   if (code === "messaging_window_closed") return "limits";

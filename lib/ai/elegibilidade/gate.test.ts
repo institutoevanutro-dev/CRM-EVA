@@ -202,7 +202,7 @@ describe("ttlDaAutorizacaoMs", () => {
   });
 });
 
-describe("DeskcommCRM #2353 · contato interno não é atendido pela IA", () => {
+describe("#2353 do original · contato interno não é atendido pela IA", () => {
   it("contato interno → NÃO responde, com motivo 'contato_interno' e sem bloqueio por allowlist", () => {
     const d = decidirElegibilidade({ ...base, modo: "open", contatoInterno: true });
     expect(d).toEqual({ permite: false, motivo: "contato_interno", bloqueioPorAllowlist: false });

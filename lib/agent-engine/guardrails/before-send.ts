@@ -76,7 +76,7 @@ import { capabilitiesOf, DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabil
 import { isWindowOpen } from './messaging-window';
 import { jobEhPassoFixoDoFluxo } from '@/lib/followup/bloqueios-obrigatorios';
 import type { ChannelProvider } from '@/lib/channels/capabilities';
-// A régua de contato interno (DeskcommCRM #2353) na forma SQL: o `stop` é um
+// A régua de contato interno (#2353 do original) na forma SQL: o `stop` é um
 // caminho de envio que não passa pelo gate de elegibilidade.
 import { sqlContatoInterno } from '@/lib/contacts/tags-internas';
 
@@ -97,7 +97,7 @@ export interface GateContext {
    */
   comHumano?: boolean;
   /**
-   * O STOP veio da etiqueta de contato INTERNO (DeskcommCRM #2353), sem bloqueio.
+   * O STOP veio da etiqueta de contato INTERNO (#2353 do original), sem bloqueio.
    * O veto é o mesmo; muda o código, porque contato interno não é opt-out.
    */
   contatoInterno?: boolean;
@@ -1526,7 +1526,7 @@ export async function readStopFlags(
   humanMeetingCommand = false,
 ): Promise<{ bloqueado: boolean; comHumano: boolean; contatoInterno: boolean }> {
   // O predicado da parada continua UM só e no SQL (`is_blocked or force_human`,
-  // mais a etiqueta de contato interno, DeskcommCRM #2353); `is_blocked` e
+  // mais a etiqueta de contato interno, #2353 do original); `is_blocked` e
   // `contato_interno` vêm ao lado só para o trace saber QUAL trava vetou. O
   // `cross join lateral` avalia a régua da etiqueta UMA vez por linha.
   //

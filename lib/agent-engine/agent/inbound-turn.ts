@@ -1876,7 +1876,7 @@ export async function deteccoesDeterministicasDoAssistido(
   let lgpd: AvisoDeEscalacaoOpts['lgpd'];
   let contextoLido = false;
   // O histórico lido vive FORA do try: é dele que a guarda do menu de robô
-  // (DeskcommCRM #3106) tira as marcas de automação. Sem contexto lido ele fica
+  // (#3106 do original) tira as marcas de automação. Sem contexto lido ele fica
   // vazio, e a guarda devolve "é de gente": o lado seguro (a passagem é irrevogável).
   let historicoDoTurno: readonly LeadContextMessage[] = [];
   try {
@@ -1973,7 +1973,7 @@ export async function deteccoesDeterministicasDoAssistido(
       : avisarLeadLendoOContato(pool, aviso.ids, { ...semInsumosDoContexto(aviso.base), motivo });
   };
 
-  // A GUARDA DO MENU DE ROBÔ (DeskcommCRM #3106): o casamento determinístico não
+  // A GUARDA DO MENU DE ROBÔ (#3106 do original): o casamento determinístico não
   // passa a conversa quando o que casou é fala de automação (menu numerado,
   // mensagem que se declara robô, ou a saudação que chega segundos depois do nosso
   // disparo; ver `ehRespostaDeRobo`). O turno segue para o rascunho, e quem lê a
@@ -2189,7 +2189,7 @@ function turnoVaiFalarComOLead(job: JobRow): boolean {
 }
 
 /**
- * O MESMO job já gravou uma decisão de roteamento? (DeskcommCRM #3143)
+ * O MESMO job já gravou uma decisão de roteamento? (#3143 do original)
  *
  * `rescheduleJob` NÃO cria outro job: o adiamento pela janela de funcionamento do
  * agente (que roda DEPOIS do roteador) devolve a MESMA linha de `job_queue` para
@@ -2510,7 +2510,7 @@ async function executarTurnoDoAgente(
   // trocou o dono e deixou a linha do destino. Gravar de novo seria uma segunda
   // decisão para a mesma mensagem.
   if (!preview && routed.routerId !== null && input.passagem === undefined) {
-    // UM TURNO, UMA DECISÃO (DeskcommCRM #3143): o turno adiado pela janela do
+    // UM TURNO, UMA DECISÃO (#3143 do original): o turno adiado pela janela do
     // agente volta como o MESMO job, e a decisão da primeira passagem é reusada.
     // A guarda é de telemetria e degrada ABERTO: leitura que falha grava como antes.
     let decisaoJaGravada = false;
@@ -2755,7 +2755,7 @@ async function executarTurnoDoAgente(
   const mensagemDoJob =
     currentInboundText ?? latestInboundSignal(openingContext.context.messages);
   const inboundsPendentes = inboundsNaoRespondidos(openingContext.context.messages);
-  // A GUARDA DO MENU DE ROBÔ (DeskcommCRM #3106): o casamento determinístico segue
+  // A GUARDA DO MENU DE ROBÔ (#3106 do original): o casamento determinístico segue
   // existindo, mas NÃO passa a conversa quando o que casou é fala de automação do
   // outro lado (`ehRespostaDeRobo`). Nesses casos o turno segue para o MODELO,
   // que vê a mensagem e sabe reconhecer robô. O laço com robô (a mesma mensagem
@@ -4546,7 +4546,7 @@ async function executarTurnoDoAgente(
           //
           // Pendência anotada num caso que JÁ estava aberto não avisa ninguém, e
           // a frase de disponibilidade autorizaria "alguém continua em seguida":
-          // ali vai a instrução que proíbe a promessa (DeskcommCRM #3097).
+          // ali vai a instrução que proíbe a promessa (#3097 do original).
           if (res.merged) {
             return { ok: true, case_id: res.caseId, message: instrucaoDePedidoNoCasoAberto() };
           }

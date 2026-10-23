@@ -65,7 +65,7 @@ const JANELA_DO_ECO_MS = 60_000;
  * `app/api/v1/messages/_handler.ts` ("fica `sent` sem o id") e no redrive do
  * `session-reconciler.ts` (`stampExternalIdAfterEcho` blindado). Exigir só
  * `queued|sending` fazia a reentrega desse eco ser lida como pessoa no celular:
- * IA pausada, linha duplicada e lead nascido pelo celular (DeskcommCRM #3138).
+ * IA pausada, linha duplicada e lead nascido pelo celular (#3138 do original).
  * `delivered`/`read` cobrem o ack que chega logo depois do carimbo (#3165).
  *
  * `failed` fica FORA: ali nada foi ao canal, não existe eco que explique a
@@ -82,10 +82,10 @@ const STATUS_DE_ENVIO_NOSSO = ["queued", "sending", "sent", "delivered", "read"]
  *
  *   - já com `external_id` igual a um dos ids que o CANAL entregou nesta
  *     mensagem: o carimbo do envio caiu DURANTE a ingestão, depois da
- *     re-checagem pós-insert e antes desta decisão (DeskcommCRM #3165). O id do
+ *     re-checagem pós-insert e antes desta decisão (#3165 do original). O id do
  *     canal não se repete entre mensagens, então o corpo nem é comparado;
  *   - ainda SEM `external_id`, num dos estados em que a linha saiu
- *     (`STATUS_DE_ENVIO_NOSSO`, `sent` inclusive: DeskcommCRM #3138), com o
+ *     (`STATUS_DE_ENVIO_NOSSO`, `sent` inclusive: #3138 do original), com o
  *     MESMO corpo.
  *
  * Qualquer uma dessas faltando, a resposta é "não sei" — e "não sei" silencia,

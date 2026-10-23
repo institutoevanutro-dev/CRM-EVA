@@ -41,7 +41,7 @@
  * Este disjuntor pega o LAÇO (o robô insistindo). A primeira resposta de um robô
  * é outro problema: o menu dele ("4 - Falar com um atendente") casa o padrão de
  * pedido de humano e passava a conversa à Fila na hora. Quem cuida disso é
- * `ehRespostaDeRobo`, em `human-handoff.ts` (DeskcommCRM #3106): ela não silencia
+ * `ehRespostaDeRobo`, em `human-handoff.ts` (#3106 do original): ela não silencia
  * nada, só deixa o turno seguir para o modelo. Se o robô repetir, este disjuntor,
  * que roda antes, para o laço.
  *

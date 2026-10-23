@@ -278,7 +278,7 @@ export const agendaSettingsSchema = agendaSettingsWriteSchema.catch({confirmatio
  * da primeira, também nasce DESLIGADA, e só `fn_definir_paciente_pelo_cadastro`
  * a grava. A mesma régua: só o booleano `true` liga.
  *
- * `internal_contact_tags` (DeskcommCRM #2353): as etiquetas que marcam um contato
+ * `internal_contact_tags` (#2353 do original): as etiquetas que marcam um contato
  * INTERNO (equipe, sócio, família, fornecedor). Contato com uma delas não vira
  * card e não recebe atendimento automático; ver `lib/contacts/tags-internas.ts`.
  * Ausente/lixo vira lista vazia (nenhum contato é interno), o comportamento de

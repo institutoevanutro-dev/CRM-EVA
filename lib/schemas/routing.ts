@@ -42,15 +42,15 @@ export const routingConfigSchema = z.object({
     .default(null),
   /**
    * Prazo, em minutos, para DEVOLVER AO RODÍZIO a conversa que o rodízio
-   * entregou e ninguém respondeu (DeskcommCRM #2985, fatia 1). `null` = desligado,
+   * entregou e ninguém respondeu (#2985 do original, fatia 1). `null` = desligado,
    * o padrão. Ligado, o cron `rodizio-devolucao` solta o dono da conversa entregue
    * por `routing` sem nenhuma mensagem humana e a devolve à distribuição; a pessoa
    * devolvida fica fora DESTA conversa por 24 h. Regra pura em
    * `lib/escalacao/devolucao-ao-rodizio.ts`. Faixa igual à da devolução ao agente.
    *
    * Sem tela nesta fatia (é a fatia 2 do original): liga-se pela API de
-   * configuração de atendimento. Portado do projeto original (DeskcommCRM, PR
-   * #2988 de @webtecnica).
+   * configuração de atendimento. Portado do projeto original (PR #2988 de
+   * @webtecnica).
    */
   unanswered_return_minutes: z
     .number()
