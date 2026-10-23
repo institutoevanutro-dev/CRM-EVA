@@ -103,6 +103,37 @@ describe("a função que decide a notificação (#3040)", () => {
     expect(avisosDoNegocio(null, { owner_user_id: VENDEDOR, status: "open" }, VENDEDOR)).toEqual([]);
   });
 
+  it("(5) sem histórico, o PRÓPRIO evento decide: carimbo colado no updated_at é a atribuição ou o fechamento", () => {
+    const agora = "2026-10-21T10:00:00.400000+00:00";
+    const atribuiuAgora = { updated_at: agora, assigned_at: "2026-10-21T10:00:00.120Z", closed_at: null };
+    expect(avisosDoNegocio(null, { owner_user_id: VENDEDOR, status: "open" }, VENDEDOR, atribuiuAgora)).toEqual([
+      "lead_assigned",
+    ]);
+    const ganhouAgora = { updated_at: agora, assigned_at: "2026-10-01T09:00:00Z", closed_at: agora };
+    expect(avisosDoNegocio(null, { owner_user_id: VENDEDOR, status: "won" }, VENDEDOR, ganhouAgora)).toEqual(["lead_won"]);
+    expect(avisosDoNegocio(null, { owner_user_id: VENDEDOR, status: "lost" }, VENDEDOR, ganhouAgora)).toEqual(["lead_lost"]);
+  });
+
+  it("(6) sem histórico, carimbo VELHO é outro UPDATE (o last_activity_at do defeito): nada sai", () => {
+    const carimboDeAtividade = {
+      updated_at: "2026-10-21T10:00:00Z",
+      assigned_at: "2026-10-18T08:00:00Z",
+      closed_at: "2026-10-19T08:00:00Z",
+    };
+    expect(avisosDoNegocio(null, { owner_user_id: VENDEDOR, status: "won" }, VENDEDOR, carimboDeAtividade)).toEqual([]);
+    // E a atribuição recente para OUTRA pessoa não avisa quem lê.
+    const paraOutro = { updated_at: "2026-10-21T10:00:00Z", assigned_at: "2026-10-21T10:00:00Z", closed_at: null };
+    expect(avisosDoNegocio(null, { owner_user_id: OUTRO, status: "open" }, VENDEDOR, paraOutro)).toEqual([]);
+    // Carimbo ilegível também não vira aviso.
+    expect(
+      avisosDoNegocio(null, { owner_user_id: VENDEDOR, status: "open" }, VENDEDOR, {
+        updated_at: "ontem",
+        assigned_at: "ontem",
+        closed_at: null,
+      }),
+    ).toEqual([]);
+  });
+
   it("o `old` sem os campos é DESCONHECIDO, não 'responsável ninguém'", () => {
     // O formato medido em produção: sem REPLICA IDENTITY FULL vem só a PK.
     expect(estadoDoAntigo({ id: "lead-1" })).toBeNull();
@@ -181,6 +212,42 @@ describe("o hook real, alimentado pelo canal do Realtime", () => {
     expect(entregarAvisoFalso).toHaveBeenLastCalledWith(
       expect.objectContaining({ category: "lead_lost", title: "Lead perdido", tag: "lead-3" }),
     );
+  });
+
+  it("o lead novo atribuído a quem lê, sem nada visto antes, avisa uma vez; o carimbo de atividade seguinte, não", () => {
+    const atribuido = "2026-10-21T10:00:00.300000+00:00";
+    aoAtualizarNegocio(
+      eventoUpdate(
+        negocio({ id: "lead-novo", owner_user_id: VENDEDOR, assigned_at: "2026-10-21T10:00:00.100Z", updated_at: atribuido }),
+        { id: "lead-novo" },
+      ),
+    );
+    expect(entregarAvisoFalso).toHaveBeenCalledTimes(1);
+    expect(entregarAvisoFalso).toHaveBeenCalledWith(expect.objectContaining({ category: "lead_assigned", tag: "lead-novo" }));
+    // Um minuto depois, a resposta do vendedor carimba o negócio: com histórico, quieto.
+    aoAtualizarNegocio(
+      eventoUpdate(
+        negocio({
+          id: "lead-novo",
+          owner_user_id: VENDEDOR,
+          assigned_at: "2026-10-21T10:00:00.100Z",
+          updated_at: "2026-10-21T10:01:00Z",
+          last_activity_at: "2026-10-21T10:01:00Z",
+        }),
+        { id: "lead-novo" },
+      ),
+    );
+    expect(entregarAvisoFalso).toHaveBeenCalledTimes(1);
+  });
+
+  it("negócio antigo do vendedor, visto pela primeira vez num carimbo de atividade: quieto (o defeito, sem histórico)", () => {
+    aoAtualizarNegocio(
+      eventoUpdate(
+        negocio({ owner_user_id: VENDEDOR, assigned_at: "2026-10-01T09:00:00Z", updated_at: "2026-10-21T10:00:00Z" }),
+        { id: "lead-1" },
+      ),
+    );
+    expect(entregarAvisoFalso).not.toHaveBeenCalled();
   });
 
   it("instalação com REPLICA IDENTITY FULL (old completo) volta a notificar já no primeiro evento", () => {

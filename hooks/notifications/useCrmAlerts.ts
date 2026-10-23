@@ -5,6 +5,7 @@ import { useCallback, useRef } from "react";
 import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
 import {
   avisosDoNegocio,
+  carimbosDoNovo,
   estadoDoAntigo,
   estadoDoNovo,
   type AvisoDeNegocio,
@@ -62,7 +63,7 @@ export function useCrmAlerts(): void {
       const estado = estadoDoNovo(novo);
       vistos.current.set(leadId, estado);
 
-      const avisos = avisosDoNegocio(anterior, estado, user.id);
+      const avisos = avisosDoNegocio(anterior, estado, user.id, carimbosDoNovo(novo));
       if (avisos.length === 0) return;
 
       const title = str(novo.title) || "Lead";
