@@ -46,6 +46,8 @@ function adminFalso() {
 }
 
 beforeEach(() => {
+  // O hash dos códigos de recuperação é HMAC com o segredo da instalação.
+  vi.stubEnv("INTERNAL_SECRET", "segredo-da-instalacao");
   vi.clearAllMocks();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   vi.mocked(createAdminClient).mockReturnValue(adminFalso() as any);

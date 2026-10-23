@@ -48,6 +48,9 @@ export function SecurityClient({
       if (r.ok) {
         setCodes(r.recovery_codes);
         toast.success(t("Novos códigos gerados."));
+      } else if (r.error === "mfa_required") {
+        // A sessão não provou o código de 6 dígitos: pede o código e volta para cá.
+        window.location.assign("/login/mfa?next=/app/settings/security");
       } else {
         toast.error(`${t("Erro:")} ${r.error}`);
       }

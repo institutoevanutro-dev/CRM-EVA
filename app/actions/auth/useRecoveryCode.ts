@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit, isServiceRoleConfigured } from "@/lib/audit";
-import { hashRecoveryCode } from "@/lib/auth/recovery-codes";
+import { hashRecoveryCode, normalizeRecoveryCode } from "@/lib/auth/recovery-codes";
 
 export type UseRecoveryCodeResult =
   | { ok: false; error: "invalid_or_used" }
@@ -26,7 +26,7 @@ const inputSchema = z.object({
  *
  * Security:
  *  - 200ms artificial delay on miss (timing leak protection).
- *  - hashRecoveryCode = sha256 → bytea match.
+ *  - hashRecoveryCode: the same bytea literal the actions write (see the helper).
  *  - Audit emits with masked code (`AB****YZ`).
  */
 export async function useRecoveryCode(
@@ -40,7 +40,7 @@ export async function useRecoveryCode(
 
   const parsed = inputSchema.safeParse({
     email: rawInput.email?.trim().toLowerCase(),
-    code: rawInput.code?.trim().toUpperCase(),
+    code: normalizeRecoveryCode(String(rawInput.code ?? "")),
   });
   if (!parsed.success) {
     await delay(200);
@@ -72,7 +72,7 @@ export async function useRecoveryCode(
     return { ok: false, error: "invalid_or_used" };
   }
 
-  // 2) Find an unused recovery code matching the sha256 hash.
+  // 2) Find an unused recovery code matching the hash.
   const codeHash = hashRecoveryCode(code);
   const { data: row, error: rowErr } = await admin
     .from("user_recovery_codes")

@@ -5,10 +5,12 @@ import { redirect } from "next/navigation";
 
 import { marcaDaSaida } from "@/lib/branding/saida";
 import { createClient } from "@/lib/supabase/server";
+import { sessionAal } from "@/lib/auth/server";
 
 export type EnrollMfaResult =
   | { ok: true; factor_id: string; qr_data_url: string; uri: string; secret: string }
-  | { ok: false; error: "enroll_failed"; message?: string };
+  | { ok: false; error: "enroll_failed"; message?: string }
+  | { ok: false; error: "mfa_required" };
 
 /**
  * Starts a TOTP enrollment. Returns factor_id + QR data URL (PNG) + raw URI.
@@ -25,8 +27,22 @@ export async function enrollMfa(): Promise<EnrollMfaResult> {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { data: existing, error: listErr } = await supabase.auth.mfa.listFactors();
+  // Sem a lista não dá para saber se a conta já tem fator: recusa em vez de
+  // tratar como primeiro cadastro.
+  if (listErr) return { ok: false, error: "enroll_failed", message: listErr.message };
+
+  // Quem JÁ tem fator verificado só cadastra outro depois de provar o atual
+  // nesta sessão (`aal2` exato). Um fator novo confirmado sobe a sessão para
+  // `aal2` e emite códigos de recuperação: o mesmo que dispensar o fator antigo.
+  const temFatorVerificado = existing?.all?.some(
+    (f) => f.factor_type === "totp" && f.status === "verified",
+  );
+  if (temFatorVerificado && (await sessionAal()) !== "aal2") {
+    return { ok: false, error: "mfa_required" };
+  }
+
   // Drop any stale unverified TOTP factors (idempotent re-enroll).
-  const { data: existing } = await supabase.auth.mfa.listFactors();
   for (const f of existing?.all ?? []) {
     if (f.factor_type === "totp" && f.status === "unverified") {
       await supabase.auth.mfa.unenroll({ factorId: f.id });

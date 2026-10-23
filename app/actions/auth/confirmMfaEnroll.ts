@@ -7,14 +7,17 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit, isServiceRoleConfigured } from "@/lib/audit";
 import { generateRecoveryCodes, hashRecoveryCode } from "@/lib/auth/recovery-codes";
+import { sessionAal } from "@/lib/auth/server";
+import { logger } from "@/lib/logger";
 
 export type ConfirmMfaEnrollResult =
   | { ok: true; recovery_codes: string[] }
-  | { ok: false; error: "invalid_code" | "challenge_failed" | "verify_failed"; message?: string };
+  | { ok: false; error: "invalid_code" | "challenge_failed" | "verify_failed"; message?: string }
+  | { ok: false; error: "mfa_required" | "service_unavailable" | "recovery_codes_failed" };
 
 /**
  * Confirms a TOTP enrollment by issuing a challenge + verifying the code, then
- * generates 10 single-use recovery codes (sha256-hashed, stored as bytea).
+ * generates 10 single-use recovery codes (`hashRecoveryCode`, stored as bytea).
  *
  * Recovery codes are returned ONCE to the caller for display — never stored
  * plaintext. Caller is responsible for showing them to the user with copy /
@@ -39,6 +42,28 @@ export async function confirmMfaEnroll(
     return { ok: false, error: "invalid_code" };
   }
 
+  // A mesma régua de `enrollMfa`: com um fator verificado, confirmar outro (e
+  // receber códigos de recuperação) exige o atual provado nesta sessão.
+  const { data: fatores, error: listErr } = await supabase.auth.mfa.listFactors();
+  // Sem a lista não dá para saber se a conta já tem fator: recusa em vez de
+  // tratar como primeiro cadastro.
+  if (listErr) return { ok: false, error: "challenge_failed", message: listErr.message };
+  const temFatorVerificado = fatores?.all?.some(
+    (f) => f.factor_type === "totp" && f.status === "verified",
+  );
+  if (temFatorVerificado && (await sessionAal()) !== "aal2") {
+    return { ok: false, error: "mfa_required" };
+  }
+
+  // Os códigos só são gravados pelo client de serviço. Sem ele, recusa ANTES de
+  // verificar o fator: depois, o fator ficaria ativo sem códigos.
+  if (!isServiceRoleConfigured()) return { ok: false, error: "service_unavailable" };
+
+  // Gerados antes do desafio pelo mesmo motivo: se o hash não puder ser feito
+  // (sem o INTERNAL_SECRET), a falha vem antes de o fator ficar ativo.
+  const codes = generateRecoveryCodes();
+  const rows = codes.map((c) => ({ user_id: user.id, code_hash: hashRecoveryCode(c) }));
+
   const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({
     factorId,
   });
@@ -55,24 +80,20 @@ export async function confirmMfaEnroll(
     return { ok: false, error: "verify_failed", message: verifyErr.message };
   }
 
-  // Generate + hash 10 recovery codes.
-  const codes = generateRecoveryCodes();
-  const rows = codes.map((c) => ({
-    user_id: user.id,
-    code_hash: hashRecoveryCode(c),
-  }));
-
-  // Try user-scoped first (RLS policy `recovery_codes_self` permits insert
-  // where user_id = auth.uid()). Fall back to admin if RLS rejects (e.g. AAL
-  // policy mismatch).
-  let { error: insertErr } = await supabase.from("user_recovery_codes").insert(rows);
-  if (insertErr && isServiceRoleConfigured()) {
-    const admin = createAdminClient();
-    const r = await admin.from("user_recovery_codes").insert(rows);
-    insertErr = r.error;
-  }
+  // Substitui o conjunto anterior: os códigos mostrados agora são os únicos que valem.
+  const admin = createAdminClient();
+  const { error: delErr } = await admin.from("user_recovery_codes").delete().eq("user_id", user.id);
+  const { error: insertErr } = delErr
+    ? { error: delErr }
+    : await admin.from("user_recovery_codes").insert(rows);
   if (insertErr) {
-    console.error("[confirmMfaEnroll] failed to insert recovery codes:", insertErr.message);
+    // O fator já foi verificado. Repetir a confirmação grava os códigos (a sessão
+    // está em aal2 agora); mostrar códigos que não foram gravados seria pior.
+    logger.error("[mfa-confirmacao] não gravou os códigos de recuperação", {
+      factor_id: factorId,
+      error: insertErr.message,
+    });
+    return { ok: false, error: "recovery_codes_failed" };
   }
 
   await audit({

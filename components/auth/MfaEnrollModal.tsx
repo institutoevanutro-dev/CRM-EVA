@@ -41,7 +41,7 @@ export function MfaEnrollModal({ motivo = "obrigatorio" }: { motivo?: "obrigator
     startTransition(async () => {
       const res = await enrollMfa();
       if (!res.ok) {
-        setError(res.message ?? t("Não foi possível iniciar a configuração."));
+        setError(("message" in res ? res.message : undefined) ?? t("Não foi possível iniciar a configuração."));
         setStep("intro");
         return;
       }
@@ -65,7 +65,7 @@ export function MfaEnrollModal({ motivo = "obrigatorio" }: { motivo?: "obrigator
         if (res.error === "verify_failed" || res.error === "invalid_code") {
           setError(t("Código inválido. Tente novamente."));
         } else {
-          setError(res.message ?? t("Falha ao confirmar. Tente novamente."));
+          setError(("message" in res ? res.message : undefined) ?? t("Falha ao confirmar. Tente novamente."));
         }
         setCode("");
         return;
