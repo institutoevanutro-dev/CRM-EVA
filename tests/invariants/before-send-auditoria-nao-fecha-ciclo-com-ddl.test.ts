@@ -104,7 +104,9 @@ async function rodarComDdlNaFila(
     const pid = ((await c.query('select pg_backend_pid() pid')).rows[0] as { pid: number }).pid;
     (c as { query: unknown }).query = async (...a: unknown[]) => {
       const r = await queryReal(...a);
-      if (!ddlPendente && typeof a[0] === 'string' && /from contacts where organization_id/.test(a[0])) {
+      // Tolera o `cross join lateral` da etiqueta de contato interno (DeskcommCRM #2353)
+      // entre `from contacts` e o `where`: casar só o texto colado deixava a sonda sem armar.
+      if (!ddlPendente && typeof a[0] === 'string' && /from contacts\b[\s\S]*\bwhere organization_id/.test(a[0])) {
         ddlPendente = ddl.query("set statement_timeout='20s'; begin; lock table contacts in access exclusive mode; commit");
         await expect.poll(async () => {
           const row = (await observador.query("select wait_event_type, pg_blocking_pids(pid) b from pg_stat_activity where query like '%lock table contacts%' and pid <> pg_backend_pid()")).rows[0];

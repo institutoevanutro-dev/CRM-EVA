@@ -628,6 +628,10 @@ export const AUDIT_ACTIONS = [
   // "Cliente pela agenda" ligada ou desligada (migration 0262). Ligar reescreve
   // etiquetas de toda a organização; metadata leva as contagens.
   "crm.cliente_pela_agenda_alterado",
+  // A lista de etiquetas de contato INTERNO (DeskcommCRM #2353) mudou: muda o que
+  // vira card no funil e o que a IA responde. "Desde quando a equipe parou de
+  // virar lead?" só tem resposta aqui.
+  "crm.tags_internas_alteradas",
   // "Paciente pelo cadastro" ligada ou desligada (migration 0360). Não reescreve
   // contato nenhum, mas muda em que funil nasce o card de quem tem cadastro de
   // paciente; metadata leva quantos contatos a regra alcançava naquele momento.

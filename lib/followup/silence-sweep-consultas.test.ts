@@ -101,6 +101,39 @@ describe("loadSilentContacts — anonimizado fica fora", () => {
   });
 });
 
+describe("loadSilentContacts — contato interno fica fora (DeskcommCRM #2353)", () => {
+  /** O mesmo dublê, com `organizations` devolvendo a lista interna da organização. */
+  function comListaInterna(linhas: ReturnType<typeof conversa>[], lista: string[]) {
+    const base = supabaseDeConversas(linhas);
+    const fromDeConversas = (base.admin as unknown as { from: (t: string) => unknown }).from;
+    const from = (tabela: string) => {
+      if (tabela !== "organizations") return fromDeConversas(tabela);
+      const chain: Record<string, unknown> = {};
+      chain.select = () => chain;
+      chain.eq = () => chain;
+      chain.maybeSingle = async () => ({ data: { settings: { crm: { internal_contact_tags: lista } } }, error: null });
+      return chain;
+    };
+    return { admin: { from } as never };
+  }
+
+  it("o contato com a etiqueta interna não volta; o sem etiqueta volta", async () => {
+    const interno = conversa("interno");
+    interno.contacts.tags = [" Equipe "] as never;
+    const { admin } = comListaInterna([interno, conversa("cliente")], ["equipe"]);
+    const contatos = await createSupabaseSilenceSweepDb(admin).loadSilentContacts("org", CORTE, []);
+    expect(contatos.map((c) => c.contact_id)).toEqual(["cliente"]);
+  });
+
+  it("CONTROLE: a mesma etiqueta fora da lista não muda nada", async () => {
+    const vip = conversa("vip");
+    vip.contacts.tags = ["vip"] as never;
+    const { admin } = comListaInterna([vip], ["equipe"]);
+    const contatos = await createSupabaseSilenceSweepDb(admin).loadSilentContacts("org", CORTE, []);
+    expect(contatos.map((c) => c.contact_id)).toEqual(["vip"]);
+  });
+});
+
 describe("loadSilentContacts — cada relógio alimenta a sua regra", () => {
   // sent_at → vigência ("sem passado": quando o contato falou); created_at →
   // episódio (relógio do banco, o mesmo do started_at). Trocar os dois não

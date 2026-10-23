@@ -49,6 +49,7 @@
  * aparece neste arquivo.
  */
 import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
+import { ehContatoInterno, lerTagsInternas } from "@/lib/contacts/tags-internas";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { marcaDaOrigem, origemDeCampanhaDaConversa } from "@/lib/campanhas/origem-do-lead";
 
@@ -81,6 +82,7 @@ export type MotivoSemLead =
   | "ja_existe" // o contato já tem lead aberto: um por demanda, não um por mensagem
   | "contato_bloqueado" // pediu para sair; criar oportunidade seria desrespeito registrado
   | "contato_oculto" // a equipe tirou do Inbox (migration 0372): não é paciente, não ganha card
+  | "contato_interno" // DeskcommCRM #2353: equipe/sócio/família/fornecedor, etiqueta interna, não é negócio
   | "sem_funil_de_entrada" // a organização não tem funil padrão — falha de configuração, visível
   | "sem_etapa" // o funil existe e não tem etapa utilizável
   | "erro"; // qualquer falha de escrita
@@ -281,7 +283,7 @@ export async function garantirLeadDaConversa(
     // `inbox_hidden_at` (migration 0372) viaja no mesmo select, e `authenticated`
     // o lê pelo grant de coluna da migration.
     .select(
-      "is_blocked,display_name,name,phone_number,source,source_metadata,first_service_at,cpf_encrypted,is_anonymized,is_merged_into,inbox_hidden_at",
+      "is_blocked,display_name,name,phone_number,source,source_metadata,first_service_at,cpf_encrypted,is_anonymized,is_merged_into,inbox_hidden_at,tags",
     )
     .eq("organization_id", organizationId)
     .eq("id", contactId)
@@ -290,6 +292,16 @@ export async function garantirLeadDaConversa(
   if (contato?.is_blocked === true) return { criado: false, motivo: "contato_bloqueado" };
   // O amigo do perfil pessoal que a equipe ocultou do Inbox não vira negócio.
   if (contatoEstaOculto(contato)) return { criado: false, motivo: "contato_oculto" };
+
+  // 1b · contato INTERNO (equipe, sócio, família, fornecedor) não vira card
+  // (DeskcommCRM #2353). A lista da organização só é lida quando o contato TEM
+  // etiqueta: o caminho comum não paga consulta a mais. Falha de leitura cai em
+  // lista vazia e o card nasce (fail-open, como o resto do arquivo).
+  const tagsDoContato = (contato as { tags?: string[] | null } | null)?.tags ?? [];
+  if (tagsDoContato.length > 0) {
+    const tagsInternas = await lerTagsInternas(db, organizationId);
+    if (ehContatoInterno(tagsDoContato, tagsInternas)) return { criado: false, motivo: "contato_interno" };
+  }
 
   // 2 · já existe demanda aberta?
   const { data: existente } = await db

@@ -957,7 +957,12 @@ async function sendFixedOutbound(
     (await passoFixoIgnoraPausaDaIA(pool, { organizationId: tenantId, contactId: leadId, kind: job.kind, payload: job.payload }));
 
   if (!ignoraPausa && (await isLeadInHandoff(pool, tenantId, leadId, { ignorarTravaDoContato: passoFixoDoFluxo }))) {
-    runLog.info('envio fixo pulado — lead silenciado (handoff/opt-out)', { kind: job.kind });
+    // Três causas no MESMO veto: handoff humano, silêncio da conversa e a
+    // etiqueta de contato interno (DeskcommCRM #2353). O texto nomeia as três.
+    runLog.info(
+      'envio fixo pulado — contato silenciado para o envio automático (handoff humano, silêncio ou etiqueta de contato interno)',
+      { kind: job.kind },
+    );
     return "skipped";
   }
 

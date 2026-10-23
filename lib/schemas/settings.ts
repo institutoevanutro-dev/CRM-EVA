@@ -9,6 +9,7 @@
 import { z } from "zod";
 
 import { ehHexValido } from "@/lib/branding/rampa";
+import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { IDIOMAS } from "@/lib/i18n/idiomas";
 import { MOEDAS_SERVIDAS } from "@/lib/money";
 
@@ -276,11 +277,20 @@ export const agendaSettingsSchema = agendaSettingsWriteSchema.catch({confirmatio
  * prontuário ou CPF) entra pelo funil de clientes (migration 0360). Independente
  * da primeira, também nasce DESLIGADA, e só `fn_definir_paciente_pelo_cadastro`
  * a grava. A mesma régua: só o booleano `true` liga.
+ *
+ * `internal_contact_tags` (DeskcommCRM #2353): as etiquetas que marcam um contato
+ * INTERNO (equipe, sócio, família, fornecedor). Contato com uma delas não vira
+ * card e não recebe atendimento automático; ver `lib/contacts/tags-internas.ts`.
+ * Ausente/lixo vira lista vazia (nenhum contato é interno), o comportamento de
+ * antes desta chave existir.
  */
+export const internalContactTagsSchema = z.array(z.string()).catch([]);
+
 export const crmSettingsSchema = z
   .object({
     cliente_pela_agenda: z.boolean().catch(false),
     paciente_pelo_cadastro: z.boolean().catch(false),
+    internal_contact_tags: internalContactTagsSchema,
     /**
      * `telefone_de_ficha_vazia` (#2593): o telefone que o cliente diz numa
      * conversa entra SOZINHO na ficha SEM número, sem a fila de proposta da
@@ -288,7 +298,12 @@ export const crmSettingsSchema = z
      */
     telefone_de_ficha_vazia: z.boolean().catch(false),
   })
-  .catch({ cliente_pela_agenda: false, paciente_pelo_cadastro: false, telefone_de_ficha_vazia: false });
+  .catch({
+    cliente_pela_agenda: false,
+    paciente_pelo_cadastro: false,
+    internal_contact_tags: [],
+    telefone_de_ficha_vazia: false,
+  });
 
 function crmDe(settings: unknown): z.infer<typeof crmSettingsSchema> {
   const crm =
@@ -296,6 +311,15 @@ function crmDe(settings: unknown): z.infer<typeof crmSettingsSchema> {
       ? (settings as Record<string, unknown>).crm
       : undefined;
   return crmSettingsSchema.parse(crm ?? {});
+}
+
+/**
+ * As etiquetas de contato INTERNO desta organização, na forma em que o banco
+ * guarda as tags (`normalizarTag`: minúscula, aparada, sem repetição). Nunca
+ * lança: um jsonb torto devolve lista vazia ("nenhum contato é interno").
+ */
+export function tagsInternasDaOrg(settings: unknown): string[] {
+  return normalizarTags(crmDe(settings).internal_contact_tags);
 }
 
 /** A regra "cliente pela agenda" está ligada nesta organização? Nunca lança. */

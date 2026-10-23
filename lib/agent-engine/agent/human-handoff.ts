@@ -25,6 +25,7 @@ import type pg from 'pg';
 
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { ehOptOutProvavel } from '@/lib/opt-out/deteccao';
+import { sqlContatoInterno } from '@/lib/contacts/tags-internas';
 import { PROVIDERS_COM_SILENCIO_DE_ROTEAMENTO } from '@/lib/channels/capabilities';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 
@@ -296,6 +297,12 @@ export function detectAmbiguousOptOut(message: string): boolean {
  * setado no contato OU alguma conversa dele ainda está silenciada (bot_silenced_until no
  * futuro — 'infinity' sempre vale). Lido no INÍCIO do turno, antes de qualquer chamada
  * de modelo. Só o humano (via CRM) libera.
+ *
+ * A MESMA guarda barra o CONTATO INTERNO (DeskcommCRM #2353): quem tem uma etiqueta
+ * da lista da organização (`organizations.settings.crm.internal_contact_tags`) não
+ * recebe atendimento automático, nem o passo fixo de fluxo (`ignorarTravaDoContato`
+ * não a solta: ela não é trava de pessoa). Entra pela forma SQL da régua única
+ * (`lib/contacts/tags-internas.ts`), porque este predicado é SQL direto.
  */
 export async function isLeadInHandoff(
   db: pg.Pool,
@@ -317,6 +324,7 @@ export async function isLeadInHandoff(
   const { rows } = await db.query<{ handoff: boolean }>(
     `select (
        ${opcoes.ignorarTravaDoContato === true ? 'false' : 'c.force_human'}
+       or ${sqlContatoInterno('c')}
        or exists (
          select 1 from conversations v
          where v.organization_id = $1 and v.contact_id = c.id

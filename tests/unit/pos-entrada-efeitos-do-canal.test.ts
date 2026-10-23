@@ -479,7 +479,11 @@ describe("opt-out encerra as demandas abertas do contato (#3288)", () => {
     );
     // O card continua indo para perdido, como antes.
     expect(encerraDemanda).toHaveBeenCalledTimes(1);
-    expect(encerraDemanda.mock.calls[0]?.[2]).toMatchObject({ leadId: "lead-1", motivo: "opted_out_of_messages" });
+    expect(encerraDemanda).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ leadId: "lead-1", motivo: "opted_out_of_messages" }),
+    );
   });
 
   it("lê só as ABERTAS do contato, na organização certa", async () => {
