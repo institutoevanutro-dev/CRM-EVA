@@ -11397,6 +11397,9 @@ export const DICIONARIO: Traducoes = {
   "Telefone deve ter DDD + número (ex.: 11999998888) ou o formato E.164 (+5511999998888)": {
     es: "El teléfono debe tener código de área + número (ej.: 11999998888) o el formato E.164 (+5511999998888)",
   },
+  // Portes 23/10, grupo D (PR #3197): CPF ou e-mail repetido responde 409 contact_exists.
+  "Já existe um contato com este CPF.": { es: "Ya existe un contacto con este CPF." },
+  "Já existe um contato com este e-mail.": { es: "Ya existe un contacto con este correo electrónico." },
 };
 
 /**

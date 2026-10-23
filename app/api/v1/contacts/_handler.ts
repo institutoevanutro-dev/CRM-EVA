@@ -20,6 +20,14 @@ import { roleAtLeast } from "@/lib/auth/types";
 import { canonicalPhoneBR, samePhone } from "@/lib/channels/phone-variants";
 import { condicoesDaBuscaDeContato } from "@/lib/contacts/busca";
 import { encontrarContatoPorTelefone } from "@/lib/channels/contato-por-telefone";
+import {
+  INDICE_CPF,
+  INDICE_EMAIL,
+  encontrarContatoPorCpfHash,
+  encontrarContatoPorEmail,
+  nomeDoIndiceUnico,
+  type ErroDeDriver,
+} from "@/lib/contacts/conflito-unico";
 import { idsComProntuario } from "@/lib/contacts/cliente-pela-agenda";
 import { indiceDoCpf, MSG_CPF_SEM_CIFRA, parDoCpf, type ParDoCpf } from "@/lib/contacts/cpf";
 import type { Contact } from "@/lib/types/contacts";
@@ -445,6 +453,63 @@ async function parDoCpfOu503(cpf: string, ctx: HandlerCtx): Promise<ParDoCpf> {
 }
 
 // ---------------------------------------------------------------------------
+// conflito de dado único (porte do original #3197, issue #3084)
+// ---------------------------------------------------------------------------
+
+/**
+ * Traduz um 23505 do INSERT/UPDATE de `contacts` no 409 `contact_exists` certo,
+ * ou devolve `null` para deixá-lo seguir no 500 de sempre.
+ *
+ * O TELEFONE continua decidindo pela RELEITURA, não pelo texto do erro: o
+ * estado (contato vivo com o mesmo telefone na mesma organização) já implica a
+ * trava. CPF e e-mail precisam do NOME do índice que o driver escreve no erro;
+ * só o índice conhecido vira 409, e só depois de a releitura (sempre com
+ * `organization_id` e `is_merged_into IS NULL`) achar o contato vivo. Sem o
+ * contato, ou com outro índice, o 23505 segue no 500. O `contact_id` devolvido
+ * vem SEMPRE da releitura, nunca do corpo.
+ *
+ * A releitura do CPF vai pelo client de serviço porque `authenticated` não lê
+ * `cpf_hash` (0289); a organização é a de `ctx`, que vem da sessão ou do token.
+ */
+async function erroDeConflitoUnico(
+  supabase: SB,
+  ctx: HandlerCtx,
+  campos: { phone_number?: unknown; email?: unknown; cpf_hash?: unknown },
+  erro: ErroDeDriver,
+  excluirId?: string,
+): Promise<ApiError | null> {
+  if (erro.code !== "23505") return null;
+  const idioma = ctx.idioma ?? "pt-BR";
+  const conflito = (id: string, mensagem: string) =>
+    new ApiError(409, "contact_exists", { contact_id: id }, ctx.requestId, traduzir(mensagem, idioma));
+
+  // CPF e e-mail vêm ANTES do telefone: o PATCH da tela reenvia o telefone do
+  // PRÓPRIO contato, e a releitura por telefone o acharia.
+  const indice = nomeDoIndiceUnico(erro);
+  if (indice === INDICE_CPF) {
+    const hash = typeof campos.cpf_hash === "string" ? campos.cpf_hash : null;
+    const existente = hash
+      ? await encontrarContatoPorCpfHash(createAdminClient(), ctx.organization_id, hash)
+      : null;
+    return existente ? conflito(existente.id, "Já existe um contato com este CPF.") : null;
+  }
+  if (indice === INDICE_EMAIL) {
+    const email = typeof campos.email === "string" ? campos.email : null;
+    const existente = email ? await encontrarContatoPorEmail(supabase, ctx.organization_id, email) : null;
+    return existente ? conflito(existente.id, "Já existe um contato com este e-mail.") : null;
+  }
+
+  // Telefone, o desenho de sempre (fatia S1 da #852). No PATCH, `excluirId` é o
+  // contato editado: achar a si mesmo pelo telefone não explica conflito nenhum.
+  const telefone = typeof campos.phone_number === "string" ? campos.phone_number : null;
+  if (!telefone) return null;
+  const existente = await encontrarContatoPorTelefone(supabase, ctx.organization_id, telefone);
+  return existente && existente.id !== excluirId
+    ? conflito(existente.id, "Já existe um contato com este telefone.")
+    : null;
+}
+
+// ---------------------------------------------------------------------------
 // create
 // ---------------------------------------------------------------------------
 
@@ -483,30 +548,12 @@ export async function createContactHandler(
     .single();
 
   if (insErr) {
-    // 409 quando o telefone já é de um contato vivo desta organização: o índice
-    // parcial `uniq_contacts_org_phone` (organization_id, phone_number) barra o
-    // insert com 23505. E-mail e CPF também têm trava única na tabela, então o
-    // 23505 sozinho não diz qual índice bateu: só vira `contact_exists` se a
-    // releitura do telefone achar um contato vivo. A releitura repete o filtro
-    // por `organization_id` — o id devolvido no `details` nunca vem do corpo da
-    // requisição — e qualquer outro conflito continua no 500 de sempre.
-    const telefoneDoInsert = insertRow.phone_number as string | null;
-    if (insErr.code === "23505" && telefoneDoInsert) {
-      const existente = await encontrarContatoPorTelefone(
-        supabase,
-        ctx.organization_id,
-        telefoneDoInsert,
-      );
-      if (existente) {
-        throw new ApiError(
-          409,
-          "contact_exists",
-          { contact_id: existente.id },
-          ctx.requestId,
-          traduzir("Já existe um contato com este telefone.", ctx.idioma ?? "pt-BR"),
-        );
-      }
-    }
+    // 409 quando o dado já pertence a um contato vivo desta organização: o
+    // telefone (`uniq_contacts_org_phone`), o CPF (`uniq_contacts_org_cpf`) e o
+    // e-mail (`uniq_contacts_org_email`) barram o insert com 23505. Qualquer
+    // outro conflito continua no 500 de sempre (ver `erroDeConflitoUnico`).
+    const conflito = await erroDeConflitoUnico(supabase, ctx, insertRow, insErr);
+    if (conflito) throw conflito;
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, insErr.message);
   }
 
@@ -691,6 +738,11 @@ export async function patchContactHandler(
     if (updErr.message?.includes("contato_bloqueado_identidade_so_o_servidor")) {
       throw contatoBloqueadoNaoTrocaIdentidade(ctx);
     }
+    // O PATCH cai nas MESMAS travas únicas do POST: trocar o e-mail (ou o CPF,
+    // ou o telefone) por um que já é de outro contato vira 409 com o
+    // `contact_id` de quem já tem o dado (porte do original #3197).
+    const conflito = await erroDeConflitoUnico(supabase, ctx, patch, updErr, contactId);
+    if (conflito) throw conflito;
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, updErr.message);
   }
   if (!updated) {
