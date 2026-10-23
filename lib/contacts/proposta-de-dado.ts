@@ -45,7 +45,9 @@ import {
   lerTelefoneDeFichaVazia,
   registrarTelefoneAplicadoNaTimeline,
 } from "@/lib/contacts/telefone-aplicado";
+import { logger } from "@/lib/logger";
 import { PHONE_REGEX } from "@/lib/schemas/contacts";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhoneBR } from "@/lib/webhooks/inbound";
 
 /**
@@ -336,7 +338,73 @@ async function gravarTelefoneDeFichaVazia(
     .select("id");
 
   if (error) return false;
-  return Array.isArray(data) && data.length === 1;
+  // A MESMA régua que quem chama usa para decidir o desfecho: só o UPDATE que
+  // casou UMA linha. A corrida perdida (0 linhas), o 23505 e o erro de banco
+  // caem fora: nada aconteceu, nada é anunciado.
+  if (!Array.isArray(data) || data.length !== 1) return false;
+
+  // ── O GATILHO TAMBÉM SAI DAQUI (porte do original #3307, issue #3283) ──────
+  //
+  // O PATCH da ficha emite `contact.phone_added`
+  // (`app/api/v1/contacts/_handler.ts`), e este caminho, o telefone que a
+  // CAPTURA AUTOMÁTICA grava, ficava MUDO: a regra "Quando um contato ganhar
+  // um telefone" não rodava aqui, sem run, sem erro e sem nada na tela. O fato
+  // é o MESMO (a ficha estava sem número e passou a ter um), então o evento é o
+  // mesmo: mesmo tipo, mesma entidade, mesmo payload, e DEPOIS do UPDATE.
+  //
+  // A ORDEM não é estética: `checarGuardasDeContato` mata com `no_phone` quem
+  // chega sem número, e a regra que este evento acorda lê a ficha para decidir.
+  // E o evento NÃO leva `caused_by_rule`: o fato é do mundo, não uma regra
+  // falando consigo mesma, e o anti-laço do motor (`lib/automation/engine.ts`)
+  // segue valendo para os eventos que uma AÇÃO do motor emite.
+  await emitirTelefoneAdicionado({
+    organizationId: p.organizationId,
+    contactId: p.contactId,
+    telefone: p.telefone,
+  });
+
+  return true;
+}
+
+/**
+ * O `contact.phone_added` do caminho da captura automática (#3283 no original).
+ *
+ * `emit_event` RESERVA este tipo ao servidor (0369 aqui, 0670 no original:
+ * `auth.uid()` não nulo → 42501), e o client que grava a ficha pode ser o de
+ * sessão: a emissão sai pelo client de serviço, como no PATCH da ficha.
+ *
+ * ⚠️ A falha aqui NÃO desfaz a gravação. O número já está na ficha quando esta
+ * função roda, e o `true` devolvido é o que decide o desfecho de quem chama:
+ * devolvê-lo `false` por causa do evento faria o número virar PROPOSTA depois
+ * de ter sido gravado. O erro não some: vai para o log com organização e
+ * contato.
+ */
+async function emitirTelefoneAdicionado(p: {
+  organizationId: string;
+  contactId: string;
+  telefone: string;
+}): Promise<void> {
+  await createAdminClient()
+    .rpc("emit_event", {
+      p_event_type: "contact.phone_added",
+      p_entity_kind: "contact",
+      p_entity_id: p.contactId,
+      // O MESMO payload do PATCH da ficha: o número em E.164, e nada além dele.
+      p_payload: { phone_number: p.telefone },
+      // O ATOR: a captura automática. Não é uma pessoa, não é uma regra e não é
+      // o agente que falou com o cliente (a escrita não foi decisão dele).
+      p_metadata: { actor_kind: "system", source: "telefone-de-ficha-vazia" },
+      p_organization_id: p.organizationId,
+    })
+    .then(({ error }) => {
+      if (error) {
+        logger.warn("[telefone-de-ficha-vazia] emit_event contact.phone_added falhou", {
+          organization_id: p.organizationId,
+          contact_id: p.contactId,
+          error: error.message,
+        });
+      }
+    });
 }
 
 // ---------------------------------------------------------------------------
