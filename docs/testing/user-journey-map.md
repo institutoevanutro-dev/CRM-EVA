@@ -2882,7 +2882,7 @@ Porte do upstream melgarafael/DeskcommCRM#2790. Sem migration, sem rota nova e s
 - [ ] Arrastar o negócio para outro dia: **não existe** (o upstream não tem). A data se muda pela ficha do negócio, como antes
 - [ ] Ganhos e perdidos fechados há mais de 30 dias só entram no calendário depois de "Ver mais", como no quadro: mês antigo pode parecer mais vazio do que foi
 
-## J39 — Reenviar uma mensagem que falhou `[P0]` (2026-10-23)
+## J40 — Reenviar uma mensagem que falhou `[P0]` (2026-10-23)
 
 Porte do upstream melgarafael/DeskcommCRM#3192 (F2 da ADR-0006 de lá). Antes, a bolha que falhava mostrava só «Falhou», com o motivo num Tooltip que o dedo não abre, e não havia como enviar de novo sem redigitar (e arriscar mandar em dobro). Agora a bolha diz o motivo em frase de tela e, quando a regra permite, oferece «Tentar de novo». P0 porque o atendente no celular não tem outra saída, e mandar em dobro ao cliente é o pior erro que a tela pode induzir.
 
