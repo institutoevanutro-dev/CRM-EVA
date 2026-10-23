@@ -94,6 +94,7 @@ import {
   buildHandoffSummary,
   detectAmbiguousOptOut,
   detectHumanHandoffRequest,
+  ehRespostaDeRobo,
   isLeadInHandoff,
   performHumanHandoff,
 } from './human-handoff';
@@ -1869,6 +1870,10 @@ export async function deteccoesDeterministicasDoAssistido(
   let optedOutThisTurn = false;
   let lgpd: AvisoDeEscalacaoOpts['lgpd'];
   let contextoLido = false;
+  // O histórico lido vive FORA do try: é dele que a guarda do menu de robô
+  // (DeskcommCRM #3106) tira as marcas de automação. Sem contexto lido ele fica
+  // vazio, e a guarda devolve "é de gente": o lado seguro (a passagem é irrevogável).
+  let historicoDoTurno: readonly LeadContextMessage[] = [];
   try {
     const abertura = await getLeadContext(
       pool,
@@ -1884,6 +1889,7 @@ export async function deteccoesDeterministicasDoAssistido(
     if (abertura.ok) {
       contextoLido = true;
       inboundsPendentes = inboundsNaoRespondidos(abertura.context.messages);
+      historicoDoTurno = abertura.context.messages;
       optedOutThisTurn = abertura.context.contact.is_blocked;
       lgpd = abertura.lgpd;
     } else {
@@ -1962,10 +1968,17 @@ export async function deteccoesDeterministicasDoAssistido(
       : avisarLeadLendoOContato(pool, aviso.ids, { ...semInsumosDoContexto(aviso.base), motivo });
   };
 
+  // A GUARDA DO MENU DE ROBÔ (DeskcommCRM #3106): o casamento determinístico não
+  // passa a conversa quando o que casou é fala de automação (menu numerado,
+  // mensagem que se declara robô, ou a saudação que chega segundos depois do nosso
+  // disparo; ver `ehRespostaDeRobo`). O turno segue para o rascunho, e quem lê a
+  // mensagem é o modelo. A palavra-chave CONFIGURADA na tela não passa pela
+  // guarda: é escolha de quem opera o agente.
   if (
     inboundsPendentes.some(
       (texto) =>
-        detectHumanHandoffRequest(texto) || matchesHandoffKeyword(texto, agent.handoffKeywords),
+        (detectHumanHandoffRequest(texto) && !ehRespostaDeRobo(texto, historicoDoTurno)) ||
+        matchesHandoffKeyword(texto, agent.handoffKeywords),
     )
   ) {
     const desfecho = await avisar('pediu_humano');
@@ -2690,11 +2703,17 @@ async function executarTurnoDoAgente(
   const mensagemDoJob =
     currentInboundText ?? latestInboundSignal(openingContext.context.messages);
   const inboundsPendentes = inboundsNaoRespondidos(openingContext.context.messages);
+  // A GUARDA DO MENU DE ROBÔ (DeskcommCRM #3106): o casamento determinístico segue
+  // existindo, mas NÃO passa a conversa quando o que casou é fala de automação do
+  // outro lado (`ehRespostaDeRobo`). Nesses casos o turno segue para o MODELO,
+  // que vê a mensagem e sabe reconhecer robô. O laço com robô (a mesma mensagem
+  // de novo e de novo) já foi barrado antes, por `pararSeForRoboDoOutroLado`.
   if (
     !preview &&
     inboundsPendentes.some(
       (texto) =>
-        detectHumanHandoffRequest(texto) ||
+        (detectHumanHandoffRequest(texto) &&
+          !ehRespostaDeRobo(texto, openingContext.context.messages)) ||
         (agentConfig !== null && matchesHandoffKeyword(texto, agentConfig.handoffKeywords)),
     )
   ) {
