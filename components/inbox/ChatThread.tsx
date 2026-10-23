@@ -27,6 +27,8 @@ interface Props {
   searchTerm?: string;
   /** Escolher uma mensagem para responder. Sobe até o composer. */
   onResponder?: (m: Message) => void;
+  /** Escolher uma mensagem para encaminhar a outra conversa (DeskcommCRM #2835). */
+  onEncaminhar?: (m: Message) => void;
   /** Fundo e balões que a pessoa escolheu (ver `lib/inbox/aparencia-da-conversa.ts`). */
   aparencia?: AparenciaDaConversa;
 }
@@ -54,7 +56,7 @@ function dayLabel(d: Date, t: (texto: string) => string = (texto) => texto, loca
   return format(d, "dd/MM/yyyy", { locale: locale });
 }
 
-export function ChatThread({ conversationId, onResponder, searchTerm = "", aparencia = APARENCIA_PADRAO }: Props) {
+export function ChatThread({ conversationId, onResponder, onEncaminhar, searchTerm = "", aparencia = APARENCIA_PADRAO }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const q = useMessagesRealtime(conversationId);
@@ -348,6 +350,7 @@ export function ChatThread({ conversationId, onResponder, searchTerm = "", apare
                   searchMatch={resultados.has(item.data.id)}
                   debugCitations={debugCitations}
                   onResponder={onResponder}
+                  onEncaminhar={onEncaminhar}
                   // A citada sai da MESMA lista já carregada: buscar no servidor
                   // por cada citação faria uma consulta por bolha. Quando a
                   // citada é antiga demais e ficou fora da página, o fio some —

@@ -4,7 +4,7 @@ import { memo, useEffect, useState } from "react";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { ArrowBendUpLeft, Check, Checks, Clock, Robot, WarningOctagon } from "@/lib/ui/icons";
+import { ArrowBendUpLeft, ArrowBendUpRight, Check, Checks, Clock, Robot, WarningOctagon } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +19,7 @@ import {
 import { ApiError } from "@/lib/api/types";
 import { FRASES_DE_FALHA, fraseDaFalhaDeCanal } from "@/lib/channels/frases-de-falha";
 import { reenvioDaMensagem } from "@/lib/messaging/reenvio";
+import { motivoDaFalhaDaMensagem } from "@/lib/inbox/motivo-da-falha";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Message } from "@/lib/types/messaging";
 import { CitationButton } from "@/components/ai/CitationButton";
@@ -38,6 +39,11 @@ interface Props {
   debugCitations?: boolean;
   /** Escolher esta mensagem para responder "em cima" dela. */
   onResponder?: (m: Message) => void;
+  /**
+   * Escolher esta mensagem para ENCAMINHAR a outra conversa (DeskcommCRM
+   * #2835). O gesto abre a escolha de destino; quem executa é o hook da tela.
+   */
+  onEncaminhar?: (m: Message) => void;
   /** A mensagem citada por ESTA, quando houver — desenha o fio. */
   citada?: Message | null;
   /**
@@ -64,6 +70,17 @@ interface Props {
   /** Gerente para cima reenvia mensagem de colega — a mesma régua da rota. */
   podeReenviarDeOutros?: boolean;
 }
+
+/**
+ * O botão de "Encaminhar" ao lado da bolha, com o mesmo desenho do "Responder":
+ * visível por padrão e escondido só onde EXISTE hover (ver o comentário do
+ * "Responder" abaixo).
+ */
+const GESTO_AO_LADO_DA_BOLHA = cn(
+  "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-muted",
+  "opacity-100 [@media(hover:hover)]:opacity-0",
+  "[@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100",
+);
 
 function AckIndicator({ status, paradaSemConexao, saiSozinha, t }: {
   status: string; paradaSemConexao: boolean; saiSozinha: boolean; t: (texto: string) => string;
@@ -107,6 +124,7 @@ export const MessageBubble = memo(function MessageBubble({
   searchMatch = false,
   debugCitations,
   onResponder,
+  onEncaminhar,
   citada,
   viewerUserId,
   nomeDoAutor,
@@ -172,6 +190,9 @@ export const MessageBubble = memo(function MessageBubble({
   const motivoDaFalha = fraseDaFalhaDeCanal(codigoDaFalha)
     ? t(FRASES_DE_FALHA[codigoDaFalha] as string)
     : t("Não foi possível enviar esta mensagem.");
+  // Encaminhar vale para qualquer mensagem com conteúdo — recebida ou enviada.
+  // Só não se encaminha o que foi apagado: o conteúdo saiu do ar de propósito.
+  const podeEncaminhar = Boolean(onEncaminhar) && !apagada;
   const aiGenerated = isAiGeneratedMessage(message.metadata);
   const citations = extractCitations(message.metadata);
   const showCitationButton =
@@ -243,6 +264,12 @@ export const MessageBubble = memo(function MessageBubble({
         quando o mouse entra. Em telas de toque não há hover — por isso
         `focus-visible` também revela, e o teclado alcança.
       */}
+      {podeEncaminhar && isOutbound && (
+        <button type="button" onClick={() => onEncaminhar?.(message)} aria-label={t("Encaminhar")}
+          className={GESTO_AO_LADO_DA_BOLHA}>
+          <ArrowBendUpRight size={14} />
+        </button>
+      )}
       {onResponder && isOutbound && (
         <button
           type="button"
@@ -431,7 +458,7 @@ export const MessageBubble = memo(function MessageBubble({
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {message.error_message ? t(message.error_message) : (message.error_code ?? t("Erro desconhecido"))}
+                  {motivoDaFalhaDaMensagem(message, t)}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -472,6 +499,12 @@ export const MessageBubble = memo(function MessageBubble({
           )}
         >
           <ArrowBendUpLeft size={14} />
+        </button>
+      )}
+      {podeEncaminhar && !isOutbound && (
+        <button type="button" onClick={() => onEncaminhar?.(message)} aria-label={t("Encaminhar")}
+          className={GESTO_AO_LADO_DA_BOLHA}>
+          <ArrowBendUpRight size={14} />
         </button>
       )}
       <AlertDialog open={confirmandoReenvio} onOpenChange={setConfirmandoReenvio}>

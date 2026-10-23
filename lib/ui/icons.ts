@@ -46,6 +46,9 @@ export {
   Dot,
   // actions
   ArrowBendUpLeft,
+  // encaminhar (DeskcommCRM #2835): a seta espelhada do "Responder" — mesma
+  // família, mesmo peso, para os dois gestos da bolha lerem como par.
+  ArrowBendUpRight,
   List,
   Bell,
   BellSlash,

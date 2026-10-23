@@ -11279,6 +11279,26 @@ export const DICIONARIO: Traducoes = {
   // Portes 23/10, grupo B (PR #3279): a bolha apagada diz quem apagou.
   "Esta mensagem foi apagada pelo contato": { es: "Este mensaje fue eliminado por el contacto" },
   "Esta mensagem foi apagada pelo atendente": { es: "Este mensaje fue eliminado por el agente" },
+  // Portes 23/10, grupo B (PR #2841): encaminhar mensagem para outra conversa.
+  Encaminhar: { es: "Reenviar" },
+  "Encaminhar mensagem": { es: "Reenviar mensaje" },
+  "Escolha a conversa que vai receber esta mensagem.": { es: "Elige la conversación que recibirá este mensaje." },
+  "Buscar conversa": { es: "Buscar conversación" },
+  "Mensagem encaminhada.": { es: "Mensaje reenviado." },
+  // A rota responde 201 mesmo quando o envio falhou (`status: "failed"`): o
+  // toast precisa dizer isso, com o motivo que o envio gravou.
+  "Não foi possível encaminhar: {motivo}": { es: "No se pudo reenviar: {motivo}" },
+  "Escolha uma conversa de destino.": { es: "Elige una conversación de destino." },
+  "Escolha uma conversa de destino desta organização.": { es: "Elige una conversación de destino de esta organización." },
+  "Esta mensagem foi apagada e não pode ser encaminhada.": { es: "Este mensaje fue eliminado y no se puede reenviar." },
+  "A mídia desta mensagem ainda não chegou ao CRM. Tente encaminhar de novo em alguns segundos.": {
+    es: "El contenido multimedia de este mensaje aún no llegó al CRM. Intenta reenviarlo de nuevo en unos segundos.",
+  },
+  "Não consegui preparar a mídia desta mensagem para o encaminhamento. Tente de novo em instantes.": {
+    es: "No pude preparar el contenido multimedia de este mensaje para reenviarlo. Inténtalo de nuevo en unos instantes.",
+  },
+  "Esta mídia não pode ser encaminhada.": { es: "Este contenido multimedia no se puede reenviar." },
+  "Só é possível encaminhar mensagens de texto ou mídia.": { es: "Solo se pueden reenviar mensajes de texto o multimedia." },
 };
 
 /**
