@@ -3,6 +3,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/hooks/inbox/useMessageTemplates", () => ({
+  // A tela importa a chave e a mutação de ordem (migration 0394).
+  CHAVE_DOS_TEMPLATES: ["message-templates"],
+  useMoverTemplate: () => ({ mutate: vi.fn(), isPending: false }),
   useMessageTemplates: () => ({
     data: [
       { id: "1", title: "Meu Pessoal", body: "Oi {{primeiro_nome}}", shortcut: "oi", owner_user_id: "u1" },

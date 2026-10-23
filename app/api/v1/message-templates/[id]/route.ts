@@ -18,7 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
-const COLS = "id, organization_id, owner_user_id, title, body, shortcut, media_item_ids, created_by_user_id, created_at, updated_at";
+const COLS = "id, organization_id, owner_user_id, title, body, shortcut, media_item_ids, created_by_user_id, created_at, updated_at, ordem";
 
 interface RouteParams {
   params: Promise<{ id: string }>;

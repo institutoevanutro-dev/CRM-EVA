@@ -24,3 +24,16 @@ export const updateTemplateSchema = z
   .partial()
   .refine((d) => Object.keys(d).length > 0, { message: "Informe ao menos um campo." });
 export type UpdateTemplateInput = z.infer<typeof updateTemplateSchema>;
+
+/**
+ * A REORDENAÇÃO (porte do original #3261): onde a resposta rápida foi solta.
+ *
+ * `depois_de` é o id do vizinho da ESQUERDA; `null` é a primeira posição. A tela
+ * manda o VIZINHO, nunca um número: a posição é conta do servidor
+ * (`lib/templates/ordem.ts`). Não é `.uuid()` de propósito: quem valida a posse
+ * é a lista visível da organização, e a recusa de lá diz o motivo certo.
+ */
+export const moverTemplateSchema = z.object({
+  depois_de: z.string().trim().min(1).max(64).nullable(),
+});
+export type MoverTemplateInput = z.infer<typeof moverTemplateSchema>;

@@ -56,7 +56,12 @@ export async function listarModelosDeMensagem(
       .select("id, title, body, shortcut, owner_user_id")
       .eq("organization_id", deps.organizationId),
     incluirPessoais ? dono : null,
-  ).order("updated_at", { ascending: false });
+  )
+    // A mesma ordem da listagem (`app/api/v1/message-templates/route.ts`): a que
+    // o operador escolheu na tela (migration 0394), não a de edição.
+    .order("ordem", { ascending: true })
+    .order("updated_at", { ascending: false })
+    .order("id", { ascending: true });
   if (error) throw new ApiError(500, "internal_error", undefined, deps.requestId, error.message);
 
   return ((data ?? []) as unknown as Array<Record<string, unknown>>).map((t) => ({

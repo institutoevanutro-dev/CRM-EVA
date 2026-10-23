@@ -11244,6 +11244,13 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível preparar o áudio para este aparelho.": {
     es: "No fue posible preparar el audio para este dispositivo.",
   },
+  // Portes 23/10, grupo C (PR #3261): a ordem das respostas rápidas por arrastar e soltar.
+  "Arrastar para reordenar": { es: "Arrastrar para reordenar" },
+  "Vizinho que não pertence a esta organização.": { es: "Vecino que no pertenece a esta organización." },
+  "Você não pode reordenar esta resposta rápida.": { es: "No puedes reordenar esta respuesta rápida." },
+  "Não foi possível reordenar a lista inteira. Recarregue a página.": {
+    es: "No fue posible reordenar la lista completa. Recarga la página.",
+  },
 };
 
 /**

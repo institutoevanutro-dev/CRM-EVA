@@ -323,6 +323,9 @@ export const AUDIT_ACTIONS = [
   "template.created",
   "template.updated",
   "template.deleted",
+  // A reordenação (porte do #3261) é um ato próprio, e não `template.updated`:
+  // "quem mudou este texto?" não pode receber junto "quem mudou de lugar".
+  "template.reordered",
   "auth.signup_requested",
   "auth.signup_failed",
   "auth.signup_confirmed",

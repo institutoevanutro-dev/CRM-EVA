@@ -115,6 +115,8 @@ export {
   GitBranch,
   Flag,
   TreeStructure,
+  // reordenar por arrastar e soltar (porte do #3261): a alça das respostas rápidas
+  DotsSixVertical as DragHandle,
   // misc
   DotsThree,
   CaretDown,

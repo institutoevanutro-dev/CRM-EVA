@@ -15,13 +15,16 @@ import type { DepsDaOperacao } from "@/lib/operacao/entradas-automaticas";
 
 function depsCom(actor: { type: string; id: string }) {
   const filtros: string[] = [];
+  const ordens: string[] = [];
   const chain: Record<string, unknown> = {};
   Object.assign(chain, {
     select: () => chain,
     eq: () => chain,
     is: (c: string, v: null) => (filtros.push(`is:${c}:${v}`), chain),
     or: (f: string) => (filtros.push(`or:${f}`), chain),
-    order: async () => ({ data: [], error: null }),
+    // A listagem encadeia três `order` (migration 0394) e então é esperada.
+    order: (c: string) => (ordens.push(c), chain),
+    then: (aoResolver: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(aoResolver),
     maybeSingle: async () => ({ data: null, error: null }),
   });
   const deps = {
@@ -30,7 +33,7 @@ function depsCom(actor: { type: string; id: string }) {
     requestId: "req",
     actor,
   } as unknown as DepsDaOperacao;
-  return { deps, filtros };
+  return { deps, filtros, ordens };
 }
 
 describe("respostas prontas pela tool", () => {
@@ -41,9 +44,11 @@ describe("respostas prontas pela tool", () => {
   });
 
   it("pessoa sem pedir: só o compartilhado", async () => {
-    const { deps, filtros } = depsCom({ type: "user", id: "u1" });
+    const { deps, filtros, ordens } = depsCom({ type: "user", id: "u1" });
     await listarModelosDeMensagem(deps);
     expect(filtros).toEqual(["is:owner_user_id:null"]);
+    // A mesma ordem da tela (0394): a do operador, não a de edição.
+    expect(ordens).toEqual(["ordem", "updated_at", "id"]);
   });
 
   it("pessoa pedindo os pessoais: compartilhado mais o PRÓPRIO, nunca o de outro", async () => {
