@@ -196,6 +196,7 @@ import {
 import {
   CASO_DE_REPETICAO,
   decidirSaidaDaRepeticao,
+  falaAntesDaEntrada,
   fraseDeRepeticaoJaSaiu,
   MENSAGEM_DE_REPETICAO,
   MENSAGEM_DO_CASO_DE_REPETICAO,
@@ -3753,6 +3754,7 @@ async function executarTurnoDoAgente(
             jobId: liveJob().id,
             nomeDoContato: effectiveContext.contact.name,
             ultimaEntrada: ultimaEntradaDoCliente(effectiveContext.messages),
+            falaAnterior: falaAntesDaEntrada(effectiveContext.messages),
             agora: clock(),
             knobs: deps.knobs.repeticao ?? REPETICAO_PADRAO,
             log: runLog,

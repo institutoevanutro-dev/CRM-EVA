@@ -17,11 +17,13 @@ import {
   decidirRepeticao,
   decidirSaidaDaRepeticao,
   ehConfirmacaoCurta,
+  falaAntesDaEntrada,
   fraseDeRepeticaoJaSaiu,
   normalizarParaRepeticao,
   primeiroNomeDoContato,
   REPETICAO_PADRAO,
   repetiuNaConversa,
+  terminaEmPerguntaReal,
   ultimaEntradaDoCliente,
 } from "@/lib/agent-engine/guardrails/repeticao-na-conversa";
 import { loadEnv } from "@/lib/agent-engine/env";
@@ -427,5 +429,101 @@ describe("paráfrase depois de uma confirmação curta (limiar 0.5)", () => {
   it("a fiação passa a última entrada do transcript do turno", () => {
     const src = fs.readFileSync(path.join(process.cwd(), "lib/agent-engine/agent/inbound-turn.ts"), "utf8");
     expect(src).toContain("ultimaEntrada: ultimaEntradaDoCliente(effectiveContext.messages)");
+  });
+});
+
+// ── a fala confirmada era pergunta de verdade: o eco é a resposta certa ───
+
+describe("pergunta de verdade → \"sim\" → resposta que ecoa a pergunta: passa", () => {
+  const apos = (candidata: string, falaAnterior: string, body: string, recentes = [falaAnterior]) =>
+    decidirRepeticao({
+      candidata,
+      recentes,
+      primeiroNome: "Chris",
+      knobs: K,
+      ultimaEntrada: { type: "text", body },
+      falaAnterior,
+    });
+
+  it("⭐ marcar avaliação: a confirmação do agendamento sai", () => {
+    const pergunta = "Posso marcar sua avaliação para quinta às 10h na unidade 1?";
+    const pronto = "Pronto, marquei sua avaliação para quinta às 10h na unidade 1!";
+    expect(apos(pronto, pergunta, "sim").repetida).toBe(false);
+    // Controle: se a fala confirmada fosse afirmação, o eco seria barrado.
+    expect(apos(pronto, "Vou marcar sua avaliação para quinta.", "sim", [pergunta]).repetida).toBe(true);
+  });
+
+  it("⭐ \"Quer que eu te mande o link?\" → \"por favor\" → o link sai", () => {
+    const pergunta = "Quer que eu te mande o link da sua consulta por aqui?";
+    const link = "Pronto, te mandei o link da sua consulta por aqui: exemplo.test";
+    expect(apos(link, pergunta, "por favor").repetida).toBe(false);
+    // Controle: sem a pergunta antes, o eco (Jaccard 0.5) seria barrado.
+    expect(apos(link, "Te mando o link da sua consulta por aqui.", "por favor", [pergunta]).repetida).toBe(true);
+  });
+
+  it("⭐ os padrões de hoje continuam barrados (muleta \"combinado?\" e afirmação)", () => {
+    const r1 = "Assim que o financeiro confirmar o comprovante, eu sigo com você para fechar a reserva, combinado?";
+    const r2 = "Assim que o financeiro confirmar, eu sigo por aqui com você pra fechar sua reserva, tá bom?";
+    expect(apos(r2, r1, "Ok").repetida).toBe(true);
+    const e1 = "Vou confirmar a validade do pedido de exames com a equipe e te passo a informação correta";
+    const e2 = "Vou checar com a equipe a validade do seu pedido de exames e te passo a informação correta, tá?";
+    expect(apos(e2, e1, "sim").repetida).toBe(true);
+  });
+
+  it("a fala confirmada é a nossa última ANTES das entradas do cliente", () => {
+    expect(
+      falaAntesDaEntrada([
+        { direction: "outbound", body: "antiga" },
+        { direction: "inbound", body: "oi" },
+        { direction: "outbound", body: "Posso marcar quinta?" },
+        { direction: "inbound", body: "sim" },
+        { direction: "inbound", body: "obrigada" },
+      ]),
+    ).toBe("Posso marcar quinta?");
+    expect(falaAntesDaEntrada([{ direction: "inbound", body: "sim" }])).toBeNull();
+    expect(falaAntesDaEntrada([])).toBeNull();
+  });
+
+  it("a fiação passa a fala confirmada do transcript do turno", () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "lib/agent-engine/agent/inbound-turn.ts"), "utf8");
+    expect(src).toContain("falaAnterior: falaAntesDaEntrada(effectiveContext.messages)");
+  });
+});
+
+describe("terminaEmPerguntaReal — pergunta-muleta não é pergunta", () => {
+  it.each([
+    "Assim que eu tiver a validação, te explico como seguimos, combinado?",
+    "Te passo certinho por aqui, tudo bem?",
+    "Já deixei com a equipe, ok?",
+    "Te aviso amanhã, tá?",
+    "Te aviso amanhã, ta?",
+    "Fica para sexta, tá bom?",
+    "Mando à tarde, certo?",
+    "Remarco para segunda, pode ser?",
+    "Seguimos assim, beleza?",
+    "Então fica assim, fechado?",
+    "A equipe te liga, né?",
+    "Combinado, Chris?",
+    "Te passo amanhã, combinado, Chris? 😊",
+    "Te passo amanhã, Combinado ?🙏",
+    "Vou confirmar com a equipe e te passo a informação correta",
+    "Perfeito!",
+    "",
+  ])("%j: não", (t) => {
+    expect(terminaEmPerguntaReal(t, "Chris")).toBe(false);
+  });
+
+  it.each([
+    "Posso marcar sua avaliação para quinta às 10h na unidade 1?",
+    "Quer que eu te mande o link?",
+    "Tudo certo por aqui. Qual horário fica melhor para você?",
+    "Combinado! Prefere manhã ou tarde? 😊",
+    "Chris, você já fez esse exame antes?",
+  ])("%j: sim", (t) => {
+    expect(terminaEmPerguntaReal(t, "Chris")).toBe(true);
+  });
+
+  it("sem nome do contato, o nome no fim deixa a pergunta como real (lado seguro: não aperta)", () => {
+    expect(terminaEmPerguntaReal("Combinado, Chris?", null)).toBe(true);
   });
 });
