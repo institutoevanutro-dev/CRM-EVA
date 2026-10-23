@@ -4795,6 +4795,15 @@ export const DICIONARIO: Traducoes = {
   "Distribuição de atendimento salva.": { es: "Distribución de atención guardada." },
   "Não consegui salvar.": { es: "No pude guardar." },
   "Pausa da IA salva.": { es: "Pausa de la IA guardada." },
+  // ─── Número fixo do lembrete do compromisso (Configurações › Agenda) ───
+  "Número que envia os lembretes": { es: "Número que envía los recordatorios" },
+  "No automático, o lembrete sai pelo número da conversa em que o horário foi marcado ou pelo da conversa mais recente do cliente. Um número fixo vale para todos os lembretes; se ele estiver desconectado, o lembrete sai pelo automático.":
+    {
+      es: "En automático, el recordatorio sale por el número de la conversación en la que se reservó el horario o por el de la conversación más reciente del cliente. Un número fijo vale para todos los recordatorios; si está desconectado, el recordatorio sale por el automático.",
+    },
+  "Automático (como hoje)": { es: "Automático (como hoy)" },
+  "Número arquivado ou removido": { es: "Número archivado o eliminado" },
+  "Número dos lembretes salvo.": { es: "Número de los recordatorios guardado." },
   // ─── Assinatura do emissor (portado do DeskcommCRM, PR #2079) ───
   "Quem fala aparece na mensagem?": { es: "¿Quién habla aparece en el mensaje?" },
   "Ligado, a mensagem que vai ao cliente ganha o nome de quem fala em negrito, na linha de cima. O histórico do CRM guarda o texto como foi escrito. Campanhas, lembretes e integrações por token não assinam.": { es: "Activado, el mensaje que llega al cliente lleva el nombre de quien habla en negrita, en la primera línea. El historial del CRM guarda el texto tal como se escribió. Las campañas, los recordatorios y las integraciones por token no firman." },

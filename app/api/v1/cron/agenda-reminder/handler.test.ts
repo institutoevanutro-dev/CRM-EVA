@@ -24,6 +24,7 @@ vi.mock("@/lib/automation/throttle", () => ({ espacarEnvio: vi.fn(async () => un
 vi.mock("@/lib/users/nome-do-atendente", () => ({ nomesDosAtendentes: vi.fn(async () => new Map()) }));
 
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
+import { ensureConversation } from "@/lib/automation/start-conversation";
 import { audit } from "@/lib/audit";
 import { providersDeEnvioAutomatico } from "@/lib/channels";
 import { logger } from "@/lib/logger";
@@ -40,7 +41,14 @@ type Linha = Record<string, unknown>;
  * Um construtor de consulta que aceita qualquer encadeamento e responde pela
  * tabela. `update` marca a consulta como o carimbo.
  */
-function dubleDoAdmin(opts: { linha: Linha; carimbaLinha?: boolean; modeloLegado?: string | null }) {
+function dubleDoAdmin(opts: {
+  linha: Linha;
+  carimbaLinha?: boolean;
+  modeloLegado?: string | null;
+  sessoes?: Array<{ id: string; provider: string }>;
+  conversas?: Array<Record<string, unknown>>;
+  settings?: unknown;
+}) {
   const carimbos: Array<Record<string, unknown>> = [];
   const responder = (tabela: string, update: Record<string, unknown> | undefined) => {
     switch (tabela) {
@@ -56,11 +64,11 @@ function dubleDoAdmin(opts: { linha: Linha; carimbaLinha?: boolean; modeloLegado
           error: null,
         };
       case "channel_sessions":
-        return { data: [{ id: "zap-1", provider: providersDeEnvioAutomatico()[0] }], error: null };
+        return { data: opts.sessoes ?? [{ id: "zap-1", provider: providersDeEnvioAutomatico()[0] }], error: null };
       case "conversations":
-        return { data: [], error: null };
+        return { data: opts.conversas ?? [], error: null };
       case "organizations":
-        return { data: { locale: "pt-BR" }, error: null };
+        return { data: { locale: "pt-BR", settings: opts.settings ?? null }, error: null };
       case "message_templates":
         return { data: opts.modeloLegado ? { body: opts.modeloLegado } : null, error: null };
       default:
@@ -186,6 +194,52 @@ describe("a linha mudou entre a leitura e o carimbo (mudou_na_rodada)", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining("mudou_na_rodada"),
       expect.objectContaining({ appointmentId: "compromisso-1" }),
+    );
+  });
+});
+
+describe("o número fixo do lembrete (settings.agenda_lembrete.channel_session_id)", () => {
+  const ZAP = providersDeEnvioAutomatico()[0] as string;
+  const MEDICO = "22222222-2222-4222-8222-222222222222";
+  const CLINICA = "33333333-3333-4333-8333-333333333333";
+  const sessoes = [
+    { id: MEDICO, provider: ZAP },
+    { id: CLINICA, provider: ZAP },
+  ];
+  // O paciente só conversou pelo número do médico.
+  const conversas = [{ id: "conv-medico", channel_session_id: MEDICO }];
+  const canalUsado = () => vi.mocked(ensureConversation).mock.calls[0]?.[3];
+
+  it("a rota lê o ajuste da organização e manda pelo número fixo", async () => {
+    const { resposta } = rodar({
+      linha: linhaDoCompromisso({}),
+      sessoes,
+      conversas,
+      settings: { agenda_lembrete: { channel_session_id: CLINICA } },
+    });
+    await resposta;
+    expect(canalUsado()).toBe(CLINICA);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("controle: sem o ajuste, vale a conversa do paciente", async () => {
+    const { resposta } = rodar({ linha: linhaDoCompromisso({}), sessoes, conversas });
+    await resposta;
+    expect(canalUsado()).toBe(MEDICO);
+  });
+
+  it("número fixo desconectado: o lembrete sai pela regra de sempre, e o motivo fica no log", async () => {
+    const { resposta } = rodar({
+      linha: linhaDoCompromisso({}),
+      sessoes: [sessoes[0]!],
+      conversas,
+      settings: { agenda_lembrete: { channel_session_id: CLINICA } },
+    });
+    await resposta;
+    expect(canalUsado()).toBe(MEDICO);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("número fixo"),
+      expect.objectContaining({ motivo: "canal_fixo_desconectado_ou_inexistente", organizationId: ORG }),
     );
   });
 });

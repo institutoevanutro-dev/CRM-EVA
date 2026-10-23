@@ -428,13 +428,58 @@ describe("escolherCanalDoLembrete — a origem da reserva vem antes da conversa 
   });
 });
 
+// O número fixo da organização (`settings.agenda_lembrete.channel_session_id`):
+// numa clínica com o número da recepção e o profissional do médico, o lembrete
+// sai SEMPRE pelo escolhido — enquanto ele puder enviar.
+describe("escolherCanalDoLembrete — o número fixo da organização vem antes de tudo", () => {
+  const ZAP = providersDeEnvioAutomatico()[0] as string;
+  const sessoes = [
+    { id: "zap-medico", provider: ZAP },
+    { id: "zap-clinica", provider: ZAP },
+  ];
+  const conversas = [{ id: "conv-medico", channel_session_id: "zap-medico" }];
+
+  it("fixo e elegível vence a conversa da reserva e a mais recente", () => {
+    expect(escolherCanalDoLembrete(sessoes, conversas, new Date(), "conv-medico", "zap-clinica")).toBe("zap-clinica");
+  });
+
+  it("fixo e elegível vale também para quem não tem conversa nenhuma", () => {
+    expect(escolherCanalDoLembrete([...sessoes].reverse(), [], new Date(), null, "zap-medico")).toBe("zap-medico");
+  });
+
+  it("fixo fora da lista (desconectado, arquivado, de outra organização): cai na regra de sempre", () => {
+    expect(escolherCanalDoLembrete([sessoes[0]!], conversas, new Date(), "conv-medico", "zap-clinica")).toBe(
+      "zap-medico",
+    );
+  });
+
+  it("fixo que não é de envio automático: cai na regra de sempre", () => {
+    const insta = { id: "insta", provider: CHANNEL_PROVIDER_INSTAGRAM as string };
+    expect(escolherCanalDoLembrete([...sessoes, insta], conversas, new Date(), null, "insta")).toBe("zap-medico");
+  });
+
+  it("fixo fora da janela de 24 h: cai na regra de sempre", () => {
+    const agora = new Date("2026-10-05T12:00:00Z");
+    const meta = { id: "canal-meta", provider: CHANNEL_PROVIDER_META as string };
+    expect(escolherCanalDoLembrete([...sessoes, meta], conversas, agora, null, "canal-meta")).toBe("zap-medico");
+  });
+
+  it("controle: sem fixo, o comportamento de antes não muda", () => {
+    expect(escolherCanalDoLembrete(sessoes, conversas, new Date(), "conv-medico", null)).toBe("zap-medico");
+    expect(escolherCanalDoLembrete(sessoes, conversas, new Date(), "conv-medico")).toBe("zap-medico");
+    expect(escolherCanalDoLembrete(sessoes, [], new Date(), null)).toBe("zap-medico");
+  });
+});
+
 describe("as consultas do canal (estrutural)", () => {
   const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
 
   it("a varredura traz a conversa da reserva e a escolha do canal a recebe", () => {
     const varredura = fonte.slice(fonte.indexOf('.from("calendar_appointments")')).slice(0, 400);
     expect(varredura).toContain("conversation_id");
-    expect(fonte).toContain("escolherCanalDoLembrete(sessoes ?? [], conversas ?? [], agora, linha.conversation_id)");
+    expect(fonte.replace(/\s+/g, " ")).toContain(
+      "escolherCanalDoLembrete( sessoes ?? [], conversas ?? [], agora, linha.conversation_id, canalFixo, )",
+    );
   });
 
   it("sessões: da organização, WORKING, de envio automático, não arquivadas, em ordem fixa", () => {
