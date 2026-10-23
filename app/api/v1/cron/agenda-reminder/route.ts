@@ -133,6 +133,7 @@ import { espacarEnvio } from "@/lib/automation/throttle";
 import { providersDeEnvioAutomatico } from "@/lib/channels";
 import { env } from "@/lib/env";
 import { aplicarMoldeDoLembrete, montarLembrete, variaveisDoMolde } from "@/lib/agenda/texto-do-lembrete";
+import { lerCanalDoLembrete } from "@/lib/agenda/canal-do-lembrete";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { logger } from "@/lib/logger";
@@ -236,6 +237,15 @@ export { aplicarMoldeDoLembrete, montarLembrete };
  * desconectado NÃO segura o lembrete: cai na regra de antes. (O original
  * prefere não enviar e avisar na Central; aqui paciente sem lembrete é pior.)
  *
+ * O NÚMERO FIXO DA ORGANIZAÇÃO vem antes de tudo (`canalFixo`, lido de
+ * `settings.agenda_lembrete.channel_session_id` por `lib/agenda/canal-do-lembrete.ts`).
+ * Com dois números — a clínica e o profissional do médico — a marcação pela
+ * tela não tem conversa de reserva, e o paciente que só falou pelo número do
+ * médico receberia o lembrete por ele. Fixo e elegível vence; fixo que não pode
+ * enviar agora (desconectado, arquivado, de outra organização, fora da janela
+ * de 24 h) NÃO segura o lembrete: cai na regra abaixo, pelo mesmo motivo da
+ * reserva, e a rota registra o porquê no log. Nulo = a regra de sempre.
+ *
  * A regra repete o filtro de provider de propósito: se a consulta mudar, o
  * Instagram continua sem ganhar. Pura e exportada, como `degrausPendentes`.
  */
@@ -244,6 +254,7 @@ export function escolherCanalDoLembrete(
   conversas: ReadonlyArray<{ id?: string; channel_session_id: string | null; last_inbound_at?: string | null }>,
   agora: Date = new Date(),
   conversaDaReserva: string | null = null,
+  canalFixo: string | null = null,
 ): string | null {
   const automaticos = new Set<string>(providersDeEnvioAutomatico());
   // Janela de 24 h (porte do upstream #2620): canal que não aceita texto livre
@@ -267,6 +278,7 @@ export function escolherCanalDoLembrete(
       )
       .map((s) => s.id),
   );
+  if (canalFixo && elegiveis.has(canalFixo)) return canalFixo;
   const daReserva = conversaDaReserva
     ? conversas.find((c) => c.id === conversaDaReserva)?.channel_session_id
     : null;
@@ -539,15 +551,21 @@ async function handle(req: NextRequest): Promise<Response> {
 
   // Uma consulta por organização na rodada, não por compromisso: o fuso entra
   // em `degrausPendentes`, antes de qualquer outra leitura da linha.
-  const organizacoes = new Map<string, { timezone: string | null; locale: string | null } | null>();
+  const organizacoes = new Map<
+    string,
+    { timezone: string | null; locale: string | null; settings?: unknown } | null
+  >();
   const organizacaoDe = async (id: string) => {
     if (!organizacoes.has(id)) {
       const { data: o } = await admin
         .from("organizations")
-        .select("timezone, locale")
+        .select("timezone, locale, settings")
         .eq("id", id)
         .maybeSingle();
-      organizacoes.set(id, (o as { timezone: string | null; locale: string | null } | null) ?? null);
+      organizacoes.set(
+        id,
+        (o as { timezone: string | null; locale: string | null; settings?: unknown } | null) ?? null,
+      );
     }
     return organizacoes.get(id) ?? null;
   };
@@ -630,7 +648,28 @@ async function handle(req: NextRequest): Promise<Response> {
     // ponytail: a conversa da reserva é procurada nas 20 mais recentes do
     // contato (a lista acima); além disso vale a regra de antes. Consulta
     // própria por id se algum contato chegar a ter tantas conversas.
-    const canalId = escolherCanalDoLembrete(sessoes ?? [], conversas ?? [], agora, linha.conversation_id);
+    // O número fixo da organização (Configurações › Agenda). Validado AQUI só
+    // por estar em `sessoes` — da organização, WORKING, não arquivado, de envio
+    // automático — e na janela de 24 h; fora disso a escolha cai na regra de
+    // sempre e o motivo fica no log.
+    const canalFixo = lerCanalDoLembrete((await organizacaoDe(org))?.settings);
+    const canalId = escolherCanalDoLembrete(
+      sessoes ?? [],
+      conversas ?? [],
+      agora,
+      linha.conversation_id,
+      canalFixo,
+    );
+    if (canalFixo && canalId !== canalFixo) {
+      logger.warn("[agenda-reminder] número fixo do lembrete indisponível; vale a regra automática", {
+        appointmentId: linha.id,
+        organizationId: org,
+        motivo: (sessoes ?? []).some((s) => s.id === canalFixo)
+          ? "canal_fixo_fora_da_janela_24h"
+          : "canal_fixo_desconectado_ou_inexistente",
+        requestId,
+      });
+    }
 
     if (!canalId) {
       // Pulo ANTES do carimbo (upstream #2620): o degrau segue pendente.

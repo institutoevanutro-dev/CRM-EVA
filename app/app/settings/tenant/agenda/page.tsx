@@ -5,9 +5,12 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 import { clientePelaAgendaLigado, pacientePeloCadastroLigado } from "@/lib/schemas/settings";
+import { lerCanalDoLembrete } from "@/lib/agenda/canal-do-lembrete";
+import { listSelectableChannels } from "@/lib/channels/selectable";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 
 import { TiposDeAgendamentoClient, type TipoRow } from "./_client";
+import { CanalDoLembrete } from "./_canal-do-lembrete";
 import { RecursosDaAgenda, type SalaRow, type UnidadeRow } from "./_resources";
 
 export const dynamic = "force-dynamic";
@@ -93,6 +96,11 @@ export default async function TiposDeAgendamentoPage() {
   //
   // Numa VPS sem `SUPABASE_SERVICE_ROLE_KEY` ele devolve Map vazio por decisão
   // declarada, e o fallback abaixo volta ao rótulo de hoje. Degrada, não some.
+  // Os números para o "Número que envia os lembretes". Falha de leitura vira
+  // lista vazia: o seletor fica só com o automático, que é o comportamento de
+  // sempre, em vez de derrubar a tela de configuração inteira.
+  const canais = await listSelectableChannels(supabase, activeOrg.orgId).catch(() => []);
+
   const nomes = await nomesDosAtendentes((pessoas ?? []).map((p) => String(p.user_id)));
 
   return (
@@ -103,6 +111,13 @@ export default async function TiposDeAgendamentoPage() {
           {t("O que se pode marcar, quanto dura e quem atende. É isto que a tela de marcar e o agente de IA oferecem ao cliente.")}
         </p>
       </header>
+      {canais.length > 0 ? (
+        <CanalDoLembrete
+          canais={canais.map((c) => ({ id: c.id, nome: c.display_name }))}
+          inicial={lerCanalDoLembrete(org?.settings)}
+          podeEditar={podeEditar}
+        />
+      ) : null}
       <RecursosDaAgenda unidades={(unidades ?? []) as UnidadeRow[]} salas={(salas ?? []) as SalaRow[]} podeEditar={podeEditar} />
       <TiposDeAgendamentoClient
         tiposIniciais={(tipos ?? []) as TipoRow[]}

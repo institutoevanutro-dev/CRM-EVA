@@ -525,6 +525,9 @@ export const AUDIT_ACTIONS = [
   "agenda.sala_alterada",
   "agenda.tipo_alterado",
   "agenda.tipo_desativado",
+  // Número fixo por onde o lembrete do compromisso sai
+  // (`settings.agenda_lembrete.channel_session_id`). Metadata: de/para (ids).
+  "agenda.canal_do_lembrete_changed",
   // Ligar de volta um tipo que alguém desligou é ato de gestão e tem verbo
   // próprio: como `agenda.tipo_alterado { campos: ["is_active"] }` ele seria,
   // na trilha, indistinguível de "mudaram a duração".
