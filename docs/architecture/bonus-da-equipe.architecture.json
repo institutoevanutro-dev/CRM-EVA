@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Bônus da equipe: Etapa 1",
+    "subtitle": "a regra no banco, a fila das 7h, o cálculo puro e as duas telas",
+    "output": "bonus-da-equipe.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que a equipe vê" },
+    { "id": "borda", "label": "Borda HTTP" },
+    { "id": "regra", "label": "Decisão pura" },
+    { "id": "dados", "label": "Banco" }
+  ],
+  "mainPath": ["cron_fila", "fn_fila", "itens", "rota_meu", "calculo", "tela_meu"],
+  "nodes": [
+    { "id": "tela_meu", "lane": "humano", "col": 1, "type": "frontend", "label": "Meu bônus (/app/analise/bonus)", "sublabel": "placar · fila de hoje · registrar ligação" },
+    { "id": "tela_equipe", "lane": "humano", "col": 2, "type": "frontend", "label": "Bônus da equipe + Configuração", "sublabel": "só o aprovador gravado" },
+    { "id": "central", "lane": "humano", "col": 3, "type": "frontend", "label": "Central de avisos", "sublabel": "fila reduzida por pedidos para parar" },
+    { "id": "rota_meu", "lane": "borda", "col": 1, "type": "api", "label": "/api/v1/bonus/meu · /ligacoes", "sublabel": "participante" },
+    { "id": "rota_programa", "lane": "borda", "col": 2, "type": "api", "label": "/api/v1/bonus/programa · /equipe · /stories", "sublabel": "aprovador" },
+    { "id": "cron_fila", "lane": "borda", "col": 3, "type": "worker", "label": "cron bonus-fila", "sublabel": "7h locais, dia útil" },
+    { "id": "cron_stories", "lane": "borda", "col": 4, "type": "worker", "label": "cron bonus-stories", "sublabel": "de hora em hora" },
+    { "id": "inbox_envio", "lane": "borda", "col": 5, "type": "api", "label": "POST /api/v1/messages", "sublabel": "envio de pessoa pela conversa" },
+    { "id": "calculo", "lane": "regra", "col": 1, "type": "service", "label": "lib/bonus/calculo.ts", "sublabel": "faixas · metas · garantia" },
+    { "id": "protecao", "lane": "regra", "col": 3, "type": "service", "label": "lib/bonus/fila.ts", "sublabel": "envio por item · proteção do número" },
+    { "id": "ritmo", "lane": "regra", "col": 5, "type": "service", "label": "lib/bonus/ritmo.ts", "sublabel": "intervalo mínimo entre envios da fila" },
+    { "id": "programa", "lane": "dados", "col": 2, "type": "database", "label": "bonus_programas", "sublabel": "regra em jsonb (Zod)" },
+    { "id": "fn_fila", "lane": "dados", "col": 3, "type": "database", "label": "fn_bonus_montar_fila", "sublabel": "exclusões da seção 4" },
+    { "id": "itens", "lane": "dados", "col": 1, "type": "database", "label": "bonus_fila_itens", "sublabel": "fila · ligação" },
+    { "id": "stories", "lane": "dados", "col": 4, "type": "database", "label": "bonus_stories_dia", "sublabel": "ids por dia local" },
+    { "id": "tarefas", "lane": "dados", "col": 5, "type": "database", "label": "crm_tasks", "sublabel": "closed_at · missed_due_date" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "cron_fila", "to": "protecao", "label": "tamanho da fila" },
+    { "id": "e2", "from": "cron_fila", "to": "fn_fila", "label": "monta" },
+    { "id": "e3", "from": "fn_fila", "to": "itens", "label": "insere" },
+    { "id": "e4", "from": "cron_fila", "to": "central", "label": "avisa se reduziu" },
+    { "id": "e5", "from": "rota_meu", "to": "itens", "label": "lê e registra" },
+    { "id": "e6", "from": "rota_meu", "to": "calculo", "label": "placar" },
+    { "id": "e7", "from": "calculo", "to": "tela_meu", "label": "mostra" },
+    { "id": "e8", "from": "tela_equipe", "to": "rota_programa", "label": "configura" },
+    { "id": "e9", "from": "rota_programa", "to": "programa", "label": "escreve (só aprovador)" },
+    { "id": "e10", "from": "cron_stories", "to": "stories", "label": "junta ids" },
+    { "id": "e11", "from": "tarefas", "to": "calculo", "label": "tarefas no prazo" },
+    { "id": "e12", "from": "stories", "to": "calculo", "label": "rotina da dupla" },
+    { "id": "e13", "from": "programa", "to": "calculo", "label": "faixas e metas" },
+    { "id": "e14", "from": "programa", "to": "cron_fila", "label": "programas ativos" },
+    { "id": "e15", "from": "rota_programa", "to": "stories", "label": "lançamento manual" },
+    { "id": "e16", "from": "protecao", "to": "central", "label": "fila reduzida" },
+    { "id": "e17", "from": "inbox_envio", "to": "ritmo", "label": "pode enviar agora?" },
+    { "id": "e18", "from": "programa", "to": "ritmo", "label": "intervalo mínimo" },
+    { "id": "e19", "from": "itens", "to": "ritmo", "label": "leads da fila de hoje" },
+    { "id": "e20", "from": "inbox_envio", "to": "rota_meu", "label": "envio marca o lead como chamado" },
+    { "id": "e21", "from": "tela_meu", "to": "rota_meu", "label": "registra ligação" },
+    { "id": "e22", "from": "rota_programa", "to": "tela_equipe", "label": "placares da equipe" },
+    { "id": "e23", "from": "programa", "to": "cron_stories", "label": "programas ativos" },
+    { "id": "e24", "from": "rota_meu", "to": "tarefas", "label": "tarefas do mês" }
+  ]
+}

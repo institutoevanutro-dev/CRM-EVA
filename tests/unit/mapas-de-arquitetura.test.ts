@@ -167,6 +167,17 @@ describe("mapas de arquitetura — coerência interna", () => {
     ).toContain("telaauditoria");
   });
 
+  it("o bônus da equipe está no mapa, e toda peça dele tem ≥2 arestas", () => {
+    const m = JSON.parse(
+      fs.readFileSync(path.join(DIR, "bonus-da-equipe.architecture.json"), "utf8"),
+    ) as Mapa;
+    const grau = (id: string) =>
+      (m.edges ?? []).filter((e) => e.from === id || e.to === id).length;
+    for (const { id } of m.nodes ?? []) {
+      expect(grau(id), `${id} com menos de 2 arestas — é ilha pelo invariante 1`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
   it("o índice de atrito está no mapa, e com mais de duas arestas", () => {
     // O caso concreto do DoD 13 para o trabalho desta branch. Genérico demais
     // não guardaria nada: "algum mapa existe" é verdade desde sempre.

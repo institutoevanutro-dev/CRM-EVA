@@ -2896,3 +2896,23 @@ Regra única em `lib/messaging/reenvio.ts` (lida pela rota e pela bolha): `segur
 - [ ] **Pela tela, em e2e: não portado.** A spec do upstream (`reenvio-pelo-celular.spec.ts`) produz a falha desativando o canal, e o fork não tem canal desativado
 - [ ] O composer reaproveitar a chave de idempotência depois de um erro de rede (parte do #3192): **não portado**, porque o `POST /api/v1/messages` do fork não honra `Idempotency-Key`
 - [ ] Que o canal de verdade entrega o reenvio, e o toque num iPhone e num Android reais
+
+## J41 — Bônus da equipe `[P1]` (2026-10-24)
+
+Análise › Bônus. O dono da organização liga o programa e escolhe participantes, valores e metas; só o aprovador gravado vê a configuração; cada participante vê o próprio placar e a fila do dia. Spec: `tests/e2e/bonus-da-equipe.spec.ts` (no CI, parte 6), dirigida pela tela com nomes fictícios. Evidência em `.superpowers/evidence/bonus-da-equipe/`. As consultas das rotas contra o PostgREST de verdade estão em `tests/e2e/bonus-consultas-banco-real.spec.ts`.
+
+Rodada local: stack próprio (Postgres da imagem Supabase 17, GoTrue, PostgREST e Storage em portas 553xx), `baseline.sql` com `ON_ERROR_STOP=1`, `seed-e2e-credentials.ts`, `next build` + `next start`, sem `RESEND_API_KEY`, sem chave de IA e sem Redis de pé. Quatro casos verdes, duas rodadas seguidas (a segunda prova que a limpeza e o telefone aleatório não colidem).
+
+| Caso | O que a pessoa faz | Resultado |
+|---|---|---|
+| J41.1 `[P1]` | O dono clica "Ligar o programa", abre Configuração, marca dois participantes, preenche o valor das tarefas e salva | **PROVADO NA TELA.** "Configuração salva."; no banco o aprovador é quem ligou, os participantes são os dois marcados e o valor está em centavos |
+| J41.2 `[P1]` | A participante abre "Meu bônus", acha o paciente para ligar, clica "Registrar ligação", escolhe "Atendeu", escreve o resumo e salva | **PROVADO NA TELA.** O diálogo abre com altura medida maior que zero; o item mostra "Atendeu" e o contador "Pacientes para ligar" sobe um. A fila é montada pela mesma `fn_bonus_montar_fila` que o cron chama |
+| J41.3 `[P1]` | A participante não vê as abas "Bônus da equipe" nem "Configuração"; um gerente que não aprova tenta mudar a configuração pela API | **PROVADO.** Abas ausentes na tela; o PUT responde 403 e o GET devolve `programa: null` |
+| J41.4 `[P1]` | O aprovador sai da equipe (vínculo revogado); o dono abre a tela, vê o aviso e clica "Assumir aprovação" | **PROVADO NA TELA.** O aviso aparece com o botão; depois do clique o aviso some, a aba Configuração aparece e no banco o aprovador passa a ser o dono |
+| J41.5 `[P2]` | O aprovador lança à mão os stories do dia | Coberto por `app/api/v1/bonus/stories/route.test.ts` e pela régua de `bonus-consultas-banco-real.spec.ts`; **não dirigido pela tela** |
+
+**O que esta jornada NÃO tem:**
+
+- **Safari de verdade:** o diálogo "Registrar ligação" e o `<input type="month">` das metas não foram abertos no Safari nesta rodada. Fica para depois do deploy.
+- **O cron às 7h de verdade** não foi esperado: a fila foi montada pela função que ele chama, no dia de hoje.
+- **O envio pela conversa com o ritmo mínimo** (`lib/bonus/ritmo.ts`) não foi dirigido pela tela; está nos testes de unidade da rota de mensagens.

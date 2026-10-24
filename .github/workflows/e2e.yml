@@ -813,6 +813,7 @@ jobs:
         sons-dos-avisos.spec.ts
       SPECS_PARTE_6: >-
         bonus-consultas-banco-real.spec.ts
+        bonus-da-equipe.spec.ts
         pipelines-gestao.spec.ts
         prova-painel-provedores.spec.ts
         qa-agente-usa-as-maos.spec.ts

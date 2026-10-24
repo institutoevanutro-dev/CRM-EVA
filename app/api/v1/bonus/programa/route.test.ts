@@ -10,7 +10,7 @@ const OUTRO_ADMIN = "55555555-5555-4555-8555-555555555555";
 const estado = vi.hoisted(() => ({
   auditados: [] as unknown[],
   atualizados: [] as unknown[],
-  filtros: [] as [string, unknown][],
+  filtros: [] as [string, string, unknown][],
   quemPede: "",
   platformAdmin: false,
   aprovadorNaEquipe: true,
@@ -54,13 +54,14 @@ vi.mock("@/lib/bonus/fatos", async () => {
 });
 vi.mock("@/lib/supabase/admin", () => {
   // Uma cadeia por tabela: `organizations` responde o dono, `user_organizations`
-  // se o aprovador segue na equipe, `bonus_programas` grava.
-  const cadeia = (resposta: () => unknown) => {
+  // se o aprovador segue na equipe, `bonus_programas` grava. Cada filtro fica
+  // guardado com a tabela e a operação, para afirmar o filtro DO UPDATE.
+  const cadeia = (onde: string, resposta: () => unknown) => {
     const c: Record<string, unknown> = {};
     c.select = () => c;
     c.is = () => c;
     c.eq = (coluna: string, valor: unknown) => {
-      estado.filtros.push([coluna, valor]);
+      estado.filtros.push([onde, coluna, valor]);
       return c;
     };
     c.maybeSingle = async () => ({ data: resposta(), error: null });
@@ -69,12 +70,14 @@ vi.mock("@/lib/supabase/admin", () => {
   return {
     createAdminClient: () => ({
       from: (tabela: string) => {
-        if (tabela === "organizations") return cadeia(() => ({ created_by: DONO }));
-        if (tabela === "user_organizations") return cadeia(() => (estado.aprovadorNaEquipe ? { id: "vinculo" } : null));
+        if (tabela === "organizations") return cadeia("organizations.select", () => ({ created_by: DONO }));
+        if (tabela === "user_organizations") {
+          return cadeia("user_organizations.select", () => (estado.aprovadorNaEquipe ? { id: "vinculo" } : null));
+        }
         return {
           update: (v: unknown) => {
             estado.atualizados.push(v);
-            return cadeia(() => ({ id: "prog" }));
+            return cadeia(`${tabela}.update`, () => ({ id: "prog" }));
           },
         };
       },
@@ -159,8 +162,8 @@ describe("PUT /api/v1/bonus/programa: assumir quando o aprovador saiu", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).data).toEqual({ id: "prog", transferido: true });
     expect(atualizados).toEqual([{ aprovador_user_id: DONO }]);
-    expect(estado.filtros).toContainEqual(["aprovador_user_id", APROVADOR]);
-    expect(estado.filtros).toContainEqual(["organization_id", ORG]);
+    expect(estado.filtros).toContainEqual(["bonus_programas.update", "aprovador_user_id", APROVADOR]);
+    expect(estado.filtros).toContainEqual(["bonus_programas.update", "organization_id", ORG]);
     expect(auditados).toEqual([
       expect.objectContaining({ action: "bonus.aprovador_assumido", actorUserId: DONO, metadata: { aprovador_anterior_user_id: APROVADOR } }),
     ]);
