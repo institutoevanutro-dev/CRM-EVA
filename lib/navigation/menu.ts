@@ -22,7 +22,13 @@ export const MENU: ReadonlyArray<{ id: string; label: string; hrefs: readonly st
     // Alertas, Casos e Propostas vêm da IA, mas são trabalho do dia: alguém precisa decidir.
     hrefs: ["/app/inbox", "/app/radar", "/app/agenda", "/app/templates", "/app/ai/inbox", "/app/ai/cases", "/app/ai/proposals"],
   },
-  { id: "vendas", label: "Vendas", hrefs: ["/app/kanban", "/app/contacts", "/app/tasks", "/app/campaigns"] },
+  {
+    id: "vendas",
+    label: "Vendas",
+    // Bônus: o catálogo o põe em Análise, mas aqui ele é trabalho do dia (a fila de leads
+    // antigos e de ligações), e Análise já está nas 9 telas.
+    hrefs: ["/app/kanban", "/app/contacts", "/app/tasks", "/app/campaigns", "/app/analise/bonus"],
+  },
   {
     id: "assistente",
     label: "Assistente",
