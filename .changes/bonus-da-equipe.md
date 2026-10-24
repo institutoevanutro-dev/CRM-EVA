@@ -4,7 +4,7 @@ secao: adicionado
 titulo: "Bônus da equipe: placar, fila do dia e registro de ligação"
 ---
 
-Nova tela em Análise › Bônus. Quem administra a organização liga o programa e
+Nova tela em Análise › Bônus. O dono da organização liga o programa e
 escolhe quem participa, os valores e as metas; só essa pessoa vê a configuração,
 e pode passar a função a outra. Se quem aprova sair da equipe, o dono da
 organização assume a função pela própria tela. Cada participante vê o próprio

@@ -40,7 +40,7 @@ export function BonusClient({ papel }: Props) {
           subcopy={
             podeCriar
               ? t("Ligue o programa e preencha a configuração antes do primeiro dia do mês.")
-              : t("Quem administra a organização liga o programa.")
+              : t("Só o dono da organização ou o administrador da plataforma liga o programa.")
           }
           primary={podeCriar && !criar.isPending ? { label: t("Ligar o programa"), onClick: () => criar.mutate() } : undefined}
         />

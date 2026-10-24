@@ -11509,7 +11509,7 @@ export const DICIONARIO: Traducoes = {
   "O placar do mês, a fila de hoje e, para quem aprova, a equipe inteira.": { es: "El marcador del mes, la fila de hoy y, para quien aprueba, el equipo entero." },
   "Não foi possível ler o programa de bônus.": { es: "No fue posible leer el programa de bonos." },
   "Ligue o programa e preencha a configuração antes do primeiro dia do mês.": { es: "Active el programa y complete la configuración antes del primer día del mes." },
-  "Quem administra a organização liga o programa.": { es: "Quien administra la organización activa el programa." },
+  "Só o dono da organização ou o administrador da plataforma liga o programa.": { es: "Solo el dueño de la organización o el administrador de la plataforma activa el programa." },
   "Ligar o programa": { es: "Activar el programa" },
   "Não foi possível ligar o programa.": { es: "No fue posible activar el programa." },
   "Meu bônus": { es: "Mi bono" },
