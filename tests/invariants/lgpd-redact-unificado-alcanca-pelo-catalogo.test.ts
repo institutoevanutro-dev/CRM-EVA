@@ -200,6 +200,11 @@ const DECISOES: Record<string, Decisao> = {
     caminho: "gatilho",
     razao: "fn_apaga_propostas_de_contato_anonimizado: a fila guarda o valor proposto para o cadastro — APAGA a linha, porque proposta não decidida nunca virou fato.",
   },
+  bonus_fila_itens: {
+    decidida: "redigir",
+    caminho: "gatilho",
+    razao: "0392: o trigger trg_contacts_anonimizado_redige_ligacoes_do_bonus apaga ligacao_resumo; resultado e hora ficam (rotina do dia).",
+  },
   crm_tasks: {
     decidida: "redigir",
     caminho: "gatilho",

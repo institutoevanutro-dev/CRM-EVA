@@ -262,6 +262,25 @@ const PARES: Array<{
     simbolo: "SITUACOES_DA_TAREFA",
   },
   {
+    tabela: "bonus_fila_itens",
+    coluna: "tipo",
+    // lib/bonus/tipos.ts → TIPOS_DE_ITEM_DA_FILA. Nasce com o par, migration 0392.
+    arquivo: "lib/bonus/tipos.ts",
+    simbolo: "TIPOS_DE_ITEM_DA_FILA",
+  },
+  {
+    tabela: "bonus_fila_itens",
+    coluna: "motivo",
+    arquivo: "lib/bonus/tipos.ts",
+    simbolo: "MOTIVOS_DE_LIGACAO",
+  },
+  {
+    tabela: "bonus_fila_itens",
+    coluna: "ligacao_resultado",
+    arquivo: "lib/bonus/tipos.ts",
+    simbolo: "RESULTADOS_DE_LIGACAO",
+  },
+  {
     tabela: "team_invites",
     coluna: "role",
     // lib/schemas/team.ts → ROLES (tupla `as const`). O `z.enum(ROLES)` das

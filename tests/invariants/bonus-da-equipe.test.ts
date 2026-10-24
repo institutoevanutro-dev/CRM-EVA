@@ -174,3 +174,110 @@ describe("tarefas: prazo trocado depois de vencido", () => {
     expect((await lerTarefa(id)).missed_due_date).toBeNull();
   });
 });
+
+async function programa(regras: Record<string, unknown> = { participantes: [PESSOA_A, PESSOA_B] }): Promise<string> {
+  const { rows } = await pool.query<{ id: string }>(
+    `insert into bonus_programas(organization_id,aprovador_user_id,regras) values($1,$2,$3)
+     on conflict (organization_id) do update set regras = excluded.regras returning id`,
+    [ORG, APROVADOR, JSON.stringify(regras)],
+  );
+  return rows[0]!.id;
+}
+
+async function contato(nome: string, extra: Record<string, unknown> = {}): Promise<string> {
+  const id = randomUUID();
+  const telefone = `+5527${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`;
+  await pool.query(
+    "insert into contacts(id,organization_id,display_name,phone_number,tags,is_blocked) values($1,$2,$3,$4,$5,$6)",
+    [id, ORG, nome, telefone, (extra.tags as string[]) ?? [], Boolean(extra.is_blocked)],
+  );
+  return id;
+}
+
+async function item(tipo: "lead_antigo" | "ligacao", dono: string, contactId: string, dia = "2026-11-03") {
+  const { rows } = await pool.query<{ id: string }>(
+    "insert into bonus_fila_itens(organization_id,dia,tipo,user_id,contact_id) values($1,$2,$3,$4,$5) returning id",
+    [ORG, dia, tipo, dono, contactId],
+  );
+  return rows[0]!.id;
+}
+
+describe("programa: só o aprovador lê", () => {
+  it("o aprovador lê; o admin participante não; o admin de outra organização não", async () => {
+    await programa();
+    const sql = "select count(*)::int as n from bonus_programas where organization_id=$1";
+    expect((await como<{ n: number }>(APROVADOR, sql, [ORG])).rows[0]!.n).toBe(1);
+    expect((await como<{ n: number }>(PESSOA_A, sql, [ORG])).rows[0]!.n).toBe(0);
+    expect((await como<{ n: number }>(ADMIN_DA_OUTRA, sql, [ORG])).rows[0]!.n).toBe(0);
+  });
+
+  it("ninguém escreve pela sessão, nem o aprovador (só a rota, com service role)", async () => {
+    await expect(
+      como(APROVADOR, "update bonus_programas set aprovador_user_id=$1 where organization_id=$2", [PESSOA_A, ORG]),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      como(PESSOA_A, "insert into bonus_programas(organization_id,aprovador_user_id) values($1,$2)", [OUTRA, PESSOA_A]),
+    ).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("fila: cada um lê a sua; o aprovador lê todas", () => {
+  it("a pessoa A não vê o item da pessoa B", async () => {
+    await programa();
+    const c = await contato("Contato Fila RLS");
+    await item("lead_antigo", PESSOA_B, c, "2026-11-04");
+    const sql = "select count(*)::int as n from bonus_fila_itens where organization_id=$1 and contact_id=$2";
+    expect((await como<{ n: number }>(PESSOA_A, sql, [ORG, c])).rows[0]!.n).toBe(0);
+    expect((await como<{ n: number }>(PESSOA_B, sql, [ORG, c])).rows[0]!.n).toBe(1);
+    expect((await como<{ n: number }>(APROVADOR, sql, [ORG, c])).rows[0]!.n).toBe(1);
+    expect((await como<{ n: number }>(ADMIN_DA_OUTRA, sql, [ORG, c])).rows[0]!.n).toBe(0);
+  });
+
+  it("a pessoa não registra ligação direto pela REST (só pela rota)", async () => {
+    const c = await contato("Contato Ligacao REST");
+    const id = await item("ligacao", PESSOA_A, c, "2026-11-05");
+    await expect(
+      como(PESSOA_A, "update bonus_fila_itens set ligacao_resultado='atendeu', ligacao_registrada_em=now() where id=$1", [id]),
+    ).rejects.toThrow(/permission denied/);
+  });
+
+  it("o mesmo contato não entra duas vezes no mesmo dia e tipo", async () => {
+    const c = await contato("Contato Duplo");
+    await item("lead_antigo", PESSOA_A, c, "2026-11-06");
+    await expect(item("lead_antigo", PESSOA_B, c, "2026-11-06")).rejects.toThrow(/bonus_fila_itens_um_por_dia/);
+  });
+});
+
+describe("stories: a organização lê, ninguém escreve pela sessão", () => {
+  it("participante lê a contagem; outra organização não", async () => {
+    await pool.query(
+      "insert into bonus_stories_dia(organization_id,dia,story_ids) values($1,'2026-11-03','{s1,s2}') on conflict do nothing",
+      [ORG],
+    );
+    const sql = "select count(*)::int as n from bonus_stories_dia where organization_id=$1";
+    expect((await como<{ n: number }>(PESSOA_B, sql, [ORG])).rows[0]!.n).toBeGreaterThan(0);
+    expect((await como<{ n: number }>(ADMIN_DA_OUTRA, sql, [ORG])).rows[0]!.n).toBe(0);
+    await expect(
+      como(APROVADOR, "update bonus_stories_dia set contagem_manual=2 where organization_id=$1", [ORG]),
+    ).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("LGPD: anonimizar apaga o resumo da ligação", () => {
+  it("o resumo vira nulo; o resultado e a hora ficam (a rotina do dia não muda)", async () => {
+    const c = await contato("Contato Anonimizar");
+    const id = await item("ligacao", PESSOA_A, c, "2026-11-07");
+    await pool.query(
+      "update bonus_fila_itens set ligacao_resultado='atendeu', ligacao_resumo='Pediu retorno na sexta', ligacao_registrada_em=now() where id=$1",
+      [id],
+    );
+    // A FUNÇÃO REAL da cascata, não um `update is_anonymized` à mão: é por onde a
+    // anonimização passa, e o gatilho dispara dentro da transação dela.
+    await pool.query("select public.fn_lgpd_cascade_redact_contact($1, $2, gen_random_uuid())", [ORG, c]);
+    const { rows } = await pool.query(
+      "select ligacao_resultado, ligacao_resumo, ligacao_registrada_em is not null as tem_hora from bonus_fila_itens where id=$1",
+      [id],
+    );
+    expect(rows[0]).toEqual({ ligacao_resultado: "atendeu", ligacao_resumo: null, tem_hora: true });
+  });
+});

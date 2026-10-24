@@ -9,6 +9,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 import { textoLegivelDeMencao } from "@/lib/notifications/mentions";
+import { RESULTADOS_DE_LIGACAO } from "@/lib/bonus/tipos";
 import {
   camposDoTitular,
   definicoesDoFunil,
@@ -215,6 +216,14 @@ export interface TaskRow {
   due_date: string | null;
   status: string;
   priority: string;
+}
+
+/** Ligação registrada na fila do bônus (migration 0392): o resumo é dado do titular. */
+export interface BonusCallRow {
+  dia: string;
+  ligacao_resultado: string | null;
+  ligacao_resumo: string | null;
+  ligacao_registrada_em: string | null;
 }
 
 /**
@@ -452,6 +461,8 @@ export interface ExportPayload {
   checkpoints?: CheckpointRow[];
   appointments: AppointmentRow[];
   tasks: TaskRow[];
+  /** Opcional: o JSON leva; o PDF não o lê. */
+  bonus_calls?: BonusCallRow[];
   webhook_captures: CaptureRow[];
   audit_log_extract: AuditRow[];
   meeting_deliveries: MeetingDeliveryRow[];
@@ -1085,6 +1096,28 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // Ligações do bônus da equipe — o resumo que a equipe escreveu sobre o
+  // titular. Anonimizar apaga o resumo (gatilho da 0392); o acesso o entrega.
+  let bonus_calls: BonusCallRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("bonus_fila_itens")
+      .select("dia, ligacao_resultado, ligacao_resumo, ligacao_registrada_em")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .eq("tipo", "ligacao")
+      // Só a ligação registrada: o CHECK `bonus_fila_itens_ligacao_coerente` amarra
+      // resultado e hora, então filtrar pelo resultado é filtrar pela hora.
+      .in("ligacao_resultado", [...RESULTADOS_DE_LIGACAO])
+      .order("dia", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] bonus calls load failed", { request_id: requestId, error: error.message });
+    } else if (data) {
+      bonus_calls = data as BonusCallRow[];
+    }
+  }
+
   // Chamadas de voz — `contact_id` direto em `voice_calls` (migration 0232).
   //
   // O que existe aqui é o REGISTRO da ligação, nunca o áudio: gravação está
@@ -1577,6 +1610,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     checkpoints,
     appointments,
     tasks,
+    bonus_calls,
     webhook_captures,
     audit_log_extract,
     reply_drafts,
