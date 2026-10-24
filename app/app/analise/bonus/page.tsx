@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
-import { papelNoPrograma } from "@/lib/bonus/acesso";
+import { papelNoPrograma, podeCriarPrograma } from "@/lib/bonus/acesso";
 import { lerPrograma } from "@/lib/bonus/fatos";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { AssumirAprovacao } from "./_components/AssumirAprovacao";
 import { BonusClient } from "./_components/BonusClient";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,11 @@ export default async function BonusPage() {
       .maybeSingle();
     aprovadorSaiu = !error && !data;
   }
+  let podeAssumir = false;
+  if (org && aprovadorSaiu) {
+    const { data } = await admin.from("organizations").select("created_by").eq("id", org.orgId).maybeSingle();
+    podeAssumir = podeCriarPrograma(user, (data as { created_by?: string | null } | null)?.created_by ?? null);
+  }
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
@@ -45,9 +51,12 @@ export default async function BonusPage() {
         </p>
       </header>
       {aprovadorSaiu ? (
-        <p className="rounded-md border border-border p-3 text-sm" data-testid="aprovador-fora-da-equipe">
-          {t("Quem aprova o bônus não faz mais parte da equipe. Só o dono da organização ou um administrador da plataforma pode assumir a função.")}
-        </p>
+        <div className="rounded-md border border-border p-3 text-sm" data-testid="aprovador-fora-da-equipe">
+          <p>
+            {t("Quem aprova o bônus não faz mais parte da equipe. Só o dono da organização ou um administrador da plataforma pode assumir a função.")}
+          </p>
+          {podeAssumir ? <AssumirAprovacao userId={user.id} /> : null}
+        </div>
       ) : null}
       {lido.status === "erro" ? (
         <p className="text-sm text-destructive">{t("Não foi possível ler o programa de bônus.")}</p>

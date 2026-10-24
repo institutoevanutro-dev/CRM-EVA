@@ -3,18 +3,34 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const APROVADOR = "11111111-1111-4111-8111-111111111111";
 const PARTICIPANTE = "22222222-2222-4222-8222-222222222222";
 const ORG = "33333333-3333-4333-8333-333333333333";
+const DONO = "44444444-4444-4444-8444-444444444444";
+const OUTRO_ADMIN = "55555555-5555-4555-8555-555555555555";
 
 // `vi.hoisted`: as fábricas de `vi.mock` sobem para o topo do arquivo.
-const estado = vi.hoisted(() => ({ auditados: [] as unknown[], atualizados: [] as unknown[], quemPede: "" }));
+const estado = vi.hoisted(() => ({
+  auditados: [] as unknown[],
+  atualizados: [] as unknown[],
+  filtros: [] as [string, unknown][],
+  quemPede: "",
+  platformAdmin: false,
+  aprovadorNaEquipe: true,
+  membro: true,
+}));
 const { auditados, atualizados } = estado;
 
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: async () => null }));
 vi.mock("@/lib/audit", () => ({ audit: async (e: unknown) => void estado.auditados.push(e) }));
-vi.mock("@/lib/tarefas/responsavel", () => ({ responsavelValido: async () => true }));
+vi.mock("@/lib/tarefas/responsavel", () => ({ responsavelValido: async () => estado.membro }));
 vi.mock("@/lib/auth/require-role", () => ({
   requireRole: async () => ({
     ok: true,
-    user: { id: estado.quemPede, idioma: "pt-BR", is_platform_admin: false },
+    user: {
+      id: estado.quemPede,
+      idioma: "pt-BR",
+      is_platform_admin: estado.platformAdmin,
+      platform_admin_scope: estado.platformAdmin ? "full" : null,
+      support: null,
+    },
     org: { orgId: "33333333-3333-4333-8333-333333333333", role: "admin" },
   }),
 }));
@@ -37,17 +53,31 @@ vi.mock("@/lib/bonus/fatos", async () => {
   };
 });
 vi.mock("@/lib/supabase/admin", () => {
-  const cadeia: Record<string, unknown> = {};
-  for (const m of ["eq", "select"]) cadeia[m] = () => cadeia;
-  cadeia.maybeSingle = async () => ({ data: { id: "prog" }, error: null });
+  // Uma cadeia por tabela: `organizations` responde o dono, `user_organizations`
+  // se o aprovador segue na equipe, `bonus_programas` grava.
+  const cadeia = (resposta: () => unknown) => {
+    const c: Record<string, unknown> = {};
+    c.select = () => c;
+    c.is = () => c;
+    c.eq = (coluna: string, valor: unknown) => {
+      estado.filtros.push([coluna, valor]);
+      return c;
+    };
+    c.maybeSingle = async () => ({ data: resposta(), error: null });
+    return c;
+  };
   return {
     createAdminClient: () => ({
-      from: () => ({
-        update: (v: unknown) => {
-          estado.atualizados.push(v);
-          return cadeia;
-        },
-      }),
+      from: (tabela: string) => {
+        if (tabela === "organizations") return cadeia(() => ({ created_by: DONO }));
+        if (tabela === "user_organizations") return cadeia(() => (estado.aprovadorNaEquipe ? { id: "vinculo" } : null));
+        return {
+          update: (v: unknown) => {
+            estado.atualizados.push(v);
+            return cadeia(() => ({ id: "prog" }));
+          },
+        };
+      },
     }),
   };
 });
@@ -61,6 +91,10 @@ describe("PUT /api/v1/bonus/programa", () => {
   beforeEach(() => {
     auditados.length = 0;
     atualizados.length = 0;
+    estado.filtros.length = 0;
+    estado.platformAdmin = false;
+    estado.aprovadorNaEquipe = true;
+    estado.membro = true;
   });
 
   it("admin participante (não aprovador) leva 403, e nada é gravado nem auditado", async () => {
@@ -97,6 +131,76 @@ describe("PUT /api/v1/bonus/programa", () => {
     estado.quemPede = APROVADOR;
     expect((await PUT(pedido({ ativo: false }))).status).toBe(200);
     expect(auditados).toEqual([expect.objectContaining({ action: "bonus.regras_alteradas", metadata: { chaves: ["ativo"] } })]);
+  });
+});
+
+describe("PUT /api/v1/bonus/programa: assumir quando o aprovador saiu", () => {
+  beforeEach(() => {
+    auditados.length = 0;
+    atualizados.length = 0;
+    estado.filtros.length = 0;
+    estado.platformAdmin = false;
+    estado.aprovadorNaEquipe = false;
+    estado.membro = true;
+  });
+
+  it("aprovador ainda na equipe: o dono não assume, nada gravado nem auditado", async () => {
+    estado.aprovadorNaEquipe = true;
+    estado.quemPede = DONO;
+    const res = await PUT(pedido({ aprovador_user_id: DONO }));
+    expect(res.status).toBe(403);
+    expect(atualizados).toEqual([]);
+    expect(auditados).toEqual([]);
+  });
+
+  it("aprovador revogado: o dono assume, com compare-and-set no aprovador antigo", async () => {
+    estado.quemPede = DONO;
+    const res = await PUT(pedido({ aprovador_user_id: DONO }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ id: "prog", transferido: true });
+    expect(atualizados).toEqual([{ aprovador_user_id: DONO }]);
+    expect(estado.filtros).toContainEqual(["aprovador_user_id", APROVADOR]);
+    expect(estado.filtros).toContainEqual(["organization_id", ORG]);
+    expect(auditados).toEqual([
+      expect.objectContaining({ action: "bonus.aprovador_assumido", actorUserId: DONO, metadata: { aprovador_anterior_user_id: APROVADOR } }),
+    ]);
+  });
+
+  it("aprovador revogado: platform admin pleno e membro assume", async () => {
+    estado.quemPede = OUTRO_ADMIN;
+    estado.platformAdmin = true;
+    expect((await PUT(pedido({ aprovador_user_id: OUTRO_ADMIN }))).status).toBe(200);
+    expect(atualizados).toEqual([{ aprovador_user_id: OUTRO_ADMIN }]);
+  });
+
+  it("aprovador revogado: platform admin que não é membro leva 422", async () => {
+    estado.quemPede = OUTRO_ADMIN;
+    estado.platformAdmin = true;
+    estado.membro = false;
+    expect((await PUT(pedido({ aprovador_user_id: OUTRO_ADMIN }))).status).toBe(422);
+    expect(atualizados).toEqual([]);
+  });
+
+  it("aprovador revogado: outro admin da organização não assume", async () => {
+    estado.quemPede = OUTRO_ADMIN;
+    expect((await PUT(pedido({ aprovador_user_id: OUTRO_ADMIN }))).status).toBe(403);
+    expect(atualizados).toEqual([]);
+  });
+
+  it("aprovador revogado: tomada não leva regras nem ativo junto", async () => {
+    estado.quemPede = DONO;
+    expect((await PUT(pedido({ aprovador_user_id: DONO, ativo: false }))).status).toBe(403);
+    expect(
+      (await PUT(pedido({ aprovador_user_id: DONO, regras: { participantes: [PARTICIPANTE], tarefas: { valor_cents: 30_000 } } }))).status,
+    ).toBe(403);
+    expect(atualizados).toEqual([]);
+    expect(auditados).toEqual([]);
+  });
+
+  it("aprovador revogado: o dono não entrega a função a outra pessoa", async () => {
+    estado.quemPede = DONO;
+    expect((await PUT(pedido({ aprovador_user_id: PARTICIPANTE }))).status).toBe(403);
+    expect(atualizados).toEqual([]);
   });
 });
 

@@ -841,6 +841,8 @@ export const AUDIT_ACTIONS = [
   "bonus.ligacao_registrada",
   "bonus.stories_lidos",
   "bonus.stories_lancados",
+  /** O dono ou o platform admin assumiu a aprovação de quem saiu da equipe. Metadata: só o UUID anterior. */
+  "bonus.aprovador_assumido",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

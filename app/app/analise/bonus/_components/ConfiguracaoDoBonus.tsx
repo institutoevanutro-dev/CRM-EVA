@@ -335,7 +335,7 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           <p className="text-sm text-muted-foreground">
-            {t("Quem aprova não pode ser tirado da instalação. Para isso, passe a função a outra pessoa antes.")}
+            {t("Se quem aprova sair da equipe, o dono da organização ou um administrador da plataforma pode assumir a função. Passar a função antes evita isso.")}
           </p>
           <select
             aria-label={t("Novo aprovador")}

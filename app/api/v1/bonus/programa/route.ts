@@ -3,7 +3,10 @@
  *
  * GET: só o aprovador lê a regra; quem não é recebe `programa: null` e se pode criar.
  * POST: cria (dono da organização ou platform admin pleno); quem cria aprova.
- * PUT: só o aprovador muda a regra, liga/desliga, passa a função adiante.
+ * PUT: só o aprovador muda a regra, liga/desliga, passa a função adiante. Se o
+ *      aprovador saiu da equipe, o dono ou o platform admin pleno ASSUME a função
+ *      (corpo só `{ aprovador_user_id: <si mesmo> }`); sem isso a configuração
+ *      ficaria trancada para sempre.
  *
  * O aprovador é uma PESSOA (`bonus_programas.aprovador_user_id`), não um papel:
  * quem participa costuma ser admin. Toda escrita é service role com filtro de
@@ -99,7 +102,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
   const requestId = randomUUID();
-  const authz = await requireRole("agent", { requestId, resource: "bonus_programas" });
+  const authz = await requireRole("agent", { requestId, resource: "bonus_programas", allowPlatformAdmin: true });
   if (!authz.ok) return authz.response;
   const t = (s: string) => traduzir(s, authz.user.idioma);
 
@@ -108,10 +111,45 @@ export async function PUT(req: NextRequest): Promise<Response> {
 
   const admin = createAdminClient();
   const lido = await lerPrograma(admin, authz.org.orgId);
-  if (lido.status !== "ok" || lido.programa.aprovadorUserId !== authz.user.id) {
-    return fail("forbidden", t("Só quem aprova o bônus muda a configuração."), 403, { requestId });
-  }
+  const negado = () => fail("forbidden", t("Só quem aprova o bônus muda a configuração."), 403, { requestId });
+  if (lido.status !== "ok") return negado();
   const programa = lido.programa;
+  if (programa.aprovadorUserId !== authz.user.id) {
+    // Tomada: só a troca para si mesmo, só com o aprovador fora da equipe.
+    if (Object.keys(parsed.data).length !== 1 || parsed.data.aprovador_user_id !== authz.user.id) return negado();
+    const vinculo = await admin
+      .from("user_organizations")
+      .select("id")
+      .eq("organization_id", authz.org.orgId)
+      .eq("user_id", programa.aprovadorUserId)
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (vinculo.error || vinculo.data) return negado();
+    if (!podeCriarPrograma(authz.user, await criadoPor(admin, authz.org.orgId))) return negado();
+    if (!(await responsavelValido(admin, authz.org.orgId, authz.user.id))) {
+      return fail("validation_failed", t("A pessoa escolhida não faz parte da equipe."), 422, { requestId });
+    }
+    const { data, error } = await admin
+      .from("bonus_programas")
+      .update({ aprovador_user_id: authz.user.id })
+      .eq("id", programa.id)
+      .eq("organization_id", authz.org.orgId)
+      .eq("aprovador_user_id", programa.aprovadorUserId)
+      .select("id")
+      .maybeSingle();
+    if (error) return fail("internal_error", t("Erro ao salvar."), 500, { requestId });
+    if (!data) return fail("state_conflict", t("A configuração mudou. Recarregue a página."), 409, { requestId });
+    await audit({
+      organizationId: authz.org.orgId,
+      actorUserId: authz.user.id,
+      action: "bonus.aprovador_assumido",
+      resourceType: "bonus_programas",
+      resourceId: programa.id,
+      metadata: { aprovador_anterior_user_id: programa.aprovadorUserId },
+      requestId,
+    });
+    return ok({ id: programa.id, transferido: true }, { requestId });
+  }
 
   const patch: Record<string, unknown> = {};
   const chaves: string[] = [];
