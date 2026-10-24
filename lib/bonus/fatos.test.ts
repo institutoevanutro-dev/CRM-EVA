@@ -68,4 +68,15 @@ describe("início do programa", () => {
     const r = await lerPrograma(admin, "org");
     expect(r.status === "ok" && r.programa.inicio).toBe("2026-03-14");
   });
+
+  it.each([[undefined], ["lixo"]])("created_at %s vira inicio null, sem lançar", async (created_at) => {
+    const linha = {
+      id: "p1", organization_id: "org", aprovador_user_id: "u1", ativo: true, regras: {}, created_at,
+      organizations: { timezone: "America/Sao_Paulo", settings: {} },
+    };
+    const consulta = { select: () => consulta, eq: () => consulta, maybeSingle: async () => ({ data: linha, error: null }) };
+    const admin = { from: () => consulta } as unknown as SupabaseClient;
+    const r = await lerPrograma(admin, "org");
+    expect(r.status === "ok" && r.programa.inicio).toBeNull();
+  });
 });

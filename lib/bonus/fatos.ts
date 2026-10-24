@@ -33,8 +33,8 @@ export interface ProgramaDoBonus {
   regras: RegrasDoBonus;
   fuso: string;
   etapasDeSinalPago: string[];
-  /** Dia local (no fuso do programa) em que ele foi criado. */
-  inicio: string;
+  /** Dia local (no fuso do programa) em que ele foi criado; `null` se `created_at` faltar ou for inválido (sem corte). */
+  inicio: string | null;
 }
 
 export type LeituraDoPrograma =
@@ -53,7 +53,7 @@ interface LinhaDoPrograma {
   aprovador_user_id: string;
   ativo: boolean;
   regras: unknown;
-  created_at: string;
+  created_at: string | null | undefined;
   organizations: { timezone: string | null; settings: unknown } | null;
 }
 
@@ -61,6 +61,7 @@ function paraPrograma(l: LinhaDoPrograma): LeituraDoPrograma {
   const lidas = lerRegras(l.regras);
   if (!lidas.ok) return { status: "erro", motivo: `regras_invalidas:${lidas.erro}` };
   const tz = l.organizations?.timezone?.trim() ?? "";
+  const criado = l.created_at ? new Date(l.created_at) : null;
   const fuso = tz !== "" && fusoValido(tz) ? tz : FUSO_PADRAO;
   return {
     status: "ok",
@@ -72,7 +73,7 @@ function paraPrograma(l: LinhaDoPrograma): LeituraDoPrograma {
       regras: lidas.regras,
       fuso,
       etapasDeSinalPago: lerPreferencias(l.organizations?.settings).etapasDeSinalPago,
-      inicio: diaLocalISO(new Date(l.created_at), fuso),
+      inicio: criado && !Number.isNaN(criado.getTime()) ? diaLocalISO(criado, fuso) : null,
     },
   };
 }
