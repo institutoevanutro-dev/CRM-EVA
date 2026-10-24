@@ -31,6 +31,7 @@ vi.mock("@/lib/bonus/fatos", async () => {
         regras: regrasSchema.parse({ participantes: [PARTICIPANTE], tarefas: { valor_cents: 20_000 } }),
         fuso: "America/Sao_Paulo",
         etapasDeSinalPago: [],
+        inicio: "2026-01-01",
       },
     }),
   };

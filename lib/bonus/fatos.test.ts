@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { logger } from "@/lib/logger";
 
-import { paraTarefaDoMes, programasAtivos } from "./fatos";
+import { lerPrograma, paraTarefaDoMes, programasAtivos } from "./fatos";
 
 const SP = "America/Sao_Paulo";
 
@@ -34,7 +34,7 @@ describe("tarefa do banco para o cálculo", () => {
 describe("programas ativos", () => {
   it("regra inválida sai da lista e deixa aviso no log, sem derrubar os outros", async () => {
     const linha = (id: string, organization_id: string, regras: unknown) => ({
-      id, organization_id, aprovador_user_id: "u1", ativo: true, regras,
+      id, organization_id, aprovador_user_id: "u1", ativo: true, regras, created_at: "2026-03-01T12:00:00Z",
       organizations: { timezone: "Fuso/Inexistente", settings: {} },
     });
     const data = [linha("p1", "org-ok", {}), linha("p2", "org-ruim", { participantes: "x" })];
@@ -53,5 +53,19 @@ describe("programas ativos", () => {
       expect.objectContaining({ organizationId: "org-ruim", motivo: expect.stringMatching(/^regras_invalidas:/) }),
     );
     aviso.mockRestore();
+  });
+});
+
+describe("início do programa", () => {
+  it("created_at perto da meia-noite UTC cai no dia local do fuso", async () => {
+    const linha = {
+      id: "p1", organization_id: "org", aprovador_user_id: "u1", ativo: true, regras: {},
+      created_at: "2026-03-15T02:00:00Z",
+      organizations: { timezone: "America/Sao_Paulo", settings: {} },
+    };
+    const consulta = { select: () => consulta, eq: () => consulta, maybeSingle: async () => ({ data: linha, error: null }) };
+    const admin = { from: () => consulta } as unknown as SupabaseClient;
+    const r = await lerPrograma(admin, "org");
+    expect(r.status === "ok" && r.programa.inicio).toBe("2026-03-14");
   });
 });

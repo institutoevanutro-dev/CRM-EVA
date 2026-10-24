@@ -22,13 +22,14 @@ vi.mock("@/lib/bonus/fatos", async () => {
   return {
     lerPrograma: async () => ({
       status: "ok",
-      programa: { id: "prog", organizationId: "org-a", aprovadorUserId: ids.APROVADOR, ativo: true, regras, fuso: "America/Sao_Paulo", etapasDeSinalPago: [] },
+      programa: { id: "prog", organizationId: "org-a", aprovadorUserId: ids.APROVADOR, ativo: true, regras, fuso: "America/Sao_Paulo", etapasDeSinalPago: [], inicio: "2026-01-01" },
     }),
     fatosDoMes: async (_a: unknown, _p: unknown, mes: string, hoje: string) => ({
       mes,
       hoje,
       regras,
       pessoas: [{ userId: ids.A, tarefas: [], leads: [], ligacoes: [], diasDeExcecao: [] }],
+      inicioDoPrograma: null,
       storiesPorDia: {},
       resultados: { comparecimento: 0, sinal_pago: 0, avaliacao_google: null },
     }),

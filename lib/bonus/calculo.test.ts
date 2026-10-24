@@ -140,6 +140,7 @@ function entrada(p: Partial<EntradaDoMes>): EntradaDoMes {
   return {
     mes: "2026-12",
     hoje: "2026-12-04",
+    inicioDoPrograma: null,
     regras: regras(),
     pessoas: [mesPerfeito(A, DEZEMBRO_UTEIS), mesPerfeito(B, DEZEMBRO_UTEIS)],
     storiesPorDia: Object.fromEntries(DEZEMBRO_UTEIS.map((d) => [d, 2])),
@@ -176,6 +177,39 @@ describe("calcularMes", () => {
     expect(a.tarefas.devidos).toBe(7);
     expect(a.tarefas.percentualBps).toBe(10_000);
     expect(b.tarefas.devidos).toBe(10);
+  });
+
+  describe("programa ligado no meio do mês", () => {
+    // 2026-03: dias úteis 2..13 antes do início (14 é sábado, 15 segunda), 15..19 depois
+    const ANTES = ["2026-03-02", "2026-03-03", "2026-03-04", "2026-03-05", "2026-03-06", "2026-03-09", "2026-03-10", "2026-03-11", "2026-03-12", "2026-03-13"];
+    const DEPOIS = ["2026-03-16", "2026-03-17", "2026-03-18", "2026-03-19", "2026-03-20"];
+    const pessoa = (): FatosDaPessoa => ({
+      userId: A,
+      tarefas: [],
+      leads: [...ANTES.map((dia) => ({ dia, meta: 30, feitos: 0 })), ...DEPOIS.map((dia) => ({ dia, meta: 30, feitos: 30 }))],
+      ligacoes: [...ANTES.map((dia) => ({ dia, meta: 5, feitos: 0 })), ...DEPOIS.map((dia) => ({ dia, meta: 5, feitos: 5 }))],
+      diasDeExcecao: [],
+    });
+    const base = (inicioDoPrograma: string | null) =>
+      entrada({
+        mes: "2026-03",
+        hoje: "2026-03-21",
+        inicioDoPrograma,
+        pessoas: [pessoa()],
+        storiesPorDia: Object.fromEntries(DEPOIS.map((d) => [d, 2])),
+      });
+
+    it("dias antes do início saem de leads, ligações e stories", () => {
+      const p = calcularMes(base("2026-03-15")).pessoas[0]!;
+      expect(p.tarefas.naoFeitos.filter((i) => i.ref < "2026-03-15")).toEqual([]);
+      expect(p.tarefas.fracaoBps).toBe(10_000);
+    });
+
+    it("sem início (null) o comportamento antigo vale: os dias anteriores contam como não feitos", () => {
+      const p = calcularMes(base(null)).pessoas[0]!;
+      expect(p.tarefas.naoFeitos.some((i) => i.tipo === "stories" && i.ref < "2026-03-15")).toBe(true);
+      expect(p.tarefas.fracaoBps).toBeLessThan(10_000);
+    });
   });
 
   it("feriado não gera rotina para ninguém", () => {

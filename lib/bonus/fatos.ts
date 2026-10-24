@@ -33,6 +33,8 @@ export interface ProgramaDoBonus {
   regras: RegrasDoBonus;
   fuso: string;
   etapasDeSinalPago: string[];
+  /** Dia local (no fuso do programa) em que ele foi criado. */
+  inicio: string;
 }
 
 export type LeituraDoPrograma =
@@ -43,7 +45,7 @@ export type LeituraDoPrograma =
 const PAGINA = 1000;
 const LOTE = 200;
 const COLUNAS_DO_PROGRAMA =
-  "id, organization_id, aprovador_user_id, ativo, regras, organizations(timezone, settings)";
+  "id, organization_id, aprovador_user_id, ativo, regras, created_at, organizations(timezone, settings)";
 
 interface LinhaDoPrograma {
   id: string;
@@ -51,6 +53,7 @@ interface LinhaDoPrograma {
   aprovador_user_id: string;
   ativo: boolean;
   regras: unknown;
+  created_at: string;
   organizations: { timezone: string | null; settings: unknown } | null;
 }
 
@@ -58,6 +61,7 @@ function paraPrograma(l: LinhaDoPrograma): LeituraDoPrograma {
   const lidas = lerRegras(l.regras);
   if (!lidas.ok) return { status: "erro", motivo: `regras_invalidas:${lidas.erro}` };
   const tz = l.organizations?.timezone?.trim() ?? "";
+  const fuso = tz !== "" && fusoValido(tz) ? tz : FUSO_PADRAO;
   return {
     status: "ok",
     programa: {
@@ -66,8 +70,9 @@ function paraPrograma(l: LinhaDoPrograma): LeituraDoPrograma {
       aprovadorUserId: l.aprovador_user_id,
       ativo: l.ativo,
       regras: lidas.regras,
-      fuso: tz !== "" && fusoValido(tz) ? tz : FUSO_PADRAO,
+      fuso,
       etapasDeSinalPago: lerPreferencias(l.organizations?.settings).etapasDeSinalPago,
+      inicio: diaLocalISO(new Date(l.created_at), fuso),
     },
   };
 }
@@ -274,6 +279,7 @@ export async function fatosDoMes(
   return {
     mes,
     hoje,
+    inicioDoPrograma: programa.inicio,
     regras: programa.regras,
     pessoas,
     storiesPorDia: Object.fromEntries(stories.map((s) => [s.dia, contagemDoDia(s)])),

@@ -47,6 +47,8 @@ export interface ContagensDoMes {
 export interface EntradaDoMes {
   mes: string;
   hoje: string;
+  /** Dia local (`YYYY-MM-DD`) em que o programa começou; `null` = sem corte. Dias antes saem das rotinas, como feriado. */
+  inicioDoPrograma: string | null;
   regras: RegrasDoBonus;
   pessoas: FatosDaPessoa[];
   storiesPorDia: Record<string, number>;
@@ -165,7 +167,7 @@ function placarDaPessoa(
   }
 
   const excecoes = new Set(p.diasDeExcecao);
-  const vale = (dia: string) => diasUteis.has(dia) && !excecoes.has(dia);
+  const vale = (dia: string) => diasUteis.has(dia) && !excecoes.has(dia) && (e.inicioDoPrograma === null || dia >= e.inicioDoPrograma);
   for (const r of p.leads) {
     if (vale(r.dia)) contar(desfechoDaRotina(r.meta, r.feitos, r.dia, e.hoje), { tipo: "leads", ref: r.dia, motivo: "incompleta" });
   }
