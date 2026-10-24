@@ -614,6 +614,20 @@ export const NAV_CATALOG = [
     section: "Os números do período",
   },
   {
+    // O bônus da equipe: cada participante vê o seu placar e a fila de hoje; quem
+    // aprova vê os placares lado a lado e a configuração. Fora da barra lateral:
+    // ela está medida no limite (`app/app/analise/page.tsx`); a porta é o hub.
+    // `agent`: viewer não manda mensagem nem registra ligação. O recorte por
+    // pessoa é das rotas (`/api/v1/bonus/*`), não do papel.
+    href: "/app/analise/bonus",
+    label: "Bônus",
+    description: "O placar do mês, a fila de hoje e as metas da equipe.",
+    icon: "Trophy",
+    group: "analise",
+    section: "Os números do período",
+    minRole: "agent",
+  },
+  {
     // Observabilidade, não configuração: por isso não fica junto dos agentes.
     href: "/app/ai/evolution",
     label: "Evolução da IA",

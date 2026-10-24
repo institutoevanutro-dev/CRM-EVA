@@ -39,6 +39,9 @@ export {
   // Evolução da IA), e um terceiro gráfico deixaria as três linhas do menu
   // indistinguíveis de relance. Mesma família Phosphor, mesmo peso.
   Megaphone,
+  // bônus da equipe (Análise › Bônus). Trophy e não outro ChartX: pelo mesmo
+  // motivo do Megaphone acima, o ChartBar já é o de Desempenho no grupo.
+  Trophy,
   // health dashboard
   WifiHigh,
   Brain,
