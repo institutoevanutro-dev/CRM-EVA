@@ -49,6 +49,13 @@ describe("ApiErrorToast", () => {
     expect(knownCodes.length).toBeGreaterThanOrEqual(10);
   });
 
+  it("bonus_ritmo mostra a frase da rota (com os segundos) como aviso, não o texto genérico de rate limit", () => {
+    const frase = "Aguarde 8 s para mandar a próxima mensagem da fila (proteção do número).";
+    showApiError(new ApiError(429, "bonus_ritmo", { aguarde_s: 8 }, "req-r", frase));
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.warning).toHaveBeenCalledWith(frase, expect.objectContaining({ description: "ID: req-r" }));
+  });
+
   it("calls toast.warning with canonical PT-BR for conversation_already_claimed", () => {
     showApiError(new ApiError(409, "conversation_already_claimed", undefined, "req-1"));
     expect(toast.warning).toHaveBeenCalledTimes(1);

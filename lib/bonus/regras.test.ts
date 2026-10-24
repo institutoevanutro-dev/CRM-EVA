@@ -16,7 +16,7 @@ describe("regras do bônus", () => {
     ]);
     expect(r.fila.hora_local).toBe(7);
     expect(r.fila.etiqueta_excluida).toBe("reativacao");
-    expect(r.protecao).toEqual({ limite_bps: 500, dias_seguidos: 3, fracao_reduzida_bps: 5_000 });
+    expect(r.protecao).toEqual({ limite_bps: 500, dias_seguidos: 3, fracao_reduzida_bps: 5_000, intervalo_minimo_s: 20 });
     expect(r.teto_cents).toBeNull();
     expect(REGRAS_PADRAO).toEqual(r);
   });

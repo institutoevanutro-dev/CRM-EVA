@@ -11468,6 +11468,13 @@ export const DICIONARIO: Traducoes = {
     {
       es: "Los pedidos para dejar de recibir mensajes pasaron del límite durante {d} días seguidos. Hoy cada persona recibe {n} leads antiguos en lugar de {m}. La fila vuelve sola a su tamaño normal cuando los pedidos bajen. Revíselo en Análisis › Bono.",
     },
+  // Bônus da equipe: o ritmo da fila no envio do Inbox (`lib/bonus/ritmo.ts`, POST /api/v1/messages).
+  "Aguarde {n} s para mandar a próxima mensagem da fila (proteção do número).": {
+    es: "Espere {n} s para enviar el próximo mensaje de la fila (protección del número).",
+  },
+  "Fora do horário de envio do número ({inicio}h às {fim}h). A mensagem da fila sai dentro da janela.": {
+    es: "Fuera del horario de envío del número ({inicio}h a {fim}h). El mensaje de la fila sale dentro de la ventana.",
+  },
 };
 
 /**

@@ -8,7 +8,10 @@ import { type NextRequest } from "next/server";
 import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { ApiError } from "@/lib/api/types";
 import { fail, ok } from "@/lib/api/wrappers";
+import { ritmoDaFila } from "@/lib/bonus/ritmo";
+import { traduzir } from "@/lib/i18n/dicionario";
 import { sendMessageSchema, validateRequest, type SendMessageInput } from "@/lib/schemas";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 import { sendMessageHandler } from "./_handler";
 
@@ -50,6 +53,32 @@ export async function POST(req: NextRequest): Promise<Response> {
       });
     }
     throw err;
+  }
+
+  // Ritmo da fila de leads antigos (bônus da equipe): só o envio de PESSOA. Mora
+  // aqui, e não no `_handler.ts`, porque o handler também serve a IA e o MCP.
+  // Falha aberta: `ritmoDaFila` nunca lança e devolve `pode` em qualquer erro.
+  if (actor.type === "user") {
+    const ritmo = await ritmoDaFila(createAdminClient(), organizationId, input.conversation_id);
+    if (ritmo.tipo === "aguarde") {
+      const n = String(ritmo.segundos);
+      return fail(
+        "bonus_ritmo",
+        traduzir("Aguarde {n} s para mandar a próxima mensagem da fila (proteção do número).", idioma ?? "pt-BR").replace("{n}", n),
+        429,
+        { details: { aguarde_s: ritmo.segundos }, requestId, headers: { "Retry-After": n } },
+      );
+    }
+    if (ritmo.tipo === "fora_da_janela") {
+      return fail(
+        "fora_da_janela_da_fila",
+        traduzir("Fora do horário de envio do número ({inicio}h às {fim}h). A mensagem da fila sai dentro da janela.", idioma ?? "pt-BR")
+          .replace("{inicio}", String(ritmo.inicio ?? 7))
+          .replace("{fim}", String(ritmo.fim ?? 22)),
+        422,
+        { requestId },
+      );
+    }
   }
 
   try {

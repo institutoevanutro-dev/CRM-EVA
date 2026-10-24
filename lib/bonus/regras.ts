@@ -81,6 +81,7 @@ export const regrasSchema = z.object({
       limite_bps: bps.default(500),
       dias_seguidos: inteiro(1, 10).default(3),
       fracao_reduzida_bps: bps.default(5_000),
+      intervalo_minimo_s: inteiro(0, 600).default(20),
     })
     .prefault({}),
 });
