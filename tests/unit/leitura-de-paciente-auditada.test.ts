@@ -26,6 +26,7 @@ const LEITURAS: Array<[arquivo: string, metodo: string, acao: string]> = [
   ["app/api/v1/lgpd/requests/[id]/preview/route.ts", "GET", "lgpd.request_previewed"],
   ["app/api/v1/prontuario/contacts/route.ts", "GET", "prontuario.contact_read"],
   ["app/api/v1/prontuario/contacts/[id]/route.ts", "GET", "prontuario.contact_read"],
+  ["app/api/v1/bonus/meu/route.ts", "GET", "contact.listed"],
 ];
 
 /** Mutações que não deixavam linha (B6). */

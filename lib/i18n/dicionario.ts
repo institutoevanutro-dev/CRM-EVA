@@ -11478,6 +11478,30 @@ export const DICIONARIO: Traducoes = {
   // Bônus da equipe: o lançamento manual dos stories (PUT /api/v1/bonus/stories).
   "Só quem aprova o bônus lança os stories.": { es: "Solo quien aprueba el bono registra las historias." },
   "Erro ao salvar.": { es: "Error al guardar." },
+  // Bônus da equipe: as rotas da configuração, do placar, da equipe e da ligação (/api/v1/bonus/*).
+  "Erro ao ler o programa.": { es: "Error al leer el programa." },
+  "Só o dono da organização liga o programa de bônus.": { es: "Solo el dueño de la organización activa el programa de bonos." },
+  "O programa já existe.": { es: "El programa ya existe." },
+  "Erro ao criar o programa.": { es: "Error al crear el programa." },
+  "Só quem aprova o bônus muda a configuração.": { es: "Solo quien aprueba el bono cambia la configuración." },
+  "Confira a configuração.": { es: "Revise la configuración." },
+  "Um dos participantes não faz parte da equipe.": { es: "Uno de los participantes no forma parte del equipo." },
+  "A pessoa escolhida não faz parte da equipe.": { es: "La persona elegida no forma parte del equipo." },
+  "A configuração mudou. Recarregue a página.": { es: "La configuración cambió. Recargue la página." },
+  "O programa de bônus não está ligado.": { es: "El programa de bonos no está activado." },
+  "Você não participa do programa de bônus.": { es: "Usted no participa en el programa de bonos." },
+  "Erro ao montar o placar.": { es: "Error al armar el marcador." },
+  "Só quem aprova o bônus vê os placares da equipe.": { es: "Solo quien aprueba el bono ve los marcadores del equipo." },
+  "Erro ao montar os placares.": { es: "Error al armar los marcadores." },
+  "Escreva o resultado e um resumo curto.": { es: "Escriba el resultado y un resumen corto." },
+  "Item da fila não encontrado.": { es: "Elemento de la fila no encontrado." },
+  "Este item não é uma ligação.": { es: "Este elemento no es una llamada." },
+  "Só dá para registrar a ligação no dia da fila.": { es: "Solo se puede registrar la llamada el día de la fila." },
+  "Erro ao registrar a ligação.": { es: "Error al registrar la llamada." },
+  // O rótulo e os motivos da atividade `call_logged` na linha do tempo.
+  "Ligação registrada": { es: "Llamada registrada" },
+  "Ligação registrada: atendeu": { es: "Llamada registrada: atendió" },
+  "Ligação registrada: não atendeu": { es: "Llamada registrada: no atendió" },
 };
 
 /**

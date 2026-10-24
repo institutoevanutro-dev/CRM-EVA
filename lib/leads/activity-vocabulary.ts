@@ -216,6 +216,8 @@ export type ActivityType =
    * UPDATE do telefone, porque a linha é rastro: falhar nela não pode desfazer
    * a escrita que ela descreve.
    */
+  /** Ligação registrada pela fila do bônus da equipe (migration 0392). O resumo fica no item da fila. */
+  | "call_logged"
   | "contact_field_auto_applied";
 
 export const ACTIVITY_LABELS: Record<ActivityType, string> = {
@@ -328,6 +330,7 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   // digitação de alguém) e de onde veio. Só assim quem lê a linha do tempo não
   // vai procurar quem foi que digitou o número.
   contact_field_auto_applied: "Telefone informado pelo cliente aplicado automaticamente",
+  call_logged: "Ligação registrada",
 };
 
 /** Quando o tipo é legado/desconhecido, a linha ainda é honesta — sem jargão. */
