@@ -21,6 +21,7 @@ import { fatosDoMes, lerPrograma, mensagensDaEquipe } from "@/lib/bonus/fatos";
 import { type ItemDaFila, itensEnviados } from "@/lib/bonus/fila";
 import type { ItemDaFilaNaTela, RespostaMeuBonus } from "@/lib/bonus/tela";
 import type { TipoDeItemDaFila } from "@/lib/bonus/tipos";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -104,7 +105,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       fila = linhas.map((l) => ({
         id: l.id,
         tipo: l.tipo,
-        contato_nome: l.contacts?.display_name ?? l.contacts?.name ?? t("Contato sem nome"),
+        // O telefone vai em campo próprio; aqui só o nome de gente (regra canônica).
+        contato_nome: nomeDoContato(l.contacts) ?? t("Contato sem nome"),
         telefone: l.contacts?.phone_number ?? null,
         conversation_id: l.conversation_id,
         motivo: l.motivo,
