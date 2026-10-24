@@ -15,6 +15,7 @@ const estado = vi.hoisted(() => ({
   platformAdmin: false,
   aprovadorNaEquipe: true,
   membro: true,
+  participantes: [] as string[],
 }));
 const { auditados, atualizados } = estado;
 
@@ -44,7 +45,7 @@ vi.mock("@/lib/bonus/fatos", async () => {
         organizationId: ORG,
         aprovadorUserId: APROVADOR,
         ativo: true,
-        regras: regrasSchema.parse({ participantes: [PARTICIPANTE], tarefas: { valor_cents: 20_000 } }),
+        regras: regrasSchema.parse({ participantes: [PARTICIPANTE, ...estado.participantes], tarefas: { valor_cents: 20_000 } }),
         fuso: "America/Sao_Paulo",
         etapasDeSinalPago: [],
         inicio: "2026-01-01",
@@ -98,6 +99,7 @@ describe("PUT /api/v1/bonus/programa", () => {
     estado.platformAdmin = false;
     estado.aprovadorNaEquipe = true;
     estado.membro = true;
+    estado.participantes = [];
   });
 
   it("admin participante (não aprovador) leva 403, e nada é gravado nem auditado", async () => {
@@ -116,18 +118,38 @@ describe("PUT /api/v1/bonus/programa", () => {
 
   it("o aprovador grava, e a auditoria não leva valor nenhum", async () => {
     estado.quemPede = APROVADOR;
-    const res = await PUT(pedido({ regras: { participantes: [PARTICIPANTE], tarefas: { valor_cents: 25_000 } } }));
+    const res = await PUT(pedido({ regras: { participantes: [PARTICIPANTE], tarefas: { valor_cents: 40_000 } } }));
     expect(res.status).toBe(200);
     expect(atualizados).toHaveLength(1);
-    expect(JSON.stringify(auditados)).not.toContain("25000");
+    expect(JSON.stringify(auditados)).not.toContain("40000");
     expect(auditados).toEqual([expect.objectContaining({ action: "bonus.regras_alteradas", metadata: { chaves: ["tarefas"] } })]);
   });
 
   it("`ativo` igual ao atual não entra nas chaves alteradas", async () => {
     estado.quemPede = APROVADOR;
-    const res = await PUT(pedido({ ativo: true, regras: { participantes: [PARTICIPANTE], tarefas: { valor_cents: 25_000 } } }));
+    const res = await PUT(pedido({ ativo: true, regras: { participantes: [PARTICIPANTE], tarefas: { valor_cents: 40_000 } } }));
     expect(res.status).toBe(200);
     expect(auditados).toEqual([expect.objectContaining({ metadata: { chaves: ["tarefas"] } })]);
+  });
+
+  it("o aprovador não se marca como participante (422, nada gravado)", async () => {
+    estado.quemPede = APROVADOR;
+    const res = await PUT(pedido({ regras: { participantes: [PARTICIPANTE, APROVADOR] } }));
+    expect(res.status).toBe(422);
+    expect(atualizados).toEqual([]);
+    expect(auditados).toEqual([]);
+  });
+
+  it("a aprovação não passa para um participante (422, nada gravado)", async () => {
+    estado.quemPede = APROVADOR;
+    expect((await PUT(pedido({ aprovador_user_id: PARTICIPANTE }))).status).toBe(422);
+    expect(atualizados).toEqual([]);
+  });
+
+  it("passar a aprovação e tirar a pessoa dos participantes no mesmo pedido vale", async () => {
+    estado.quemPede = APROVADOR;
+    const res = await PUT(pedido({ aprovador_user_id: PARTICIPANTE, regras: { participantes: [] } }));
+    expect(res.status).toBe(200);
   });
 
   it("desligar o programa audita a chave `ativo`", async () => {
@@ -145,6 +167,7 @@ describe("PUT /api/v1/bonus/programa: assumir quando o aprovador saiu", () => {
     estado.platformAdmin = false;
     estado.aprovadorNaEquipe = false;
     estado.membro = true;
+    estado.participantes = [];
   });
 
   it("aprovador ainda na equipe: o dono não assume, nada gravado nem auditado", async () => {
@@ -196,6 +219,14 @@ describe("PUT /api/v1/bonus/programa: assumir quando o aprovador saiu", () => {
     expect(
       (await PUT(pedido({ aprovador_user_id: DONO, regras: { participantes: [PARTICIPANTE], tarefas: { valor_cents: 30_000 } } }))).status,
     ).toBe(403);
+    expect(atualizados).toEqual([]);
+    expect(auditados).toEqual([]);
+  });
+
+  it("aprovador revogado: o dono que é participante não assume (422)", async () => {
+    estado.quemPede = DONO;
+    estado.participantes = [DONO];
+    expect((await PUT(pedido({ aprovador_user_id: DONO }))).status).toBe(422);
     expect(atualizados).toEqual([]);
     expect(auditados).toEqual([]);
   });

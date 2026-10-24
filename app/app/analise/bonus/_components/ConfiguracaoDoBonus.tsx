@@ -126,7 +126,8 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
           <CardTitle>{t("Participantes")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
-          {membros.map((m) => (
+          {/* Quem aprova não concorre: a rota recusa (422). */}
+          {membros.filter((m) => m.user_id !== aprovador).map((m) => (
             <label key={m.user_id} className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -345,7 +346,7 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
           >
             <option value="">{t("Escolha uma pessoa")}</option>
             {membros
-              .filter((m) => m.user_id !== aprovador)
+              .filter((m) => m.user_id !== aprovador && !inicial.participantes.includes(m.user_id))
               .map((m) => (
                 <option key={m.user_id} value={m.user_id}>
                   {m.full_name ?? t("Sem nome")}

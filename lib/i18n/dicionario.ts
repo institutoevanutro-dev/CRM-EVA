@@ -11484,6 +11484,7 @@ export const DICIONARIO: Traducoes = {
   "O programa já existe.": { es: "El programa ya existe." },
   "Erro ao criar o programa.": { es: "Error al crear el programa." },
   "Só quem aprova o bônus muda a configuração.": { es: "Solo quien aprueba el bono cambia la configuración." },
+  "Quem aprova o bônus não pode ser participante.": { es: "Quien aprueba el bono no puede ser participante." },
   "Confira a configuração.": { es: "Revise la configuración." },
   "Um dos participantes não faz parte da equipe.": { es: "Uno de los participantes no forma parte del equipo." },
   "A pessoa escolhida não faz parte da equipe.": { es: "La persona elegida no forma parte del equipo." },

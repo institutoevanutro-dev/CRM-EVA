@@ -112,6 +112,9 @@ export async function PUT(req: NextRequest): Promise<Response> {
   const admin = createAdminClient();
   const lido = await lerPrograma(admin, authz.org.orgId);
   const negado = () => fail("forbidden", t("Só quem aprova o bônus muda a configuração."), 403, { requestId });
+  // Quem aprova não concorre: senão veria e mudaria os próprios valores e metas.
+  const aprovadorParticipa = () =>
+    fail("validation_failed", t("Quem aprova o bônus não pode ser participante."), 422, { requestId });
   if (lido.status !== "ok") return negado();
   const programa = lido.programa;
   if (programa.aprovadorUserId !== authz.user.id) {
@@ -126,6 +129,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
       .maybeSingle();
     if (vinculo.error || vinculo.data) return negado();
     if (!podeCriarPrograma(authz.user, await criadoPor(admin, authz.org.orgId))) return negado();
+    if (programa.regras.participantes.includes(authz.user.id)) return aprovadorParticipa();
     if (!(await responsavelValido(admin, authz.org.orgId, authz.user.id))) {
       return fail("validation_failed", t("A pessoa escolhida não faz parte da equipe."), 422, { requestId });
     }
@@ -152,6 +156,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
   }
 
   const patch: Record<string, unknown> = {};
+  let participantesFinais = programa.regras.participantes;
   const chaves: string[] = [];
   if (parsed.data.regras !== undefined) {
     const regras = regrasSchema.safeParse(parsed.data.regras);
@@ -167,6 +172,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
       }
     }
     patch.regras = regras.data;
+    participantesFinais = regras.data.participantes;
     chaves.push(...chavesAlteradas(programa.regras as Record<string, unknown>, regras.data as Record<string, unknown>));
   }
   if (parsed.data.ativo !== undefined && parsed.data.ativo !== programa.ativo) {
@@ -181,6 +187,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
     }
     patch.aprovador_user_id = novoAprovador;
   }
+  if (participantesFinais.includes(transfere ? novoAprovador : authz.user.id)) return aprovadorParticipa();
   if (Object.keys(patch).length === 0) return ok({ id: programa.id, transferido: false }, { requestId });
 
   // Compare-and-set: se a função mudou de mãos no meio, o update casa zero linhas.
