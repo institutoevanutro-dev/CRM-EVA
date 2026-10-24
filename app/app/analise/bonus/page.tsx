@@ -20,7 +20,21 @@ export default async function BonusPage() {
   const user = await requireAuth();
   const org = await resolveActiveOrg(user);
   const t = (texto: string) => traduzir(texto, user.idioma);
-  const lido = org ? await lerPrograma(createAdminClient(), org.orgId) : ({ status: "ausente" } as const);
+  const admin = createAdminClient();
+  const lido = org ? await lerPrograma(admin, org.orgId) : ({ status: "ausente" } as const);
+  // Aprovador revogado: ninguém mais configura pela tela. Erro na leitura não
+  // acusa nada (melhor faltar o aviso que acusar à toa).
+  let aprovadorSaiu = false;
+  if (org && lido.status === "ok") {
+    const { data, error } = await admin
+      .from("user_organizations")
+      .select("id")
+      .eq("organization_id", org.orgId)
+      .eq("user_id", lido.programa.aprovadorUserId)
+      .is("revoked_at", null)
+      .maybeSingle();
+    aprovadorSaiu = !error && !data;
+  }
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
@@ -30,6 +44,11 @@ export default async function BonusPage() {
           {t("O placar do mês, a fila de hoje e, para quem aprova, a equipe inteira.")}
         </p>
       </header>
+      {aprovadorSaiu ? (
+        <p className="rounded-md border border-border p-3 text-sm" data-testid="aprovador-fora-da-equipe">
+          {t("Quem aprova o bônus não faz mais parte da equipe. Só o dono da organização ou um administrador da plataforma pode assumir a função.")}
+        </p>
+      ) : null}
       {lido.status === "erro" ? (
         <p className="text-sm text-destructive">{t("Não foi possível ler o programa de bônus.")}</p>
       ) : (

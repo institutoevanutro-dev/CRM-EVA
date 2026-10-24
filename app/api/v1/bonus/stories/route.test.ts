@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * O lançamento manual é do APROVADOR (um usuário, não um papel), e a
@@ -22,7 +22,7 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/bonus/fatos", () => ({
   lerPrograma: vi.fn(async (_admin: unknown, org: string) =>
     aprovadorPorOrg[org]
-      ? { status: "ok", programa: { organizationId: org, aprovadorUserId: aprovadorPorOrg[org] } }
+      ? { status: "ok", programa: { organizationId: org, aprovadorUserId: aprovadorPorOrg[org], fuso: "America/Sao_Paulo" } }
       : { status: "ausente" },
   ),
 }));
@@ -49,6 +49,13 @@ beforeEach(() => {
   sessao.userId = "u-aprovador-a";
   sessao.orgId = "org-a";
   vi.mocked(lerPrograma).mockClear();
+  // Hoje é 03/11/2026 no fuso do programa: o mês aberto vai de 01/11 a 03/11.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-03T15:00:00Z"));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("PUT /api/v1/bonus/stories", () => {
@@ -84,6 +91,19 @@ describe("PUT /api/v1/bonus/stories", () => {
       expect((await put(corpo)).status).toBe(422);
     }
     expect(gravados).toHaveLength(0);
+  });
+
+  it("dia impossível, de mês fechado ou futuro: 422, nada gravado", async () => {
+    for (const dia of ["2026-02-31", "2026-13-45", "2026-10-31", "2026-11-04", "2027-11-01"]) {
+      expect((await put({ dia, contagem: 2 })).status, dia).toBe(422);
+    }
+    expect(gravados).toHaveLength(0);
+  });
+
+  it("o mês aberto é o do FUSO do programa: 00h30 UTC do dia 1 ainda é o mês anterior em São Paulo", async () => {
+    vi.setSystemTime(new Date("2026-12-01T00:30:00Z"));
+    expect((await put({ dia: "2026-11-30", contagem: 1 })).status).toBe(200);
+    expect((await put({ dia: "2026-12-01", contagem: 1 })).status).toBe(422);
   });
 
   it("contagem null devolve o dia à leitura automática (grava null)", async () => {
