@@ -30,7 +30,8 @@
     { "id": "fn_fila", "lane": "dados", "col": 3, "type": "database", "label": "fn_bonus_montar_fila", "sublabel": "exclusões da seção 4" },
     { "id": "itens", "lane": "dados", "col": 1, "type": "database", "label": "bonus_fila_itens", "sublabel": "fila · ligação" },
     { "id": "stories", "lane": "dados", "col": 4, "type": "database", "label": "bonus_stories_dia", "sublabel": "ids por dia local" },
-    { "id": "tarefas", "lane": "dados", "col": 5, "type": "database", "label": "crm_tasks", "sublabel": "closed_at · missed_due_date" }
+    { "id": "tarefas", "lane": "dados", "col": 5, "type": "database", "label": "crm_tasks", "sublabel": "closed_at · missed_due_date" },
+    { "id": "messages", "lane": "dados", "col": 6, "type": "database", "label": "messages", "sublabel": "envios da equipe (lidos, nunca marcados)" }
   ],
   "edges": [
     { "id": "e1", "from": "cron_fila", "to": "protecao", "label": "tamanho da fila" },
@@ -52,7 +53,9 @@
     { "id": "e17", "from": "inbox_envio", "to": "ritmo", "label": "pode enviar agora?" },
     { "id": "e18", "from": "programa", "to": "ritmo", "label": "intervalo mínimo" },
     { "id": "e19", "from": "itens", "to": "ritmo", "label": "leads da fila de hoje" },
-    { "id": "e20", "from": "inbox_envio", "to": "rota_meu", "label": "envio marca o lead como chamado" },
+    { "id": "e25", "from": "inbox_envio", "to": "messages", "label": "grava o envio" },
+    { "id": "e26", "from": "messages", "to": "calculo", "label": "lead chamado = mensagem da pessoa no dia" },
+    { "id": "e27", "from": "messages", "to": "ritmo", "label": "último envio da fila" },
     { "id": "e21", "from": "tela_meu", "to": "rota_meu", "label": "registra ligação" },
     { "id": "e22", "from": "rota_programa", "to": "tela_equipe", "label": "placares da equipe" },
     { "id": "e23", "from": "programa", "to": "cron_stories", "label": "programas ativos" },
