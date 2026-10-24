@@ -142,8 +142,30 @@ describe("tarefas: prazo trocado depois de vencido", () => {
     const id = await tarefa(ANTEONTEM);
     await pool.query(`update crm_tasks set due_date=${DAQUI_A_3_DIAS} where id=$1`, [id]);
     const original = (await lerTarefa(id)).missed_due_date!.toISOString();
-    await como(PESSOA_A, "update crm_tasks set missed_due_date=null, due_date=now() + interval '9 days' where id=$1", [id]);
-    expect((await lerTarefa(id)).missed_due_date!.toISOString()).toBe(original);
+    const r = await como(
+      PESSOA_A,
+      "update crm_tasks set missed_due_date=null, due_date=now() + interval '9 days' where id=$1",
+      [id],
+    );
+    expect(r.rowCount).toBe(1);
+    const lida = await lerTarefa(id);
+    expect(lida.due_date!.getTime()).toBeGreaterThan(Date.now() + 8 * 86_400_000);
+    expect(lida.missed_due_date!.toISOString()).toBe(original);
+  });
+
+  it("fuso inválido na organização não derruba a troca: usa o fuso padrão", async () => {
+    const org = randomUUID();
+    await pool.query(
+      "insert into organizations(id,slug,legal_name,display_name,timezone) values($1::uuid,$1::text,'Fuso','Fuso','Invalida/Zona')",
+      [org],
+    );
+    const { rows } = await pool.query<{ id: string; due_date: Date }>(
+      `insert into crm_tasks(organization_id,title,due_date,status)
+       values($1,'Tarefa de teste',${ANTEONTEM},'pending') returning id, due_date`,
+      [org],
+    );
+    await pool.query(`update crm_tasks set due_date=${DAQUI_A_3_DIAS} where id=$1`, [rows[0]!.id]);
+    expect((await lerTarefa(rows[0]!.id)).missed_due_date?.toISOString()).toBe(rows[0]!.due_date.toISOString());
   });
 
   it("tarefa já concluída pode ter o prazo editado sem virar atrasada", async () => {

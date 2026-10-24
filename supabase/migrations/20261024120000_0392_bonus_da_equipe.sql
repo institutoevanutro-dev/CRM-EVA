@@ -71,6 +71,11 @@ begin
       into v_fuso
       from public.organizations o
      where o.id = old.organization_id;
+    -- A coluna não é validada (ver lib/agent-engine/agent/fuso-da-org.ts): um
+    -- nome fora do IANA faria o `at time zone` lançar e derrubar a troca de prazo.
+    if not exists (select 1 from pg_catalog.pg_timezone_names where name = v_fuso) then
+      v_fuso := 'America/Sao_Paulo';
+    end if;
     -- Vencido = o FIM DO DIA LOCAL do prazo já passou (a regra do bônus é
     -- "concluída até o fim do dia do prazo"). Trocar no próprio dia não conta.
     if ((((old.due_date at time zone v_fuso)::date + 1)::timestamp) at time zone v_fuso) <= now() then
