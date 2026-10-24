@@ -6,7 +6,8 @@
  * contato, no MESMO dia local do item. Mensagem do celular chega ao banco como
  * `sent_via = 'external_device'` e o coletor já não a traz.
  */
-import { diaLocalISO } from "@/lib/agenda/fuso";
+import { diaLocalISO, partesNoFuso } from "@/lib/agenda/fuso";
+import { FUSO_PADRAO } from "@/lib/tempo/fusos";
 
 import type { RotinaDoDia } from "./calculo";
 import { inicioDoDia, somarDias } from "./calendario";
@@ -39,6 +40,24 @@ const HORA_LIMITE_DA_MONTAGEM = 12;
 
 export function deveMontarAgora(horaLocal: number, horaDaFila: number): boolean {
   return horaLocal >= horaDaFila && horaLocal < HORA_LIMITE_DA_MONTAGEM;
+}
+
+/**
+ * Hora e dia locais do programa. O fuso já chega saneado de `fatos.ts`; isto é
+ * defesa: um fuso que o `Intl` recusa cai em `FUSO_PADRAO`, em vez de pular o dia.
+ */
+export function relogioDoPrograma(agora: Date, fuso: string): { hora: number; dia: string } {
+  try {
+    return { hora: partesNoFuso(agora, fuso).hora, dia: diaLocalISO(agora, fuso) };
+  } catch {
+    return { hora: partesNoFuso(agora, FUSO_PADRAO).hora, dia: diaLocalISO(agora, FUSO_PADRAO) };
+  }
+}
+
+/** Os participantes da regra que são membros ATIVOS da organização, sem nulos nem repetidos. */
+export function participantesValidos(lista: readonly (string | null | undefined)[], membros: readonly string[]): string[] {
+  const ativos = new Set(membros);
+  return [...new Set(lista)].filter((id): id is string => typeof id === "string" && id !== "" && ativos.has(id));
 }
 
 export function itensEnviados(

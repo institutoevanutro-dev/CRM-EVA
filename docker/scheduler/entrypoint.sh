@@ -106,6 +106,10 @@ CRONS="
 # no dia errado metade do mundo e de madrugada boa parte do resto. Barato: quem
 # não configurou a automação não chega a ser varrido.
 7 * * * *|60|api/v1/cron/contact-birthdays
+# O BÔNUS DA EQUIPE. De hora em hora porque quem decide o momento é o relógio
+# de cada organização (7h locais, em dia útil); a função devolve já montada
+# nas rodadas seguintes, então o custo é uma consulta por hora.
+5 * * * *|60|api/v1/cron/bonus-fila
 0 12 * * *|60|api/v1/cron/lgpd-sla-watcher
 30 3 * * *|120|api/v1/cron/kb-conversations-batch
 15 4 * * *|60|api/v1/cron/sync-model-catalog

@@ -37,6 +37,7 @@ const config: VercelConfig = {
     { path: "/api/v1/cron/sinal-revisao-humana", schedule: "*/15 * * * *" },
     { path: "/api/v1/cron/case-stale-watcher", schedule: "7 * * * *" },
     { path: "/api/v1/cron/contact-birthdays", schedule: "7 * * * *" },
+    { path: "/api/v1/cron/bonus-fila", schedule: "5 * * * *" },
     { path: "/api/v1/cron/contact-avatars", schedule: "*/10 * * * *" },
     { path: "/api/v1/cron/financeiro-nomes", schedule: "*/10 * * * *" },
     { path: "/api/v1/cron/precificaeva-catalogo", schedule: "17 * * * *" },

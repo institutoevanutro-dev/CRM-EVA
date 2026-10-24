@@ -6,6 +6,8 @@ import {
   historicoDeEnvio,
   type ItemDaFila,
   itensEnviados,
+  participantesValidos,
+  relogioDoPrograma,
   rotinasDaPessoa,
   tamanhoDaFilaDeLeads,
 } from "./fila";
@@ -106,5 +108,32 @@ describe("hora de montar a fila", () => {
     expect(deveMontarAgora(7, 7)).toBe(true);
     expect(deveMontarAgora(11, 7)).toBe(true);
     expect(deveMontarAgora(12, 7)).toBe(false);
+  });
+});
+
+describe("relogioDoPrograma", () => {
+  // 10:00 UTC = 07:00 em São Paulo; em Tóquio já é 19:00.
+  const agora = new Date("2026-11-03T10:00:00.000Z");
+
+  it("lê a hora e o dia no fuso do programa", () => {
+    expect(relogioDoPrograma(agora, "Asia/Tokyo")).toEqual({ hora: 19, dia: "2026-11-03" });
+  });
+
+  it("fuso inválido não pula o dia: cai em São Paulo", () => {
+    expect(relogioDoPrograma(agora, "America/Asunción")).toEqual({ hora: 7, dia: "2026-11-03" });
+    expect(relogioDoPrograma(agora, "")).toEqual({ hora: 7, dia: "2026-11-03" });
+  });
+});
+
+describe("participantesValidos", () => {
+  const C = "pessoa-c";
+
+  it("fica só com membros, sem nulos, vazios nem repetidos, na ordem da regra", () => {
+    const lista = [B, null, A, "", B, C, undefined, A] as unknown as string[];
+    expect(participantesValidos(lista, [A, B])).toEqual([B, A]);
+  });
+
+  it("ninguém da regra é membro: lista vazia", () => {
+    expect(participantesValidos([C], [A])).toEqual([]);
   });
 });

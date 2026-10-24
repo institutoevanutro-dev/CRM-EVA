@@ -833,6 +833,14 @@ export const AUDIT_ACTIONS = [
   // cliente precisa encontrar o ato administrativo que abriu a porta, e não só
   // as gravações que ela deixou passar.
   "crm.telefone_de_ficha_vazia_alterado",
+  /** Bônus da equipe (migration 0392). A metadata NUNCA leva valores, metas ou nomes. */
+  "bonus.programa_criado",
+  "bonus.regras_alteradas",
+  "bonus.aprovador_transferido",
+  "bonus.fila_montada",
+  "bonus.ligacao_registrada",
+  "bonus.stories_lidos",
+  "bonus.stories_lancados",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

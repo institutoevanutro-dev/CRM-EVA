@@ -11462,6 +11462,12 @@ export const DICIONARIO: Traducoes = {
   "A pessoa escolhida não tem e-mail cadastrado no acesso dela.": {
     es: "La persona elegida no tiene correo registrado en su acceso.",
   },
+  // Bônus da equipe: o aviso da Central quando a fila de leads antigos encolhe (`lib/bonus/aviso.ts`).
+  "A fila de leads antigos foi reduzida": { es: "La fila de leads antiguos se redujo" },
+  "Os pedidos para parar de receber mensagens passaram do limite em {d} dias seguidos. Hoje cada pessoa recebe {n} leads antigos em vez de {m}. A fila volta ao tamanho normal sozinha quando os pedidos caírem. Confira em Análise › Bônus.":
+    {
+      es: "Los pedidos para dejar de recibir mensajes pasaron del límite durante {d} días seguidos. Hoy cada persona recibe {n} leads antiguos en lugar de {m}. La fila vuelve sola a su tamaño normal cuando los pedidos bajen. Revíselo en Análisis › Bono.",
+    },
 };
 
 /**
