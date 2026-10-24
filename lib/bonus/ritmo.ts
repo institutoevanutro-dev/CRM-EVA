@@ -2,7 +2,8 @@
  * O RITMO da fila de leads antigos: entre dois disparos frios pelo mesmo número,
  * no mínimo `protecao.intervalo_minimo_s` segundos, e só dentro da janela do
  * número. Vale para o PRIMEIRO envio de pessoa do dia a um contato da fila
- * `lead_antigo` de hoje; a conversa que já começou passa livre.
+ * `lead_antigo` de hoje; a conversa que já começou passa livre, e o contato que
+ * escreveu primeiro hoje (inbound) também: a resposta não é contato frio.
  *
  * Falha ABERTA: qualquer erro de leitura devolve `pode` e vai ao log. Este gate
  * fica na frente do envio do Inbox inteiro, e calar o atendimento é pior do que
@@ -90,6 +91,18 @@ export async function ritmoDaFila(
         .eq("sent_via", "user")
         .neq("status", "failed")
         .gte("created_at", desde);
+
+    // Quem escreveu primeiro hoje não é contato frio: a resposta passa livre.
+    const escreveu = await admin
+      .from("messages")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", conv.contact_id)
+      .eq("direction", "inbound")
+      .gte("created_at", desde)
+      .limit(1);
+    if (escreveu.error) return erroDeLeitura("messages", organizationId, escreveu.error.message);
+    if ((escreveu.data ?? []).length > 0) return PODE;
 
     const jaFalou = await enviosDePessoaHoje().eq("contact_id", conv.contact_id).limit(1);
     if (jaFalou.error) return erroDeLeitura("messages", organizationId, jaFalou.error.message);

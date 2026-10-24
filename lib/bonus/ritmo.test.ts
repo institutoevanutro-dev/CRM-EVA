@@ -122,6 +122,29 @@ describe("ritmoDaFila", () => {
     expect(await rodar(c)).toEqual({ tipo: "pode" });
   });
 
+  describe("contato que escreveu primeiro hoje", () => {
+    const inbound = (criada: Date, extra: Linha = {}) =>
+      msg("c-fila", criada, { direction: "inbound", sent_via: null, ...extra });
+
+    it("inbound hoje: pode, mesmo com o último envio da fila há 5 s", async () => {
+      const c = cenario({ mensagens: [inbound(seg(600)), msg("c-fila-2", seg(5))] });
+      expect(await rodar(c)).toEqual({ tipo: "pode" });
+    });
+
+    it("inbound hoje, fora da janela do número: pode", async () => {
+      const c = cenario({
+        mensagens: [inbound(seg(600))],
+        knobs: [{ organization_id: ORG, channel_session_id: NUM, window_start_hour: 11, window_end_hour: 20, timezone: "America/Sao_Paulo" }],
+      });
+      expect(await rodar(c)).toEqual({ tipo: "pode" });
+    });
+
+    it("inbound só de ontem continua segurando", async () => {
+      const c = cenario({ mensagens: [inbound(new Date("2026-11-03T02:00:00Z")), msg("c-fila-2", seg(5))] });
+      expect(await rodar(c)).toEqual({ tipo: "aguarde", segundos: 15 });
+    });
+  });
+
   it("sem programa, ou programa inativo: pode", async () => {
     expect(await rodar(cenario({ programa: null, mensagens: [msg("c-fila-2", seg(5))] }))).toEqual({ tipo: "pode" });
     expect(await rodar(cenario({ programa: { ativo: false }, mensagens: [msg("c-fila-2", seg(5))] }))).toEqual({ tipo: "pode" });
