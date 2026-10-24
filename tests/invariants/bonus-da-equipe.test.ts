@@ -168,10 +168,18 @@ describe("tarefas: prazo trocado depois de vencido", () => {
     expect((await lerTarefa(rows[0]!.id)).missed_due_date?.toISOString()).toBe(rows[0]!.due_date.toISOString());
   });
 
-  it("tarefa já concluída pode ter o prazo editado sem virar atrasada", async () => {
-    const id = await tarefa(ANTEONTEM, "done");
-    await pool.query(`update crm_tasks set due_date=${DAQUI_A_3_DIAS} where id=$1`, [id]);
+  it("tarefa concluída NO PRAZO pode ter o prazo editado sem virar atrasada", async () => {
+    const id = await tarefa(DAQUI_A_3_DIAS, "done");
+    await pool.query(`update crm_tasks set due_date=${ANTEONTEM} where id=$1`, [id]);
     expect((await lerTarefa(id)).missed_due_date).toBeNull();
+  });
+
+  it("tarefa concluída ATRASADA não vira 'no prazo' quando o prazo é movido depois", async () => {
+    const id = await tarefa(ANTEONTEM);
+    const original = (await lerTarefa(id)).due_date!.toISOString();
+    await pool.query("update crm_tasks set status='done' where id=$1", [id]);
+    await pool.query(`update crm_tasks set due_date=now() where id=$1`, [id]);
+    expect((await lerTarefa(id)).missed_due_date?.toISOString()).toBe(original);
   });
 });
 

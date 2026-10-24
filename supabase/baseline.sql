@@ -37716,8 +37716,7 @@ begin
   new.missed_due_date := old.missed_due_date;
   if new.missed_due_date is null
      and old.due_date is not null
-     and new.due_date is distinct from old.due_date
-     and not v_encerrada_antes then
+     and new.due_date is distinct from old.due_date then
     select coalesce(nullif(btrim(o.timezone), ''), 'America/Sao_Paulo')
       into v_fuso
       from public.organizations o
@@ -37727,9 +37726,15 @@ begin
     if not exists (select 1 from pg_catalog.pg_timezone_names where name = v_fuso) then
       v_fuso := 'America/Sao_Paulo';
     end if;
-    -- Vencido = o FIM DO DIA LOCAL do prazo já passou (a regra do bônus é
+    -- Vencido = o FIM DO DIA LOCAL do prazo já tinha passado (a regra do bônus é
     -- "concluída até o fim do dia do prazo"). Trocar no próprio dia não conta.
-    if ((((old.due_date at time zone v_fuso)::date + 1)::timestamp) at time zone v_fuso) <= now() then
+    -- Aberta: medido agora. Já encerrada: medido na hora do encerramento — a que
+    -- fechou no prazo segue livre para ter o prazo editado; a que fechou atrasada
+    -- não vira "no prazo" porque alguém moveu o prazo depois.
+    -- (Num IF do plpgsql, o THEN de um CASE solto encerraria a condição: por isso o
+    -- parêntese em volta do CASE.)
+    if ((((old.due_date at time zone v_fuso)::date + 1)::timestamp) at time zone v_fuso)
+       <= (case when v_encerrada_antes then old.closed_at else now() end) then
       new.missed_due_date := old.due_date;
     end if;
   end if;
@@ -37781,7 +37786,8 @@ create table if not exists public.bonus_fila_itens (
   constraint bonus_fila_itens_resultado_check check (ligacao_resultado is null or ligacao_resultado in ('atendeu', 'nao_atendeu')),
   constraint bonus_fila_itens_ligacao_coerente check ((ligacao_resultado is null) = (ligacao_registrada_em is null)),
   constraint bonus_fila_itens_resumo_curto check (ligacao_resumo is null or length(ligacao_resumo) <= 500),
-  -- Um contato, uma pessoa, um dia: a dupla nunca liga duas vezes para o mesmo.
+  -- Um contato por dia por tipo, seja quem for o dono: duas pessoas nunca
+  -- recebem o mesmo contato na fila do mesmo dia.
   constraint bonus_fila_itens_um_por_dia unique (organization_id, dia, tipo, contact_id)
 );
 
