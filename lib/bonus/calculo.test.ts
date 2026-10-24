@@ -246,8 +246,8 @@ describe("calcularMes", () => {
   });
 
   it("o teto corta o total", () => {
-    const placar = calcularMes(entrada({ regras: regras({ teto_cents: 25_000 }) }));
-    expect(placar.pessoas[0]!.totalCents).toBe(25_000);
+    const placar = calcularMes(entrada({ regras: regras({ teto_cents: 20_000 }) }));
+    expect(placar.pessoas[0]!.totalCents).toBe(20_000);
   });
 
   it("tarefa de outro mês não entra", () => {
