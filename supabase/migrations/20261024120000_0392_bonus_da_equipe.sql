@@ -203,6 +203,182 @@ grant select on public.bonus_programas, public.bonus_fila_itens, public.bonus_st
 grant all on public.bonus_programas, public.bonus_fila_itens, public.bonus_stories_dia to service_role;
 end $janela$;
 
+-- ---- 3. a fila do dia ----
+-- Chamada pelo cron `bonus-fila` (service role) às 7h locais de dia útil. O
+-- tamanho por pessoa vem do chamador, já reduzido pela proteção do número
+-- (`lib/bonus/fila.ts`). Uma transação: ou a fila do dia nasce inteira, ou não
+-- nasce. A regra de "contato interno" é a mesma de `lib/contacts/tags-internas.ts`
+-- (`sqlContatoInterno`), escrita aqui porque esta função é SQL.
+create or replace function public.fn_bonus_montar_fila(
+  p_org uuid,
+  p_dia date,
+  p_agora timestamptz,
+  p_participantes uuid[],
+  p_leads_por_pessoa integer,
+  p_ligacoes_por_pessoa integer,
+  p_fila jsonb
+) returns jsonb
+  language plpgsql
+  set search_path to 'public', 'pg_temp'
+as $$
+declare
+  v_n integer := coalesce(cardinality(p_participantes), 0);
+  v_etiqueta text := left(lower(btrim(coalesce(p_fila ->> 'etiqueta_excluida', ''))), 40);
+  v_sem_mensagem integer := coalesce((p_fila ->> 'dias_sem_mensagem')::integer, 30);
+  v_sem_repetir integer := coalesce((p_fila ->> 'dias_sem_repetir')::integer, 60);
+  v_falta integer := coalesce((p_fila -> 'ligacoes' ->> 'dias_falta')::integer, 30);
+  v_pos integer := coalesce((p_fila -> 'ligacoes' ->> 'dias_pos_consulta')::integer, 7);
+  v_ret_min integer := coalesce((p_fila -> 'ligacoes' ->> 'dias_retorno_min')::integer, 30);
+  v_ret_max integer := coalesce((p_fila -> 'ligacoes' ->> 'dias_retorno_max')::integer, 90);
+  v_lig_repetir integer := coalesce((p_fila -> 'ligacoes' ->> 'dias_sem_repetir')::integer, 30);
+  v_leads integer := 0;
+  v_ligacoes integer := 0;
+begin
+  if v_n = 0 then
+    return jsonb_build_object('leads', 0, 'ligacoes', 0, 'ja_montada', false);
+  end if;
+  if exists (select 1 from public.bonus_fila_itens f where f.organization_id = p_org and f.dia = p_dia) then
+    return jsonb_build_object('leads', 0, 'ligacoes', 0, 'ja_montada', true);
+  end if;
+
+  -- Leads antigos.
+  with conversa as (
+    select distinct on (cv.contact_id) cv.contact_id, cv.id as conversation_id, cv.last_inbound_at
+      from public.conversations cv
+     where cv.organization_id = p_org
+       and cv.channel = 'whatsapp'
+       and cv.is_group = false
+       and cv.last_inbound_at is not null
+     order by cv.contact_id, cv.last_inbound_at desc
+  ), candidatos as (
+    select cv.contact_id, cv.conversation_id, cv.last_inbound_at
+      from conversa cv
+      join public.contacts c on c.id = cv.contact_id and c.organization_id = p_org
+     where c.is_blocked = false
+       and c.is_anonymized = false
+       and c.is_merged_into is null
+       and c.inbox_hidden_at is null
+       and c.phone_number is not null
+       and (v_etiqueta = '' or not exists (
+             select 1 from unnest(c.tags) as t(e) where left(lower(btrim(t.e)), 40) = v_etiqueta))
+       and (v_etiqueta = '' or not exists (
+             select 1 from public.crm_leads l cross join lateral unnest(l.tags) as t(e)
+              where l.organization_id = p_org and l.contact_id = c.id
+                and left(lower(btrim(t.e)), 40) = v_etiqueta))
+       and not exists (
+             select 1
+               from public.organizations o
+              cross join lateral jsonb_array_elements_text(
+                case when jsonb_typeof(o.settings -> 'crm' -> 'internal_contact_tags') = 'array'
+                     then o.settings -> 'crm' -> 'internal_contact_tags' else '[]'::jsonb end) as interna(valor)
+              cross join lateral unnest(c.tags) as do_contato(etiqueta)
+              where o.id = c.organization_id
+                and left(lower(btrim(interna.valor)), 40) <> ''
+                and left(lower(btrim(do_contato.etiqueta)), 40) = left(lower(btrim(interna.valor)), 40))
+       and not exists (
+             select 1 from public.conversations x
+              where x.organization_id = p_org and x.contact_id = c.id
+                and x.last_message_at >= p_agora - make_interval(days => v_sem_mensagem))
+       and not exists (
+             select 1 from public.calendar_appointments a
+              where a.organization_id = p_org and a.contact_id = c.id
+                and a.starts_at > p_agora and a.status in ('pending', 'confirmed'))
+       and not exists (
+             select 1 from public.bonus_fila_itens f
+              where f.organization_id = p_org and f.contact_id = c.id
+                and f.tipo = 'lead_antigo' and f.dia > p_dia - v_sem_repetir)
+  ), ordenados as (
+    select contact_id, conversation_id,
+           (row_number() over (order by last_inbound_at desc, contact_id) - 1)::integer as ordem
+      from candidatos
+  )
+  insert into public.bonus_fila_itens (organization_id, dia, tipo, user_id, contact_id, conversation_id)
+  select p_org, p_dia, 'lead_antigo', p_participantes[(ordem % v_n) + 1], contact_id, conversation_id
+    from ordenados
+   where ordem < greatest(p_leads_por_pessoa, 0) * v_n
+  on conflict do nothing;
+  get diagnostics v_leads = row_count;
+
+  -- Pacientes para ligar.
+  with historico as (
+    select a.contact_id,
+           (array_agg(a.status order by a.starts_at desc))[1] as ultimo_status,
+           max(a.starts_at) as ultimo_inicio
+      from public.calendar_appointments a
+     where a.organization_id = p_org
+       and a.contact_id is not null
+       and a.starts_at <= p_agora
+       and a.status in ('completed', 'no_show')
+     group by a.contact_id
+  ), classificados as (
+    select h.contact_id, h.ultimo_inicio,
+           case
+             when h.ultimo_status = 'no_show'
+              and h.ultimo_inicio >= p_agora - make_interval(days => v_falta) then 'faltou'
+             when h.ultimo_status = 'completed'
+              and h.ultimo_inicio between p_agora - make_interval(days => v_ret_max)
+                                      and p_agora - make_interval(days => v_ret_min) then 'sem_retorno'
+             when h.ultimo_status = 'completed'
+              and h.ultimo_inicio between p_agora - make_interval(days => v_pos)
+                                      and p_agora - interval '1 day' then 'pos_consulta'
+           end as motivo
+      from historico h
+  ), candidatos as (
+    select k.contact_id, k.motivo, k.ultimo_inicio,
+           (select cv.id from public.conversations cv
+             where cv.organization_id = p_org and cv.contact_id = k.contact_id
+             order by cv.last_message_at desc nulls last limit 1) as conversation_id
+      from classificados k
+      join public.contacts c on c.id = k.contact_id and c.organization_id = p_org
+     where k.motivo is not null
+       and c.is_blocked = false
+       and c.is_anonymized = false
+       and c.is_merged_into is null
+       and c.phone_number is not null
+       and not exists (
+             select 1
+               from public.organizations o
+              cross join lateral jsonb_array_elements_text(
+                case when jsonb_typeof(o.settings -> 'crm' -> 'internal_contact_tags') = 'array'
+                     then o.settings -> 'crm' -> 'internal_contact_tags' else '[]'::jsonb end) as interna(valor)
+              cross join lateral unnest(c.tags) as do_contato(etiqueta)
+              where o.id = c.organization_id
+                and left(lower(btrim(interna.valor)), 40) <> ''
+                and left(lower(btrim(do_contato.etiqueta)), 40) = left(lower(btrim(interna.valor)), 40))
+       and not exists (
+             select 1 from public.calendar_appointments a
+              where a.organization_id = p_org and a.contact_id = c.id
+                and a.starts_at > p_agora and a.status in ('pending', 'confirmed'))
+       and not exists (
+             select 1 from public.bonus_fila_itens f
+              where f.organization_id = p_org and f.contact_id = c.id
+                and (f.dia = p_dia
+                     or (f.tipo = 'ligacao' and f.ligacao_registrada_em is not null
+                         and f.dia > p_dia - v_lig_repetir)))
+  ), ordenados as (
+    select contact_id, motivo, conversation_id,
+           (row_number() over (
+              order by case motivo when 'faltou' then 1 when 'sem_retorno' then 2 else 3 end,
+                       ultimo_inicio desc, contact_id) - 1)::integer as ordem
+      from candidatos
+  )
+  insert into public.bonus_fila_itens (organization_id, dia, tipo, user_id, contact_id, conversation_id, motivo)
+  select p_org, p_dia, 'ligacao', p_participantes[(ordem % v_n) + 1], contact_id, conversation_id, motivo
+    from ordenados
+   where ordem < greatest(p_ligacoes_por_pessoa, 0) * v_n
+  on conflict do nothing;
+  get diagnostics v_ligacoes = row_count;
+
+  return jsonb_build_object('leads', v_leads, 'ligacoes', v_ligacoes, 'ja_montada', false);
+end$$;
+
+do $janela$ begin -- atômico: reaplicar não abre janela (reaplicar-o-baseline-nao-abre-janela.test.ts)
+revoke all on function public.fn_bonus_montar_fila(uuid, date, timestamptz, uuid[], integer, integer, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.fn_bonus_montar_fila(uuid, date, timestamptz, uuid[], integer, integer, jsonb)
+  to service_role;
+end $janela$;
+
 -- ---- 4. LGPD: anonimizar apaga o resumo das ligações ----
 -- Gatilho no FATO (`is_anonymized` virou true), como a 0184/0198: cobre o
 -- cascade, a rota direta e quem anonimizar por outro caminho amanhã. O

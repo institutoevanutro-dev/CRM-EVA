@@ -281,3 +281,127 @@ describe("LGPD: anonimizar apaga o resumo da ligação", () => {
     expect(rows[0]).toEqual({ ligacao_resultado: "atendeu", ligacao_resumo: null, tem_hora: true });
   });
 });
+
+describe("fila do dia (fn_bonus_montar_fila)", () => {
+  const FILA = {
+    dias_sem_mensagem: 30,
+    dias_sem_repetir: 60,
+    etiqueta_excluida: "reativacao",
+    ligacoes: { dias_falta: 30, dias_pos_consulta: 7, dias_retorno_min: 30, dias_retorno_max: 90, dias_sem_repetir: 30 },
+  };
+  const DIA = "2026-11-10";
+  const AGORA = "2026-11-10T10:05:00Z";
+
+  async function conversa(contactId: string, ultimaRecebidaDiasAtras: number | null, ultimaMensagemDiasAtras: number) {
+    await pool.query(
+      `insert into conversations(organization_id,contact_id,channel_session_id,status,last_inbound_at,last_message_at)
+       values($1,$2,$3,'resolved',
+              case when $4::int is null then null else $6::timestamptz - make_interval(days => $4::int) end,
+              $6::timestamptz - make_interval(days => $5::int))`,
+      [ORG, contactId, SESSAO, ultimaRecebidaDiasAtras, ultimaMensagemDiasAtras, AGORA],
+    );
+  }
+
+  async function consulta(contactId: string, diasAtras: number, status: string) {
+    await pool.query(
+      `insert into calendar_appointments(organization_id,contact_id,title,starts_at,ends_at,status)
+       values($1,$2,'Consulta de teste',$4::timestamptz - make_interval(days => $3::int),
+              $4::timestamptz - make_interval(days => $3::int) + interval '1 hour',$5)`,
+      [ORG, contactId, diasAtras, AGORA, status],
+    );
+  }
+
+  const montar = (leads = 30, ligacoes = 5) =>
+    pool
+      .query<{ r: { leads: number; ligacoes: number; ja_montada: boolean } }>(
+        "select fn_bonus_montar_fila($1,$2,$3,$4,$5,$6,$7) as r",
+        [ORG, DIA, AGORA, [PESSOA_A, PESSOA_B], leads, ligacoes, JSON.stringify(FILA)],
+      )
+      .then((x) => x.rows[0]!.r);
+
+  const naFila = async (tipo: string) =>
+    (
+      await pool.query<{ contact_id: string; user_id: string; motivo: string | null }>(
+        "select contact_id, user_id, motivo from bonus_fila_itens where organization_id=$1 and dia=$2 and tipo=$3",
+        [ORG, DIA, tipo],
+      )
+    ).rows;
+
+  it("só entra quem pode receber; o rodízio divide entre as duas pessoas", async () => {
+    await pool.query("delete from bonus_fila_itens where organization_id=$1", [ORG]);
+    await pool.query(
+      "update organizations set settings = jsonb_set(settings, '{crm}', '{\"internal_contact_tags\": [\"equipe\"]}') where id=$1",
+      [ORG],
+    );
+
+    const apto1 = await contato("Apto Um");
+    await conversa(apto1, 40, 40);
+    const apto2 = await contato("Apto Dois");
+    await conversa(apto2, 45, 45);
+    const optOut = await contato("Pediu Para Parar", { is_blocked: true });
+    await conversa(optOut, 40, 40);
+    const reativacao = await contato("Com Reativacao", { tags: ["reativacao"] });
+    await conversa(reativacao, 40, 40);
+    const interno = await contato("Da Equipe", { tags: ["equipe"] });
+    await conversa(interno, 40, 40);
+    const recente = await contato("Falou Semana Passada");
+    await conversa(recente, 40, 5);
+    const frio = await contato("Numero Frio");
+    await conversa(frio, null, 40);
+    const comConsulta = await contato("Tem Consulta Futura");
+    await conversa(comConsulta, 40, 40);
+    await consulta(comConsulta, -5, "confirmed");
+    const chamadoHa30 = await contato("Chamado Ha 30 Dias");
+    await conversa(chamadoHa30, 40, 40);
+    await item("lead_antigo", PESSOA_A, chamadoHa30, "2026-10-11");
+    const chamadoHa70 = await contato("Chamado Ha 70 Dias");
+    await conversa(chamadoHa70, 80, 80);
+    await item("lead_antigo", PESSOA_A, chamadoHa70, "2026-09-01");
+
+    const r = await montar();
+    expect(r.ja_montada).toBe(false);
+    const leads = await naFila("lead_antigo");
+    expect(new Set(leads.map((l) => l.contact_id))).toEqual(new Set([apto1, apto2, chamadoHa70]));
+    expect(new Set(leads.map((l) => l.user_id))).toEqual(new Set([PESSOA_A, PESSOA_B]));
+  });
+
+  it("segunda chamada no mesmo dia não monta de novo", async () => {
+    expect((await montar()).ja_montada).toBe(true);
+  });
+
+  it("ligações: faltou antes de sem retorno antes de pós-consulta; exclusões valem", async () => {
+    await pool.query("delete from bonus_fila_itens where organization_id=$1 and dia=$2", [ORG, DIA]);
+    const faltou = await contato("Faltou");
+    await consulta(faltou, 3, "no_show");
+    const semRetorno = await contato("Sem Retorno");
+    await consulta(semRetorno, 45, "completed");
+    const pos = await contato("Pos Consulta");
+    await consulta(pos, 3, "completed");
+    const voltou = await contato("Ja Remarcou");
+    await consulta(voltou, 45, "completed");
+    await consulta(voltou, -10, "pending");
+    const jaLigado = await contato("Ja Ligado");
+    await consulta(jaLigado, 3, "no_show");
+    const idLigado = await item("ligacao", PESSOA_B, jaLigado, "2026-11-01");
+    await pool.query(
+      "update bonus_fila_itens set ligacao_resultado='nao_atendeu', ligacao_registrada_em=now() where id=$1",
+      [idLigado],
+    );
+
+    await montar(0, 2);
+    const ligacoes = await naFila("ligacao");
+    const motivoDe = new Map(ligacoes.map((l) => [l.contact_id, l.motivo]));
+    expect(motivoDe.get(faltou)).toBe("faltou");
+    expect(motivoDe.get(semRetorno)).toBe("sem_retorno");
+    expect(motivoDe.has(voltou)).toBe(false);
+    expect(motivoDe.has(jaLigado)).toBe(false);
+    expect(ligacoes.length).toBe(3);
+    expect(motivoDe.get(pos)).toBe("pos_consulta");
+  });
+
+  it("anon e authenticated não executam a montagem", async () => {
+    await expect(
+      como(PESSOA_A, "select fn_bonus_montar_fila($1,$2,$3,$4,$5,$6,$7)", [ORG, DIA, AGORA, [PESSOA_A], 1, 1, "{}"]),
+    ).rejects.toThrow(/permission denied/);
+  });
+});
