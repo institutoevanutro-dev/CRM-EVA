@@ -16,8 +16,12 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { textoDoAviso } from "@/lib/escalacao/aviso-ao-lead";
+import type { AvailabilitySchedule } from "@/lib/schemas/routing";
+
 import {
   fraseDeExpectativa,
+  quandoAEquipeVolta,
   quemPodeAssumirAgora,
   expectativaDeAtendimento,
 } from "@/lib/escalacao/disponibilidade";
@@ -80,7 +84,7 @@ describe("quem pode assumir agora", () => {
       "org",
       AGORA,
     );
-    expect(q).toEqual({ disponiveis: 1, total: 3 });
+    expect(q).toEqual({ disponiveis: 1, total: 3, volta: null });
   });
 
   it("quem nunca configurou disponibilidade NÃO é contado como disponível", async () => {
@@ -91,7 +95,7 @@ describe("quem pode assumir agora", () => {
       "org",
       AGORA,
     );
-    expect(q).toEqual({ disponiveis: 0, total: 1 });
+    expect(q).toEqual({ disponiveis: 0, total: 1, volta: null });
   });
 
   it("fora da janela de horário não conta, mesmo online e com folga", async () => {
@@ -120,5 +124,135 @@ describe("quem pode assumir agora", () => {
     );
     expect(r.quem).toBeNull();
     expect(r.frase).toMatch(/NÃO prometa contato/i);
+  });
+});
+
+/**
+ * QUANDO A EQUIPE VOLTA — a clínica não atende sábado nem domingo.
+ *
+ * Datas de outubro de 2026 (24/10 é sábado). São Paulo é UTC-3 o ano todo.
+ * Jornada fictícia: segunda a sexta, 08:00–18:00.
+ */
+describe("quando a equipe volta", () => {
+  const SP = "America/Sao_Paulo";
+  const semanaUtil = (timezone = SP): AvailabilitySchedule => ({
+    timezone,
+    windows: [1, 2, 3, 4, 5].map((dow) => ({ dow, start: "08:00", end: "18:00" })),
+  });
+
+  it("sábado à tarde: volta na segunda-feira", () => {
+    // sábado 24/10 15:00 SP
+    expect(quandoAEquipeVolta([semanaUtil()], new Date("2026-10-24T18:00:00Z"), SP)).toBe(
+      "na segunda-feira",
+    );
+  });
+
+  it("sexta 23:00: volta na segunda-feira", () => {
+    // sexta 23/10 23:00 SP = sábado 02:00 UTC
+    expect(quandoAEquipeVolta([semanaUtil()], new Date("2026-10-24T02:00:00Z"), SP)).toBe(
+      "na segunda-feira",
+    );
+  });
+
+  it("terça 21:00: volta amanhã", () => {
+    // terça 20/10 21:00 SP
+    expect(quandoAEquipeVolta([semanaUtil()], new Date("2026-10-21T00:00:00Z"), SP)).toBe("amanhã");
+  });
+
+  it("antes de abrir no mesmo dia: hoje a partir da hora da janela", () => {
+    // quarta 21/10 06:00 SP; uma agenda abre 08:30, outra 10:00: vale a mais cedo.
+    const tarde: AvailabilitySchedule = { timezone: SP, windows: [{ dow: 3, start: "10:00", end: "12:00" }] };
+    const cedo: AvailabilitySchedule = { timezone: SP, windows: [{ dow: 3, start: "08:30", end: "12:00" }] };
+    expect(quandoAEquipeVolta([tarde, cedo], new Date("2026-10-21T09:00:00Z"), SP)).toBe(
+      "hoje a partir das 8h30",
+    );
+  });
+
+  it("dentro do horário: null (o texto de hoje fica)", () => {
+    // terça 20/10 10:00 SP
+    expect(quandoAEquipeVolta([semanaUtil()], new Date("2026-10-20T13:00:00Z"), SP)).toBeNull();
+  });
+
+  it("sem horário configurado: null (o texto de hoje fica)", () => {
+    const sabado = new Date("2026-10-24T18:00:00Z");
+    expect(quandoAEquipeVolta([], sabado, SP)).toBeNull();
+    // alguém sem janela atende 24/7: não há "volta"
+    expect(quandoAEquipeVolta([semanaUtil(), { timezone: SP, windows: [] }], sabado, SP)).toBeNull();
+  });
+
+  it("fuso: o mesmo instante perto da meia-noite dá respostas diferentes em SP e em UTC", () => {
+    // terça 20/10 01:00 UTC = segunda 19/10 22:00 SP.
+    const t = new Date("2026-10-20T01:00:00Z");
+    // jornada em SP: abre terça 08:00 SP, que é "amanhã" para quem está em SP.
+    expect(quandoAEquipeVolta([semanaUtil(SP)], t, SP)).toBe("amanhã");
+    // jornada escrita em UTC: abre terça 08:00 UTC = terça 05:00 SP, também "amanhã" em SP.
+    expect(quandoAEquipeVolta([semanaUtil("UTC")], t, SP)).toBe("amanhã");
+    // rotulado em UTC, o mesmo início é "hoje" (já é terça em UTC).
+    expect(quandoAEquipeVolta([semanaUtil("UTC")], t, "UTC")).toBe("hoje a partir das 8h");
+  });
+
+  it("uma semana à frente diz 'próxima'", () => {
+    // terça 20/10 19:00 SP, só há janela às terças.
+    const soTerca: AvailabilitySchedule = { timezone: SP, windows: [{ dow: 2, start: "08:00", end: "18:00" }] };
+    expect(quandoAEquipeVolta([soTerca], new Date("2026-10-20T22:00:00Z"), SP)).toBe(
+      "na próxima terça-feira",
+    );
+  });
+
+  it("quemPodeAssumirAgora lê a volta da jornada de quem está ligado", async () => {
+    const q = await quemPodeAssumirAgora(
+      {
+        query: () =>
+          Promise.resolve({
+            rows: [
+              { user_id: "a", role: "agent", capacity: 5, schedule: semanaUtil(), carga: "0", fuso_org: SP },
+              // desligado: não entra na conta da volta
+              { user_id: "b", role: "agent", capacity: null, schedule: null, carga: "0", fuso_org: SP },
+            ],
+            rowCount: 2,
+          }),
+      } as never,
+      "org",
+      new Date("2026-10-24T18:00:00Z"),
+    );
+    expect(q).toEqual({ disponiveis: 0, total: 2, volta: "na segunda-feira" });
+  });
+});
+
+describe("o que o paciente lê com a volta conhecida", () => {
+  const LEAD = "22222222-2222-4222-8222-222222222222";
+  const fora = { disponiveis: 0, total: 2, volta: "na segunda-feira" };
+
+  it("aviso de escalação diz quando a equipe volta, sem travessão", () => {
+    const t = textoDoAviso("pediu_humano", fora, LEAD);
+    expect(t).toContain("na segunda-feira");
+    expect(t).not.toMatch(/[—–]/);
+  });
+
+  it("sem volta conhecida, o texto é exatamente o de antes", () => {
+    const antes = textoDoAviso("pediu_humano", { disponiveis: 0, total: 2 }, LEAD);
+    expect(textoDoAviso("pediu_humano", { ...fora, volta: null }, LEAD)).toBe(antes);
+    expect(fraseDeExpectativa({ disponiveis: 0, total: 2, volta: null })).toBe(
+      fraseDeExpectativa({ disponiveis: 0, total: 2 }),
+    );
+  });
+
+  it("com gente disponível, a volta não muda nada", () => {
+    expect(textoDoAviso("pediu_humano", { disponiveis: 1, total: 2, volta: "amanhã" }, LEAD)).toBe(
+      textoDoAviso("pediu_humano", { disponiveis: 1, total: 2 }, LEAD),
+    );
+  });
+
+  it("instrução ao modelo (open_human_case) carrega a volta e proíbe outro prazo", () => {
+    const f = fraseDeExpectativa(fora);
+    expect(f).toContain("retorna na segunda-feira");
+    expect(f).toMatch(/NÃO prometa contato antes/);
+  });
+
+  it("três redações entre leads (o spinning cruza leads)", () => {
+    const textos = new Set(
+      Array.from({ length: 60 }, (_, i) => textoDoAviso("pediu_humano", fora, `lead-${i}`)),
+    );
+    expect(textos.size).toBeGreaterThanOrEqual(3);
   });
 });
