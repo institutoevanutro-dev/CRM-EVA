@@ -8,6 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { diaLocalISO } from "@/lib/agenda/fuso";
 import { lerPreferencias } from "@/lib/conversoes/preferencias";
 import { leadsQueEntraramNoSinal } from "@/lib/conversoes/sinais-do-periodo";
+import { logger } from "@/lib/logger";
 import { FUSO_PADRAO, fusoValido } from "@/lib/tempo/fusos";
 
 import type { EntradaDoMes, FatosDaPessoa, TarefaDoMes } from "./calculo";
@@ -91,6 +92,9 @@ export async function programasAtivos(
   for (const linha of (data ?? []) as unknown as LinhaDoPrograma[]) {
     const lido = paraPrograma(linha);
     if (lido.status === "ok") programas.push(lido.programa);
+    else if (lido.status === "erro") {
+      logger.warn("[bonus] programa ativo com regras inválidas", { organizationId: linha.organization_id, motivo: lido.motivo });
+    }
   }
   return { status: "ok", programas };
 }
@@ -294,9 +298,11 @@ export async function historicoDeEnvioRecente(
   const itens = (await itensDaFila(admin, org, de, ate)).filter((i) => i.tipo === "lead_antigo");
   if (itens.length === 0) return [];
   const contatos = [...new Set(itens.map((i) => i.contactId))];
-  // Meia-noite UTC do primeiro dia: um pouco antes do início local, de propósito.
-  // `itensEnviados` recorta pelo dia local; mensagem a mais não muda o resultado.
-  const mensagens = await mensagensDaEquipe(admin, org, programa.regras.participantes, contatos, new Date(`${de}T00:00:00Z`), new Date());
+  // Meia-noite UTC da VÉSPERA do primeiro dia: antes do início local em qualquer
+  // fuso (UTC-12 a UTC+14), de propósito. `itensEnviados` recorta pelo dia local;
+  // mensagem a mais não muda o resultado.
+  const desde = new Date(`${somarDias(de, -1)}T00:00:00Z`);
+  const mensagens = await mensagensDaEquipe(admin, org, programa.regras.participantes, contatos, desde, new Date());
   const bloqueadoEm = new Map<string, string>();
   for (const lote of emLotes(contatos)) {
     const { data, error } = await admin

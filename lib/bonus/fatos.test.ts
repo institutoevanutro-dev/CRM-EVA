@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { describe, expect, it, vi } from "vitest";
 
-import { paraTarefaDoMes } from "./fatos";
+import { logger } from "@/lib/logger";
+
+import { paraTarefaDoMes, programasAtivos } from "./fatos";
 
 const SP = "America/Sao_Paulo";
 
@@ -25,5 +28,30 @@ describe("tarefa do banco para o cálculo", () => {
     const base = { id: "t3", due_date: "2026-11-10T12:00:00Z", missed_due_date: null, closed_at: null };
     expect(paraTarefaDoMes({ ...base, status: "in_progress" }, SP).situacao).toBe("aberta");
     expect(paraTarefaDoMes({ ...base, status: "cancelled", closed_at: "2026-11-09T12:00:00Z" }, SP).situacao).toBe("cancelada");
+  });
+});
+
+describe("programas ativos", () => {
+  it("regra inválida sai da lista e deixa aviso no log, sem derrubar os outros", async () => {
+    const linha = (id: string, organization_id: string, regras: unknown) => ({
+      id, organization_id, aprovador_user_id: "u1", ativo: true, regras,
+      organizations: { timezone: "Fuso/Inexistente", settings: {} },
+    });
+    const data = [linha("p1", "org-ok", {}), linha("p2", "org-ruim", { participantes: "x" })];
+    const consulta = { select: () => consulta, eq: () => consulta, limit: async () => ({ data, error: null }) };
+    const admin = { from: () => consulta } as unknown as SupabaseClient;
+    const aviso = vi.spyOn(logger, "warn").mockImplementation(() => {});
+
+    const r = await programasAtivos(admin);
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.programas.map((p) => p.id)).toEqual(["p1"]);
+    expect(r.programas[0]!.fuso).toBe("America/Sao_Paulo");
+    expect(aviso).toHaveBeenCalledWith(
+      "[bonus] programa ativo com regras inválidas",
+      expect.objectContaining({ organizationId: "org-ruim", motivo: expect.stringMatching(/^regras_invalidas:/) }),
+    );
+    aviso.mockRestore();
   });
 });
