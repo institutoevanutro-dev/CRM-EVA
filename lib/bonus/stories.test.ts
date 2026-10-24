@@ -27,4 +27,10 @@ describe("stories por dia", () => {
     expect(contagemDoDia({ story_ids: ["s1"], contagem_manual: 2 })).toBe(2);
     expect(contagemDoDia({ story_ids: ["s1", "s2", "s3"], contagem_manual: null })).toBe(3);
   });
+
+  it("leitura recusada não apaga o lançamento manual: ids vazios + leitura_erro, vale a contagem manual", () => {
+    // A linha como o cron a deixa quando a borda recusa: só leitura_erro/lido_em mudam.
+    const linha = { story_ids: [] as string[], contagem_manual: 2, leitura_erro: "sem_permissao" };
+    expect(contagemDoDia(linha)).toBe(2);
+  });
 });

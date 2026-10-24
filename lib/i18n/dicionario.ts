@@ -11475,6 +11475,9 @@ export const DICIONARIO: Traducoes = {
   "Fora do horário de envio do número ({inicio}h às {fim}h). A mensagem da fila sai dentro da janela.": {
     es: "Fuera del horario de envío del número ({inicio}h a {fim}h). El mensaje de la fila sale dentro de la ventana.",
   },
+  // Bônus da equipe: o lançamento manual dos stories (PUT /api/v1/bonus/stories).
+  "Só quem aprova o bônus lança os stories.": { es: "Solo quien aprueba el bono registra las historias." },
+  "Erro ao salvar.": { es: "Error al guardar." },
 };
 
 /**

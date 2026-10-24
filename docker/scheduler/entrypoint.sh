@@ -110,6 +110,8 @@ CRONS="
 # de cada organização (7h locais, em dia útil); a função devolve já montada
 # nas rodadas seguintes, então o custo é uma consulta por hora.
 5 * * * *|60|api/v1/cron/bonus-fila
+# Stories do dia: de hora em hora porque o story some em 24h.
+25 * * * *|60|api/v1/cron/bonus-stories
 0 12 * * *|60|api/v1/cron/lgpd-sla-watcher
 30 3 * * *|120|api/v1/cron/kb-conversations-batch
 15 4 * * *|60|api/v1/cron/sync-model-catalog
