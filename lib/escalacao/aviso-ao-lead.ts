@@ -157,6 +157,17 @@ const FECHOS = {
 } as const;
 
 /**
+ * Fora do horário, com a volta CONHECIDA (`quem.volta`, ver
+ * `quandoAEquipeVolta`). Mesmo sorteio; três redações de estrutura diferente
+ * pela mesma razão do spinning. Sem travessão: é texto ao paciente.
+ */
+const foraDoHorario = (quando: string): readonly string[] => [
+  `Agora a equipe está fora do horário; seu pedido ficou registrado e ela retorna ${quando}.`,
+  `Deixei sua solicitação anotada, e o time volta a atender ${quando}.`,
+  `Neste momento não há expediente, mas alguém te responde ${quando}.`,
+];
+
+/**
  * Variante DETERMINÍSTICA por lead: sha256(lead_id) → uint32 → módulo.
  *
  * É a MESMA regra de `pickReentryVariant` (`lib/agent-engine/agent/reentry-template.ts`),
@@ -199,7 +210,9 @@ export function textoDoAviso(
   const fecho =
     quem === null || quem.total === 0
       ? variante(leadId, FECHOS.sem_equipe)
-      : quem.disponiveis === 0
+      : quem.disponiveis === 0 && quem.volta
+        ? variante(leadId, foraDoHorario(quem.volta))
+        : quem.disponiveis === 0
         ? variante(leadId, FECHOS.fora_de_expediente)
         : variante(leadId, FECHOS.com_equipe);
 
