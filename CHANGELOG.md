@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.38.1] — 2026-10-25
+
+### Corrigido
+
+- **O build não depende mais das fontes do Google** As fontes do sistema (Inter, Cormorant Garamond, IBM Plex Mono e as da vitrine de design) agora vão dentro da imagem, em vez de serem baixadas do Google durante a construção. A construção da imagem deixava de funcionar de vez em quando quando o Google demorava a responder; isso não acontece mais. A aparência das telas é a mesma. Nada a fazer na atualização.
+
 ## [4.38.0] — 2026-10-25
 
 ### Adicionado
@@ -8303,7 +8309,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.38.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.38.1...HEAD
+[4.38.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.38.0...v4.38.1
 [4.38.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.37.0...v4.38.0
 [4.37.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.36.0...v4.37.0
 [4.36.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.35.0...v4.36.0
