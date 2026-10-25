@@ -8,6 +8,19 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.38.0] — 2026-10-25
+
+### Adicionado
+
+- **Bônus da equipe: placar, fila do dia e registro de ligação** Nova tela em Análise › Bônus. O dono da organização liga o programa e
+  escolhe quem participa, os valores e as metas; só essa pessoa vê a configuração,
+  e pode passar a função a outra. Se quem aprova sair da equipe, o dono da
+  organização assume a função pela própria tela. Cada participante vê o próprio
+  placar do mês e a fila do dia (leads antigos para chamar pelo CRM e pacientes
+  para ligar, com o registro do resultado). As tarefas passam a guardar a hora em
+  que foram encerradas, e trocar o prazo de uma tarefa já vencida fica registrado.
+  Nada muda para quem não liga o programa.
+
 ## [4.37.0] — 2026-10-25
 
 ### Alterado
@@ -8290,7 +8303,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.37.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.38.0...HEAD
+[4.38.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.37.0...v4.38.0
 [4.37.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.36.0...v4.37.0
 [4.36.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.35.0...v4.36.0
 [4.35.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.34.2...v4.35.0
