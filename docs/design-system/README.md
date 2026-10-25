@@ -39,7 +39,7 @@ Esta pasta é a **fonte canônica** da linguagem visual do DeskcommCRM. Toda dec
 ## Source of truth (código)
 
 - `app/design/lib/tokens.ts` — tokens em TypeScript (cor, spacing, radius, shadow, motion)
-- `app/design/lib/fonts.ts` — config das fontes via `next/font/google`
+- `app/design/lib/fonts.ts` — config das fontes via `next/font/local` (arquivos em `app/fonts/`)
 - `app/design/showcase.css` — CSS vars `.ds-*` canônicas
 - `app/design/` — showcase navegável em `/design`
 

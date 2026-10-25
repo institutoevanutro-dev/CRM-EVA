@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Cormorant_Garamond, IBM_Plex_Mono, Inter } from "next/font/google";
+import localFont from "next/font/local";
 import { headers } from "next/headers";
 import { Toaster } from "sonner";
 import { coresDaBarraDoNavegador } from "@/lib/branding/barra-do-navegador";
@@ -28,22 +28,27 @@ import "./globals.css";
 
 // Fontes do site da clínica e do PrecificaEva (spec 2026-10-09-visual-clinica):
 // Inter no texto e nos números, Cormorant Garamond nos títulos.
-const inter = Inter({
-  subsets: ["latin", "latin-ext"],
+// Locais (app/fonts/, latin + latin-ext): o build não baixa nada do Google.
+const inter = localFont({
+  src: "./fonts/inter.woff2",
+  weight: "100 900",
   display: "swap",
   variable: "--font-inter",
 });
 
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin", "latin-ext"],
-  weight: ["500", "600", "700"],
+const cormorant = localFont({
+  src: "./fonts/cormorant-garamond.woff2",
+  weight: "500 700",
   display: "swap",
   variable: "--font-cormorant",
+  adjustFontFallback: "Times New Roman",
 });
 
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500"],
+const plexMono = localFont({
+  src: [
+    { path: "./fonts/ibm-plex-mono-400.woff2", weight: "400" },
+    { path: "./fonts/ibm-plex-mono-500.woff2", weight: "500" },
+  ],
   display: "swap",
   variable: "--font-mono",
 });

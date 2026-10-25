@@ -24,7 +24,7 @@ A fonte secundária para **dados monoespaçados** é **IBM Plex Mono** — escol
 --ds-font-mono:    var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, monospace;
 ```
 
-`var(--font-atkinson)` é injetado por `next/font/google` via `app/design/lib/fonts.ts`.
+`var(--font-atkinson)` é injetado por `next/font/local` (arquivos em `app/fonts/`) via `app/design/lib/fonts.ts`.
 
 **Pesos disponíveis** (Atkinson):
 - 400 — body, default UI
