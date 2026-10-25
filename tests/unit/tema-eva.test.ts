@@ -38,10 +38,11 @@ describe("cores iguais às do Financeiro", () => {
   });
   it("fontes do site da clínica: Inter no texto, Cormorant Garamond nos títulos", () => {
     const layout = readFileSync("app/layout.tsx", "utf8");
-    expect(layout).toMatch(/import \{[^}]*\bInter\b[^}]*\} from "next\/font\/google"/);
-    expect(layout).toMatch(/\bCormorant_Garamond\b/);
-    expect(layout).not.toMatch(/\bJosefin_Sans\b/);
-    expect(layout).not.toMatch(/Atkinson_Hyperlegible/);
+    expect(layout).toMatch(/import localFont from "next\/font\/local"/);
+    expect(layout).toContain('"./fonts/inter.woff2"');
+    expect(layout).toContain('"./fonts/cormorant-garamond.woff2"');
+    expect(layout).not.toMatch(/josefin/i);
+    expect(layout).not.toMatch(/atkinson/i);
     expect(css).toMatch(/--font-sans:\s*var\(--font-inter\)/);
     expect(css).toMatch(/--font-titulo:\s*var\(--font-cormorant\)/);
     expect(css).not.toMatch(/--font-atkinson/);
