@@ -127,6 +127,13 @@ const COPY: Record<string, { variant: Variant; msg?: string }> = {
   // TOM. Sem `msg` de propósito: a lista de agentes é contexto que nenhuma
   // frase genérica alcança.
   credential_in_use: { variant: "warning" },
+
+  // ---- Ritmo da fila de leads antigos (bônus da equipe) ----
+  //
+  // Espera, não quebra: o texto volta ao campo e sai daqui a pouco. Sem `msg`:
+  // a rota diz quantos segundos, ou qual é a janela do número.
+  bonus_ritmo: { variant: "warning" },
+  fora_da_janela_da_fila: { variant: "warning" },
 };
 
 /**

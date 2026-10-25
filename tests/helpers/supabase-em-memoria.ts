@@ -1,7 +1,7 @@
 /**
  * Um PostgREST de mentira, com estado, para testar rota contra dado que muda.
  *
- * Só o que as rotas de pedido LGPD usam: `select/eq/in/gt/order/limit/range`,
+ * Só o que as rotas de pedido LGPD usam: `select/eq/neq/in/gt/gte/order/limit/range`,
  * a contagem `select(…, { count, head })`, `maybeSingle/single`, `insert`,
  * `update` e `rpc` (espionado). `from` também é espionado: é como o teste conta
  * quantas consultas uma rota faz por tabela (N+1). Embutidos do `select` são
@@ -29,6 +29,7 @@ export function supabaseEmMemoria(tabelas: Record<string, Linha[]>) {
     let limite = Infinity;
     let inicio = 0;
     let soContar = false;
+    let descPor: string | null = null;
 
     function executar(): Resposta {
       if (acao.tipo !== "select" && recusar[tabela]) return { data: null, error: recusar[tabela]! };
@@ -38,6 +39,10 @@ export function supabaseEmMemoria(tabelas: Record<string, Linha[]>) {
         return { data: [criada], error: null };
       }
       const todas = linhas.filter((l) => filtros.every((f) => f(l)));
+      if (descPor) {
+        const c = descPor;
+        todas.sort((a, b) => (String(a[c]) < String(b[c]) ? 1 : String(a[c]) > String(b[c]) ? -1 : 0));
+      }
       if (soContar) return { data: null, error: null, count: todas.length };
       const achadas = todas.slice(inicio, inicio + limite);
       if (acao.tipo === "update") for (const l of achadas) Object.assign(l, acao.patch);
@@ -58,7 +63,11 @@ export function supabaseEmMemoria(tabelas: Record<string, Linha[]>) {
       eq: (c: string, v: unknown) => (filtros.push((l) => l[c] === v), q),
       in: (c: string, vs: unknown[]) => (filtros.push((l) => vs.includes(l[c])), q),
       gt: (c: string, v: unknown) => (filtros.push((l) => String(l[c]) > String(v)), q),
-      order: () => q,
+      neq: (c: string, v: unknown) => (filtros.push((l) => l[c] !== v), q),
+      gte: (c: string, v: unknown) => (filtros.push((l) => String(l[c]) >= String(v)), q),
+      // Só a ordem descendente reordena: as rotas LGPD contam com a ordem de
+      // inserção nas consultas ascendentes, e ela continua igual.
+      order: (c: string, o?: { ascending?: boolean }) => ((descPor = o?.ascending === false ? c : descPor), q),
       limit: (n: number) => ((limite = n), q),
       range: (de: number, ate: number) => ((inicio = de), (limite = ate - de + 1), q),
       insert: (linha: Linha) => ((acao = { tipo: "insert", linha }), q),

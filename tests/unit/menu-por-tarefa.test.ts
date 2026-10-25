@@ -21,7 +21,7 @@ describe("menu por tarefa", () => {
   it("nenhum grupo passa de 9 telas (é o que permite mostrar todas, sem \"Ver tudo\")", () => {
     for (const g of MENU) expect(g.hrefs.length, g.label).toBeLessThanOrEqual(9);
     expect(MENU.map((g) => `${g.label} ${g.hrefs.length}`)).toEqual([
-      "Atendimento 7", "Vendas 4", "Assistente 8", "Análise 9", "Clínica 9", "Integrações 7",
+      "Atendimento 7", "Vendas 5", "Assistente 8", "Análise 9", "Clínica 9", "Integrações 7",
     ]);
   });
 

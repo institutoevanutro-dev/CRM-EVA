@@ -25,6 +25,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { lerPreferencias } from "@/lib/conversoes/preferencias";
+import { leadsQueEntraramNoSinal } from "@/lib/conversoes/sinais-do-periodo";
 import { ORIGEM_DA_PLANILHA } from "@/lib/leads/planilha";
 
 export type Origem = "meta" | "google" | "indicacao" | "organico";
@@ -125,10 +126,7 @@ export async function consultaFunilPorOrigem(admin: SupabaseClient, org: string,
   const { etapasDeSinalPago } = lerPreferencias((dataOrg as { settings?: unknown } | null)?.settings);
   const sinais: { contact_id: string | null }[] = [];
   if (etapasDeSinalPago.length) {
-    const eventos = await todas<{ entity_id: string | null }>((a, b) =>
-      admin.from("event_log").select("entity_id").eq("organization_id", org).eq("event_type", "lead.stage_changed")
-        .in("payload->>to_stage_id", etapasDeSinalPago).gte("created_at", inicio).lt("created_at", fim).order("id").range(a, b));
-    const leadsDoSinal = [...new Set(eventos.map((x) => x.entity_id).filter((x): x is string => Boolean(x)))];
+    const leadsDoSinal = await leadsQueEntraramNoSinal(admin, org, etapasDeSinalPago, inicio, fim);
     for (const lote of emLotes(leadsDoSinal)) {
       const { data, error } = await admin.from("crm_leads").select("contact_id").eq("organization_id", org).in("id", lote);
       if (error) throw new Error("funil_por_origem: leads do sinal");

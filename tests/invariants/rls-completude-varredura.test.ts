@@ -260,6 +260,9 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "da organização viraram venda, e quem o lê é o servidor com o admin client " +
       "filtrando organization_id à mão (a tela `/app/settings/conversoes`).",
   },
+  { tabela: "bonus_programas", razao: "tests/invariants/bonus-da-equipe.test.ts — \"programa: só o aprovador lê\": o aprovador lê, o admin participante e o admin de outra organização leem 0, e sessão nenhuma escreve (nem o aprovador)" },
+  { tabela: "bonus_fila_itens", razao: "tests/invariants/bonus-da-equipe.test.ts — \"fila: cada um lê a sua; o aprovador lê todas\": a pessoa A não vê o item da B, o admin de outra organização lê 0, e a pessoa não registra ligação pela REST" },
+  { tabela: "bonus_stories_dia", razao: "tests/invariants/bonus-da-equipe.test.ts — \"stories: a organização lê, ninguém escreve pela sessão\": participante lê, outra organização lê 0, e o aprovador não escreve pela sessão" },
 ];
 
 /**
