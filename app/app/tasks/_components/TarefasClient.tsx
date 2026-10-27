@@ -16,6 +16,7 @@ import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { cn } from "@/lib/utils";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useTasks } from "@/hooks/tasks/useTasks";
+import { responsavelDoFiltro, type FiltroDeResponsavel } from "@/lib/tarefas/filtro-de-responsavel";
 import { nomeDoResponsavel } from "@/lib/tarefas/rotulo-do-responsavel";
 import type { NovaTarefa, SituacaoDaTarefa, Tarefa } from "@/lib/tarefas/tipos";
 
@@ -44,7 +45,7 @@ export function TarefasClient({
     membros ? nomeDoResponsavel(membros, userId) : null;
   const [modo, setModo] = useState<"lista" | "calendario">("lista");
   const [situacao, setSituacao] = useState<FiltroDeSituacao>("aberto");
-  const [minhas, setMinhas] = useState(minhasDeInicio);
+  const [responsavel, setResponsavel] = useState<FiltroDeResponsavel>(minhasDeInicio ? "eu" : "todos");
   const [emEdicao, setEmEdicao] = useState<Tarefa | null>(null);
   const [formAberto, setFormAberto] = useState(false);
   const [prazoSugerido, setPrazoSugerido] = useState<string | undefined>();
@@ -63,9 +64,10 @@ export function TarefasClient({
     editarTarefa,
     apagarTarefa,
     alternarConcluida,
-  } = useTasks(
-    situacao === "aberto" ? { aberto: true, minhas } : { status: situacao, minhas },
-  );
+  } = useTasks({
+    ...(situacao === "aberto" ? { aberto: true } : { status: situacao }),
+    assigned_to: responsavelDoFiltro(responsavel),
+  });
 
   function abrirNova(dia?: string) {
     setEmEdicao(null);
@@ -112,27 +114,27 @@ export function TarefasClient({
               </SelectContent>
             </Select>
 
-            <div className="flex items-center gap-0.5 rounded-md border bg-muted p-0.5">
-              {([
-                [true, t("Minhas")],
-                [false, t("Todas")],
-              ] as const).map(([valor, rotulo]) => (
-                <button
-                  key={rotulo}
-                  type="button"
-                  onClick={() => setMinhas(valor)}
-                  aria-pressed={minhas === valor}
-                  className={cn(
-                    "min-h-11 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors lg:min-h-0",
-                    minhas === valor
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {rotulo}
-                </button>
-              ))}
-            </div>
+            <Select value={responsavel} onValueChange={(v) => setResponsavel(v as FiltroDeResponsavel)}>
+              <SelectTrigger
+                aria-label={t("Responsável")}
+                className="h-11 w-[168px] text-xs lg:h-9"
+                data-testid="tarefas-filtro-responsavel"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">{t("Todos")}</SelectItem>
+                <SelectItem value="eu">{t("Minhas")}</SelectItem>
+                {(membros ?? [])
+                  .filter((m) => m.user_id !== usuarioId)
+                  .map((m) => (
+                    <SelectItem key={m.user_id} value={m.user_id}>
+                      {m.full_name ?? m.user_id.slice(0, 8)}
+                    </SelectItem>
+                  ))}
+                <SelectItem value="ninguem">{t("Sem responsável")}</SelectItem>
+              </SelectContent>
+            </Select>
 
             {/* O calendário tem 7 colunas: a 390px não cabe, e no celular fica a lista. */}
             <div className="hidden items-center gap-0.5 rounded-md border bg-muted p-0.5 md:flex">
@@ -231,6 +233,16 @@ export function TarefasClient({
         aoSalvar={salvar}
         membros={membros ?? []}
         usuarioId={usuarioId}
+        // Filtrando por alguém, a tarefa nova nasce DESSA pessoa: a lista que
+        // está na tela filtra por ela, e outra pessoa sumiria logo depois de
+        // salva. "Sem responsável" nasce sem dono; "Todos" e "Minhas", de quem cria.
+        responsavelPadrao={
+          responsavel === "todos" || responsavel === "eu"
+            ? undefined
+            : responsavel === "ninguem"
+              ? null
+              : responsavel
+        }
       />
     </div>
   );
