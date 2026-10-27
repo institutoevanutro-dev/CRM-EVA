@@ -64,7 +64,7 @@
     { "id": "orgmarca", "lane": "humano", "col": 1, "type": "frontend", "label": "/app/settings/marca", "sublabel": "marca da ORGANIZAÇÃO · admin do tenant, sem platform_admin" },
     { "id": "telatenant", "lane": "humano", "col": 1, "type": "frontend", "label": "/app/settings/tenant", "sublabel": "campo Razão social — o único lugar onde legal_name deixa de ser cópia do nome fantasia" },
     { "id": "aba", "lane": "humano", "col": 8, "type": "frontend", "label": "A aba do navegador", "sublabel": "título (generateMetadata) + ícone (/icon) + cor da barra (themeColor)" },
-    { "id": "interface", "lane": "humano", "col": 8, "type": "frontend", "label": "A interface pós-login", "sublabel": "sidebar, logo, botões, anel de foco — tudo pelo accent derivado" },
+    { "id": "interface", "lane": "humano", "col": 8, "type": "frontend", "label": "A interface pós-login", "sublabel": "sidebar, logo, botões, anel de foco: tudo pela cor derivada; o fundo do menu só muda com a cor do menu da organização (lib/branding/menu.ts)" },
     { "id": "painelaudit", "lane": "humano", "col": 8, "type": "frontend", "label": "/admin/audit", "sublabel": "quem repintou isto, e quando — as duas ações estão nas DUAS listas de código" },
     { "id": "caixaentrada", "lane": "humano", "col": 8, "type": "frontend", "label": "A caixa de entrada do cliente", "sublabel": "convite, confirmação de conta, recuperação de senha, aviso de SLA" },
     { "id": "autenticador", "lane": "humano", "col": 8, "type": "frontend", "label": "O app autenticador, no celular", "sublabel": "issuer=<marca>. Trocar o issuer NÃO reescreve fator já cadastrado" },

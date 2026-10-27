@@ -37,6 +37,7 @@ vi.mock("@/lib/instalacao/modulos", () => ({ modulosLigados: async () => [] }));
 vi.mock("@/lib/auth/vinculo-revogado", () => ({ acessoFoiRevogado: async () => false }));
 vi.mock("@/lib/branding/instalacao", () => ({ marcaDaInstalacao: async () => ({}) }));
 vi.mock("@/lib/branding/organizacao", () => ({
+  menuDaOrganizacaoDeSettings: () => null,
   resolverMarcaDaOrganizacao: () => ({
     name: "Deskcomm",
     logoUrl: null,

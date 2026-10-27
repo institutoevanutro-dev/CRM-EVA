@@ -24,6 +24,7 @@ import { toast } from "sonner";
 
 import { updateMarcaDaOrganizacao } from "@/app/actions/settings/updateMarcaDaOrganizacao";
 import { AmostrasDePaleta } from "@/components/branding/AmostrasDePaleta";
+import { CampoDaCorDoMenu } from "@/components/branding/CampoDaCorDoMenu";
 import { CampoDeLogo } from "@/components/branding/CampoDeLogo";
 import { TiraDeTons, type ItemDaLegenda } from "@/components/branding/TiraDeTons";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,8 @@ interface Props {
     readonly app_name: string | null;
     readonly accent_hex: string | null;
     readonly logo_path: string | null;
+    /** A cor do menu lateral, já validada por `menuDaOrganizacaoDeSettings`. */
+    readonly menu_hex: string | null;
   };
   /** A linha da marca da INSTALAÇÃO — a camada logo abaixo desta. */
   readonly instalacao: LinhaDaInstalacao;
@@ -126,12 +129,15 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
   const router = useRouter();
   const [nome, setNome] = useState(gravada.app_name ?? "");
   const [hex, setHex] = useState(gravada.accent_hex ?? "");
+  const [menu, setMenu] = useState(gravada.menu_hex ?? "");
   const [erroTecnico, setErroTecnico] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const nomeLimpo = nome.trim();
   const hexLimpo = hex.trim();
   const hexValido = hexLimpo.length === 0 || ehHexValido(hexLimpo);
+  const menuLimpo = menu.trim();
+  const menuValido = menuLimpo.length === 0 || ehHexValido(menuLimpo);
 
   // As duas camadas de baixo, montadas uma vez. `abaixo` sozinho responde "o que
   // aparece se eu não definir nada"; com a camada da organização na frente,
@@ -168,8 +174,13 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
   // seria aplicada" ANTES de salvar, em vez de a pessoa descobrir pela tela
   // continuar igual depois.
   const serializacao = useMemo(
-    () => cssDaMarca(resolvida.cor, ESCOPO_DA_ORGANIZACAO),
-    [resolvida.cor],
+    () =>
+      cssDaMarca(
+        resolvida.cor,
+        ESCOPO_DA_ORGANIZACAO,
+        menuLimpo.length > 0 && menuValido ? menuLimpo : null,
+      ),
+    [resolvida.cor, menuLimpo, menuValido],
   );
 
   const derivada = resolvida.cor?.derivada ?? null;
@@ -225,6 +236,7 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
     const lido = marcaDaOrganizacaoSchema.safeParse({
       app_name: nomeLimpo.length > 0 ? nomeLimpo : null,
       accent_hex: hexLimpo.length > 0 ? hexLimpo : null,
+      menu_hex: menuLimpo.length > 0 ? menuLimpo : null,
     });
     if (!lido.success) {
       toast.error(t("Confira os campos: algum valor não está no formato esperado."));
@@ -320,6 +332,12 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
           </p>
         </div>
 
+        <CampoDaCorDoMenu
+          valor={menu}
+          onMudar={setMenu}
+          corDaMarca={resolvida.cor?.semente ?? null}
+        />
+
         {derivada ? (
           <div className="space-y-2">
             <p className="text-sm text-text-muted">
@@ -385,6 +403,13 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
             valor={origemEmPortugues(resolvida.origens.nome, t)}
           />
           <LinhaDeOrigem campo={t("Cor")} valor={origemEmPortugues(resolvida.origens.cor, t)} />
+          <LinhaDeOrigem
+            campo={t("Cor do menu lateral")}
+            valor={origemEmPortugues(
+              menuLimpo.length > 0 && menuValido ? "organizacao" : "padrao",
+              t,
+            )}
+          />
           <LinhaDeOrigem
             campo={t("Logo")}
             valor={origemEmPortugues(resolvida.origens.logoUrl, t)}
@@ -471,7 +496,7 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
         {erroTecnico ? (
           <span className="font-mono text-xs text-text-muted">{erroTecnico}</span>
         ) : null}
-        <Button type="submit" disabled={isPending || !hexValido}>
+        <Button type="submit" disabled={isPending || !hexValido || !menuValido}>
           {isPending ? t("Salvando…") : t("Salvar")}
         </Button>
       </div>

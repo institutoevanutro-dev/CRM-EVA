@@ -1,4 +1,4 @@
-<!-- traduzido-de: docs/white-label.md@2612127f0a86 -->
+<!-- traduzido-de: docs/white-label.md@8972939195fc -->
 
 [🇧🇷 Português](white-label.md) · 🇺🇸 English · [🇪🇸 Español](white-label.es.md)
 
@@ -61,7 +61,7 @@ Configuration survives every update. That is why the brand is read at runtime an
 
 ## Brand per organization
 
-**One installation serves several organizations, and each one may have its own brand.** The admin of each organization opens `Configurações → Marca` (`/app/settings/marca`) and defines its **name**, **color** and **logo** — without needing you, and without seeing the others.
+**One installation serves several organizations, and each one may have its own brand.** The admin of each organization opens `Configurações → Marca` (`/app/settings/marca`) and defines its **name**, **color** and **logo** — without needing you, and without seeing the others. The optional **side menu color** lives there too: left blank, the menu keeps the factory green, whatever the brand color is. The "Usar a cor da marca" (use the brand color) button suggests a dark shade with the brand's hue, and a color that is too light is darkened until the menu text clears 4.5:1 (the screen says when that happens).
 
 The boundary, which is deliberate:
 
@@ -82,7 +82,7 @@ Straight to the point, so that you do not find out in front of the client. Each 
 
 - **Domain per organization.** One installation, one domain. There is no domain column in the schema, the host-based branching in `proxy.ts` is a declared NOOP (it exists only as documentation of the intended topology), and at the Edge there is no database to query before deciding whom that host belongs to. A client who demands their own domain is asking for a **dedicated installation**.
 - **Font.** Typography is the same in every installation. `next/font` resolves at **build** time, and the image your VPS downloads already arrives built — a font picker in the panel would save a value that nothing would read. (The font is Atkinson Hyperlegible, chosen by the Braille Institute for legibility; swapping it does not change brand perception and makes reading worse for whoever spends the day inside the system.)
-- **Theme.** The light/dark pair belongs to the design system. Your brand moves the **accent** — what is action, highlight and focus — and deliberately does **not** move the page background: the background is the same under every brand, and that is why the browser bar color is too.
+- **Theme.** The light/dark pair belongs to the design system. Your brand moves the **accent** (what is action, highlight and focus), and deliberately does **not** move the page background: the background is the same under every brand, and that is why the browser bar color is too.
 - **The LGPD data-subject report does not carry your brand — and that is on purpose.** See its own section below.
 - **The AI budget alarm** still goes out with our brand. It is the only known leak, and it stays: today that alarm has no schedule wired to it at all, so fixing its brand would change nothing anyone sees. It goes out when the alarm gets a real cron.
 - **Two technical names do not change**: the `X-Deskcomm-Signature` header of outbound webhooks and the session cookie. The first is a contract with third-party systems that already check that name; renaming it would break a client's integration **silently** — the receiver raises no error, it merely stops recognizing.

@@ -8,7 +8,7 @@
  */
 import { z } from "zod";
 
-import { ehHexValido } from "@/lib/branding/rampa";
+import { ehHexValido, normalizarHex } from "@/lib/branding/rampa";
 import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { IDIOMAS } from "@/lib/i18n/idiomas";
 import { MOEDAS_SERVIDAS } from "@/lib/money";
@@ -237,6 +237,20 @@ export const marcaDaOrganizacaoSchema = z.object({
     .trim()
     .refine(ehHexValido, { message: "Use uma cor no formato #rrggbb" })
     .nullable(),
+  /**
+   * A cor do menu lateral. Mesmo validador do `accent_hex`, e já normalizada
+   * aqui (`#FFF` vira `#ffffff`): a função SQL não confere esta chave, então o
+   * Zod é a única porta. `default(null)` para uma aba aberta antes da
+   * atualização, que ainda não manda o campo, não ser recusada inteira: ela
+   * grava o menu em branco, que é o que aquela tela mostrava.
+   */
+  menu_hex: z
+    .string()
+    .trim()
+    .refine(ehHexValido, { message: "Use uma cor no formato #rrggbb" })
+    .transform((v) => normalizarHex(v))
+    .nullable()
+    .default(null),
 });
 export type MarcaDaOrganizacaoInput = z.infer<typeof marcaDaOrganizacaoSchema>;
 

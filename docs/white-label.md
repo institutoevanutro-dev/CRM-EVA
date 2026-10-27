@@ -59,7 +59,7 @@ Configuração sobrevive a toda atualização. É por isso que a marca é lida e
 
 ## Marca por organização
 
-**Uma instalação atende várias organizações, e cada uma pode ter a própria marca.** O admin de cada organização abre `Configurações → Marca` (`/app/settings/marca`) e define **nome**, **cor** e **logo** dela — sem precisar de você, e sem enxergar as outras.
+**Uma instalação atende várias organizações, e cada uma pode ter a própria marca.** O admin de cada organização abre `Configurações → Marca` (`/app/settings/marca`) e define **nome**, **cor** e **logo** dela — sem precisar de você, e sem enxergar as outras. Ali também fica a **cor do menu lateral**, opcional: em branco, o menu continua com o verde de fábrica, qualquer que seja a cor da marca. O botão "Usar a cor da marca" sugere um tom escuro com o matiz da marca, e uma cor clara demais é escurecida até o texto do menu passar de 4,5:1 (a tela avisa quando isso acontece).
 
 A fronteira, que é deliberada:
 
@@ -80,7 +80,7 @@ Sendo direto, para você não descobrir na frente do cliente. Cada linha traz a 
 
 - **Domínio por organização.** Uma instalação, um domínio. Não há coluna de domínio no schema, o desvio por host no `proxy.ts` é um NOOP declarado (existe só como documentação da topologia pretendida), e no Edge não há banco para consultar antes de decidir a quem aquele host pertence. Cliente que exige o próprio domínio pede **instalação dedicada**.
 - **Fonte.** A tipografia é a mesma em toda instalação. `next/font` resolve em tempo de **build**, e a imagem que a sua VPS baixa já vem construída — um seletor de fonte no painel salvaria um valor que nada leria. (A fonte é a Atkinson Hyperlegible, escolhida pelo Braille Institute por legibilidade; trocá-la não muda percepção de marca e piora a leitura de quem passa o dia no sistema.)
-- **Tema.** O par claro/escuro é do design system. A sua marca move o **accent** — o que é ação, destaque e foco —, e deliberadamente **não** move o fundo da página: o fundo é o mesmo em toda marca, e é por isso que a cor da barra do navegador também é.
+- **Tema.** O par claro/escuro é do design system. A sua marca move o **accent** (o que é ação, destaque e foco) e deliberadamente **não** move o fundo da página: o fundo é o mesmo em toda marca, e é por isso que a cor da barra do navegador também é.
 - **O relatório de LGPD do titular não leva a sua marca — e isso é de propósito.** Ver a seção própria abaixo.
 - **O alarme de orçamento de IA** ainda sai com a nossa marca. É o único vazamento conhecido, e ele fica: hoje esse alarme não tem agendamento nenhum ligado, então consertar a marca dele não mudaria nada que alguém veja. Sai quando o alarme ganhar cron de verdade.
 - **Dois nomes técnicos não mudam**: o cabeçalho `X-Deskcomm-Signature` dos webhooks de saída e o cookie de sessão. O primeiro é contrato com sistemas de terceiros que já conferem esse nome; renomear derrubaria integração de cliente **em silêncio** — o receptor não dá erro, apenas deixa de reconhecer.

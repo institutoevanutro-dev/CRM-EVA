@@ -50,7 +50,8 @@
  * que se descobre semanas depois.
  */
 
-import { GRAUS, stop } from "./rampa";
+import { baseDoDegradeDoMenu, fundoDoMenu } from "./menu";
+import { ehHexValido, GRAUS, stop } from "./rampa";
 import type { CorResolvida } from "./resolve";
 
 export type CodigoDoCss =
@@ -230,6 +231,19 @@ export const ESCOPO_DA_ORGANIZACAO = [
 
 export type EscopoDaMarca = typeof ESCOPO_DA_INSTALACAO | typeof ESCOPO_DA_ORGANIZACAO;
 
+/**
+ * O menu lateral, quando a ORGANIZAÇÃO escolheu uma cor para ele. A marca sozinha
+ * não mexe no menu: sem esta escolha o verde de fábrica do `globals.css` fica,
+ * qualquer que seja a semente. Os dois tokens saem nos dois blocos, pelo mesmo
+ * motivo de todo o resto (ver o cabeçalho).
+ */
+function declaracoesDoMenu(menu: string, tema: "claro" | "escuro"): Declaracao[] {
+  return [
+    ["--color-sidebar-bg", fundoDoMenu(menu, tema)],
+    ["--color-sidebar-tint", baseDoDegradeDoMenu(menu, tema)],
+  ];
+}
+
 function montarBloco(seletor: string, decls: readonly Declaracao[]): string {
   const linhas = decls.map(([nome, valor]) => `  ${nome}: ${valor};`);
   return `${seletor} {\n${linhas.join("\n")}\n}`;
@@ -249,8 +263,15 @@ function montarBloco(seletor: string, decls: readonly Declaracao[]): string {
 export function cssDaMarca(
   cor: CorResolvida | null,
   escopo: EscopoDaMarca = ESCOPO_DA_INSTALACAO,
+  menu: string | null = null,
 ): CssDaMarca {
-  if (!cor) return { css: null, motivos: [] };
+  // A cor do menu é campo da ORGANIZAÇÃO (`settings.branding.menu_hex`); no
+  // escopo da instalação ela não existe. Hex inválido vira ausência e não
+  // exceção: isto roda no layout de `/app`, e quem recusa com motivo é o Zod da
+  // action, na escrita.
+  const menuValido =
+    escopo === ESCOPO_DA_ORGANIZACAO && menu !== null && ehHexValido(menu) ? menu : null;
+  if (!cor && !menuValido) return { css: null, motivos: [] };
 
   const motivos: MotivoDoCss[] = [];
 
@@ -262,7 +283,7 @@ export function cssDaMarca(
   // carrega: emitir só a base deixaria o chip com fundo e texto de um matiz e
   // borda de outro — pior que não mover. Fechar isso exige a régua carregar os
   // companheiros, ou seja, mexer em `lib/branding/contraste.ts`.
-  for (const m of cor.derivada?.motivos ?? []) {
+  for (const m of cor?.derivada?.motivos ?? []) {
     if (m.codigo !== "semantica_deslocada") continue;
     motivos.push({
       codigo: "token_nao_serializado",
@@ -275,7 +296,10 @@ export function cssDaMarca(
 
   const blocos: string[] = [];
   for (const [seletor, tema] of escopo) {
-    const decls = declaracoesDoTema(cor, tema);
+    const decls = [
+      ...(cor ? declaracoesDoTema(cor, tema) : []),
+      ...(menuValido ? declaracoesDoMenu(menuValido, tema) : []),
+    ];
     for (const [nome, valor] of decls) {
       if (!NOME_DE_TOKEN.test(nome)) {
         motivos.push({

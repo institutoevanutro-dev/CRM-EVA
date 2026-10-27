@@ -5065,6 +5065,17 @@ export const DICIONARIO: Traducoes = {
     es: "Aparece en el menú lateral, para quien trabaja aquí. Déjalo en blanco para usar",
   },
   "Cor da sua marca": { es: "Color de tu marca" },
+  "Cor do menu lateral": { es: "Color del menú lateral" },
+  "Escolher a cor do menu visualmente": { es: "Elegir el color del menú visualmente" },
+  "Usar a cor da marca": { es: "Usar el color de la marca" },
+  "Modo claro": { es: "Modo claro" },
+  "Modo escuro": { es: "Modo oscuro" },
+  "Deixe em branco para manter o menu padrão.": {
+    es: "Déjalo en blanco para mantener el menú predeterminado.",
+  },
+  "Escurecemos um pouco para o texto do menu continuar legível.": {
+    es: "Lo oscurecimos un poco para que el texto del menú siga siendo legible.",
+  },
   "Deixe em branco para voltar à cor que o sistema já usa.": {
     es: "Déjalo en blanco para volver al color que el sistema ya usa.",
   },
