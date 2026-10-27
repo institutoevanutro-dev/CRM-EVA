@@ -272,6 +272,7 @@ export function VinculoDaMarcacao({
         open={criando}
         onOpenChange={setCriando}
         nomeInicial={search.trim()}
+        permitirIniciarConversa={false}
         onCriado={(contato) => {
           // Volta JÁ SELECIONADO. A busca passa a ser o nome do contato, e o
           // termo fica marcado como resolvido para a pré-escolha automática não

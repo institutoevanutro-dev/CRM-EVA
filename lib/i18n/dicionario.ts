@@ -6680,6 +6680,17 @@ export const DICIONARIO: Traducoes = {
     es: "Ningún contacto con ese nombre o teléfono.",
   },
   "Contato criado": { es: "Contacto creado" },
+  // Salvar e iniciar conversa (porte do original #3547).
+  "Salvar e iniciar conversa": { es: "Guardar e iniciar conversa" },
+  "Contato salvo. Cadastre um telefone para abrir a conversa.": {
+    es: "Contacto guardado. Registra un teléfono para abrir la conversación.",
+  },
+  "Escolha um contato para abrir a conversa.": {
+    es: "Elige un contacto para abrir la conversación.",
+  },
+  "Sem telefone no contato: cadastre um telefone para abrir a conversa.": {
+    es: "Sin teléfono en el contacto: registra un teléfono para abrir la conversación.",
+  },
   "Não foi possível carregar as sugestões agora.": { es: "No se pudieron cargar las sugerencias ahora." },
   "Não foi possível registrar a decisão.": { es: "No se pudo registrar la decisión." },
   "O assistente ouviu isto na conversa": { es: "El asistente escuchó esto en la conversación" },
