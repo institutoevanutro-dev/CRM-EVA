@@ -11303,6 +11303,9 @@ export const DICIONARIO: Traducoes = {
   "O WhatsApp não confirmou o envio a tempo. Pode ser que a mensagem tenha chegado.": {
     es: "WhatsApp no confirmó el envío a tiempo. Puede que el mensaje haya llegado.",
   },
+  "O WhatsApp devolveu um erro para esta mensagem depois de aceitá-la. Pode ser que ela tenha chegado; confira na conversa antes de reenviar.": {
+    es: "WhatsApp devolvió un error para este mensaje después de aceptarlo. Puede que haya llegado; revisa la conversación antes de reenviarlo.",
+  },
   "Este número não tem WhatsApp.": { es: "Este número no tiene WhatsApp." },
   "A janela de 24 horas fechou. Envie um modelo aprovado ou aguarde o cliente escrever.": {
     es: "La ventana de 24 horas se cerró. Envía una plantilla aprobada o espera a que el cliente escriba.",

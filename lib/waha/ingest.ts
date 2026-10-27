@@ -27,6 +27,7 @@ import { extrairAtribuicaoWaha } from "@/lib/waha/atribuicao-de-anuncio";
 import { semAssinatura } from "@/lib/messaging/assinatura";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ackToStatus } from "@/lib/types/messaging";
+import { fraseDaFalhaDeCanal } from "@/lib/channels/frases-de-falha";
 import type { WahaEnvelope, WahaPayload } from "@/lib/waha/envelope";
 import { bareWaMessageId, chatIdFromWaMessageId, wahaEchoExternalIds } from "@/lib/waha/message-id";
 import { logger } from "@/lib/logger";
@@ -1282,15 +1283,21 @@ async function handleOutboundFromUserPhone(
   }
 }
 
+/**
+ * O aviso de entrega do WhatsApp só faz o status ANDAR PARA A FRENTE
+ * (`sending < sent < delivered < read`). A rede não garante a ordem dos avisos:
+ * uma rajada de avisos antigos, reenviada numa reconexão, não pode fazer uma
+ * mensagem lida voltar a "entregue" nem devolver uma enviada a "enviando".
+ *
+ * A condição mora NO PRÓPRIO UPDATE (`.in("status", …)`), e as horas de entrega
+ * e de leitura são gravadas uma vez só (`is null`). Uma confirmação do aparelho
+ * (ACK 2/3) recupera `failed` (pode ter sido timeout antes da confirmação);
+ * ACK 0/1 não prova entrega e não recupera a falha.
+ */
 async function handleAck(admin: Admin, session: Session, p: WahaPayload): Promise<void> {
   if (!p.id) return;
   const ack = p.ack ?? 0;
-  const status = ackToStatus(ack);
   const now = new Date().toISOString();
-
-  const update: Record<string, unknown> = { ack, status };
-  if (ack >= 2) update.delivered_at = now;
-  if (ack >= 3) update.read_at = now;
 
   // O ack do WAHA 2026.x vem como `{fromMe}_{chatId}_{bareId}`. O NOWEB grava
   // `external_id` = bareId (id interno), o WEBJS grava o `_serialized` completo.
@@ -1298,11 +1305,97 @@ async function handleAck(admin: Admin, session: Session, p: WahaPayload): Promis
   // inbound (que é full e sustenta o dedup 23505).
   const bare = bareWaMessageId(p.id);
   const candidates = bare === p.id ? [p.id] : [p.id, bare];
-  await admin
+
+  if (ack < 0) {
+    await marcarAckDeErro(admin, session, candidates, now);
+    return;
+  }
+
+  const status = ackToStatus(ack);
+  if (status === null) return;
+
+  const antes =
+    status === "read" ? ["sending", "sent", "delivered", "failed"]
+    : status === "delivered" ? ["sending", "sent", "failed"]
+    : ["sending"];
+  const { error } = await admin
     .from("messages")
-    .update(update)
+    .update({ ack, status })
     .eq("organization_id", session.organization_id)
-    .in("external_id", candidates);
+    .in("external_id", candidates)
+    .in("status", antes);
+  if (error) {
+    logger.warn("waha.ingest: aviso de entrega não gravado", { detail: error.message });
+  }
+
+  if (ack >= 2) await carimbarUmaVez(admin, session, candidates, "delivered_at", now);
+  if (ack >= 3) await carimbarUmaVez(admin, session, candidates, "read_at", now);
+}
+
+async function carimbarUmaVez(
+  admin: Admin,
+  session: Session,
+  candidates: string[],
+  coluna: "delivered_at" | "read_at",
+  quando: string,
+): Promise<void> {
+  // Só depois de a linha avançar: uma linha ainda `failed` não ganha hora de
+  // entrega sem mudar de estado.
+  const { error } = await admin
+    .from("messages")
+    .update({ [coluna]: quando })
+    .eq("organization_id", session.organization_id)
+    .in("external_id", candidates)
+    .neq("status", "failed")
+    .is(coluna, null);
+  if (error) {
+    logger.warn("waha.ingest: hora do aviso não gravada", { detail: error.message, coluna });
+  }
+}
+
+/**
+ * ack = -1: o WhatsApp recusou a mensagem DEPOIS de o transporte tê-la aceitado.
+ * Só vale para o que nunca foi confirmado (`sending`/`sent`); `delivered`/`read`
+ * não mudam. Vira `failed` com `ack_error` — nunca volta a `sending`, o que faria
+ * o `recover-stuck-messages` abrir o alerta errado. Emite `message.failed` só
+ * pelas linhas que ESTE aviso marcou (mesma régua do recover-stuck-messages).
+ */
+async function marcarAckDeErro(
+  admin: Admin,
+  session: Session,
+  candidates: string[],
+  now: string,
+): Promise<void> {
+  const { data, error } = await admin
+    .from("messages")
+    .update({
+      ack: -1,
+      status: "failed",
+      error_code: "ack_error",
+      error_message: fraseDaFalhaDeCanal("ack_error"),
+      updated_at: now,
+    })
+    .eq("organization_id", session.organization_id)
+    .in("external_id", candidates)
+    .in("status", ["sending", "sent"])
+    .select("id, conversation_id");
+  if (error) {
+    logger.warn("waha.ingest: aviso de erro não gravado", { detail: error.message });
+    return;
+  }
+  for (const linha of (data ?? []) as Array<{ id: string; conversation_id: string | null }>) {
+    const { error: emitErr } = await admin.rpc("emit_event" as never, {
+      p_event_type: "message.failed",
+      p_entity_kind: "message",
+      p_entity_id: linha.id,
+      p_payload: { message_id: linha.id, conversation_id: linha.conversation_id, reason: "ack_error" },
+      p_metadata: { source: "waha-ack-webhook" },
+      p_organization_id: session.organization_id,
+    } as never);
+    if (emitErr) {
+      logger.warn("waha.ingest: emit message.failed falhou", { detail: emitErr.message, message_id: linha.id });
+    }
+  }
 }
 
 interface SessionStatusRow extends Session {

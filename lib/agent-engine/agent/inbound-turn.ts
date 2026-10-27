@@ -182,6 +182,7 @@ import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
 import { esperarComoHumano, manterDigitando } from './atraso-humano';
 import { bolhasQueCabemNoEnvio, instrucaoDeBolhas, sendInBubbles, splitForSend } from './split-message';
+import { semConteudoVisivel } from './conteudo-visivel';
 import { formatarParaWhatsApp } from './formato-whatsapp';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
 import { decidePromise } from '../guardrails/promise/engine';
@@ -3728,7 +3729,9 @@ async function executarTurnoDoAgente(
         // CORPO VAZIO NÃO SAI. O schema garante min(1) no argumento, mas um `\n`
         // ou espaço passa e chegava ao canal como bolha em branco (medido no
         // original, 2026-09-19). Recusar aqui devolve ao modelo para reescrever.
-        if (body.trim() === '') {
+        // "Em branco" inclui o que o `trim()` não tira: caractere de formatação
+        // invisível (U+200E e afins).
+        if (semConteudoVisivel(body)) {
           return {
             ok: false,
             error: {
