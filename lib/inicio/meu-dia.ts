@@ -13,6 +13,7 @@ import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { tagDeIdioma } from "@/lib/i18n/datas";
 import type { createClient } from "@/lib/supabase/server";
 import { janelaDeHoje, LIMITE_DE_ITENS, type Bloco, type ContextoDoInicio } from "./tipos";
+import { HREF_MINHAS_TAREFAS } from "@/lib/tarefas/tipos";
 
 type Db = Awaited<ReturnType<typeof createClient>>;
 
@@ -275,7 +276,7 @@ export async function minhasTarefas(db: Db, ctx: ContextoDoInicio): Promise<Bloc
       id: String(t.id),
       titulo: String(t.title ?? ""),
       ...(t.due_date ? { detalhe: diaNoFuso(String(t.due_date), ctx) } : {}),
-      href: "/app/tasks",
+      href: HREF_MINHAS_TAREFAS,
     })),
   };
 }

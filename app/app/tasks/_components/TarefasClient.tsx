@@ -26,7 +26,15 @@ import { ListaDeTarefas } from "./ListaDeTarefas";
 /** "aberto" não é uma situação do banco: é o filtro que a tela abre por padrão. */
 type FiltroDeSituacao = "aberto" | SituacaoDaTarefa;
 
-export function TarefasClient({ podeEditar, usuarioId }: { podeEditar: boolean; usuarioId: string }) {
+export function TarefasClient({
+  podeEditar,
+  usuarioId,
+  minhasDeInicio = false,
+}: {
+  podeEditar: boolean;
+  usuarioId: string;
+  minhasDeInicio?: boolean;
+}) {
   const t = useT();
   // A equipe que pode receber tarefa. A rota exige `agent`: para o visualizador
   // ela não carrega, e a lista simplesmente não mostra o nome.
@@ -36,6 +44,7 @@ export function TarefasClient({ podeEditar, usuarioId }: { podeEditar: boolean; 
     membros ? nomeDoResponsavel(membros, userId) : null;
   const [modo, setModo] = useState<"lista" | "calendario">("lista");
   const [situacao, setSituacao] = useState<FiltroDeSituacao>("aberto");
+  const [minhas, setMinhas] = useState(minhasDeInicio);
   const [emEdicao, setEmEdicao] = useState<Tarefa | null>(null);
   const [formAberto, setFormAberto] = useState(false);
   const [prazoSugerido, setPrazoSugerido] = useState<string | undefined>();
@@ -55,7 +64,7 @@ export function TarefasClient({ podeEditar, usuarioId }: { podeEditar: boolean; 
     apagarTarefa,
     alternarConcluida,
   } = useTasks(
-    situacao === "aberto" ? { aberto: true } : { status: situacao },
+    situacao === "aberto" ? { aberto: true, minhas } : { status: situacao, minhas },
   );
 
   function abrirNova(dia?: string) {
@@ -90,7 +99,7 @@ export function TarefasClient({ podeEditar, usuarioId }: { podeEditar: boolean; 
               value={situacao}
               onValueChange={(v) => setSituacao(v as FiltroDeSituacao)}
             >
-              <SelectTrigger className="h-9 w-[150px] text-xs" aria-label={t("Situação")}>
+              <SelectTrigger className="h-11 w-[150px] text-xs lg:h-9" aria-label={t("Situação")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -104,12 +113,35 @@ export function TarefasClient({ podeEditar, usuarioId }: { podeEditar: boolean; 
             </Select>
 
             <div className="flex items-center gap-0.5 rounded-md border bg-muted p-0.5">
+              {([
+                [true, t("Minhas")],
+                [false, t("Todas")],
+              ] as const).map(([valor, rotulo]) => (
+                <button
+                  key={rotulo}
+                  type="button"
+                  onClick={() => setMinhas(valor)}
+                  aria-pressed={minhas === valor}
+                  className={cn(
+                    "min-h-11 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors lg:min-h-0",
+                    minhas === valor
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+
+            {/* O calendário tem 7 colunas: a 390px não cabe, e no celular fica a lista. */}
+            <div className="hidden items-center gap-0.5 rounded-md border bg-muted p-0.5 md:flex">
               <button
                 type="button"
                 onClick={() => setModo("lista")}
                 aria-pressed={modo === "lista"}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  "flex min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors lg:min-h-0",
                   modo === "lista"
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground",
@@ -123,7 +155,7 @@ export function TarefasClient({ podeEditar, usuarioId }: { podeEditar: boolean; 
                 onClick={() => setModo("calendario")}
                 aria-pressed={modo === "calendario"}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  "flex min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors lg:min-h-0",
                   modo === "calendario"
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground",
@@ -137,7 +169,7 @@ export function TarefasClient({ podeEditar, usuarioId }: { podeEditar: boolean; 
             {/* Sem "Atualizar": a lista relê ao voltar para a aba e depois de
                 cada mudança. O botão sugeria que ela ficava velha sozinha. */}
             {podeEditar && (
-              <Button size="sm" className="h-9 gap-1.5 text-xs" onClick={() => abrirNova()}>
+              <Button size="sm" className="gap-1.5 text-xs md:h-9" onClick={() => abrirNova()}>
                 <Plus size={14} aria-hidden />
                 {t("Nova tarefa")}
               </Button>
@@ -161,23 +193,33 @@ export function TarefasClient({ podeEditar, usuarioId }: { podeEditar: boolean; 
             <div key={i} className="h-14 animate-pulse rounded-lg border bg-card" />
           ))}
         </div>
-      ) : modo === "calendario" ? (
-        <CalendarioDeTarefas
-          tarefas={tarefas}
-          podeEditar={podeEditar}
-          aoAbrirTarefa={abrirEdicao}
-          aoClicarNoDia={abrirNova}
-          nomeDoResponsavel={rotuloDoResponsavel}
-        />
       ) : (
-        <ListaDeTarefas
-          tarefas={tarefas}
-          podeEditar={podeEditar}
-          aoAlternarConcluida={alternarConcluida}
-          aoEditar={abrirEdicao}
-          aoApagar={(tarefa) => apagarTarefa(tarefa.id)}
-          nomeDoResponsavel={rotuloDoResponsavel}
-        />
+        <>
+          {/* A MESMA régua `md` que esconde o seletor esconde o calendário:
+              escolhido no tablet deitado e girado para o celular, ele não pode
+              ficar preso na tela sem o botão de voltar para a lista. */}
+          {modo === "calendario" && (
+            <div data-testid="tarefas-calendario" className="hidden md:block">
+              <CalendarioDeTarefas
+                tarefas={tarefas}
+                podeEditar={podeEditar}
+                aoAbrirTarefa={abrirEdicao}
+                aoClicarNoDia={abrirNova}
+                nomeDoResponsavel={rotuloDoResponsavel}
+              />
+            </div>
+          )}
+          <div data-testid="tarefas-lista" className={cn(modo === "calendario" && "md:hidden")}>
+            <ListaDeTarefas
+              tarefas={tarefas}
+              podeEditar={podeEditar}
+              aoAlternarConcluida={alternarConcluida}
+              aoEditar={abrirEdicao}
+              aoApagar={(tarefa) => apagarTarefa(tarefa.id)}
+              nomeDoResponsavel={rotuloDoResponsavel}
+            />
+          </div>
+        </>
       )}
 
       <FormularioDeTarefa
