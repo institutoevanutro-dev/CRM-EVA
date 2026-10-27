@@ -176,7 +176,7 @@ describe("send_message recusa corpo em branco antes de qualquer envio", () => {
   })();
 
   it("a guarda existe e devolve corpo_vazio ao modelo", () => {
-    expect(corpoDoSend).toMatch(/if \(body\.trim\(\) === ''\)/);
+    expect(corpoDoSend).toMatch(/if \(semConteudoVisivel\(body\)\)/);
     expect(corpoDoSend).toContain("code: 'corpo_vazio'");
   });
 
