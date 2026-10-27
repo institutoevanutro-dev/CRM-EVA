@@ -50,7 +50,8 @@
  * que se descobre semanas depois.
  */
 
-import { GRAUS, stop } from "./rampa";
+import { razaoDeContraste, PISOS } from "./contraste";
+import { compor, GRAUS, hexParaOklch, oklchParaHex, rampaDeSemente, stop } from "./rampa";
 import type { CorResolvida } from "./resolve";
 
 export type CodigoDoCss =
@@ -107,6 +108,37 @@ function paraDiagnostico(valor: string): string {
 
 type Declaracao = readonly [nome: string, valor: string];
 
+/**
+ * A frente do menu lateral (`--color-sidebar-fg` do `app/globals.css`). O fundo
+ * derivado é medido contra ela; `tests/unit/branding-marca-css.test.ts` confere
+ * que o literal daqui é o mesmo do CSS.
+ */
+export const FRENTE_DO_MENU = "#e9e2c8";
+
+/**
+ * O fundo do menu lateral a partir da semente: o stop mais escuro da rampa no
+ * claro e, no escuro, o mesmo com 60% de preto por cima, que é a relação que o
+ * `globals.css` desenhou à mão (#1d352c no claro, #0b1612 no escuro).
+ *
+ * Sai da SEMENTE, não da derivação: a marca acromática não ganha accent, mas o
+ * menu dela é cinza escuro do mesmo jeito. O hex é calculado aqui, e não com
+ * `color-mix` no valor do token, porque a allowlist só aceita `#rrggbb`.
+ *
+ * A frente é clara, então o fundo escurece até o texto caber no piso de 4,5:1.
+ * Com o stop 950 isso já vale para toda semente (L fixo ~0,23); o laço é a
+ * garantia, não o caminho comum.
+ */
+export function fundoDoMenu(semente: string, tema: "claro" | "escuro"): string {
+  let fundo = stop(rampaDeSemente(semente), 10);
+  const { C, h } = hexParaOklch(fundo);
+  let { L } = hexParaOklch(fundo);
+  while (razaoDeContraste(fundo, FRENTE_DO_MENU) < PISOS.texto) {
+    L -= 0.02;
+    fundo = oklchParaHex({ L, C, h });
+  }
+  return tema === "claro" ? fundo : compor("#000000", 0.6, fundo);
+}
+
 function declaracoesDoTema(cor: CorResolvida, tema: "claro" | "escuro"): Declaracao[] {
   // `--color-brand` sai SEMPRE que há semente, inclusive quando ela não pinta
   // (marca acromática, papel só de identidade). É onde a cor do cliente existe
@@ -114,7 +146,10 @@ function declaracoesDoTema(cor: CorResolvida, tema: "claro" | "escuro"): Declara
   // e-mail vão ler. Hoje ele não tem consumidor dentro do produto: declarar uma
   // custom property inerte não muda pixel nenhum, e sem ela o motivo
   // `marca_acromatica` ("a cor fica só em --color-brand") seria mentira.
-  const saida: Declaracao[] = [["--color-brand", cor.semente]];
+  const saida: Declaracao[] = [
+    ["--color-brand", cor.semente],
+    ["--color-sidebar-bg", fundoDoMenu(cor.semente, tema)],
+  ];
   const derivada = cor.derivada;
   if (!derivada) return saida;
 
