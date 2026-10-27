@@ -37,6 +37,9 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  // O fio do Inbox acompanha a última mensagem (porte do original #3209).
+  "Mensagens da conversa": { es: "Mensajes de la conversación" },
+  "Novas mensagens · Ir para o fim": { es: "Mensajes nuevos · Ir al final" },
   // Configurações › Etiquetas: contato interno (#2353 do original).
   "Etiquetas de contato interno": { es: "Etiquetas de contacto interno" },
   "Para equipe, sócio, família ou fornecedor. O contato com uma destas etiquetas não vira card no funil e não recebe mensagens automáticas da IA nem dos acompanhamentos. A conversa continua normal no Inbox, e a equipe responde por lá como sempre. Uma etiqueta por linha.": {
