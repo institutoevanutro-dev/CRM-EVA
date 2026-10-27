@@ -24,6 +24,7 @@
  *    devolve `""`: quem chama não envia (o passo é pulado).
  */
 import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
+import { RESERVA_DA_VARIAVEL } from "@/lib/texto/reserva-da-variavel";
 
 export type TemplateContact = Pick<ContatoNomeavel, "name" | "display_name"> & {
   phone_number?: string | null;
@@ -45,7 +46,13 @@ const SINONIMOS: Record<string, Variavel> = {
   "contact.email": "email",
 };
 
-const VARIAVEL = /\{\{\s*([a-zA-Z_.]+)\s*\}\}/g;
+/**
+ * `{{chave}}` ou `{{chave|"reserva"}}` (texto de reserva, porte do original
+ * #3535): grupo 1 = chave, grupo 2 = reserva, ausente quando não há.
+ */
+const VARIAVEL = new RegExp(String.raw`\{\{\s*([a-zA-Z_.]+)\s*${RESERVA_DA_VARIAVEL}\}\}`, "g");
+/** O miolo de UMA marcação com reserva opcional — para ler a chave sem a reserva. */
+const MIOLO = new RegExp(String.raw`^\s*([a-zA-Z_.]+)\s*${RESERVA_DA_VARIAVEL}$`);
 /** Qualquer `{{…}}`, inclusive a que não é variável (`{{primeiro nome}}`, `{{1}}`). */
 const QUALQUER_VARIAVEL = /\{\{[^{}]*\}\}/;
 
@@ -64,7 +71,9 @@ export function variaveisDesconhecidas(texto: string, extras: readonly string[] 
   return [...texto.matchAll(new RegExp(QUALQUER_VARIAVEL, "g"))]
     .map((m) => m[0])
     .filter((literal) => {
-      const dentro = literal.slice(2, -2);
+      const miolo = literal.slice(2, -2);
+      // Com texto de reserva (`{{primeiro_nome|"aluno"}}`) a chave é o que vem antes do `|`.
+      const dentro = MIOLO.exec(miolo)?.[1] ?? miolo;
       return variavelDe(dentro) === null && !extras.includes(dentro.trim().toLowerCase());
     });
 }
@@ -87,6 +96,8 @@ export const MOTIVO_CURINGA_LITERAL =
 export function motivoDoCuringaLiteral(body: string, contact: TemplateContact): string | null {
   if (nomeDoContato(contact)) return null;
   const sobrouNome = [...body.matchAll(VARIAVEL)].some((m) => {
+    // Com reserva a marcação nunca sobra literal: sai o texto de reserva.
+    if (m[2] !== undefined) return false;
     const variavel = variavelDe(m[1]!);
     return variavel === "nome" || variavel === "primeiro_nome";
   });
@@ -127,10 +138,12 @@ export function interpolateTemplate(
     telefone: texto(contact.phone_number),
     email: texto(contact.email),
   };
-  const preenchido = body.replace(VARIAVEL, (literal, rawKey: string) => {
+  const preenchido = body.replace(VARIAVEL, (literal, rawKey: string, reserva: string | undefined) => {
     const variavel = variavelDe(rawKey);
-    // Desconhecida ou sem valor: mantém; em `remover`, sai logo abaixo.
-    return variavel !== null && valores[variavel] !== "" ? valores[variavel] : literal;
+    if (variavel !== null && valores[variavel] !== "") return valores[variavel];
+    // Sem valor, a reserva que quem escreveu deixou (`{{nome|"aluno"}}`). Sem
+    // ela, ou desconhecida: mantém; em `remover`, sai logo abaixo.
+    return variavel !== null && reserva !== undefined ? reserva : literal;
   });
   if (opcoes.semValor !== "remover") return preenchido;
   let saida = preenchido;

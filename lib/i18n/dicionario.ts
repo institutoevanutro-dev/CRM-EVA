@@ -778,6 +778,9 @@ export const DICIONARIO: Traducoes = {
   "Prepara no compositor: você revisa e envia": { es: "Lo prepara en el editor: tú revisas y envías" },
   "Buscar resposta": { es: "Buscar respuesta" },
   "Mostrar na barra do Inbox": { es: "Mostrar en la barra del Inbox" },
+  'Para não depender do dado, ponha um texto de reserva: {{primeiro_nome|"aluno"}}.': {
+    es: 'Para no depender del dato, pon un texto de respaldo: {{primeiro_nome|"alumno"}}.',
+  },
   "Desmarcado, a resposta sai da barra do Inbox e continua no atalho /.": {
     es: "Sin marcar, la respuesta sale de la barra del Inbox y sigue en el atajo /.",
   },

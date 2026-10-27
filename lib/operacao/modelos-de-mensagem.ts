@@ -24,7 +24,7 @@
  * melgarafael/DeskcommCRM #1673 (9f566e7f58), só o núcleo de visibilidade.
  */
 import { ApiError } from "@/lib/api/types";
-import { renderTemplate } from "@/lib/automation/template";
+import { MARCACAO, renderTemplate } from "@/lib/automation/template";
 import type { DepsDaOperacao } from "@/lib/operacao/entradas-automaticas";
 
 export interface ModeloVisivel {
@@ -205,8 +205,10 @@ export async function contatoDoNegocio(
 /** As marcações do modelo que o contexto não resolveu — mesma varredura do render. */
 function lacunasDe(template: string, contexto: Record<string, unknown>): string[] {
   const vazias = new Set<string>();
-  for (const m of template.matchAll(/\{\{\s*([\w.]+)\s*\}\}/g)) {
+  for (const m of template.matchAll(MARCACAO)) {
     const marcacao = m[1]!;
+    // Com texto de reserva (`{{x|"aluno"}}`) o render nunca deixa a frase vazia: não é lacuna.
+    if (m[2] !== undefined) continue;
     // Comparar o render de UMA marcação isolada é o que garante a mesma régua
     // do texto final: alias, caminho aninhado e ausência passam pelo mesmo código.
     if (renderTemplate(`{{${marcacao}}}`, contexto) === "") vazias.add(marcacao);
