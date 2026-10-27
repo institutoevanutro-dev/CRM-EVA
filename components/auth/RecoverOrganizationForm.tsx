@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
 import { recoverOrganization } from "@/app/actions/auth/recoverOrganization";
+import { AvisoSemResposta, useEnvioComTeto } from "@/components/auth/teto-da-espera";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,16 +43,18 @@ export function RecoverOrganizationForm({ nomeSugerido }: { nomeSugerido?: strin
   const t = useT();
   const [name, setName] = useState(nomeSugerido ?? "");
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const { pendente: isPending, semResposta, enviar } = useEnvioComTeto();
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    startTransition(async () => {
-      const result = await recoverOrganization(name);
-      // O caminho de sucesso não volta: a action redireciona para o onboarding.
-      if (!result.ok) setError(t(MENSAGENS[result.error] ?? MENSAGENS.provision_failed!));
-    });
+    // O caminho de sucesso não volta: a action redireciona para o onboarding.
+    void enviar(
+      () => recoverOrganization(name),
+      (result) => {
+        if (!result.ok) setError(t(MENSAGENS[result.error] ?? MENSAGENS.provision_failed!));
+      },
+    );
   }
 
   return (
@@ -73,6 +76,7 @@ export function RecoverOrganizationForm({ nomeSugerido }: { nomeSugerido?: strin
           {error}
         </p>
       )}
+      {semResposta && <AvisoSemResposta />}
       <Button className="w-full" type="submit" disabled={isPending || name.trim().length < 2}>
         {isPending ? t("Preparando seu ambiente…") : t("Continuar para o onboarding")}
       </Button>
