@@ -8,6 +8,22 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.39.0] — 2026-10-27
+
+### Adicionado
+
+- **Cor do menu lateral por organização** Em Configurações › Marca há um campo novo, "Cor do menu lateral". Em branco, o menu continua
+  com o verde de fábrica, qualquer que seja a cor da marca: quem não mexer não vê nada mudar.
+
+  Com uma cor escolhida, o menu dessa organização passa a usá-la nos temas claro e escuro, e o
+  degradê da base acompanha o mesmo matiz. O botão "Usar a cor da marca" sugere um tom escuro com
+  o matiz da sua marca. Se a cor escolhida for clara demais, o sistema a escurece até o texto do
+  menu passar de 4,5:1, e a tela avisa quando isso acontece.
+
+### Corrigido
+
+- **A resposta pronta registra por que não foi usada** Quando uma mensagem não recebe a resposta pronta, o log do atendimento agora diz o motivo (por exemplo, abaixo do limite de semelhança ou mais de um assunto) e a semelhança encontrada. Antes essas recusas eram silenciosas, e não havia como calibrar o limite. O texto do cliente nunca vai para o log. Nada a fazer na atualização.
+
 ## [4.38.1] — 2026-10-25
 
 ### Corrigido
@@ -8309,7 +8325,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.38.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.39.0...HEAD
+[4.39.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.38.1...v4.39.0
 [4.38.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.38.0...v4.38.1
 [4.38.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.37.0...v4.38.0
 [4.37.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.36.0...v4.37.0
