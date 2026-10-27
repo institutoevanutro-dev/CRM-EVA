@@ -405,7 +405,10 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
           <LinhaDeOrigem campo={t("Cor")} valor={origemEmPortugues(resolvida.origens.cor, t)} />
           <LinhaDeOrigem
             campo={t("Cor do menu lateral")}
-            valor={origemEmPortugues(menuLimpo.length > 0 ? "organizacao" : "padrao", t)}
+            valor={origemEmPortugues(
+              menuLimpo.length > 0 && menuValido ? "organizacao" : "padrao",
+              t,
+            )}
           />
           <LinhaDeOrigem
             campo={t("Logo")}

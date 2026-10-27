@@ -71,8 +71,9 @@ export function menuDaCorDaMarca(semente: string): string {
  */
 export function fundoDoMenu(menu: string, tema: "claro" | "escuro"): string {
   let fundo = normalizarHex(menu);
-  const { C, h } = hexParaOklch(fundo);
-  let { L } = hexParaOklch(fundo);
+  const inicial = hexParaOklch(fundo);
+  const { C, h } = inicial;
+  let { L } = inicial;
   while (!textoPassa(fundo)) {
     L -= 0.02;
     fundo = oklchParaHex({ L, C, h });

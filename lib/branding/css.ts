@@ -108,7 +108,6 @@ function paraDiagnostico(valor: string): string {
 
 type Declaracao = readonly [nome: string, valor: string];
 
-
 function declaracoesDoTema(cor: CorResolvida, tema: "claro" | "escuro"): Declaracao[] {
   // `--color-brand` sai SEMPRE que há semente, inclusive quando ela não pinta
   // (marca acromática, papel só de identidade). É onde a cor do cliente existe
