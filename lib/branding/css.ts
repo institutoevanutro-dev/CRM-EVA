@@ -51,7 +51,7 @@
  */
 
 import { razaoDeContraste, PISOS } from "./contraste";
-import { compor, GRAUS, hexParaOklch, oklchParaHex, rampaDeSemente, stop } from "./rampa";
+import { GRAUS, hexParaOklch, oklchParaHex, stop } from "./rampa";
 import type { CorResolvida } from "./resolve";
 
 export type CodigoDoCss =
@@ -115,28 +115,63 @@ type Declaracao = readonly [nome: string, valor: string];
  */
 export const FRENTE_DO_MENU = "#e9e2c8";
 
+/** O texto secundário do menu (`--color-sidebar-muted`), também medido. */
+export const FRENTE_SECUNDARIA_DO_MENU = "#b9b39c";
+
+/** O menu de fábrica do `globals.css`, por tema: a referência de luz e de croma. */
+const MENU_DE_FABRICA = { claro: "#1d352c", escuro: "#0b1612" } as const;
+
 /**
- * O fundo do menu lateral a partir da semente: o stop mais escuro da rampa no
- * claro e, no escuro, o mesmo com 60% de preto por cima, que é a relação que o
- * `globals.css` desenhou à mão (#1d352c no claro, #0b1612 no escuro).
+ * A cor que o degradê do menu mistura na base. De fábrica é `--color-success`
+ * (#5a8a5f no claro, #82a077 no escuro); com marca, é a mesma conta do fundo.
+ */
+const BASE_DO_DEGRADE_DE_FABRICA = { claro: "#5a8a5f", escuro: "#82a077" } as const;
+
+/** A luz e o croma (no máximo) da referência, com o matiz da semente. */
+function naLuzDe(referencia: string, semente: string): { L: number; C: number; h: number } {
+  const ref = hexParaOklch(referencia);
+  const cor = hexParaOklch(semente);
+  return { L: ref.L, C: Math.min(ref.C, cor.C), h: cor.h };
+}
+
+/**
+ * A base do degradê do menu (`--color-sidebar-tint`), pela mesma regra do
+ * fundo: com a semente verde de fábrica sai o próprio verde de hoje, e uma
+ * marca de outro matiz não deixa verde nenhum no menu.
+ */
+export function baseDoDegradeDoMenu(semente: string, tema: "claro" | "escuro"): string {
+  return oklchParaHex(naLuzDe(BASE_DO_DEGRADE_DE_FABRICA[tema], semente));
+}
+
+/**
+ * O fundo do menu lateral a partir da semente: a LUZ do menu de fábrica, o
+ * MATIZ da semente e o croma menor entre os dois.
  *
- * Sai da SEMENTE, não da derivação: a marca acromática não ganha accent, mas o
- * menu dela é cinza escuro do mesmo jeito. O hex é calculado aqui, e não com
- * `color-mix` no valor do token, porque a allowlist só aceita `#rrggbb`.
+ * Luz fixa porque o menu é desenhado escuro e a frente é clara: uma semente
+ * clara não pode clarear o menu. Croma pelo mínimo porque uma semente cinza
+ * tem de dar um cinza quase preto, e não ganhar a saturação do verde. Com a
+ * semente verde de fábrica o resultado é o próprio `#1d352c` / `#0b1612` (a
+ * menos de arredondamento), e uma instalação verde não vê o menu mudar.
  *
- * A frente é clara, então o fundo escurece até o texto caber no piso de 4,5:1.
- * Com o stop 950 isso já vale para toda semente (L fixo ~0,23); o laço é a
- * garantia, não o caminho comum.
+ * O hex é calculado aqui, e não com `color-mix` no valor do token, porque a
+ * allowlist só aceita `#rrggbb`. `oklchParaHex` já traz a cor para dentro do
+ * sRGB. O laço é piso, não caminho comum: escurece até o texto principal e o
+ * secundário passarem de 4,5:1 (com a luz de fábrica os dois já passam).
  */
 export function fundoDoMenu(semente: string, tema: "claro" | "escuro"): string {
-  let fundo = stop(rampaDeSemente(semente), 10);
-  const { C, h } = hexParaOklch(fundo);
-  let { L } = hexParaOklch(fundo);
-  while (razaoDeContraste(fundo, FRENTE_DO_MENU) < PISOS.texto) {
+  const { C, h } = naLuzDe(MENU_DE_FABRICA[tema], semente);
+  let { L } = naLuzDe(MENU_DE_FABRICA[tema], semente);
+  let fundo = oklchParaHex({ L, C, h });
+  while (
+    Math.min(
+      razaoDeContraste(fundo, FRENTE_DO_MENU),
+      razaoDeContraste(fundo, FRENTE_SECUNDARIA_DO_MENU),
+    ) < PISOS.texto
+  ) {
     L -= 0.02;
     fundo = oklchParaHex({ L, C, h });
   }
-  return tema === "claro" ? fundo : compor("#000000", 0.6, fundo);
+  return fundo;
 }
 
 function declaracoesDoTema(cor: CorResolvida, tema: "claro" | "escuro"): Declaracao[] {
@@ -149,6 +184,7 @@ function declaracoesDoTema(cor: CorResolvida, tema: "claro" | "escuro"): Declara
   const saida: Declaracao[] = [
     ["--color-brand", cor.semente],
     ["--color-sidebar-bg", fundoDoMenu(cor.semente, tema)],
+    ["--color-sidebar-tint", baseDoDegradeDoMenu(cor.semente, tema)],
   ];
   const derivada = cor.derivada;
   if (!derivada) return saida;

@@ -7,11 +7,13 @@ import {
   cssDaMarca,
   ESCOPO_DA_INSTALACAO,
   ESCOPO_DA_ORGANIZACAO,
+  baseDoDegradeDoMenu,
   FRENTE_DO_MENU,
+  FRENTE_SECUNDARIA_DO_MENU,
   fundoDoMenu,
 } from "@/lib/branding/css";
 import { derivarMarca, PISOS, razaoDeContraste } from "@/lib/branding/contraste";
-import { GRAUS } from "@/lib/branding/rampa";
+import { deltaEOklab, GRAUS, hexParaOklch } from "@/lib/branding/rampa";
 import { REGUA_DO_PRODUTO } from "@/lib/branding/regua-do-produto";
 import { camadaDoAmbiente, resolverMarca, type CorResolvida } from "@/lib/branding/resolve";
 
@@ -97,6 +99,7 @@ describe("serialização — os dois blocos", () => {
       [
         "--color-brand",
         "--color-sidebar-bg",
+        "--color-sidebar-tint",
         ...GRAUS.map((g) => `--color-accent-${g}`),
         "--color-accent",
         "--color-accent-fg",
@@ -132,7 +135,11 @@ describe("serialização — os dois blocos", () => {
   it("semente que não pinta emite só a identidade e o fundo do menu", () => {
     const cor: CorResolvida = { semente: "#2563eb", papel: "marca", derivada: null };
     const blocos = lerBlocos(cssDaMarca(cor).css ?? "");
-    expect(Object.keys(blocos[":root:root"] ?? {})).toEqual(["--color-brand", "--color-sidebar-bg"]);
+    expect(Object.keys(blocos[":root:root"] ?? {})).toEqual([
+      "--color-brand",
+      "--color-sidebar-bg",
+      "--color-sidebar-tint",
+    ]);
   });
 });
 
@@ -424,32 +431,65 @@ describe("fundo do menu lateral: segue a marca", () => {
 
   it("sai também para a marca acromática, que não ganha accent", () => {
     const blocos = lerBlocos(cssDaMarca(corDe("#808080")).css ?? "");
-    for (const b of Object.values(blocos)) expect(b["--color-sidebar-bg"]).toMatch(HEX6);
+    for (const b of Object.values(blocos)) {
+      expect(b["--color-sidebar-bg"]).toMatch(HEX6);
+      expect(b["--color-sidebar-tint"]).toMatch(HEX6);
+    }
   });
 
   it("não sai sem semente: o verde do globals.css fica", () => {
     expect(cssDaMarca(null).css).toBeNull();
   });
 
-  it.each(["#c7ae83", "#3a3f47", "#27463b", ...SEMENTES])(
-    "%s: o texto do menu passa de 4,5:1 nos dois temas",
+  it("a semente verde de fábrica mantém o menu de hoje (ΔE ≤ 0,02)", () => {
+    expect(deltaEOklab(fundoDoMenu("#27463b", "claro"), "#1d352c")).toBeLessThanOrEqual(0.02);
+    expect(deltaEOklab(fundoDoMenu("#27463b", "escuro"), "#0b1612")).toBeLessThanOrEqual(0.02);
+  });
+
+  it("a base do degradê com a semente verde fica perto do verde de hoje", () => {
+    // Misturada a 38% no degradê, ΔE 0,05 na base vira menos de 0,02 no pixel.
+    expect(deltaEOklab(baseDoDegradeDoMenu("#27463b", "claro"), "#5a8a5f")).toBeLessThanOrEqual(0.05);
+    expect(deltaEOklab(baseDoDegradeDoMenu("#27463b", "escuro"), "#82a077")).toBeLessThanOrEqual(0.05);
+  });
+
+  it("a base do degradê de fábrica é a `--color-success` do globals.css, nos dois temas", () => {
+    const sucesso = [...CSS_DO_PRODUTO.matchAll(/--color-success:\s*(#[0-9a-f]{6});/gi)].map((m) =>
+      m[1]?.toLowerCase(),
+    );
+    expect(sucesso).toContain(baseDoDegradeDoMenu("#5a8a5f", "claro"));
+    expect(sucesso).toContain(baseDoDegradeDoMenu("#82a077", "escuro"));
+  });
+
+  it("semente cinza dá menu cinza, sem croma emprestado do verde", () => {
+    expect(hexParaOklch(fundoDoMenu("#3a3f47", "claro")).C).toBeLessThanOrEqual(
+      hexParaOklch("#3a3f47").C + 0.001,
+    );
+  });
+
+  it.each(["#c7ae83", "#3a3f47", "#27463b", "#6b2737", "#2f5d6b", ...SEMENTES])(
+    "%s: o texto principal e o secundário do menu passam de 4,5:1 nos dois temas",
     (semente) => {
       for (const tema of ["claro", "escuro"] as const) {
         const fundo = fundoDoMenu(semente, tema);
         expect(fundo).toMatch(HEX6);
         expect(razaoDeContraste(fundo, FRENTE_DO_MENU)).toBeGreaterThanOrEqual(PISOS.texto);
+        expect(razaoDeContraste(fundo, FRENTE_SECUNDARIA_DO_MENU)).toBeGreaterThanOrEqual(
+          PISOS.texto,
+        );
       }
     },
   );
 
-  it("a frente medida é a mesma `--color-sidebar-fg` do globals.css", () => {
-    const declarada = /--color-sidebar-fg:\s*(#[0-9a-f]{6});/i.exec(CSS_DO_PRODUTO)?.[1];
-    expect(declarada?.toLowerCase()).toBe(FRENTE_DO_MENU);
+  it("as frentes medidas são as mesmas do globals.css", () => {
+    const fg = /--color-sidebar-fg:\s*(#[0-9a-f]{6});/i.exec(CSS_DO_PRODUTO)?.[1];
+    const muted = /--color-sidebar-muted:\s*(#[0-9a-f]{6});/i.exec(CSS_DO_PRODUTO)?.[1];
+    expect(fg?.toLowerCase()).toBe(FRENTE_DO_MENU);
+    expect(muted?.toLowerCase()).toBe(FRENTE_SECUNDARIA_DO_MENU);
   });
 
   it("o degradê mistura a marca, com o verde de fábrica só como reserva", () => {
     const utilitario = /@utility fundo-lateral \{[\s\S]*?\n\}/.exec(CSS_DO_PRODUTO)?.[0] ?? "";
-    expect(utilitario).toContain("var(--color-brand, var(--color-success))");
+    expect(utilitario).toContain("var(--color-sidebar-tint, var(--color-success))");
     expect(utilitario).not.toMatch(/62%, var\(--color-success\)\)/);
   });
 });
