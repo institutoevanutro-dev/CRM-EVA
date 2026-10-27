@@ -42,7 +42,8 @@ const TEMPO_MAXIMO_DO_EMBEDDING_MS = 3000;
 export type DesfechoDaRespostaPronta =
   /** `null` só no replay em que o ledger provou o envio e o uso não foi registrado. */
   | { respondeu: true; respostaProntaId: string | null }
-  | { respondeu: false; motivo: string };
+  /** `similaridade`: a melhor encontrada, quando a comparação chegou a rodar. */
+  | { respondeu: false; motivo: string; similaridade?: number | null };
 
 export type RespostaProntaOpts = Omit<AvisoDeEscalacaoOpts, 'motivo'> & {
   /** `inboundsNaoRespondidos` do turno — o que o cliente disse e ainda não respondemos. */
@@ -84,7 +85,19 @@ export async function tentarRespostaPronta(
   opts: RespostaProntaOpts,
 ): Promise<DesfechoDaRespostaPronta> {
   try {
-    return await tentar(pool, ids, opts);
+    const desfecho = await tentar(pool, ids, opts);
+    // Sem esta linha, "nunca respondeu" fica indistinguível de "nunca rodou":
+    // a recusa por limite ou por assunto misturado era silenciosa. Só motivo e
+    // número — nunca o texto do cliente.
+    if (!desfecho.respondeu) {
+      opts.log.info('resposta pronta não usada — o turno segue para a IA', {
+        motivo: desfecho.motivo,
+        ...(typeof desfecho.similaridade === 'number'
+          ? { similaridade: Math.round(desfecho.similaridade * 1000) / 1000 }
+          : {}),
+      });
+    }
+    return desfecho;
   } catch (err) {
     opts.log.warn('resposta pronta falhou — o turno segue para a IA', {
       error: err instanceof Error ? err.message.slice(0, 200) : 'erro desconhecido',
@@ -142,7 +155,7 @@ async function tentar(
     [ids.tenantId, `[${vetor.join(',')}]`, MODELO_DE_EMBEDDING],
   );
   const decisao = decidirRespostaPronta(new Map(rows.map((r) => [r.id, r.similaridade])), config.limite);
-  if (!decisao.casou) return { respondeu: false, motivo: decisao.motivo };
+  if (!decisao.casou) return { respondeu: false, motivo: decisao.motivo, similaridade: decisao.similaridade };
   const item = rows.find((r) => r.id === decisao.respostaProntaId);
   if (item === undefined) return { respondeu: false, motivo: 'erro' };
 
