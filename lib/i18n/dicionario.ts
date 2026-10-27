@@ -774,6 +774,10 @@ export const DICIONARIO: Traducoes = {
   "Respostas rápidas": { es: "Respuestas rápidas" },
   "Prepara no compositor: você revisa e envia": { es: "Lo prepara en el editor: tú revisas y envías" },
   "Buscar resposta": { es: "Buscar respuesta" },
+  "Mostrar na barra do Inbox": { es: "Mostrar en la barra del Inbox" },
+  "Desmarcado, a resposta sai da barra do Inbox e continua no atalho /.": {
+    es: "Sin marcar, la respuesta sale de la barra del Inbox y sigue en el atajo /.",
+  },
   "sem próximo passo": { es: "sin próximo paso" },
   "Nenhuma resposta com esse nome.": { es: "Ninguna respuesta con ese nombre." },
   Contatos: { es: "Contactos" },

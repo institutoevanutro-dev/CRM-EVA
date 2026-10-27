@@ -10,6 +10,12 @@ export const createTemplateSchema = z.object({
   shared: z.boolean().default(false),
   /** Itens da Biblioteca de mídia, na ordem em que saem (migration 0383). */
   media_item_ids: idsDeMidiaSchema.optional(),
+  /**
+   * "Mostrar na barra do Inbox" (migration 0398). Ausente = LIGADO: a resposta
+   * nasce aparecendo na barra, como sempre. A tela manda `false` só quando o
+   * operador desmarca.
+   */
+  mostrar_na_barra: z.boolean().optional(),
 });
 export type CreateTemplateInput = z.infer<typeof createTemplateSchema>;
 
@@ -20,6 +26,8 @@ export const updateTemplateSchema = z
     shortcut: z.string().trim().min(1).max(40).nullable(),
     /** A lista COMPLETA, na ordem; `[]` tira todas. */
     media_item_ids: idsDeMidiaSchema,
+    /** "Mostrar na barra do Inbox" (migration 0398) — o liga/desliga da tela. */
+    mostrar_na_barra: z.boolean(),
   })
   .partial()
   .refine((d) => Object.keys(d).length > 0, { message: "Informe ao menos um campo." });

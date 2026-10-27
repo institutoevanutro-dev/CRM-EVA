@@ -39,6 +39,8 @@ interface CreateInput {
   shortcut?: string;
   shared?: boolean;
   media_item_ids?: string[];
+  /** "Mostrar na barra do Inbox" (migration 0398) — ausente é ligado. */
+  mostrar_na_barra?: boolean;
 }
 
 interface UpdateInput {
@@ -47,6 +49,7 @@ interface UpdateInput {
   body: string;
   shortcut: string | null;
   media_item_ids?: string[];
+  mostrar_na_barra?: boolean;
 }
 
 export function TemplateFormDialog({ open, onOpenChange, canShare, template }: Props) {
@@ -56,6 +59,8 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
   const [body, setBody] = React.useState("");
   const [shortcut, setShortcut] = React.useState("");
   const [shared, setShared] = React.useState(false);
+  /** "Mostrar na barra do Inbox" (migration 0398). Nasce LIGADO, como a coluna. */
+  const [mostrarNaBarra, setMostrarNaBarra] = React.useState(true);
   /** Itens da Biblioteca de mídia, na ordem (migration 0383). */
   const [imagens, setImagens] = React.useState<string[]>([]);
 
@@ -81,6 +86,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
     setShortcut(template?.shortcut ?? "");
     setShared(template ? template.owner_user_id === null : false);
     setImagens(template?.media_item_ids ?? []);
+    setMostrarNaBarra(template ? template.mostrar_na_barra !== false : true);
   }, [open, template]);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -92,6 +98,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
           title,
           body,
           shortcut: shortcut.trim() || null,
+          mostrar_na_barra: mostrarNaBarra,
           // A biblioteca é de manager+: quem não a vê não reescreve a lista.
           ...(canShare ? { media_item_ids: imagens } : {}),
         });
@@ -102,6 +109,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
           body,
           shortcut: shortcut.trim() || undefined,
           shared: canShare ? shared : false,
+          mostrar_na_barra: mostrarNaBarra,
           ...(canShare && imagens.length ? { media_item_ids: imagens } : {}),
         });
         toast.success(t("Resposta criada."));
@@ -178,6 +186,18 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
               <Label htmlFor="tpl-shared">{t("Compartilhar com a equipe")}</Label>
             </div>
           )}
+          {/* Desmarcado, o botão sai da barra do Inbox e a resposta CONTINUA no
+              atalho `/` — a dica diz isso, porque a confusão natural é achar
+              que tirar da barra apaga a resposta. */}
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Switch id="tpl-na-barra" checked={mostrarNaBarra} onCheckedChange={setMostrarNaBarra} />
+              <Label htmlFor="tpl-na-barra">{t("Mostrar na barra do Inbox")}</Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t("Desmarcado, a resposta sai da barra do Inbox e continua no atalho /.")}
+            </p>
+          </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               {t("Cancelar")}

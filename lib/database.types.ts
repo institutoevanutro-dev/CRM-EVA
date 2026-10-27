@@ -5800,6 +5800,7 @@ export type Database = {
           created_at: string
           created_by_user_id: string | null
           id: string
+          mostrar_na_barra: boolean
           ordem: number
           organization_id: string
           owner_user_id: string | null
@@ -5812,6 +5813,7 @@ export type Database = {
           created_at?: string
           created_by_user_id?: string | null
           id?: string
+          mostrar_na_barra?: boolean
           ordem?: number
           organization_id: string
           owner_user_id?: string | null
@@ -5824,6 +5826,7 @@ export type Database = {
           created_at?: string
           created_by_user_id?: string | null
           id?: string
+          mostrar_na_barra?: boolean
           ordem?: number
           organization_id?: string
           owner_user_id?: string | null

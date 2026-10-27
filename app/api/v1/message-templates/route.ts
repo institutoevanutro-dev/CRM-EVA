@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
 /** O gatilho da 0383 recusou: imagem que não é item da biblioteca desta organização. */
 class MidiaForaDaBiblioteca extends Error {}
 const COLS =
-  "id, organization_id, owner_user_id, title, body, shortcut, media_item_ids, created_by_user_id, created_at, updated_at, ordem";
+  "id, organization_id, owner_user_id, title, body, shortcut, media_item_ids, mostrar_na_barra, created_by_user_id, created_at, updated_at, ordem";
 /** Tag do endpoint no recibo de idempotência. Muda de rota muda de recibo. */
 const ENDPOINT = "/api/v1/message-templates";
 
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       details: parsed.error.flatten().fieldErrors as Record<string, unknown>,
     });
   }
-  const { title, body, shortcut, shared, media_item_ids } = parsed.data;
+  const { title, body, shortcut, shared, media_item_ids, mostrar_na_barra } = parsed.data;
   // Compartilhado exige manager+. requireRole já resolveu o role efetivo do
   // banco em org.role — reusar em vez de uma 2ª chamada/RPC. A RLS with_check
   // barra de qualquer forma; isto só dá um erro claro antes do insert.
@@ -119,6 +119,8 @@ export async function POST(req: NextRequest): Promise<Response> {
         title,
         body,
         shortcut: shortcut ?? null,
+        // Ausente, a coluna assume o default (`true`): nasce aparecendo na barra.
+        ...(mostrar_na_barra === undefined ? {} : { mostrar_na_barra }),
         // Itens da Biblioteca de mídia (0383): o banco confere que são desta org.
         media_item_ids: media_item_ids ?? [],
         created_by_user_id: user.id,

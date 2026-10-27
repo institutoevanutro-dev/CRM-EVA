@@ -20,17 +20,26 @@ import type { MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
  * Nasce FECHADA: com dezenas de respostas cadastradas, a barra aberta ocupava o
  * Inbox inteiro (relato da clínica, 22/10). Aberta, tem busca e altura limitada
  * com rolagem; escolher uma resposta fecha de novo.
+ *
+ * Só entram as respostas marcadas "Mostrar na barra do Inbox" (migration 0398,
+ * porte do original #3311): a AUSÊNCIA da marcação conta como ligada, e o `/`
+ * continua listando TODAS — esconder daqui não tira a resposta do atalho.
  */
+export function respostasDaBarra(respostas: readonly MessageTemplate[]): MessageTemplate[] {
+  return respostas.filter((r) => r.mostrar_na_barra !== false);
+}
+
 interface Props {
   respostas: readonly MessageTemplate[];
   onEscolher: (resposta: MessageTemplate) => void;
   disabled?: boolean;
 }
 
-export function BarraDeRecursos({ respostas, onEscolher, disabled = false }: Props) {
+export function BarraDeRecursos({ respostas: todas, onEscolher, disabled = false }: Props) {
   const t = useT();
   const [aberta, setAberta] = useState(false);
   const [busca, setBusca] = useState("");
+  const respostas = respostasDaBarra(todas);
   if (respostas.length === 0) return null;
   const termo = busca.trim().toLocaleLowerCase("pt-BR");
   const visiveis = termo
