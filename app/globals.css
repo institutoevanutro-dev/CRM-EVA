@@ -223,8 +223,9 @@
 
   /* Menu lateral e tabelas no padrão do Eva Financeiro (spec 2026-10-07-cores-e-menu).
      O menu é verde nos DOIS temas; o dourado só aparece sobre ele ou como traço.
-     Com cor de marca configurada, `--color-sidebar-bg` vem de `lib/branding/css.ts`
-     (matiz da marca na luz destes literais) e eles ficam como padrão de fábrica. */
+     Só a cor do menu da ORGANIZAÇÃO (`settings.branding.menu_hex`) troca o fundo:
+     aí `--color-sidebar-bg` vem de `lib/branding/menu.ts` via `css.ts`. A cor da
+     marca sozinha não mexe aqui, e estes literais ficam como padrão de fábrica. */
   --color-sidebar-bg: #1d352c;
   --color-sidebar-fg: #e9e2c8;
   --color-sidebar-muted: #b9b39c;
@@ -626,9 +627,10 @@
    tem equivalente em `@theme`), então o apelido vira utilitário explícito. */
 /* Números de painel: Inter com dígitos de mesma largura e traço firme. O título é
    serifado, mas número em serifa fina fica difícil de ler de relance. */
-/* Fundo do menu lateral: o mesmo degradê do PrecificaEva e do Eva Financeiro (escuro no topo, a cor da
-   marca embaixo). Sem marca, `--color-sidebar-tint` não existe e o fundo mistura com `--color-success`, o
-   verde de fábrica. Com marca, `lib/branding/css.ts` emite `--color-sidebar-bg` e `--color-sidebar-tint`. */
+/* Fundo do menu lateral: o mesmo degradê do PrecificaEva e do Eva Financeiro (escuro no topo, a
+   cor do menu embaixo). Sem cor de menu, `--color-sidebar-tint` não existe e o fundo mistura com
+   `--color-success`, o verde de fábrica. Com cor de menu da organização, `lib/branding/css.ts` emite
+   `--color-sidebar-bg` e `--color-sidebar-tint`. */
 @utility fundo-lateral {
   background-color: var(--color-sidebar-bg);
   background-image: linear-gradient(

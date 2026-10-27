@@ -11,7 +11,7 @@ import { EstiloDaMarcaDaOrganizacao } from "./_components/EstiloDaMarcaDaOrganiz
 import { MfaEnrollGate } from "@/components/auth/MfaEnrollGate";
 import { cssDaMarca, ESCOPO_DA_ORGANIZACAO } from "@/lib/branding/css";
 import { marcaDaInstalacao } from "@/lib/branding/instalacao";
-import { resolverMarcaDaOrganizacao } from "@/lib/branding/organizacao";
+import { menuDaOrganizacaoDeSettings, resolverMarcaDaOrganizacao } from "@/lib/branding/organizacao";
 import { env } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -136,13 +136,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // resolução devolve a cor da instalação — e reemiti-la aqui, escopada no
     // `<body>`, seria repetir no documento um bloco que já vale pela raiz. Além
     // de bytes, custaria a única pergunta que a presença do bloco responde.
-    if (marca.origens.cor === "organizacao") {
+    // A cor do menu é da organização e não passa pelo resolvedor: em branco, nada
+    // sai e o menu fica com o verde de fábrica, qualquer que seja a marca.
+    const menu = menuDaOrganizacaoDeSettings(orgRow?.settings ?? null);
+    if (marca.origens.cor === "organizacao" || menu !== null) {
       // Os `motivos` de uma cor recusada NÃO são registrados aqui de propósito:
       // este caminho roda para todo tenant a cada render, e um aviso por
       // organização no log da instalação é como um alarme deixa de ser lido. O
       // laço de retorno desta feature é a tela `/app/settings/marca`, que mostra
       // os motivos para quem pode consertá-los — o admin daquela organização.
-      cssDaOrganizacao = cssDaMarca(marca.cor, ESCOPO_DA_ORGANIZACAO).css;
+      cssDaOrganizacao = cssDaMarca(
+        marca.origens.cor === "organizacao" ? marca.cor : null,
+        ESCOPO_DA_ORGANIZACAO,
+        menu,
+      ).css;
     }
 
     // Desce para o menu CAMPO A CAMPO, e só o campo que a organização definiu.

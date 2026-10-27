@@ -1,13 +1,13 @@
 ---
 impacto: capacidade_nova
-secao: alterado
-titulo: O menu lateral segue a cor da marca
+secao: adicionado
+titulo: Cor do menu lateral por organização
 ---
 
-O fundo do menu lateral era verde fixo, qualquer que fosse a cor escolhida em Marca. Agora,
-com cor de marca configurada (na instalação ou na organização), o menu ganha o matiz da sua cor
-na mesma luz escura de hoje, nos temas claro e escuro, e o degradê da base mistura a sua cor no
-lugar do verde. O texto do menu continua acima de 4,5:1, e a paleta Verde e dourado mantém o
-menu exatamente como era.
+Em Configurações › Marca há um campo novo, "Cor do menu lateral". Em branco, o menu continua
+com o verde de fábrica, qualquer que seja a cor da marca: quem não mexer não vê nada mudar.
 
-Sem cor de marca configurada, nada muda: o menu segue com o verde de fábrica.
+Com uma cor escolhida, o menu dessa organização passa a usá-la nos temas claro e escuro, e o
+degradê da base acompanha o mesmo matiz. O botão "Usar a cor da marca" sugere um tom escuro com
+o matiz da sua marca. Se a cor escolhida for clara demais, o sistema a escurece até o texto do
+menu passar de 4,5:1, e a tela avisa quando isso acontece.

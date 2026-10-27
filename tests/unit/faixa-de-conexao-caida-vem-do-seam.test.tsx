@@ -65,6 +65,7 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("@/lib/branding/instalacao", () => ({ marcaDaInstalacao: async () => ({}) }));
 vi.mock("@/lib/branding/organizacao", () => ({
+  menuDaOrganizacaoDeSettings: () => null,
   resolverMarcaDaOrganizacao: () => ({
     name: "Deskcomm",
     logoUrl: null,

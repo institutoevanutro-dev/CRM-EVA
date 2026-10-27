@@ -33,7 +33,7 @@ import { redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { marcaDaInstalacao } from "@/lib/branding/instalacao";
-import { marcaDaOrganizacaoDeSettings } from "@/lib/branding/organizacao";
+import { marcaDaOrganizacaoDeSettings, menuDaOrganizacaoDeSettings } from "@/lib/branding/organizacao";
 import { env } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -89,6 +89,9 @@ export default async function MarcaDaOrganizacaoPage() {
             // a URL pronta do servidor faria a tela ter uma segunda regra de
             // montagem, e a que divergisse seria a que ninguém abre.
             logo_path: gravada?.logo_path ?? null,
+            // Já validada e normalizada: o que não for hex chega como `null`,
+            // igual ao que o layout de `/app` aplica.
+            menu_hex: menuDaOrganizacaoDeSettings(data?.settings ?? null),
           }}
           // As DUAS camadas de baixo descem para o formulário, e não uma resolução
           // já pronta: a prévia ao vivo remonta a pilha inteira a cada tecla, pelo

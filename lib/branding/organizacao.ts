@@ -34,6 +34,7 @@
  * dentro de `MarcaResolvida`, que é o que a tela mostra ao admin.
  */
 
+import { ehHexValido, normalizarHex } from "./rampa";
 import { REGUA_DO_PRODUTO } from "./regua-do-produto";
 import {
   camadaDaInstalacao,
@@ -85,6 +86,21 @@ export function marcaDaOrganizacaoDeSettings(settings: unknown): MarcaDaOrganiza
     // partir de um objeto.
     logo_path: texto(envelope.logo_path),
   };
+}
+
+/**
+ * A cor do menu lateral desta organização, normalizada, ou `null`.
+ *
+ * O banco não valida esta chave (a função de escrita só confere `accent_hex`),
+ * então quem lê confere a forma: o que não for hex vira `null`, e o menu fica
+ * com o verde de fábrica em vez de derrubar o layout de `/app`.
+ */
+export function menuDaOrganizacaoDeSettings(settings: unknown): string | null {
+  if (typeof settings !== "object" || settings === null || Array.isArray(settings)) return null;
+  const bruto = (settings as Record<string, unknown>).branding;
+  if (typeof bruto !== "object" || bruto === null || Array.isArray(bruto)) return null;
+  const cru = texto((bruto as Record<string, unknown>).menu_hex)?.trim() ?? "";
+  return ehHexValido(cru) ? normalizarHex(cru) : null;
 }
 
 /**

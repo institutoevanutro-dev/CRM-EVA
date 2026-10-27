@@ -50,8 +50,8 @@
  * que se descobre semanas depois.
  */
 
-import { razaoDeContraste, PISOS } from "./contraste";
-import { GRAUS, hexParaOklch, oklchParaHex, stop } from "./rampa";
+import { baseDoDegradeDoMenu, fundoDoMenu } from "./menu";
+import { ehHexValido, GRAUS, stop } from "./rampa";
 import type { CorResolvida } from "./resolve";
 
 export type CodigoDoCss =
@@ -108,71 +108,6 @@ function paraDiagnostico(valor: string): string {
 
 type Declaracao = readonly [nome: string, valor: string];
 
-/**
- * A frente do menu lateral (`--color-sidebar-fg` do `app/globals.css`). O fundo
- * derivado é medido contra ela; `tests/unit/branding-marca-css.test.ts` confere
- * que o literal daqui é o mesmo do CSS.
- */
-export const FRENTE_DO_MENU = "#e9e2c8";
-
-/** O texto secundário do menu (`--color-sidebar-muted`), também medido. */
-export const FRENTE_SECUNDARIA_DO_MENU = "#b9b39c";
-
-/** O menu de fábrica do `globals.css`, por tema: a referência de luz e de croma. */
-const MENU_DE_FABRICA = { claro: "#1d352c", escuro: "#0b1612" } as const;
-
-/**
- * A cor que o degradê do menu mistura na base. De fábrica é `--color-success`
- * (#5a8a5f no claro, #82a077 no escuro); com marca, é a mesma conta do fundo.
- */
-const BASE_DO_DEGRADE_DE_FABRICA = { claro: "#5a8a5f", escuro: "#82a077" } as const;
-
-/** A luz e o croma (no máximo) da referência, com o matiz da semente. */
-function naLuzDe(referencia: string, semente: string): { L: number; C: number; h: number } {
-  const ref = hexParaOklch(referencia);
-  const cor = hexParaOklch(semente);
-  return { L: ref.L, C: Math.min(ref.C, cor.C), h: cor.h };
-}
-
-/**
- * A base do degradê do menu (`--color-sidebar-tint`), pela mesma regra do
- * fundo: com a semente verde de fábrica sai o próprio verde de hoje, e uma
- * marca de outro matiz não deixa verde nenhum no menu.
- */
-export function baseDoDegradeDoMenu(semente: string, tema: "claro" | "escuro"): string {
-  return oklchParaHex(naLuzDe(BASE_DO_DEGRADE_DE_FABRICA[tema], semente));
-}
-
-/**
- * O fundo do menu lateral a partir da semente: a LUZ do menu de fábrica, o
- * MATIZ da semente e o croma menor entre os dois.
- *
- * Luz fixa porque o menu é desenhado escuro e a frente é clara: uma semente
- * clara não pode clarear o menu. Croma pelo mínimo porque uma semente cinza
- * tem de dar um cinza quase preto, e não ganhar a saturação do verde. Com a
- * semente verde de fábrica o resultado é o próprio `#1d352c` / `#0b1612` (a
- * menos de arredondamento), e uma instalação verde não vê o menu mudar.
- *
- * O hex é calculado aqui, e não com `color-mix` no valor do token, porque a
- * allowlist só aceita `#rrggbb`. `oklchParaHex` já traz a cor para dentro do
- * sRGB. O laço é piso, não caminho comum: escurece até o texto principal e o
- * secundário passarem de 4,5:1 (com a luz de fábrica os dois já passam).
- */
-export function fundoDoMenu(semente: string, tema: "claro" | "escuro"): string {
-  const { C, h } = naLuzDe(MENU_DE_FABRICA[tema], semente);
-  let { L } = naLuzDe(MENU_DE_FABRICA[tema], semente);
-  let fundo = oklchParaHex({ L, C, h });
-  while (
-    Math.min(
-      razaoDeContraste(fundo, FRENTE_DO_MENU),
-      razaoDeContraste(fundo, FRENTE_SECUNDARIA_DO_MENU),
-    ) < PISOS.texto
-  ) {
-    L -= 0.02;
-    fundo = oklchParaHex({ L, C, h });
-  }
-  return fundo;
-}
 
 function declaracoesDoTema(cor: CorResolvida, tema: "claro" | "escuro"): Declaracao[] {
   // `--color-brand` sai SEMPRE que há semente, inclusive quando ela não pinta
@@ -181,11 +116,7 @@ function declaracoesDoTema(cor: CorResolvida, tema: "claro" | "escuro"): Declara
   // e-mail vão ler. Hoje ele não tem consumidor dentro do produto: declarar uma
   // custom property inerte não muda pixel nenhum, e sem ela o motivo
   // `marca_acromatica` ("a cor fica só em --color-brand") seria mentira.
-  const saida: Declaracao[] = [
-    ["--color-brand", cor.semente],
-    ["--color-sidebar-bg", fundoDoMenu(cor.semente, tema)],
-    ["--color-sidebar-tint", baseDoDegradeDoMenu(cor.semente, tema)],
-  ];
+  const saida: Declaracao[] = [["--color-brand", cor.semente]];
   const derivada = cor.derivada;
   if (!derivada) return saida;
 
@@ -301,6 +232,19 @@ export const ESCOPO_DA_ORGANIZACAO = [
 
 export type EscopoDaMarca = typeof ESCOPO_DA_INSTALACAO | typeof ESCOPO_DA_ORGANIZACAO;
 
+/**
+ * O menu lateral, quando a ORGANIZAÇÃO escolheu uma cor para ele. A marca sozinha
+ * não mexe no menu: sem esta escolha o verde de fábrica do `globals.css` fica,
+ * qualquer que seja a semente. Os dois tokens saem nos dois blocos, pelo mesmo
+ * motivo de todo o resto (ver o cabeçalho).
+ */
+function declaracoesDoMenu(menu: string, tema: "claro" | "escuro"): Declaracao[] {
+  return [
+    ["--color-sidebar-bg", fundoDoMenu(menu, tema)],
+    ["--color-sidebar-tint", baseDoDegradeDoMenu(menu, tema)],
+  ];
+}
+
 function montarBloco(seletor: string, decls: readonly Declaracao[]): string {
   const linhas = decls.map(([nome, valor]) => `  ${nome}: ${valor};`);
   return `${seletor} {\n${linhas.join("\n")}\n}`;
@@ -320,8 +264,15 @@ function montarBloco(seletor: string, decls: readonly Declaracao[]): string {
 export function cssDaMarca(
   cor: CorResolvida | null,
   escopo: EscopoDaMarca = ESCOPO_DA_INSTALACAO,
+  menu: string | null = null,
 ): CssDaMarca {
-  if (!cor) return { css: null, motivos: [] };
+  // A cor do menu é campo da ORGANIZAÇÃO (`settings.branding.menu_hex`); no
+  // escopo da instalação ela não existe. Hex inválido vira ausência e não
+  // exceção: isto roda no layout de `/app`, e quem recusa com motivo é o Zod da
+  // action, na escrita.
+  const menuValido =
+    escopo === ESCOPO_DA_ORGANIZACAO && menu !== null && ehHexValido(menu) ? menu : null;
+  if (!cor && !menuValido) return { css: null, motivos: [] };
 
   const motivos: MotivoDoCss[] = [];
 
@@ -333,7 +284,7 @@ export function cssDaMarca(
   // carrega: emitir só a base deixaria o chip com fundo e texto de um matiz e
   // borda de outro — pior que não mover. Fechar isso exige a régua carregar os
   // companheiros, ou seja, mexer em `lib/branding/contraste.ts`.
-  for (const m of cor.derivada?.motivos ?? []) {
+  for (const m of cor?.derivada?.motivos ?? []) {
     if (m.codigo !== "semantica_deslocada") continue;
     motivos.push({
       codigo: "token_nao_serializado",
@@ -346,7 +297,10 @@ export function cssDaMarca(
 
   const blocos: string[] = [];
   for (const [seletor, tema] of escopo) {
-    const decls = declaracoesDoTema(cor, tema);
+    const decls = [
+      ...(cor ? declaracoesDoTema(cor, tema) : []),
+      ...(menuValido ? declaracoesDoMenu(menuValido, tema) : []),
+    ];
     for (const [nome, valor] of decls) {
       if (!NOME_DE_TOKEN.test(nome)) {
         motivos.push({

@@ -30,7 +30,8 @@ export type UpdateMarcaDaOrganizacaoResult =
     };
 
 /**
- * Troca o nome e a cor que a ORGANIZAÇÃO mostra dentro do produto.
+ * Troca o nome, a cor e a cor do menu lateral que a ORGANIZAÇÃO mostra dentro
+ * do produto.
  *
  * ── Por que RPC, e não `.update({ settings })` ───────────────────────────────
  *
@@ -118,7 +119,10 @@ export async function updateMarcaDaOrganizacao(
   // Os dois campos vazios significam "volte ao que vem da instalação", e é `null`
   // que a função entende como apagar a chave `branding` — gravar `{}` deixaria um
   // envelope vazio que o resolvedor teria de aprender a ignorar.
-  const limpar = parsed.data.app_name === null && parsed.data.accent_hex === null;
+  const limpar =
+    parsed.data.app_name === null &&
+    parsed.data.accent_hex === null &&
+    parsed.data.menu_hex === null;
   const marca = limpar
     ? null
     : {
@@ -129,6 +133,9 @@ export async function updateMarcaDaOrganizacao(
         // "mudou?" ser uma pergunta com resposta.
         accent_hex:
           parsed.data.accent_hex === null ? null : normalizarHex(parsed.data.accent_hex),
+        // Já normalizada pelo Zod. A função SQL não confere esta chave: o
+        // `marcaDaOrganizacaoSchema` é a única validação da cor do menu.
+        menu_hex: parsed.data.menu_hex,
         updated_by: authUser.id,
         updated_at: new Date().toISOString(),
       };
@@ -182,6 +189,7 @@ export async function updateMarcaDaOrganizacao(
       // lida por quem opera a instalação inteira.
       fields_changed: Object.keys(parsed.data),
       accent_definido: parsed.data.accent_hex !== null,
+      menu_definido: parsed.data.menu_hex !== null,
       nome_definido: parsed.data.app_name !== null,
     },
   });
