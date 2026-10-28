@@ -48,7 +48,7 @@ test("criar tarefa para outra pessoa da equipe e ver o nome dela na lista", asyn
   await page.getByLabel("O que precisa ser feito").fill(titulo);
 
   // O campo nasce com quem cria ("(você)"); escolhe OUTRA pessoa da lista.
-  await page.getByLabel("Responsável").click();
+  await page.getByLabel("Responsável", { exact: true }).click();
   // Espera a EQUIPE carregar: antes dela a lista só tem "Ninguém" e "Você"
   // (o item de quem cria, enquanto a equipe não chega). Medido no CI: sem esta
   // espera o teste escolhia "Você" e media a própria pressa.

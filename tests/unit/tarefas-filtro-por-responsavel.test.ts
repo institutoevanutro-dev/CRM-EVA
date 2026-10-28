@@ -116,7 +116,7 @@ describe("o filtro da tela → o parâmetro da rota", () => {
   it("a tela usa o filtro e manda para a rota (o fio que some sem barulho)", () => {
     const tela = readFileSync("app/app/tasks/_components/TarefasClient.tsx", "utf8");
     expect(tela).toMatch(/assigned_to: responsavelDoFiltro\(responsavel\)/);
-    expect(tela).toMatch(/aria-label=\{t\("Responsável"\)\}/);
+    expect(tela).toMatch(/aria-label=\{t\("Filtrar por responsável"\)\}/);
     const hook = readFileSync("hooks/tasks/useTasks.ts", "utf8");
     expect(hook).toMatch(/params\.set\("assigned_to", filtros\.assigned_to\)/);
   });
