@@ -8,6 +8,64 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.40.0] — 2026-10-28
+
+### Adicionado
+
+- **O Inbox lembra o número e o Não lidos que você escolheu** Quem atende um setor com um número só precisava escolher o número e ligar **Não lidos** toda vez que recarregava o Inbox. Agora os dois filtros ficam lembrados neste navegador, separados por organização: ao reabrir, o Inbox volta como você deixou. Desligar o filtro apaga a lembrança. Busca e etiqueta continuam valendo só para a visita. Não é preciso mexer em nada na VPS.
+
+  Portado do projeto original (DeskcommCRM, PR #3535 de @melgarafael, a partir do #3402 de @xxfabioxx12).
+
+- **O lembrete de caso parado vale para cada espera e tem cadência ajustável na Central** A Central já lembrava a equipe do caso que espera uma decisão: depois de 24 horas, até três avisos. Mas a conta era da vida inteira do caso, então um caso que já tinha recebido os três avisos, foi ao cliente e voltou para a equipe nunca mais era lembrado. Agora cada espera tem o seu próprio relógio: ele começa quando o caso chega à equipe, recomeça quando o cliente responde, e o limite de avisos vale para cada espera.
+
+  Quem administra a conta encontra na **Central de avisos** o cartão **Lembrete de caso parado**, para desligar o lembrete ou escolher de quanto em quanto tempo ele chega (de 1 hora a 3 dias) e quantos avisos cada espera recebe. O padrão continua o de antes (ligado, a cada 24 horas, três avisos), então nada muda sozinho na atualização. Os casos que já estão esperando começam a contar a partir da atualização e não recebem de novo avisos que já receberam, para ninguém levar uma rajada de lembretes de uma vez. O lembrete continua só na Central, sem WhatsApp.
+
+  Portado do projeto original (DeskcommCRM, PR #3399 de @melgarafael), a partir da ideia e da primeira versão de @Atlasads no pedido #2584.
+
+- **Tarefas ganha o filtro "Minhas", e o Início abre direto nas suas tarefas** A tela de Tarefas ganha o seletor "Minhas | Todas". Os itens de tarefa do Início ("Meu dia") abrem a tela já em "Minhas". No celular, os botões e a caixa de concluir ficam do tamanho do dedo, e o calendário de tarefas não é oferecido (as sete colunas não cabem na tela; a lista segue igual), nem quando ele foi escolhido no tablet deitado e o aparelho é girado. No computador, a única mudança é o seletor. Nada a fazer na atualização.
+
+  Portado do projeto original (DeskcommCRM, PR #3254 de @melgarafael). Lá o lembrete de prazo e o push de tarefa nova também abrem em "Minhas"; este fork ainda não tem esses avisos, então o endereço entrou no Início.
+
+- **Cada resposta rápida escolhe se aparece na barra do Inbox** Cada resposta rápida agora tem **Mostrar na barra do Inbox**, ligado por padrão (toda resposta que já existe nasce marcada). Desmarcar tira o botão da barra "Respostas rápidas" do Inbox **sem** tirar a resposta do atalho `/`, que segue listando todas. A barra continua recolhida por padrão, com busca, e na ordem que a tela de respostas rápidas define ao arrastar. Nada a fazer na atualização: a coluna nova entra sozinha.
+
+  Portado do projeto original (DeskcommCRM, PR #3311 de @webtecnica, issue #3282). O recolhimento da barra que vinha junto não foi portado: este fork já tinha a barra recolhida com busca.
+
+- **Cadastrar contato ou negócio agora pode já abrir a conversa** Quem cadastra um contato ou um negócio e atende em seguida tinha de sair da tela, ir ao
+  Inbox, clicar em "Iniciar conversa" e procurar o contato de novo. Agora os dois cadastros
+  têm o botão **"Salvar e iniciar conversa"**: ele salva e cai direto na conversa daquele
+  contato, já atribuída a quem cadastrou — o mesmo caminho do Inbox (`open-with-contact` e `claim`), então a conversa não nasce órfã.
+
+  Quem só quer cadastrar continua com o botão de sempre, que não abre conversa nenhuma. E a
+  permissão não muda de lado: sem papel de atendente o servidor recusa, a tela mostra o
+  motivo e não navega. Contato sem telefone não abre conversa 1:1, e a tela diz por quê.
+
+  Portado do projeto original (DeskcommCRM, PR #3547 de @melgarafael, a partir do #3528 de @webtecnica).
+
+- **A tela de Tarefas filtra por responsável** O seletor "Minhas | Todas" da tela de Tarefas virou o seletor "Responsável": Todos, Minhas, cada pessoa da equipe e Sem responsável. Antes dava para ver só as suas ou as de todo mundo; agora dá para ver só as de um colega, ou as que ainda não têm dono. O filtro vale também para a visão de calendário e é aplicado na própria consulta (a lista não perde tarefas por causa do limite de 500). O Início continua abrindo a tela em "Minhas", e uma tarefa criada com uma pessoa escolhida no filtro já nasce com ela como responsável. A API `GET /api/v1/tasks` passa a aceitar, em `assigned_to`, além de `me`, o id de um membro ou `ninguem`.
+
+  Portado do projeto original (DeskcommCRM, PR #3280 de @flaviosiq).
+
+- **Texto de reserva para variáveis das mensagens** Agora dá para escrever `{{primeiro_nome|"aluno"}}` numa mensagem: se o contato não tiver o dado, sai o texto entre aspas ("Oi aluno!") em vez de a variável ficar vazia ou a pessoa ficar de fora. Vale nas respostas rápidas do Inbox, no WhatsApp e no e-mail das automações, no texto fixo do follow-up, nos modelos de mensagem da API de operação e na campanha de texto livre. Aspas retas ou curvas, de 1 a 100 caracteres, sem chaves nem aspas dentro. Com o dado preenchido, a reserva é ignorada; quem não usa `|` não percebe nenhuma mudança. Nada muda na VPS.
+
+  Portado do projeto original (DeskcommCRM, PR #3535 de @melgarafael, a partir do #3405 de @xxfabioxx12).
+
+### Corrigido
+
+- **Criar contato durante outro cadastro preserva o rascunho** Ao criar um contato dentro de um negócio ou agendamento, o contato volta selecionado
+  e os dados ainda em edição são preservados. No negócio, "Salvar e iniciar conversa"
+  continua disponível depois de concluir o cadastro. O cadastro avulso de contato
+  também conserva esse atalho.
+
+  Portado do projeto original (DeskcommCRM, PR #3547 de @melgarafael, a partir do #3528 de @webtecnica).
+
+- **O inbox acompanha novas mensagens no computador e no celular** Conversas abertas acompanham a última mensagem mesmo quando ela é longa, a página mantém a mesma quantidade de itens ou uma imagem termina de carregar. O próprio envio leva ao final; ao ler o histórico, novas mensagens exibem um aviso com acesso ao fim. Carregar mensagens antigas preserva a posição de leitura e o teclado móvel mantém a conversa visível.
+
+  Portado do projeto original (DeskcommCRM, PR #3209 de @vitorlacerdadigital).
+
+- **O card do negócio não mostra mais "Propõe: Responder o cliente"** A próxima ação que o agente escrevia sem dizer nada — "Responder o cliente", "Atender o lead" — não vira mais proposta no card do funil. O agente já responde a cada mensagem, então a frase ocupava a faixa do card no lugar de "esfriando", da proposta de retomada e da probabilidade, e aprovar aquilo contava como atividade do negócio no radar de risco. Essas frases genéricas são descartadas na gravação, preservando uma proposta anterior, e o agente recebe orientação para propor uma ação concreta. O filtro reconhece uma lista curta de expressões em português e espanhol; não avalia o conteúdo de toda proposta. A ação concreta e a limpeza da proposta continuam como antes, e nada a fazer na atualização. As propostas vazias que já estão gravadas seguem no card até alguém aprovar, ignorar ou o agente reescrever.
+
+  Portado do projeto original (DeskcommCRM, PR #3535 de @melgarafael, a partir do #3458 de @webtecnica).
+
 ## [4.39.1] — 2026-10-27
 
 ### Corrigido
@@ -8353,7 +8411,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.39.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.40.0...HEAD
+[4.40.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.39.1...v4.40.0
 [4.39.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.39.0...v4.39.1
 [4.39.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.38.1...v4.39.0
 [4.38.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.38.0...v4.38.1
