@@ -19,6 +19,10 @@ import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { contactCreateSchema, type ContactCreate } from "@/lib/schemas/contacts";
 import type { Contact } from "@/lib/types/contacts";
 import { useCreateContact } from "@/hooks/contacts/useCreateContact";
+import {
+  AbrirConversaAposSalvar,
+  type AlvoDeConversaAposSalvar,
+} from "@/components/inbox/AbrirConversaAposSalvar";
 
 interface FormShape {
   name?: string;
@@ -47,11 +51,25 @@ interface Props {
    * selecionado, em vez de mandar a pessoa procurar de novo o que acabou de criar.
    */
   onCriado?: (contato: Contact) => void;
+  /**
+   * Só o cadastro que conclui a jornada pode navegar para a conversa. Quem
+   * fornece um contato a outro formulário (negócio, agendamento) desliga, para
+   * preservar o rascunho que está em edição.
+   */
+  permitirIniciarConversa?: boolean;
 }
 
-export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: Props) {
+export function NewContactDialog({
+  open,
+  onOpenChange,
+  nomeInicial,
+  onCriado,
+  permitirIniciarConversa = true,
+}: Props) {
   const t = useT();
   const create = useCreateContact();
+  /** A conversa a abrir depois de salvar — `null` = nada pendente. */
+  const [conversaAoSalvar, setConversaAoSalvar] = useState<AlvoDeConversaAposSalvar | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
 
   const form = useForm<FormShape>({
@@ -59,6 +77,16 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
   });
 
   async function onSubmit(values: FormShape) {
+    await salvar(values, false);
+  }
+
+  /**
+   * Grava o contato e, se pedido, já abre a conversa dele (porte do original
+   * #3547). O contato é gravado ANTES: se abrir falhar (sem canal, sem
+   * telefone, papel insuficiente), o cadastro não é desfeito nem escondido. O
+   * telefone que vale é o que a rota GRAVOU, não o digitado.
+   */
+  async function salvar(values: FormShape, abrir: boolean) {
     setServerError(null);
     // A MESMA normalização da API (lib/contacts/tag-normalizada): o que a ficha
     // grava é o que o filtro `?tag=` casa (issue #1224).
@@ -82,20 +110,31 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
       return;
     }
 
+    let contato: Contact | undefined;
     try {
       const resposta = await create.mutateAsync(parsed.data as ContactCreate);
-      toast.success(t("Contato criado"));
-      form.reset();
-      onOpenChange(false);
       // `.data` é o envelope do `ok()`, e dentro dele mora `{ contact, action }`.
       // Entregar `resposta.data` aqui devolveria esse envelope como se fosse o
       // contato: o `id` sairia `undefined` e a marcação ficaria sem ninguém, em
       // silêncio. Quem garante que este caminho não volta a errar é o tipo do
       // hook, ligado ao retorno da rota.
-      if (resposta?.data?.contact) onCriado?.(resposta.data.contact);
+      contato = resposta?.data?.contact;
     } catch {
-      // error toast already handled by hook
+      // error toast already handled by hook — e nada foi criado.
+      return;
     }
+
+    toast.success(t("Contato criado"));
+    form.reset();
+    onOpenChange(false);
+    if (!contato) return;
+    onCriado?.(contato);
+    if (!abrir || !permitirIniciarConversa) return;
+    if (!contato.phone_number) {
+      toast.info(t("Contato salvo. Cadastre um telefone para abrir a conversa."));
+      return;
+    }
+    setConversaAoSalvar({ contact_id: contato.id });
   }
 
   return (
@@ -107,7 +146,15 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
             {t("Preencha pelo menos um identificador (email ou telefone).")}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <form
+          onSubmit={(event) => {
+            // O portal mantém a árvore React: o submit deste subcadastro não
+            // pode submeter também o negócio ou a marcação ainda em edição.
+            event.stopPropagation();
+            void form.handleSubmit(onSubmit)(event);
+          }}
+          className="space-y-4"
+        >
           <div className="space-y-2">
             <Label htmlFor="name">{t("Nome")}</Label>
             <Input id="name" {...form.register("name")} />
@@ -152,12 +199,25 @@ export function NewContactDialog({ open, onOpenChange, nomeInicial, onCriado }: 
             >
               {t("Cancelar")}
             </Button>
+            {permitirIniciarConversa && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={create.isPending}
+                onClick={form.handleSubmit((values) => void salvar(values, true))}
+              >
+                {t("Salvar e iniciar conversa")}
+              </Button>
+            )}
             <Button type="submit" disabled={create.isPending}>
               {create.isPending ? t("Criando…") : t("Criar contato")}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
+      {/* FORA do `DialogContent`: o cadastro FECHA ao salvar e a abertura da
+          conversa vem depois; dentro, morreria junto com o formulário. */}
+      {conversaAoSalvar && <AbrirConversaAposSalvar alvo={conversaAoSalvar} />}
     </Dialog>
   );
 }

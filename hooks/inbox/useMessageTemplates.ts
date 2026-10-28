@@ -16,6 +16,11 @@ export interface MessageTemplate {
    * Opcional pelo mesmo motivo das mídias: fixture de teste vem sem a chave.
    */
   ordem?: number;
+  /**
+   * "Mostrar na barra do Inbox" (migration 0398). Ausente conta como ligado:
+   * fixture sem a chave aparece na barra, como sempre. Só o `false` esconde.
+   */
+  mostrar_na_barra?: boolean | null;
 }
 
 /** A chave da lista: a tela, o Inbox e a mutação de ordem usam a MESMA. */

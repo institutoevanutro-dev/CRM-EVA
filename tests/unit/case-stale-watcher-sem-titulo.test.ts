@@ -29,6 +29,8 @@ const TITULO = "Paciente relata reação ao medicamento";
 function adminComCasos(casos: Array<Record<string, unknown>>) {
   const avisos: Array<Record<string, unknown>> = [];
   const client = {
+    // Quem venceu vem de `fn_casos_parados_para_lembrar` (migration 0397).
+    rpc: () => Promise.resolve({ data: casos, error: null }),
     from(tabela: string) {
       const cadeia: Record<string, unknown> = {
         select: () => cadeia,
@@ -59,8 +61,9 @@ const casoParado = (followup_attempts: number) => ({
   organization_id: ORG_ID,
   title: TITULO,
   opened_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-  updated_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
   followup_attempts,
+  cobrancas_na_espera: followup_attempts,
+  teto: 3,
 });
 
 async function rodar() {

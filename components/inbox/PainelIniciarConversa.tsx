@@ -44,13 +44,12 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { apiClient } from "@/lib/api/client";
-import { ApiError } from "@/lib/api/types";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { normalizePhoneBR, phoneForDisplay, samePhone } from "@/lib/channels/phone-variants";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { assumirConversaAoAbrir } from "@/lib/inbox/assumir-conversa-ao-abrir";
 import { ChatCircle, UserCircle, Users } from "@/lib/ui/icons";
 import { useAuth, usePermission } from "@/hooks/auth/AuthProvider";
-import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { useContactList } from "@/hooks/contacts/useContactList";
 import { useT } from "@/hooks/i18n/useT";
 import { useMessageTemplates } from "@/hooks/inbox/useMessageTemplates";
@@ -290,30 +289,9 @@ export function IniciarConversaDialog({
   async function aoAbrir(conversationId: string, mensagem: string) {
     // ATRIBUIR antes de qualquer mensagem: "assuma se estiver livre". Recusa
     // 409 = a conversa reaberta já tinha dono; aí não se rouba atendimento.
-    let assumiu = true;
-    try {
-      await apiClient.post(`/api/v1/conversations/${conversationId}/claim`, {
-        expected_assignee: null,
-      });
-    } catch (err) {
-      if (!(err instanceof ApiError && err.status === 409)) {
-        assumiu = false;
-        showApiError(err);
-      } else {
-        const conversa = await apiClient
-          .get<{ data: ConversationWithContact }>(`/api/v1/conversations/${conversationId}`)
-          .then((r) => r.data)
-          .catch(() => null);
-        assumiu = conversa?.assigned_to_user_id === user.id;
-        if (!assumiu) {
-          toast.info(
-            `${t("A conversa neste número está com")} ${
-              conversa?.assigned_to_user_name ?? t("outro atendente")
-            }.`,
-          );
-        }
-      }
-    }
+    // A regra mora em `lib/inbox/assumir-conversa-ao-abrir` (porte do original
+    // #3547): o cadastro de contato e de negócio pedem o MESMO claim.
+    const assumiu = await assumirConversaAoAbrir(conversationId, { userId: user.id, t });
 
     if (mensagem && assumiu) {
       try {

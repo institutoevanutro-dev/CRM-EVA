@@ -137,6 +137,7 @@ export function SeletorDeContato({ escolhido, onEscolher, rotulo, semCriar = fal
           onOpenChange={setCriando}
           nomeInicial={termo}
           onCriado={escolher}
+          permitirIniciarConversa={false}
         />
       )}
     </div>

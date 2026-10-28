@@ -554,6 +554,11 @@ export const AUDIT_ACTIONS = [
   // o que se quer responder depois é "o sistema cobrou?", e uma linha por caso
   // faria do audit log a própria fila.
   "ai.caso_parado_cobrado",
+  // A cadência do lembrete de caso parado (migration 0397): ligado, intervalo e
+  // teto, escolhidos na Central por quem administra. Audita porque desligar
+  // cala a cobrança da organização inteira, e "quem desligou, e quando" só tem
+  // resposta na trilha — a coluna guarda só o valor de agora.
+  "ai.lembrete_de_caso_configurado",
   // Um pedido não confirmado soltou o horário que estava segurando. Audita
   // porque é CANCELAMENTO — o compromisso deixa de existir para quem o pediu —,
   // e sem esta linha a única explicação para o horário ter voltado a aparecer

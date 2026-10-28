@@ -28,6 +28,10 @@ import type { Stage } from "@/lib/kanban/types";
 import { createLeadSchema, type CreateLeadInput } from "@/lib/schemas/leads";
 import { parseReaisToCents } from "@/lib/money";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
+import {
+  AbrirConversaAposSalvar,
+  type AlvoDeConversaAposSalvar,
+} from "@/components/inbox/AbrirConversaAposSalvar";
 import type { Contact } from "@/lib/types/contacts";
 import { EcoDoValor } from "./EcoDoValor";
 import { SeletorDeContato } from "./SeletorDeContato";
@@ -67,6 +71,8 @@ export function NewLeadDialog({
 }: Props) {
   const t = useT();
   const create = useCreateLead(pipelineId);
+  /** A conversa a abrir depois de criar (porte do original #3547) — `null` = nada pendente. */
+  const [conversaAoCriar, setConversaAoCriar] = useState<AlvoDeConversaAposSalvar | null>(null);
   const initialStage = useMemo(() => defaultStageId(stages), [stages]);
   // Quem abre o diálogo já sabendo o contato (Inbox) não escolhe de novo.
   const [contato, setContato] = useState<Contact | null>(null);
@@ -105,6 +111,14 @@ export function NewLeadDialog({
   }, [initialStage, form]);
 
   async function onSubmit(values: FormShape) {
+    await gravar(values, false);
+  }
+
+  /**
+   * A criação de fato; com `abrir`, depois a conversa do contato do negócio
+   * aberta no Inbox ("Salvar e iniciar conversa", porte do original #3547).
+   */
+  async function gravar(values: FormShape, abrir: boolean) {
     const tags = values.tagsRaw
       .split(",")
       .map((s) => s.trim())
@@ -156,8 +170,15 @@ export function NewLeadDialog({
       setContato(null);
       onOpenChange(false);
     } catch {
-      // toast already shown
+      // toast already shown — e nada foi criado, então não há conversa a abrir.
+      return;
     }
+
+    // Fora do `try`: o negócio JÁ existe, e uma falha ao abrir a conversa não
+    // pode ser contada como falha de criação. `idDoContato` foi lido antes do
+    // reset que soltou o contato escolhido.
+    if (!abrir || !idDoContato) return;
+    setConversaAoCriar({ contact_id: idDoContato });
   }
 
   const stageId = form.watch("stage_id");
@@ -166,6 +187,20 @@ export function NewLeadDialog({
   // no meio da ligação e completa depois continua conseguindo, e a importação e
   // as automações seguem criando sem contato de propósito.
   const faltaContato = !contactId && !contato;
+
+  /**
+   * Dá para abrir a conversa ao salvar? Precisa de contato (a thread 1:1 é com
+   * uma pessoa) e, quando o contato foi escolhido AQUI, de telefone. Contato
+   * vindo por `contactId` (o painel do Inbox) é o de uma conversa que já existe.
+   * O motivo fica VISÍVEL no botão: clique que não faz nada parece defeito.
+   */
+  const semTelefoneNoContato = Boolean(contato) && !contato?.phone_number?.trim();
+  const podeIniciarConversa = !faltaContato && !semTelefoneNoContato;
+  const motivoSemConversa = faltaContato
+    ? t("Escolha um contato para abrir a conversa.")
+    : semTelefoneNoContato
+      ? t("Sem telefone no contato: cadastre um telefone para abrir a conversa.")
+      : null;
 
   function escolherContato(escolhido: Contact | null) {
     setContato(escolhido);
@@ -279,12 +314,24 @@ export function NewLeadDialog({
             >
               Cancelar
             </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={create.isPending || !stageId || !podeIniciarConversa}
+              title={motivoSemConversa ?? undefined}
+              onClick={form.handleSubmit((values) => void gravar(values, true))}
+            >
+              {t("Salvar e iniciar conversa")}
+            </Button>
             <Button type="submit" disabled={create.isPending || !stageId}>
               {create.isPending ? "Criando…" : "Criar lead"}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
+      {/* FORA do `DialogContent`: o formulário FECHA ao criar e a abertura da
+          conversa vem depois. */}
+      {conversaAoCriar && <AbrirConversaAposSalvar alvo={conversaAoCriar} />}
     </Dialog>
   );
 }

@@ -21,6 +21,13 @@
  * por um `Record` de objetos deixaria o par cego.
  */
 
+/**
+ * O endereço das tarefas DE QUEM está vendo: a tela de Tarefas abre em
+ * "Minhas" quando chega por ele (`app/app/tasks/page.tsx`). É o que o Início
+ * usa ao apontar para as tarefas da pessoa.
+ */
+export const HREF_MINHAS_TAREFAS = "/app/tasks?assigned_to=me";
+
 export const PRIORIDADES_DA_TAREFA = ["low", "medium", "high", "urgent"] as const;
 export type PrioridadeDaTarefa = (typeof PRIORIDADES_DA_TAREFA)[number];
 

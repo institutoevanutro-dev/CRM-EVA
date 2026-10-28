@@ -1,6 +1,14 @@
 import { resolveField } from "@/lib/automation/conditions";
 import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
 import { semAVariavel } from "@/lib/inbox/template-vars";
+import { RESERVA_DA_VARIAVEL } from "@/lib/texto/reserva-da-variavel";
+
+/**
+ * A marcação `{{caminho}}` ou `{{caminho|"reserva"}}` (texto de reserva, porte
+ * do original #3535). Grupo 1 = caminho, grupo 2 = reserva (ausente quando não
+ * há). Compartilhada com os modelos de mensagem da operação.
+ */
+export const MARCACAO = new RegExp(String.raw`\{\{\s*([\w.]+)\s*${RESERVA_DA_VARIAVEL}\}\}`, "g");
 
 const ALIASES: Record<string, string> = {
   telefone: "contact.phone_number",
@@ -33,14 +41,19 @@ export function renderTemplate(
   context: Record<string, unknown>,
   formatarValor: (valor: string) => string = (valor) => valor,
 ): string {
-  let saida = template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, path: string) => {
+  let saida = template.replace(MARCACAO, (_m, path: string, reserva: string | undefined) => {
     if (DO_NOME.has(path)) {
       const nome = nomeDoContato(context.contact as ContatoNomeavel | undefined) ?? "";
       // `{{primeiro_nome}}` = primeira palavra do nome, como no Inbox e na campanha.
       const valor = path === "primeiro_nome" ? (nome.split(/\s+/)[0] ?? "") : nome;
-      return valor === "" ? NOME_AUSENTE : formatarValor(valor);
+      if (valor === "") return reserva ?? NOME_AUSENTE;
+      return formatarValor(valor);
     }
-    return formatarValor(String(resolveField(context, ALIASES[path] ?? path) ?? ""));
+    const valor = String(resolveField(context, ALIASES[path] ?? path) ?? "");
+    // Sem o dado, a reserva que quem escreveu a mensagem deixou. Ela é texto do
+    // operador (como o resto do corpo), não valor do contato: não passa por `formatarValor`.
+    if (reserva !== undefined && valor.trim() === "") return reserva;
+    return formatarValor(valor);
   });
   for (let i = saida.indexOf(NOME_AUSENTE); i !== -1; i = saida.indexOf(NOME_AUSENTE)) {
     saida = semAVariavel(saida, i, NOME_AUSENTE.length);

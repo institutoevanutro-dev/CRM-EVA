@@ -30,6 +30,22 @@
  * Três avisos e para. Quem ignorou três vezes não vai atender no quarto, e
  * alarme que nunca cala treina a equipe a ignorar o alarme certo — o mesmo
  * argumento que o dedup de `insertInboxItem` já faz no repositório.
+ *
+ * ═══ UM RELÓGIO POR ESPERA, E A CADÊNCIA É DA ORGANIZAÇÃO (migration 0397) ═══
+ *
+ * Portado do projeto original (DeskcommCRM, PR #3399, ideia de @Atlasads no
+ * #2584). O teto passou a valer por ESPERA, e não pela vida do caso:
+ * `followup_attempts` nunca zera, então um caso cobrado três vezes que foi ao
+ * cliente e voltou nunca mais era lembrado. Quem decide o que venceu é
+ * `fn_casos_parados_para_lembrar`: o aviso N de uma espera vence em
+ * `espera_desde + N × intervalo`, e `espera_desde`/`cobrancas_na_espera`
+ * voltam ao começo toda vez que o caso entra em `awaiting_human` (gatilho
+ * `trg_caso_marca_inicio_da_espera`). O relógio deixou de ser `updated_at`.
+ *
+ * Intervalo, teto e o liga/desliga moram em `organizations` (`lembrete_caso_*`)
+ * e são escolhidos na Central por quem administra. O default — ligado, 24 h,
+ * três avisos — é o comportamento de antes. O intervalo mínimo é uma hora
+ * porque este cron roda de hora em hora.
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
@@ -42,18 +58,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Quanto tempo um caso pode ficar sem ninguém encostar antes do primeiro aviso,
- * e o intervalo entre as cobranças seguintes.
- *
- * Constante e não configuração: enquanto ninguém pedir um valor diferente, um
- * knob a mais é uma pergunta a mais no onboarding e um campo a mais para ficar
- * errado. Vira `organizations.settings` no dia em que alguém precisar.
- */
-const SILENCIO_ATE_COBRAR_MS = 24 * 60 * 60 * 1000;
-
-/** Depois disto, insistir não informa mais nada — só ensina a ignorar. */
-const TETO_DE_COBRANCAS = 3;
+/** Uma linha de `fn_casos_parados_para_lembrar` (migration 0397). */
+interface CasoVencido {
+  id: string;
+  organization_id: string;
+  opened_at: string;
+  followup_attempts: number;
+  cobrancas_na_espera: number;
+  teto: number;
+}
 
 /** Teto por rodada. Roda de hora em hora; sobra volta na seguinte. */
 const LIMITE_DA_VARREDURA = 200;
@@ -76,36 +89,30 @@ async function handle(req: NextRequest): Promise<Response> {
 
   const admin = createAdminClient();
   const agora = Date.now();
-  const corte = new Date(agora - SILENCIO_ATE_COBRAR_MS).toISOString();
 
-  // `updated_at` e não `opened_at`: qualquer mexida no caso (uma nota do agente,
-  // uma transição) conta como "alguém encostou". Cobrar por idade absoluta
-  // avisaria de novo sobre um caso que a equipe está tratando naquele instante.
-  const { data, error } = await admin
-    .from("agent_cases")
-    .select("id, organization_id, opened_at, updated_at, followup_attempts")
-    .eq("status", "awaiting_human")
-    .lt("updated_at", corte)
-    .lt("followup_attempts", TETO_DE_COBRANCAS)
-    .order("updated_at", { ascending: true })
-    .limit(LIMITE_DA_VARREDURA);
+  // A conta do vencimento cruza o caso com a cadência da organização, e por isso
+  // mora no banco: um `.lt()` aqui não alcança `espera_desde + N × intervalo`, e
+  // um `limit` sem ela devolveria casos ainda não vencidos na frente dos vencidos.
+  const { data, error } = await admin.rpc("fn_casos_parados_para_lembrar", {
+    p_limite: LIMITE_DA_VARREDURA,
+  });
 
   if (error) {
     logger.error("[case-stale-watcher] consulta falhou", { error: error.message, requestId });
     return fail("internal_error", "Falha ao buscar casos parados.", 500, { requestId });
   }
 
-  const casos = data ?? [];
+  const casos = (data ?? []) as CasoVencido[];
   let avisados = 0;
   let jaAvisados = 0;
 
   for (const caso of casos) {
-    const horas = (agora - Date.parse(caso.opened_at as string)) / 3_600_000;
-    const tentativa = (caso.followup_attempts as number) + 1;
+    const horas = (agora - Date.parse(caso.opened_at)) / 3_600_000;
+    const tentativa = caso.cobrancas_na_espera + 1;
 
     // Um aviso ABERTO por caso: enquanto o anterior não for resolvido, não
-    // nasce outro. Quem resolve o aviso sem resolver o caso é cobrado de novo no
-    // ciclo seguinte — e é `followup_attempts` que impede isso para sempre.
+    // nasce outro. Quem resolve o aviso sem resolver o caso é cobrado de novo
+    // quando o próximo vencer — e é `cobrancas_na_espera` que segura o teto.
     const { data: jaTem } = await admin
       .from("agent_inbox_items")
       .select("id")
@@ -136,7 +143,7 @@ async function handle(req: NextRequest): Promise<Response> {
         `Um caso está aguardando alguém da equipe desde que foi aberto, ` +
         `e o cliente continua do outro lado. Abra o caso e diga o que fazer — concluir, ` +
         `pedir informação ao cliente ou passar para uma pessoa.` +
-        (tentativa >= TETO_DE_COBRANCAS
+        (tentativa >= caso.teto
           ? " Este é o último aviso automático sobre ele."
           : ""),
       ref_kind: "agent_case",
@@ -153,13 +160,13 @@ async function handle(req: NextRequest): Promise<Response> {
       continue;
     }
 
-    // ⚠️ NÃO usa `update ... set updated_at`: mexer em `updated_at` faria a
-    // própria cobrança parecer "alguém encostou no caso" e adiaria a seguinte
-    // por mais 24h — o watcher sabotando a si mesmo. O trigger de updated_at
-    // desta tabela é o que decide; aqui só o contador muda.
+    // Os DOIS contadores sobem: `cobrancas_na_espera` segura o teto desta
+    // espera, e `followup_attempts` continua sendo o total da vida do caso, que
+    // o Índice de Atrito lê como insistência. Sem `updated_at` e sem `status`:
+    // o relógio é `espera_desde`, e só a entrada em `awaiting_human` o move.
     const { error: erroContador } = await admin
       .from("agent_cases")
-      .update({ followup_attempts: tentativa })
+      .update({ followup_attempts: caso.followup_attempts + 1, cobrancas_na_espera: tentativa })
       .eq("id", caso.id)
       .eq("organization_id", caso.organization_id)
       .eq("status", "awaiting_human");

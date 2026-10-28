@@ -30,6 +30,8 @@
 import { traduzir } from "@/lib/i18n/dicionario";
 import { IDIOMA_PADRAO, type Idioma } from "@/lib/i18n/idiomas";
 
+import { RESERVA_DA_VARIAVEL } from "@/lib/texto/reserva-da-variavel";
+
 import { horaNoFuso } from "./relogio";
 
 /** As variáveis que existem. Oferecer uma que não resolve é prometer dado que não há. */
@@ -49,7 +51,11 @@ export interface ValoresDoDestinatario {
   nome: string | null;
 }
 
-const TOKEN = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
+/**
+ * `{{variavel}}` e, opcionalmente, um TEXTO DE RESERVA entre aspas:
+ * `{{primeiro_nome|"aluno"}}` (sintaxe em `lib/texto/reserva-da-variavel.ts`).
+ */
+const TOKEN = new RegExp(String.raw`\{\{\s*([a-zA-Z0-9_]+)\s*${RESERVA_DA_VARIAVEL}\}\}`, "g");
 
 export interface TextoRenderizado {
   texto: string;
@@ -68,16 +74,19 @@ export function renderizar(
   const faltando = new Set<VariavelDaCampanha>();
   const desconhecidas = new Set<string>();
 
-  const texto = template.replace(TOKEN, (literal, bruto: string) => {
+  const texto = template.replace(TOKEN, (literal, bruto: string, reserva: string | undefined) => {
     const chave = bruto.toLowerCase();
+    // Sem o dado: a reserva, se quem escreveu deu uma; senão FALTA, como sempre.
+    const faltou = (variavel: VariavelDaCampanha) =>
+      reserva !== undefined ? reserva : marcarFalta(faltando, variavel, literal);
     switch (chave) {
       case "nome": {
-        if (nome === "") return marcarFalta(faltando, "nome", literal);
+        if (nome === "") return faltou("nome");
         return nome;
       }
       case "primeiro_nome": {
         const primeiro = nome.split(/\s+/)[0] ?? "";
-        if (primeiro === "") return marcarFalta(faltando, "primeiro_nome", literal);
+        if (primeiro === "") return faltou("primeiro_nome");
         return primeiro;
       }
       case "saudacao": {

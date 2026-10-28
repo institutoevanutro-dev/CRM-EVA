@@ -37,6 +37,9 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  // O fio do Inbox acompanha a última mensagem (porte do original #3209).
+  "Mensagens da conversa": { es: "Mensajes de la conversación" },
+  "Novas mensagens · Ir para o fim": { es: "Mensajes nuevos · Ir al final" },
   // Configurações › Etiquetas: contato interno (#2353 do original).
   "Etiquetas de contato interno": { es: "Etiquetas de contacto interno" },
   "Para equipe, sócio, família ou fornecedor. O contato com uma destas etiquetas não vira card no funil e não recebe mensagens automáticas da IA nem dos acompanhamentos. A conversa continua normal no Inbox, e a equipe responde por lá como sempre. Uma etiqueta por linha.": {
@@ -774,6 +777,13 @@ export const DICIONARIO: Traducoes = {
   "Respostas rápidas": { es: "Respuestas rápidas" },
   "Prepara no compositor: você revisa e envia": { es: "Lo prepara en el editor: tú revisas y envías" },
   "Buscar resposta": { es: "Buscar respuesta" },
+  "Mostrar na barra do Inbox": { es: "Mostrar en la barra del Inbox" },
+  'Para não depender do dado, ponha um texto de reserva: {{primeiro_nome|"aluno"}}.': {
+    es: 'Para no depender del dato, pon un texto de respaldo: {{primeiro_nome|"alumno"}}.',
+  },
+  "Desmarcado, a resposta sai da barra do Inbox e continua no atalho /.": {
+    es: "Sin marcar, la respuesta sale de la barra del Inbox y sigue en el atajo /.",
+  },
   "sem próximo passo": { es: "sin próximo paso" },
   "Nenhuma resposta com esse nome.": { es: "Ninguna respuesta con ese nombre." },
   Contatos: { es: "Contactos" },
@@ -1226,6 +1236,21 @@ export const DICIONARIO: Traducoes = {
   "Menu do usuário": { es: "Menú del usuario" },
   Sair: { es: "Cerrar sesión" },
   "Central de avisos": { es: "Central de avisos" },
+  // Lembrete de caso parado na Central (migration 0397; porte do original #3399, ideia de @Atlasads no #2584).
+  "Lembrete de caso parado": { es: "Recordatorio de caso detenido" },
+  "Quando um caso espera uma decisão da equipe, esta Central volta a avisar. O relógio começa quando o caso chega à equipe e recomeça quando o cliente responde.": {
+    es: "Cuando un caso espera una decisión del equipo, esta Central vuelve a avisar. El reloj empieza cuando el caso llega al equipo y se reinicia cuando el cliente responde.",
+  },
+  "Lembrar a equipe dos casos parados": { es: "Recordar al equipo los casos detenidos" },
+  "Lembrar a cada": { es: "Recordar cada" },
+  "Avisos por espera": { es: "Avisos por espera" },
+  "Salvar lembrete": { es: "Guardar recordatorio" },
+  "Lembrete de caso parado salvo.": { es: "Recordatorio de caso detenido guardado." },
+  "Não foi possível salvar o lembrete de caso parado.": { es: "No se pudo guardar el recordatorio de caso detenido." },
+  "1 dia": { es: "1 día" },
+  "1 hora": { es: "1 hora" },
+  "{n} dias": { es: "{n} días" },
+  "{n} horas": { es: "{n} horas" },
   "em aberto": { es: "abiertos" },
   // ─── Agentes de IA: lista ───
   "Agents de IA": { es: "Agentes de IA" },
@@ -5799,6 +5824,7 @@ export const DICIONARIO: Traducoes = {
     es: "Contacto anonimizado — no es posible enviar mensajes.",
   },
   "Responsável": { es: "Responsable" },
+  "Filtrar por responsável": { es: "Filtrar por responsable" },
 
   // ─── Onboarding: welcome ───
   "Boas-vindas ao": { es: "Bienvenido a" },
@@ -6655,6 +6681,17 @@ export const DICIONARIO: Traducoes = {
     es: "Ningún contacto con ese nombre o teléfono.",
   },
   "Contato criado": { es: "Contacto creado" },
+  // Salvar e iniciar conversa (porte do original #3547).
+  "Salvar e iniciar conversa": { es: "Guardar e iniciar conversa" },
+  "Contato salvo. Cadastre um telefone para abrir a conversa.": {
+    es: "Contacto guardado. Registra un teléfono para abrir la conversación.",
+  },
+  "Escolha um contato para abrir a conversa.": {
+    es: "Elige un contacto para abrir la conversación.",
+  },
+  "Sem telefone no contato: cadastre um telefone para abrir a conversa.": {
+    es: "Sin teléfono en el contacto: registra un teléfono para abrir la conversación.",
+  },
   "Não foi possível carregar as sugestões agora.": { es: "No se pudieron cargar las sugerencias ahora." },
   "Não foi possível registrar a decisão.": { es: "No se pudo registrar la decisión." },
   "O assistente ouviu isto na conversa": { es: "El asistente escuchó esto en la conversación" },

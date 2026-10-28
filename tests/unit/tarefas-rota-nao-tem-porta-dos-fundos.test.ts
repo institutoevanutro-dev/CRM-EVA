@@ -159,6 +159,25 @@ describe("GET /api/v1/tasks", () => {
     expect(res.status).toBe(500);
     expect(espiao.tabelas).toEqual(["crm_tasks"]);
   });
+
+  it('"minhas" filtra pelo id da SESSÃO', async () => {
+    const espiao = fazerSupabase([{ data: [LINHA] }]);
+    const { GET } = await import("@/app/api/v1/tasks/route");
+
+    const res = await GET(new NextRequest("http://x/api/v1/tasks?assigned_to=me"));
+
+    expect(res.status).toBe(200);
+    expect(espiao.filtros).toContainEqual(["assigned_to", ANA]);
+  });
+
+  it("sem o parâmetro, não filtra por responsável", async () => {
+    const espiao = fazerSupabase([{ data: [LINHA] }]);
+    const { GET } = await import("@/app/api/v1/tasks/route");
+
+    await GET(new NextRequest("http://x/api/v1/tasks"));
+
+    expect(espiao.filtros.map(([coluna]) => coluna)).not.toContain("assigned_to");
+  });
 });
 
 describe("POST /api/v1/tasks", () => {

@@ -43,6 +43,11 @@ interface Props {
   membros?: readonly AssignableMember[];
   /** Quem está criando — o responsável padrão de uma tarefa nova. */
   usuarioId?: string;
+  /**
+   * Responsável de uma tarefa NOVA quando a tela pede outro que não quem cria
+   * (o filtro da lista aponta para alguém). `null` = nasce sem responsável.
+   */
+  responsavelPadrao?: string | null;
 }
 
 /** O Select do Radix não aceita `""` como valor: "ninguém" precisa de um nome. */
@@ -75,6 +80,7 @@ export function FormularioDeTarefa({
   contactId,
   membros = [],
   usuarioId,
+  responsavelPadrao,
 }: Props) {
   const t = useT();
   const editando = Boolean(tarefa);
@@ -93,7 +99,8 @@ export function FormularioDeTarefa({
   const [prioridade, setPrioridade] = useState<PrioridadeDaTarefa>(tarefa?.priority ?? "medium");
   const [situacao, setSituacao] = useState<SituacaoDaTarefa>(tarefa?.status ?? "pending");
   // Tarefa nova nasce de quem a cria; editando, respeita o que está gravado.
-  const responsavelInicial = (editando ? tarefa?.assigned_to : usuarioId) ?? NINGUEM;
+  const responsavelInicial =
+    (editando ? tarefa?.assigned_to : responsavelPadrao === undefined ? usuarioId : responsavelPadrao) ?? NINGUEM;
   const [responsavel, setResponsavel] = useState<string>(responsavelInicial);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
