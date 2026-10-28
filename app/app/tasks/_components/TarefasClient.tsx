@@ -116,7 +116,7 @@ export function TarefasClient({
 
             <Select value={responsavel} onValueChange={(v) => setResponsavel(v as FiltroDeResponsavel)}>
               <SelectTrigger
-                aria-label={t("Responsável")}
+                aria-label={t("Filtrar por responsável")}
                 className="h-11 w-[168px] text-xs lg:h-9"
                 data-testid="tarefas-filtro-responsavel"
               >

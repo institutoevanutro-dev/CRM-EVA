@@ -5824,6 +5824,7 @@ export const DICIONARIO: Traducoes = {
     es: "Contacto anonimizado — no es posible enviar mensajes.",
   },
   "Responsável": { es: "Responsable" },
+  "Filtrar por responsável": { es: "Filtrar por responsable" },
 
   // ─── Onboarding: welcome ───
   "Boas-vindas ao": { es: "Bienvenido a" },
