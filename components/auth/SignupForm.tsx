@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useTransition, useState } from "react";
+import { useState } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
 import {
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { signUp } from "@/app/actions/auth/signUp";
+import { AvisoSemResposta, useEnvioComTeto } from "@/components/auth/teto-da-espera";
 
 /**
  * Convite em curso: a conta está sendo criada para ACEITAR um convite, não para
@@ -32,7 +33,7 @@ export interface ConviteDoSignup {
 export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
   const t = useT();
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const { pendente: isPending, semResposta, enviar } = useEnvioComTeto();
   const [serverError, setServerError] = useState<string | null>(null);
   const [contaExistente, setContaExistente] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -63,18 +64,17 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
 
   const onSubmit = (values: SignupInput & { full_name: string }) => {
     setServerError(null);
-    startTransition(async () => {
-      // No modo convite o e-mail do formulário é readonly, e readonly no
-      // cliente não vale nada: quem confere de novo é o servidor.
-      const entrada: SignupInput | SignupComConviteInput = convite
-        ? {
-            full_name: values.full_name,
-            email: convite.email,
-            password: values.password,
-            password_confirm: values.password_confirm,
-          }
-        : values;
-      const res = await signUp(entrada, convite?.token);
+    // No modo convite o e-mail do formulário é readonly, e readonly no
+    // cliente não vale nada: quem confere de novo é o servidor.
+    const entrada: SignupInput | SignupComConviteInput = convite
+      ? {
+          full_name: values.full_name,
+          email: convite.email,
+          password: values.password,
+          password_confirm: values.password_confirm,
+        }
+      : values;
+    void enviar(() => signUp(entrada, convite?.token), (res) => {
       if (res.ok) {
         /**
          * ⚠️ O PROVEDOR JÁ DEIXOU A PESSOA ENTRAR — não existe e-mail para ela
@@ -258,6 +258,7 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
           {serverError}
         </div>
       )}
+      {semResposta && <AvisoSemResposta />}
       <Button type="submit" className="w-full" disabled={isPending}>
         {isPending ? t("Criando conta...") : t("Criar conta")}
       </Button>

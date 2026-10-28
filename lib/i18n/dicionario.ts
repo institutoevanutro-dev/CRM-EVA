@@ -7364,6 +7364,13 @@ export const DICIONARIO: Traducoes = {
   "Senha": { es: "Contraseña" },
   "Confirmar senha": { es: "Confirmar contraseña" },
   "Código inválido. Tente novamente.": { es: "Código inválido. Intenta de nuevo." },
+  // O aviso das telas de autenticação quando a resposta não chega no teto de
+  // espera (components/auth/teto-da-espera.tsx). Não afirma que falhou: a
+  // ação pode ter acontecido do outro lado.
+  "Não recebemos a resposta do servidor. Recarregue a página para tentar de novo.": {
+    es: "No recibimos la respuesta del servidor. Recarga la página para intentarlo de nuevo.",
+  },
+  "Recarregar a página": { es: "Recargar la página" },
   "Verificando...": { es: "Verificando..." },
   "Verificar": { es: "Verificar" },
   "Dados inválidos. Confira os campos.": { es: "Datos inválidos. Revisa los campos." },
@@ -11343,6 +11350,9 @@ export const DICIONARIO: Traducoes = {
   "Enviar de novo": { es: "Enviar de nuevo" },
   "O WhatsApp não confirmou o envio a tempo. Pode ser que a mensagem tenha chegado.": {
     es: "WhatsApp no confirmó el envío a tiempo. Puede que el mensaje haya llegado.",
+  },
+  "O WhatsApp devolveu um erro para esta mensagem depois de aceitá-la. Pode ser que ela tenha chegado; confira na conversa antes de reenviar.": {
+    es: "WhatsApp devolvió un error para este mensaje después de aceptarlo. Puede que haya llegado; revisa la conversación antes de reenviarlo.",
   },
   "Este número não tem WhatsApp.": { es: "Este número no tiene WhatsApp." },
   "A janela de 24 horas fechou. Envie um modelo aprovado ou aguarde o cliente escrever.": {

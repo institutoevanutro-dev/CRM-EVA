@@ -154,10 +154,13 @@ export interface Note {
  * Mapeia ack do WAHA (0..3) para o status canônico em messages.status.
  * 0=pending/sent server-side, 1=server-confirmed, 2=delivered (device), 3=read.
  */
-export function ackToStatus(ack: number | null | undefined): Message["status"] {
-  if (ack == null) return "sent";
+export function ackToStatus(ack: number | null | undefined): Message["status"] | null {
+  // `null` = "não muda o status": 0 (pendente), -1 (erro — `handleAck` grava
+  // `failed`, nunca `sending`) e ausente. Um aviso que não sabe o que dizer não
+  // pode fazer a mensagem regredir.
+  if (ack == null) return null;
   if (ack >= 3) return "read";
   if (ack >= 2) return "delivered";
   if (ack >= 1) return "sent";
-  return "sending";
+  return null;
 }

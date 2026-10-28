@@ -8,6 +8,50 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.39.1] — 2026-10-27
+
+### Corrigido
+
+- **O custo do turno do agente de IA é registrado fracionado, não 1 centavo por chamada** Cada execução do agente arredondava o custo para cima, para o centavo inteiro. Numa
+  chamada barata (frações de centavo) isso registrava até 12× o custo real, inflava o
+  painel de custo e podia cortar o turno cedo pelo teto de gasto por chamada. Agora o
+  custo é gravado como é.
+
+  Portado do projeto original (DeskcommCRM, PR #3394 de @jmpo).
+
+- **O status de entrega do WhatsApp não volta atrás, e a IA não manda bolha invisível** Avisos de entrega do WhatsApp que chegavam fora de ordem (por exemplo, numa reconexão)
+  podiam fazer uma mensagem lida voltar a "entregue", ou uma enviada voltar a "enviando".
+  Agora o status só anda para a frente, e um erro devolvido pelo WhatsApp depois de aceitar
+  a mensagem aparece como falha com explicação, em vez de deixá-la presa em "enviando".
+  A IA também deixa de mandar bolhas feitas só de caracteres invisíveis.
+
+  Portado do projeto original (DeskcommCRM, PR #3475 de @melgarafael, parte de #3469 de @paulolimajr77).
+
+- **As telas de entrar, cadastrar e verificar não ficam presas em "Entrando…"** Quando a resposta do servidor não chegava, os formulários de autenticação (entrar,
+  verificação em duas etapas, cadastro, esqueci a senha, nova senha, código de
+  recuperação, recuperar empresa e ativar a verificação) ficavam com o botão em
+  "Entrando…"/"Verificando…" para sempre. Agora, depois de 20 segundos sem resposta, a
+  tela avisa e oferece recarregar a página. O teto é uma defesa: a causa da demora não foi
+  identificada.
+
+  Portado do projeto original (DeskcommCRM, PR #3398 de @melgarafael, a partir do #2429 de @LeonardoMarcelo).
+
+## [4.39.0] — 2026-10-27
+
+### Adicionado
+
+- **Cor do menu lateral por organização** Em Configurações › Marca há um campo novo, "Cor do menu lateral". Em branco, o menu continua
+  com o verde de fábrica, qualquer que seja a cor da marca: quem não mexer não vê nada mudar.
+
+  Com uma cor escolhida, o menu dessa organização passa a usá-la nos temas claro e escuro, e o
+  degradê da base acompanha o mesmo matiz. O botão "Usar a cor da marca" sugere um tom escuro com
+  o matiz da sua marca. Se a cor escolhida for clara demais, o sistema a escurece até o texto do
+  menu passar de 4,5:1, e a tela avisa quando isso acontece.
+
+### Corrigido
+
+- **A resposta pronta registra por que não foi usada** Quando uma mensagem não recebe a resposta pronta, o log do atendimento agora diz o motivo (por exemplo, abaixo do limite de semelhança ou mais de um assunto) e a semelhança encontrada. Antes essas recusas eram silenciosas, e não havia como calibrar o limite. O texto do cliente nunca vai para o log. Nada a fazer na atualização.
+
 ## [4.38.1] — 2026-10-25
 
 ### Corrigido
@@ -8309,7 +8353,9 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.38.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.39.1...HEAD
+[4.39.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.39.0...v4.39.1
+[4.39.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.38.1...v4.39.0
 [4.38.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.38.0...v4.38.1
 [4.38.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.37.0...v4.38.0
 [4.37.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.36.0...v4.37.0
