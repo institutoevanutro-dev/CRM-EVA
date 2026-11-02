@@ -33,6 +33,7 @@ import {
   alterarAgendamentoHandler,
   cancelarAgendamentoHandler,
   marcarAgendamentoHandler,
+  registrarRealizadoPelaIntegracaoHandler,
 } from "@/app/api/v1/agenda/agendamentos/_handler";
 import { ApiError } from "@/lib/api/types";
 import { SITUACOES_DO_AGENDAMENTO } from "@/lib/agenda/tipos";
@@ -1128,6 +1129,13 @@ const desfechoShape = {
     .enum(["completed", "no_show"])
     .describe("`completed` = a pessoa foi atendida; `no_show` = ela não apareceu e não avisou"),
   notes: z.string().max(2000).optional(),
+  performed_by_name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .optional()
+    .describe("só para a integração do prontuário: nome do profissional que finalizou a consulta"),
 };
 
 export const crmSetAppointmentOutcome: McpToolDefinition<typeof desfechoShape> = {
@@ -1142,6 +1150,16 @@ export const crmSetAppointmentOutcome: McpToolDefinition<typeof desfechoShape> =
   requiresScope: "mcp:write",
   handler: async (input, ctx) =>
     semDerrubarOTurno("registrado", async () => {
+      // A integração do prontuário (escopo `agenda:outcome`) informa só "Realizado",
+      // e o banco registra a origem como integração (migration 0401).
+      if (ctx.actor.type === "api_token" && ctx.scopes?.includes("agenda:outcome") && input.outcome === "completed") {
+        const r = await registrarRealizadoPelaIntegracaoHandler(
+          ctx.supabase,
+          { organization_id: ctx.organizationId, actor: ctx.actor, requestId: ctx.requestId },
+          { id: input.appointment_id, apiTokenId: ctx.apiTokenId, ...(input.performed_by_name ? { performedByName: input.performed_by_name } : {}) },
+        );
+        return { registrado: true, compromisso: compromissoComHorarioLocal(r) };
+      }
       if (ctx.actor.type !== "user") return { registrado: false, requer_confirmacao_humana: true,
         orientacao: "Peça à equipe para abrir o compromisso na Agenda e confirmar a presença.",
         href: `/app/agenda?compromisso=${input.appointment_id}` };
