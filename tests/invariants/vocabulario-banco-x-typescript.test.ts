@@ -338,6 +338,13 @@ const PARES: Array<{
     arquivo: "lib/lgpd/types.ts",
     simbolo: "LgpdScope",
   },
+  {
+    tabela: "google_click_codes",
+    coluna: "click_id_kind",
+    // lib/leads/codigo-de-clique-google.ts → TipoDeClique (migration 0400).
+    arquivo: "lib/leads/codigo-de-clique-google.ts",
+    simbolo: "TipoDeClique",
+  },
 ];
 
 /** Tira um nível de parênteses externos, se ele envolver a expressão inteira. */

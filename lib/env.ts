@@ -71,6 +71,8 @@ const schema = z.object({
   PRECIFICAEVA_ORGANIZATION_ID: z.string().optional(),
   MARKETING_ORGANIZATION_ID: z.string().optional(),
   MARKETING_REPORT_TOKEN: z.string().optional(),
+  // Origens (vírgula) do site que grava o código de clique do Google Ads (migration 0400).
+  CLIQUE_GOOGLE_ORIGENS: z.string().optional(),
   // Node
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 

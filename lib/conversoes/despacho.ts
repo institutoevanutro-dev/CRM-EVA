@@ -87,6 +87,7 @@ export function lerOrigem(sourceMetadata: unknown): {
   plataforma: PlataformaDeAnuncio | null;
   cliqueMeta: string | null;
   cliqueGoogle: string | null;
+  braidGoogle: { campo: "gbraid" | "wbraid"; valor: string } | null;
 } {
   const meta = objeto(sourceMetadata);
   const bruto = objeto(meta.ad_raw);
@@ -95,6 +96,11 @@ export function lerOrigem(sourceMetadata: unknown): {
     plataforma,
     cliqueMeta: plataforma === "meta_ads" ? (texto(bruto.ctwa_clid) ?? texto(bruto.ctwaClid)) : null,
     cliqueGoogle: texto(meta.gclid) ?? texto(bruto.gclid),
+    braidGoogle: texto(bruto.gbraid)
+      ? { campo: "gbraid", valor: texto(bruto.gbraid)! }
+      : texto(bruto.wbraid)
+        ? { campo: "wbraid", valor: texto(bruto.wbraid)! }
+        : null,
   };
 }
 

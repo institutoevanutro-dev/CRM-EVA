@@ -30,6 +30,7 @@ import { marcarConversaComMensagem } from "@/lib/channels/marcar-conversa";
 
 import { extrairAtribuicaoMeta } from "@/lib/channels/atribuicao-de-anuncio-oficial";
 import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
+import { aplicarCodigoDeCliqueGoogle } from "@/lib/leads/codigo-de-clique-google";
 import { pausarIaPorAtendimentoManual } from "@/lib/escalacao/atendimento-manual";
 
 import { aplicarEfeitosPosEntrada } from "../pos-entrada";
@@ -240,6 +241,7 @@ async function efeitosDaEntrada(
   // contato ainda não tem `ad_platform`.
   const atribuicao = extrairAtribuicaoMeta(msg.referral);
   if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
+  else await aplicarCodigoDeCliqueGoogle(admin, input.organizationId, contactId, msg.text);
 
   await aplicarEfeitosPosEntrada(admin, {
     organizationId: input.organizationId,
