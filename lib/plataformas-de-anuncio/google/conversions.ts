@@ -55,12 +55,15 @@ export function montarCorpoGoogle(
   credencial: CredencialGoogle,
   conversao: ConversaoDeAgendamento,
 ): Record<string, unknown> | null {
+  // Com id de clique, só ele sai: o caminho do código no WhatsApp foi escolhido
+  // justamente para não mandar telefone/e-mail do paciente ao Google (02/11).
+  const clique = conversao.cliqueGoogle ?? conversao.braidGoogle?.valor ?? null;
   const identificadores: Record<string, string>[] = [];
-  const telefone = telefoneHashGoogle(conversao.telefone);
-  const email = emailHashGoogle(conversao.email);
+  const telefone = clique ? null : telefoneHashGoogle(conversao.telefone);
+  const email = clique ? null : emailHashGoogle(conversao.email);
   if (telefone) identificadores.push({ hashedPhoneNumber: telefone });
   if (email) identificadores.push({ hashedEmail: email });
-  if (!identificadores.length && !conversao.cliqueGoogle) return null;
+  if (!identificadores.length && !clique) return null;
 
   const conversaoGoogle: Record<string, unknown> = {
     conversionAction: `customers/${credencial.customerId}/conversionActions/${credencial.conversionActionId}`,
@@ -70,6 +73,7 @@ export function montarCorpoGoogle(
   };
   if (identificadores.length) conversaoGoogle.userIdentifiers = identificadores;
   if (conversao.cliqueGoogle) conversaoGoogle.gclid = conversao.cliqueGoogle;
+  else if (conversao.braidGoogle) conversaoGoogle[conversao.braidGoogle.campo] = conversao.braidGoogle.valor;
 
   return { conversions: [conversaoGoogle], partialFailure: true };
 }

@@ -129,6 +129,7 @@ async function handle(row: EventRow): Promise<HandlerResult> {
     email,
     cliqueMeta: origem.cliqueMeta,
     cliqueGoogle: origem.cliqueGoogle,
+    braidGoogle: origem.braidGoogle,
   };
 
   return despachar({

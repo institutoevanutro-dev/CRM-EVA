@@ -23,6 +23,7 @@ import { pausarIaPorAtendimentoManual } from "@/lib/escalacao/atendimento-manual
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
+import { aplicarCodigoDeCliqueGoogle } from "@/lib/leads/codigo-de-clique-google";
 import { extrairAtribuicaoWaha } from "@/lib/waha/atribuicao-de-anuncio";
 import { semAssinatura } from "@/lib/messaging/assinatura";
 import type { createAdminClient } from "@/lib/supabase/admin";
@@ -800,6 +801,7 @@ async function handleInbound(
   // contato já tem atribuição, o UPDATE casa zero linhas.
   const atribuicao = extrairAtribuicaoWaha(p._data?.message);
   if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
+  else await aplicarCodigoDeCliqueGoogle(admin, session.organization_id, contactId, texto);
 
   const conversationId = await upsertConversation(admin, session.organization_id, contactId, session.id);
   if (!conversationId) return;

@@ -62,8 +62,10 @@ export interface ConversaoDeAgendamento {
   email: string | null;
   /** `ctwa_clid` do anúncio clique-para-WhatsApp, quando o contato tem. */
   cliqueMeta: string | null;
-  /** `gclid`, quando o contato tem. Hoje nenhum caminho o captura. */
+  /** `gclid`, quando o contato tem (código de clique do site, migration 0400). */
   cliqueGoogle: string | null;
+  /** `gbraid`/`wbraid` (clique em iOS), quando não há `gclid`. */
+  braidGoogle: { campo: "gbraid" | "wbraid"; valor: string } | null;
 }
 
 /**

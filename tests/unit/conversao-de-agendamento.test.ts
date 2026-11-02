@@ -103,6 +103,7 @@ const conversaoBase: ConversaoDeAgendamento = {
   email: "paciente@example.com",
   cliqueMeta: null,
   cliqueGoogle: null,
+  braidGoogle: null,
 };
 const meta: CredencialMeta = { plataforma: "meta_ads", datasetId: "1234567", accessToken: "t", testEventCode: null };
 const google: CredencialGoogle = {
@@ -162,6 +163,21 @@ describe("o corpo enviado é uma lista fechada", () => {
     ]);
     expect(corpo.partialFailure).toBe(true);
     expect(chaves(corpo).filter((k) => PROIBIDAS.test(k) && k !== "conversionAction")).toEqual([]);
+  });
+
+  it("Google com gclid: só o clique sai, sem telefone nem e-mail", () => {
+    const corpo = montarCorpoGoogle(google, { ...conversaoBase, cliqueGoogle: "Cj0KCQabc123" })!;
+    const c = (corpo.conversions as Record<string, unknown>[])[0]!;
+    expect(c.gclid).toBe("Cj0KCQabc123");
+    expect(c.userIdentifiers).toBeUndefined();
+  });
+
+  it("Google com gbraid (iOS): vai no campo próprio, sem identificadores", () => {
+    const corpo = montarCorpoGoogle(google, { ...conversaoBase, braidGoogle: { campo: "gbraid", valor: "0AAAAAbraid1" } })!;
+    const c = (corpo.conversions as Record<string, unknown>[])[0]!;
+    expect(c.gbraid).toBe("0AAAAAbraid1");
+    expect(c.gclid).toBeUndefined();
+    expect(c.userIdentifiers).toBeUndefined();
   });
 
   it("Google: falha parcial vira código enumerado, nunca a mensagem", () => {

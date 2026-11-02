@@ -25,6 +25,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { pausarIaPorAtendimentoManual } from "@/lib/escalacao/atendimento-manual";
 import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
+import { aplicarCodigoDeCliqueGoogle } from "@/lib/leads/codigo-de-clique-google";
 import { logger } from "@/lib/logger";
 import { nomeDeArquivoLimpo } from "@/lib/messaging/media/nome-de-arquivo";
 
@@ -247,6 +248,7 @@ export async function ingestMetaInbound(
   // guarda de primeiro toque fica no banco, então a re-entrega não reescreve.
   const atribuicao = extrairAtribuicaoMeta(e.referral);
   if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
+  else await aplicarCodigoDeCliqueGoogle(admin, orgId, contactId, e.text);
 
   // Tipo fora do CHECK (`interactive`, `button`, …) derrubava o INSERT — e a
   // mensagem do cliente sumia. Passa pelo mesmo mapa do eco e do histórico.

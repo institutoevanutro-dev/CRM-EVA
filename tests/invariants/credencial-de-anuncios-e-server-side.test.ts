@@ -49,11 +49,12 @@ import { join } from "node:path";
 
 import { motivoDoErro, sql } from "./psql-transporte";
 
-/** As três tabelas do eixo de anúncios, criadas pelas migrations 0213 e 0214. */
+/** As tabelas do eixo de anúncios, criadas pelas migrations 0213, 0214 e 0400. */
 const TABELAS = [
   "ad_platform_connections",
   "ad_conversion_dispatches",
   "ad_insights_connections",
+  "google_click_codes",
 ] as const;
 
 function erroSob(papel: string, comando: string): string | null {
