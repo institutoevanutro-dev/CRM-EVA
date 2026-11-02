@@ -156,6 +156,15 @@ describe("GET /api/v1/contacts — Bearer (integrações externas)", () => {
     expect(listContactsHandler).not.toHaveBeenCalled();
   });
 
+  it("a chave só do Financeiro (financeiro:contatos) não lista contatos → 403", async () => {
+    tokenOk({ scopes: ["financeiro:contatos"] });
+    const { GET } = await import("./route");
+    const res = await GET(req("http://localhost/api/v1/contacts", { authorization: "Bearer dsk_abc_def" }));
+
+    expect(res.status).toBe(403);
+    expect(listContactsHandler).not.toHaveBeenCalled();
+  });
+
   it("token de UMA organização nunca lê contatos de OUTRA — organization_id vem do token, não do cliente", async () => {
     // Mesmo que a chamada tente insinuar outra org via querystring, o schema de
     // query não aceita `organization_id` — e o handler só recebe o que o TOKEN

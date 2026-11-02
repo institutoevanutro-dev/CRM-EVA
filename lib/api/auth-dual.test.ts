@@ -106,6 +106,22 @@ describe("resolveAuthDual", () => {
     expect(r.response.status).toBe(403);
   });
 
+  it("recusa a chave só do Financeiro nas rotas de envio", async () => {
+    vi.mocked(validateBearerToken).mockResolvedValue({
+      organizationId: ORG_DO_TOKEN,
+      scopes: ["financeiro:contatos"],
+      role: "agent",
+      actor: { type: "api_token", id: "tok-1" },
+    } as never);
+
+    const r = await resolveAuthDual(req({ authorization: "Bearer dsk_abc" }), OPCOES);
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.response.status).toBe(403);
+    expect(requireRole).not.toHaveBeenCalled();
+  });
+
   it("token inválido fecha em 401 e não cai na sessão", async () => {
     vi.mocked(validateBearerToken).mockRejectedValue(
       new McpAuthError(-32001, 401, "Token inválido."),
