@@ -38233,6 +38233,17 @@ comment on column public.message_templates.mostrar_na_barra is
   'Se a resposta rápida aparece na barra do Inbox (migration 0398). Default true: mantém o comportamento de sempre. O atalho / lista TODAS, independente deste campo.';
 -- ---- fim: resposta rápida na barra do Inbox (migration 0398) ----
 
+-- ---- pacing_ledger.resposta: resposta não gasta o teto do dia (migration 0399) ----
+-- Derivado de supabase/migrations/20261102120000_0399_resposta_nao_gasta_o_teto_do_dia.sql
+-- (o porquê inteiro está no cabeçalho de lá). Porte do original #3769 (9061 lá).
+-- Não cria função. Entra ANTES da VARREDURA anon. Idempotente.
+alter table public.pacing_ledger
+  add column if not exists resposta boolean not null default false;
+
+comment on column public.pacing_ledger.resposta is
+  'true = resposta a quem escreveu: vale para o espaçamento, não para o teto do dia (warm-up/daily_message_limit), que conta só disparos (migration 0399).';
+-- ---- fim: pacing_ledger.resposta (migration 0399) ----
+
 
 
 
