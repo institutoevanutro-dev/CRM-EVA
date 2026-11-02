@@ -4,7 +4,8 @@ import { memo, useEffect, useState } from "react";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { ArrowBendUpLeft, ArrowBendUpRight, Check, Checks, Clock, Robot, WarningOctagon } from "@/lib/ui/icons";
+import { ArrowBendUpLeft, ArrowBendUpRight, CalendarX, Check, Checks, Clock, Robot, WarningOctagon } from "@/lib/ui/icons";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +20,7 @@ import {
 import { ApiError } from "@/lib/api/types";
 import { reenvioDaMensagem } from "@/lib/messaging/reenvio";
 import { motivoDaFalhaDaMensagem } from "@/lib/inbox/motivo-da-falha";
+import { hrefDoCompromisso, puloDaAgendaDaMensagem } from "@/lib/inbox/pulo-da-agenda";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Message } from "@/lib/types/messaging";
 import { CitationButton } from "@/components/ai/CitationButton";
@@ -181,6 +183,19 @@ export const MessageBubble = memo(function MessageBubble({
   const reenvio = onReenviar
     ? reenvioDaMensagem(message, { userId: viewerUserId, podeReenviarDeOutros, agora })
     : "nenhum";
+  // PULO DA AGENDA (#3848, portado do original): o fluxo escolheu não enviar
+  // porque o contato tem compromisso marcado. A linha carrega `failed` + o
+  // código do pulo; aqui os dois desfechos se separam: falha de verdade segue
+  // com "Falhou" e botão; pulo ganha selo próprio e NÃO oferece reenvio (a
+  // regra é `reenvioDaMensagem`, a mesma da rota).
+  const pulo = puloDaAgendaDaMensagem(message);
+  const puloHref = pulo ? hrefDoCompromisso(pulo) : null;
+  const fraseDoPulo =
+    pulo?.motivo === "em_atendimento"
+      ? t("O contato está na agenda agora; o fluxo está configurado para não enviar quando isso acontece.")
+      : pulo?.motivo === "presenca_pendente"
+        ? t("O compromisso do contato já terminou e a presença ainda não foi confirmada; o fluxo está configurado para não enviar quando isso acontece.")
+        : t("O contato tem compromisso marcado na agenda; o fluxo está configurado para não enviar quando isso acontece.");
   const paradaSemConexao = message.status === "queued" && Boolean(message.metadata?.queued_reason)
     && !message.metadata?._optimistic;
   // O MOTIVO à vista, e não só no Tooltip: o dedo não abre Tooltip. O texto
@@ -319,7 +334,8 @@ export const MessageBubble = memo(function MessageBubble({
                     ? "rounded-br-sm border border-accent/25 bg-accent-soft text-text"
                     : "rounded-br-sm bg-[var(--bolha-enviada-fundo,var(--primary))] text-[var(--bolha-enviada-texto,var(--primary-foreground))]",
               ),
-          isFailed && "border border-destructive",
+          // O pulo da agenda não é falha: a moldura de erro diria o contrário.
+          isFailed && !pulo && "border border-destructive",
           // Apagada sai das cores da DIREÇÃO e vai para o CINZA: a diferença
           // entre o que foi apagado e o que está vivo tem de ser vista de
           // relance, e o fundo é justamente o que diz de quem é a mensagem —
@@ -444,7 +460,7 @@ export const MessageBubble = memo(function MessageBubble({
           )}
           {isOutbound && !isFailed && <AckIndicator status={message.status} paradaSemConexao={paradaSemConexao}
             saiSozinha={message.sent_via === "ai"} t={t} />}
-          {isFailed && (
+          {isFailed && !pulo && (
             // Provider local: o painel do inbox não tem TooltipProvider ancestral e
             // este Tooltip só monta em mensagem failed — sem o provider, abrir uma
             // conversa com falha de envio derrubava o painel inteiro (error boundary).
@@ -459,10 +475,46 @@ export const MessageBubble = memo(function MessageBubble({
               </Tooltip>
             </TooltipProvider>
           )}
+          {pulo && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    data-testid="selo-pulada-pela-agenda"
+                    className="inline-flex items-center gap-0.5 font-semibold"
+                  >
+                    <CalendarX size={10} weight="bold" aria-hidden /> {t("Pulada pela agenda")}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{fraseDoPulo}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
-        {(isFailed || reenvio !== "nenhum") && (
+        {(isFailed || reenvio !== "nenhum" || pulo) && (
           <div className="mt-1.5 space-y-1.5 border-t border-current/20 pt-1.5">
-            {isFailed && <p data-testid="motivo-da-falha" className="text-xs leading-snug">{motivoDaFalha}</p>}
+            {isFailed && !pulo && <p data-testid="motivo-da-falha" className="text-xs leading-snug">{motivoDaFalha}</p>}
+            {pulo && (
+              // Sem botão de reenvio: quem decidiu não enviar foi a escolha do
+              // fluxo. A saída é abrir a agenda, mudar a escolha do fluxo ou
+              // escrever pelo campo de resposta, e a tela diz isso.
+              <div data-testid="pulo-da-agenda" className="space-y-1">
+                <p className="text-xs leading-snug">{fraseDoPulo}</p>
+                {pulo.titulo && (
+                  <p className="text-xs leading-snug opacity-80">
+                    {t("Compromisso: {titulo}").replace("{titulo}", pulo.titulo)}
+                  </p>
+                )}
+                {puloHref && (
+                  <Link href={puloHref} className="inline-flex text-xs underline">
+                    {t("Abrir agenda")}
+                  </Link>
+                )}
+                <p className="text-[10px] leading-snug opacity-70">
+                  {t("Para mandar mesmo assim, mude a escolha do fluxo ou escreva pelo campo de resposta.")}
+                </p>
+              </div>
+            )}
             {reenvio !== "nenhum" && (
               <Button size="sm" variant="secondary" disabled={ocupado}
                 onClick={() => (reenvio === "confirmar" ? setConfirmandoReenvio(true) : void reenviar(false))}>

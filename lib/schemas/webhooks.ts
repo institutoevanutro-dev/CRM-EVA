@@ -7,6 +7,7 @@
  * na primeira vez que alguém acrescentou um. Agora não há número a envelhecer.)
  */
 import { z } from "zod";
+import { ESCOLHAS_NO_ENVIO } from "@/lib/agenda/escolha-no-envio";
 
 import { conditionSchema, conditionsSchema } from "@/lib/automation/conditions";
 
@@ -63,7 +64,21 @@ export { conditionSchema };
 
 export const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("create_or_move_lead"), config: z.object({ pipeline_id: z.string().uuid(), stage_id: z.string().uuid() }) }),
-  z.object({ type: z.literal("send_whatsapp_message"), config: z.object({ channel_session_id: z.string().uuid(), template: z.string().min(1).max(2000) }) }),
+  z.object({
+    type: z.literal("send_whatsapp_message"),
+    config: z.object({
+      channel_session_id: z.string().uuid(),
+      template: z.string().min(1).max(2000),
+      /**
+       * #3813 (portado do original) — "Quando o contato tiver horário marcado":
+       * `adiar` (padrão, o comportamento de sempre), `enviar` ou `nao_enviar`
+       * (pulo registrado com motivo). Opcional: regra já gravada não tem a
+       * chave e continua idêntica; sem esta linha o `z.object` descartaria a
+       * chave no save.
+       */
+      quando_ha_compromisso: z.enum(ESCOLHAS_NO_ENVIO).optional(),
+    }),
+  }),
   // O e-mail como SAÍDA (porte do upstream #2794). O transporte não é da regra:
   // é o serviço de e-mail da instalação (`lib/email/resend.ts`). `email_fixo`
   // só existe para o modo `fixo`; "" do input controlado vira ausência.
@@ -130,6 +145,8 @@ export const actionSchema = z.discriminatedUnion("type", [
        * mais que isso está tentando pôr o prompt do agente aqui dentro.
        */
       instruction: z.string().min(1).max(1000),
+      /** #3813 — mesma escolha da irmã `send_whatsapp_message`. */
+      quando_ha_compromisso: z.enum(ESCOLHAS_NO_ENVIO).optional(),
     }),
   }),
   z.object({

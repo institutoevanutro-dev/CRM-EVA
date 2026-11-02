@@ -21,6 +21,7 @@
  * os que o envio daqui grava (não há canal "desativado"; há os do Instagram).
  */
 import { isMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
+import { MOTIVO_DO_PULO } from "@/lib/agenda/escolha-no-envio";
 
 export type TipoDeReenvio = "seguro" | "confirmar" | "nenhum";
 
@@ -66,6 +67,10 @@ const FALHA_SEGURA = new Set([
 const FALHA_SEM_REENVIO = new Set([
   "channel_archived",
   "missing_phone_number",
+  // #3848 (portado do original) — o fluxo escolheu NÃO enviar porque o contato
+  // tem compromisso na agenda. A rota de reenvio não reavalia a agenda (não leva
+  // `proactiveContext`), então o toque sairia mesmo, contra a decisão da regra.
+  MOTIVO_DO_PULO,
   // Número sem WhatsApp.
   "131026",
   // Limites de envio, de spam e de qualidade: um toque a mais é o que derruba o número.

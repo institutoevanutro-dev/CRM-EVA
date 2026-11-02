@@ -41,6 +41,9 @@ import {
   type LeadCheckpointRow,
 } from './inbound-turn';
 import { isLeadInHandoff } from './human-handoff';
+import { AgendaPuladoError, MOTIVO_DO_PULO, decidirNoEnvio } from '@/lib/agenda/escolha-no-envio';
+import { escolhaDoFluxoPg } from '@/lib/agenda/escolha-no-envio-leitura';
+import { protecaoAgendaPg } from '@/lib/agenda/protecao-followup';
 import { aplicarPessoaNoComandoAoTurno } from '@/lib/followup/pessoa-no-comando-no-turno';
 import {
   MOTIVO_TEXTO_VAZIO_SEM_VALOR,
@@ -627,6 +630,40 @@ async function runFlowDrivenTurn(
       return;
     }
 
+    // #3813 (portado do original) — O PULO PELA AGENDA ACONTECE ANTES DE
+    // QUALQUER GASTO, E TEM NOME. A escolha do FLUXO (`quando_ha_compromisso`
+    // na configuração publicada do follow-up) vale aqui como no caminho inline
+    // (`enviar-texto-fixo.ts`). A leitura da proteção só é paga por quem pode
+    // pular: em `adiar` (padrão) e `enviar` a decisão nunca é `pular`, então o
+    // caminho de hoje não muda nem custa uma consulta a mais.
+    const pularPelaAgenda = async (appointmentId: string | null, naGuarda: boolean): Promise<void> => {
+      runLog.info(
+        naGuarda
+          ? 'passo do fluxo pulado na guarda do envio: o contato tem horário marcado'
+          : 'passo do fluxo pulado: o contato tem horário marcado',
+        { motivo: MOTIVO_DO_PULO, appointment_id: appointmentId, node_id: nodeId },
+      );
+      await complete(pool, {
+        jobId: job.id,
+        jobClaim: claimOfJob(job),
+        organizationId: target.tenantId,
+        enrollmentId,
+        nodeId,
+        result: { kind: 'skipped', reason: MOTIVO_DO_PULO },
+      });
+    };
+    const escolhaDaAgenda = await escolhaDoFluxoPg(pool, target.tenantId, enrollmentId);
+    if (escolhaDaAgenda === 'nao_enviar') {
+      const decisaoDaAgenda = decidirNoEnvio(
+        await protecaoAgendaPg(pool, target.tenantId, target.leadId, clock()),
+        escolhaDaAgenda,
+      );
+      if (decisaoDaAgenda.acao === 'pular') {
+        await pularPelaAgenda(decisaoDaAgenda.appointment_id, false);
+        return;
+      }
+    }
+
     // Passo de mídia: a legenda é o corpo (pode ficar vazia — a mídia sai sozinha).
     const body =
       input.mediaId !== undefined
@@ -638,7 +675,17 @@ async function runFlowDrivenTurn(
     }
     if (body !== null) {
       // Texto do operador: sem camada semântica (ver o cabeçalho de sendFixedOutbound).
-      const sent = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body, false, 1, input.mediaId);
+      let sent: Awaited<ReturnType<typeof sendFixedOutbound>>;
+      try {
+        sent = await sendFixedOutbound(deps, job, pool, ctx, clock, target, body, false, 1, input.mediaId);
+      } catch (err) {
+        // #3813 — CORRIDA: o compromisso nasceu entre a leitura acima e o envio,
+        // e a guarda do envio pulou por `nao_enviar`. O desfecho continua sendo
+        // o PULO NOMEADO, não falha de job.
+        if (!(err instanceof AgendaPuladoError)) throw err;
+        await pularPelaAgenda(err.protection.appointment_id, true);
+        return;
+      }
       // Os QUATRO desfechos voltam para o enrollment. O adiado era o que não
       // voltava, e o silêncio custava o enrollment inteiro (dead-man de ~11h).
       if (typeof sent === 'object') {
