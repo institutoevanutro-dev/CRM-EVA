@@ -589,6 +589,23 @@ export const DICIONARIO: Traducoes = {
   "Não iniciada: o atendimento ou a resposta do cliente mudou.": { es: "No iniciada: cambió la atención o la respuesta del cliente." },
   "Sem contato vinculado. Este compromisso não inicia uma recuperação.": { es: "Sin contacto vinculado. Esta cita no inicia una recuperación." },
   "Recuperação iniciada e interrompida porque o cliente respondeu.": { es: "Recuperación iniciada e interrumpida porque el cliente respondió." },
+  // #3848 (portado do original) — o selo da mensagem que o fluxo mandou PULAR
+  // por causa da agenda, na Inbox.
+  "Pulada pela agenda": { es: "Omitida por la agenda" },
+  "O contato tem compromisso marcado na agenda; o fluxo está configurado para não enviar quando isso acontece.": {
+    es: "El contacto tiene una cita agendada; el flujo está configurado para no enviar cuando eso ocurre.",
+  },
+  "O contato está na agenda agora; o fluxo está configurado para não enviar quando isso acontece.": {
+    es: "El contacto está en la cita ahora; el flujo está configurado para no enviar cuando eso ocurre.",
+  },
+  "O compromisso do contato já terminou e a presença ainda não foi confirmada; o fluxo está configurado para não enviar quando isso acontece.": {
+    es: "La cita del contacto ya terminó y la asistencia aún no se ha confirmado; el flujo está configurado para no enviar cuando eso ocurre.",
+  },
+  "Compromisso: {titulo}": { es: "Cita: {titulo}" },
+  "Abrir agenda": { es: "Abrir agenda" },
+  "Para mandar mesmo assim, mude a escolha do fluxo ou escreva pelo campo de resposta.": {
+    es: "Para enviar de todos modos, cambia la opción del flujo o escribe desde el campo de respuesta.",
+  },
   "Revise o próximo passo.": { es: "Revise el siguiente paso." },
   "Revisar acompanhamentos": { es: "Revisar seguimientos" },
   "Mensagem do cliente usada como evidência (opcional)": { es: "Mensaje del cliente usado como evidencia (opcional)" },
@@ -2448,6 +2465,15 @@ export const DICIONARIO: Traducoes = {
   "Escreva sua resposta para a IA...": { es: "Escribe tu respuesta para la IA..." },
   "Escolha uma das opções acima para enviar.": { es: "Elige una de las opciones de arriba para enviar." },
   "Enviando...": { es: "Enviando..." },
+  // ─── #3810: encerrar sem avisar o cliente (lib/ai/case-copy.ts + painel) ───
+  "Encerrar sem avisar o cliente": { es: "Cerrar sin avisar al cliente" },
+  "Tira o caso da fila sem mandar nada: o cliente não recebe mensagem nenhuma.": { es: "Saca el caso de la cola sin enviar nada: el cliente no recibe ningún mensaje." },
+  "Caso encerrado. O cliente não recebeu mensagem.": { es: "Caso cerrado. El cliente no recibió ningún mensaje." },
+  "Escreva por que este caso não precisa mais de resposta (o cliente não recebe esta nota).": { es: "Escribe por qué este caso ya no necesita respuesta (el cliente no recibe esta nota)." },
+  "A nota é obrigatória e fica só no caso. Nada é enviado ao cliente.": { es: "La nota es obligatoria y queda solo en el caso. No se envía nada al cliente." },
+  "Encerrar caso": { es: "Cerrar caso" },
+  "Escreva a nota do encerramento.": { es: "Escribe la nota del cierre." },
+  "Encerramento de caso indisponível (config).": { es: "Cierre de caso no disponible (config)." },
   // ─── lib/ai/case-copy.ts (status, ações e timeline dos casos humanos) ───
   "Aguardando você": { es: "Esperándote" },
   "Virou atendimento humano": { es: "Se convirtió en atención humana" },
@@ -4167,6 +4193,9 @@ export const DICIONARIO: Traducoes = {
     es: "El contacto fue ocultado del Inbox por el equipo: la automatización no le escribe.",
   },
   "O contato não tem telefone cadastrado.": { es: "El contacto no tiene teléfono registrado." },
+  "O contato tem horário marcado na agenda; esta automação foi configurada para não enviar quando isso acontece.": {
+    es: "El contacto tiene horario reservado en la agenda; esta automatización está configurada para no enviar cuando ocurre.",
+  },
   "Falta preencher alguma configuração desta ação — abra a automação e revise.": {
     es: "Falta completar alguna configuración de esta acción — abre la automatización y revísala.",
   },
@@ -4398,8 +4427,8 @@ export const DICIONARIO: Traducoes = {
   "Hora de início da janela": { es: "Hora de inicio de la ventana" },
   "h até": { es: "h hasta" },
   "Hora de fim da janela": { es: "Hora de fin de la ventana" },
-  "Quando o cliente escreve, o agente responde nesta janela. Em branco, segue a janela de disparo. Use 0 e 24 para responder a qualquer hora — o teto diário e o intervalo entre envios continuam valendo.": {
-    es: "Cuando el cliente escribe, el agente responde dentro de esta ventana. En blanco, sigue la ventana de envíos proactivos. Usa 0 y 24 para responder a cualquier hora: el tope diario y el intervalo entre envíos siguen valiendo.",
+  "Quando o cliente escreve, o agente responde nesta janela. Em branco, segue a janela de disparo. Use 0 e 24 para responder a qualquer hora — o intervalo entre envios continua valendo. A resposta não conta no teto diário.": {
+    es: "Cuando el cliente escribe, el agente responde dentro de esta ventana. En blanco, sigue la ventana de envíos proactivos. Usa 0 y 24 para responder a cualquier hora: el intervalo entre envíos sigue valiendo. La respuesta no cuenta en el tope diario.",
   },
   "Disparos em massa, prospecção e mensagens que retomam conversa parada só saem nesta janela. Fora dela, o envio fica agendado para a próxima abertura — você vê o motivo na conversa.": {
     es: "Los envíos masivos, la prospección y los mensajes que retoman una conversación detenida solo salen dentro de esta ventana. Fuera de ella, el envío queda programado para cuando se abra de nuevo, y el motivo aparece en la conversación.",
@@ -4420,8 +4449,8 @@ export const DICIONARIO: Traducoes = {
   "Teto diário de envios": { es: "Tope diario de envíos" },
   "sem teto definido": { es: "sin tope definido" },
   "Teto diário de mensagens": { es: "Tope diario de mensajes" },
-  "Máximo de mensagens que este número envia por dia. Números novos também respeitam o aquecimento automático abaixo, o que for menor.": {
-    es: "Máximo de mensajes que este número envía por día. Los números nuevos también respetan el calentamiento automático de abajo, lo que sea menor.",
+  "Máximo de mensagens que este número inicia por dia: primeira mensagem, follow-up e campanha. A resposta a quem escreveu não conta. Números novos também respeitam o aquecimento automático abaixo, o que for menor.": {
+    es: "Máximo de mensajes que este número inicia por día: primer mensaje, seguimiento y campaña. La respuesta a quien escribió no cuenta. Los números nuevos también respetan el calentamiento automático de abajo, lo que sea menor.",
   },
   "Fuso horário IANA": { es: "Zona horaria IANA" },
   "Usar o padrão": { es: "Usar el predeterminado" },

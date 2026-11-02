@@ -76,6 +76,11 @@ const MOTIVO_DA_PARADA: Record<string, string> = {
   contato_oculto: "O contato foi ocultado do Inbox pela equipe: automação não escreve para ele.",
   ai_opt_out: "O contato está marcado como sempre atendimento humano: a IA não escreve para ele.",
   no_phone: "O contato não tem telefone cadastrado.",
+  /* #3813 (portado do original): a escolha "não enviar" quando o contato tem
+     horário marcado. É decisão de quem montou a regra, não falha. Emitido por
+     lib/agenda/escolha-no-envio.ts (MOTIVO_DO_PULO). */
+  compromisso_na_agenda:
+    "O contato tem horário marcado na agenda; esta automação foi configurada para não enviar quando isso acontece.",
   missing_config: "Falta preencher alguma configuração desta ação — abra a automação e revise.",
   fora_da_janela_de_envio:
     "Está fora da janela de envio configurada para esse número. A mensagem sai sozinha quando ela reabrir.",
