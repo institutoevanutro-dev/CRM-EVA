@@ -8,6 +8,21 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.44.0] — 2026-11-02
+
+### Adicionado
+
+- **Integração do prontuário pode marcar o compromisso como realizado** Quando o profissional finaliza a consulta no prontuário, a integração pode registrar o
+  compromisso como "Realizado" na Agenda, sem alguém repetir o clique. Para isso há um escopo
+  novo de chave, `agenda:outcome` ("Prontuário: marcar compromisso como realizado"), que abre
+  só a ferramenta `crm_set_appointment_outcome` e só para o desfecho `completed`.
+
+  A porta é estreita: não registra falta, não remarca, não cancela, só alcança compromisso da
+  organização da chave que já começou, e repetir a chamada não muda nada. O compromisso fica
+  com a origem "integração" (não finge ser uma pessoa), e a auditoria guarda a chave e o nome do
+  profissional informado (`performed_by_name`). O acompanhamento pós-consulta dispara igual ao
+  da presença confirmada pela equipe. Quem não cria uma chave com esse escopo não vê diferença.
+
 ## [4.43.1] — 2026-11-02
 
 ### Corrigido
@@ -8500,7 +8515,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.43.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.44.0...HEAD
+[4.44.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.43.1...v4.44.0
 [4.43.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.43.0...v4.43.1
 [4.43.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.42.0...v4.43.0
 [4.42.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.41.0...v4.42.0
