@@ -21,6 +21,20 @@ describe("token exclusivo da agenda", () => {
     }
   });
 
+  it("agenda:outcome abre só a tool de desfecho", () => {
+    const realizado = ["agenda:outcome", "role:ai_operator"];
+    expect(hasMcpToolScope(realizado, "crm_set_appointment_outcome", "mcp:write")).toBe(true);
+    for (const [name, scope] of [
+      ["crm_list_appointments", "mcp:read"],
+      ["crm_reschedule_appointment", "mcp:write"],
+      ["crm_cancel_appointment", "mcp:write"],
+      ["crm_book_appointment", "mcp:write"],
+    ] as const) {
+      expect(hasMcpToolScope(realizado, name, scope)).toBe(false);
+    }
+    expect(hasMcpToolScope(agenda, "crm_set_appointment_outcome", "mcp:write")).toBe(false);
+  });
+
   it("mantém o comportamento dos tokens MCP existentes", () => {
     expect(hasMcpToolScope(["mcp:read"], "crm_list_appointments", "mcp:read")).toBe(true);
     expect(hasMcpToolScope(["mcp:write"], "crm_reschedule_appointment", "mcp:write")).toBe(true);

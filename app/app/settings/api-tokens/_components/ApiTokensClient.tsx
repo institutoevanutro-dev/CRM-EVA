@@ -49,6 +49,8 @@ const SCOPES: { id: string; label: string }[] = [
   { id: "prontuario:contacts:write", label: "Prontuário: criar e atualizar cadastro de contatos" },
   { id: "agenda:read", label: "Prontuário: ler compromissos da agenda" },
   { id: "agenda:reschedule", label: "Prontuário: remarcar compromissos da agenda" },
+  // Só "Realizado": não registra falta, não remarca, não cancela (migration 0401).
+  { id: "agenda:outcome", label: "Prontuário: marcar compromisso como realizado (requer operador de agenda)" },
   { id: "role:ai_operator", label: "Operador de agenda (necessário para remarcar)" },
   // Só a rota do Financeiro aceita: não abre MCP nem conversas.
   { id: "financeiro:contatos", label: "Financeiro: ler nome, telefone e e-mail de um contato" },

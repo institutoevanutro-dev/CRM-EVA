@@ -70,6 +70,7 @@ export function createMcpServer(
           role: auth.role,
           actor: auth.actor,
           apiTokenId: auth.apiTokenId,
+          scopes: auth.scopes,
           requestId,
           supabase,
           ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),

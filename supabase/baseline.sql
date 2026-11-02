@@ -19943,6 +19943,16 @@ begin
  if changed then new.confirmation_next_at:=null; end if;
  if new.status is distinct from old.status and new.status in ('completed','no_show') then
   actor:=auth.uid();
+  -- 0401: "Realizado" informado pela integração do prontuário. Só chega aqui por
+  -- fn_appointment_complete_by_integration (service_role), que liga a marca
+  -- local da transação; sem sessão, só `completed`, e sem mensagem como prova.
+  if actor is null and new.status='completed' and new.outcome_message_id is null
+     and current_setting('crm.realizado_pela_integracao',true)='on' then
+   if new.starts_at>now() then raise exception 'appointment_not_started' using errcode='22023'; end if;
+   new.outcome_user_id:=null; new.outcome_recorded_at:=clock_timestamp();
+   new.outcome_source_kind:='integration';
+   return new;
+  end if;
   if actor is null or not public.fn_role_at_least(new.organization_id,'agent') or not public.fn_support_write_allowed(new.organization_id) then
    raise exception 'appointment_human_confirmation_required' using errcode='42501'; end if;
   if new.starts_at>now() then raise exception 'appointment_not_started' using errcode='22023'; end if;
@@ -38304,6 +38314,26 @@ grant select, insert, update, delete on public.google_click_codes to service_rol
 comment on table public.google_click_codes is
   'Par código curto → id de clique do Google Ads, gravado pelo site no clique do WhatsApp e consumido uma vez quando a mensagem com "Cód. XXXXXX" chega. Vale 90 dias (migration 0400).';
 -- ---- fim: código de clique do Google Ads (migration 0400) ----
+
+-- ---- "Realizado" pela integração do prontuário (migration 0401) ----
+-- Derivado de supabase/migrations/20261102190000_0401_realizado_pela_integracao.sql.
+-- O corpo novo de fn_appointment_stamp foi trocado NO LUGAR (bloco da 0224), para a
+-- reaplicação não passar por versão antiga; aqui entra só a função nova.
+create or replace function public.fn_appointment_complete_by_integration(p_org uuid,p_id uuid,p_revision bigint)
+returns jsonb language plpgsql security definer set search_path=public as $$
+declare r jsonb;
+begin
+ if auth.uid() is not null then raise exception 'appointment_integration_only' using errcode='42501'; end if;
+ perform set_config('crm.realizado_pela_integracao','on',true);
+ r:=public.fn_appointment_change_core(p_org,p_id,p_revision,'{"status":"completed"}'::jsonb,false,null);
+ perform set_config('crm.realizado_pela_integracao','',true);
+ return r;
+end; $$;
+comment on function public.fn_appointment_complete_by_integration(uuid,uuid,bigint) is
+ 'Registra "Realizado" informado pela integração do prontuário (escopo agenda:outcome, migration 0401). Só service_role; liga a marca local que fn_appointment_stamp aceita para outcome_source_kind=integration. Não remarca, não cancela, não registra falta.';
+revoke execute on function public.fn_appointment_complete_by_integration(uuid,uuid,bigint) from public,anon,authenticated;
+grant execute on function public.fn_appointment_complete_by_integration(uuid,uuid,bigint) to service_role;
+-- ---- fim: "Realizado" pela integração do prontuário (migration 0401) ----
 
 
 

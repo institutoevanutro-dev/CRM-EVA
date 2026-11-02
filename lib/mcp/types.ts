@@ -39,6 +39,8 @@ export interface McpContext {
   role: Role;
   actor: Actor;
   apiTokenId: string;
+  /** Escopos do token do MCP externo. Ausente nos turnos internos do agente. */
+  scopes?: readonly string[];
   requestId: string;
   /** Service-role admin client. Tools devem filtrar `organization_id` em toda query. */
   supabase: SupabaseClient;

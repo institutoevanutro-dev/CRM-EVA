@@ -502,6 +502,62 @@ export async function alterarAgendamentoHandler(
 }
 
 /**
+ * "Realizado" informado pela integração do prontuário (escopo `agenda:outcome`,
+ * migration 0401). Porta estreita de propósito: só `completed`, só compromisso
+ * desta organização que já começou, idempotente, e quem informou (token e nome
+ * do profissional) vai para a auditoria. Falta, remarcação e cancelamento
+ * continuam com a equipe. Quem confere o escopo é a tool MCP antes de chamar.
+ */
+export async function registrarRealizadoPelaIntegracaoHandler(
+  supabase: SB,
+  ctx: HandlerCtx,
+  input: { id: string; apiTokenId: string; performedByName?: string },
+): Promise<Record<string, unknown>> {
+  if (ctx.actor.type !== "api_token") throw new ApiError(403, "forbidden", undefined, ctx.requestId, "Só a integração do prontuário usa este caminho.");
+  const atual = await exigeAgendamento(supabase, ctx, input.id, ["id", "revision", "event_type_id", "contact_id", "starts_at", "status", "time_zone"]);
+  if (atual.status === "completed") return { id: atual.id, status: "completed", inalterado: true };
+  if (atual.status === "cancelled") throw new ApiError(422, "agenda_ja_cancelado", undefined, ctx.requestId, "Este compromisso foi cancelado; não dá para registrar que aconteceu.");
+  if (atual.status === "no_show") throw new ApiError(409, "conflict", undefined, ctx.requestId, "A equipe já registrou falta neste compromisso. Peça para revisarem na Agenda.");
+  if (new Date(atual.starts_at as string).getTime() > Date.now()) throw new ApiError(422, "agenda_ainda_nao_aconteceu", undefined, ctx.requestId, "Este compromisso ainda não começou.");
+
+  await guardServiceEffect();
+  const { data, error } = await supabase.rpc("fn_appointment_complete_by_integration", { p_org: ctx.organization_id, p_id: input.id, p_revision: Number(atual.revision) });
+  if (error) {
+    const conflito = error.code === "PT409" || error.code === "40001";
+    throw new ApiError(conflito ? 409 : error.code === "P0002" ? 404 : 422, conflito ? "conflict" : error.code === "P0002" ? "not_found" : "validation_failed", undefined, ctx.requestId,
+      conflito ? "Este compromisso mudou. Tente de novo." : "Não foi possível registrar que a consulta aconteceu.");
+  }
+  const salvo = data as Record<string, unknown>;
+  await fecharOLaco(supabase, ctx, {
+    appointmentId: atual.id as string,
+    contactId: (atual.contact_id as string | null) ?? null,
+    atividade: atividadeDaTransicao(atual.status as SituacaoAnterior, "completed"),
+    gatilho: gatilhoDaTransicao(atual.status as SituacaoAnterior, "completed"),
+    transicao: "completed",
+    fusoDoCompromisso: String(salvo.time_zone),
+    nomeDoTipo: await nomeDoTipoDoCompromisso(supabase, ctx, atual.event_type_id as string | null),
+    outcome: { revision: salvo.revision, source_kind: salvo.outcome_source_kind, message_id: null, recorded_at: salvo.outcome_recorded_at },
+  });
+  void audit({
+    action: "agenda.appointment_outcome_recorded",
+    actorUserId: null,
+    organizationId: ctx.organization_id,
+    resourceType: "calendar_appointment",
+    resourceId: input.id,
+    requestId: ctx.requestId,
+    metadata: {
+      status: salvo.status,
+      revision: salvo.revision,
+      outcome_source_kind: salvo.outcome_source_kind,
+      via: "integracao_prontuario",
+      api_token_id: input.apiTokenId,
+      performed_by_name: input.performedByName ?? null,
+    },
+  });
+  return salvo;
+}
+
+/**
  * Cancela de verdade (status), não apaga a linha: o histórico do que foi marcado
  * e desmarcado é o que deixa o Radar distinguir lead que desistiu de lead que
  * nunca marcou, e o agente não reoferecer o horário que a pessoa recusou.
