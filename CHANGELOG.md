@@ -8,6 +8,18 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.43.0] — 2026-11-02
+
+### Adicionado
+
+- **Chave de integração só para o Financeiro** Em Configurações › Chaves de integração há uma opção nova, `financeiro:contatos`. Uma chave
+  criada só com ela deixa o Financeiro ler o nome, o telefone e o e-mail de um contato, e mais
+  nada: ela não lê conversas, não lista contatos e não usa as ferramentas dos agentes de IA.
+
+  Quem já tem uma chave do Financeiro com `mcp:read` não precisa fazer nada: ela continua
+  funcionando. Para trocar pela chave nova, crie uma chave só com `financeiro:contatos`, coloque-a
+  no Financeiro e depois revogue a antiga.
+
 ## [4.42.0] — 2026-11-02
 
 ### Adicionado
@@ -8479,7 +8491,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.42.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.43.0...HEAD
+[4.43.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.42.0...v4.43.0
 [4.42.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.41.0...v4.42.0
 [4.41.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.40.0...v4.41.0
 [4.40.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.39.1...v4.40.0
