@@ -49,6 +49,8 @@ describe("reenvioDaMensagem", () => {
     ["missing_phone_number", "nenhum"],
     ["pre_go_live", "nenhum"],
     ["pre_go_live_indisponivel", "nenhum"],
+    // #3848 — pulada pela agenda: o reenvio não reavalia a agenda.
+    ["compromisso_na_agenda", "nenhum"],
     ["canal_x_error", "confirmar"],
     ["canal_y_error", "confirmar"],
     ["send_timeout", "confirmar"],

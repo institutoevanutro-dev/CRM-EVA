@@ -589,6 +589,23 @@ export const DICIONARIO: Traducoes = {
   "Não iniciada: o atendimento ou a resposta do cliente mudou.": { es: "No iniciada: cambió la atención o la respuesta del cliente." },
   "Sem contato vinculado. Este compromisso não inicia uma recuperação.": { es: "Sin contacto vinculado. Esta cita no inicia una recuperación." },
   "Recuperação iniciada e interrompida porque o cliente respondeu.": { es: "Recuperación iniciada e interrumpida porque el cliente respondió." },
+  // #3848 (portado do original) — o selo da mensagem que o fluxo mandou PULAR
+  // por causa da agenda, na Inbox.
+  "Pulada pela agenda": { es: "Omitida por la agenda" },
+  "O contato tem compromisso marcado na agenda; o fluxo está configurado para não enviar quando isso acontece.": {
+    es: "El contacto tiene una cita agendada; el flujo está configurado para no enviar cuando eso ocurre.",
+  },
+  "O contato está na agenda agora; o fluxo está configurado para não enviar quando isso acontece.": {
+    es: "El contacto está en la cita ahora; el flujo está configurado para no enviar cuando eso ocurre.",
+  },
+  "O compromisso do contato já terminou e a presença ainda não foi confirmada; o fluxo está configurado para não enviar quando isso acontece.": {
+    es: "La cita del contacto ya terminó y la asistencia aún no se ha confirmado; el flujo está configurado para no enviar cuando eso ocurre.",
+  },
+  "Compromisso: {titulo}": { es: "Cita: {titulo}" },
+  "Abrir agenda": { es: "Abrir agenda" },
+  "Para mandar mesmo assim, mude a escolha do fluxo ou escreva pelo campo de resposta.": {
+    es: "Para enviar de todos modos, cambia la opción del flujo o escribe desde el campo de respuesta.",
+  },
   "Revise o próximo passo.": { es: "Revise el siguiente paso." },
   "Revisar acompanhamentos": { es: "Revisar seguimientos" },
   "Mensagem do cliente usada como evidência (opcional)": { es: "Mensaje del cliente usado como evidencia (opcional)" },
@@ -4167,6 +4184,9 @@ export const DICIONARIO: Traducoes = {
     es: "El contacto fue ocultado del Inbox por el equipo: la automatización no le escribe.",
   },
   "O contato não tem telefone cadastrado.": { es: "El contacto no tiene teléfono registrado." },
+  "O contato tem horário marcado na agenda; esta automação foi configurada para não enviar quando isso acontece.": {
+    es: "El contacto tiene horario reservado en la agenda; esta automatización está configurada para no enviar cuando ocurre.",
+  },
   "Falta preencher alguma configuração desta ação — abra a automação e revise.": {
     es: "Falta completar alguna configuración de esta acción — abre la automatización y revísala.",
   },

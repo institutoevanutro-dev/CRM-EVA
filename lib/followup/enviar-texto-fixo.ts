@@ -2,6 +2,8 @@ import {sendWithLedger,supabaseSendLedger} from "@/lib/agent-engine/edge/crm/sen
 import { randomUUID } from "node:crypto";
 import { assertAgendaEffectSupabase } from "@/lib/agenda/efeito";
 import { AgendaDeferredError } from "@/lib/agenda/protecao-followup";
+import { AgendaPuladoError, MOTIVO_DO_PULO } from "@/lib/agenda/escolha-no-envio";
+import { escolhaDoFluxo } from "@/lib/agenda/escolha-no-envio-leitura";
 import { parseServiceBoundary, StaleServiceBoundaryError } from "@/lib/atendimento/fronteira";
 import { assertServiceBoundarySupabase } from "@/lib/atendimento/origem";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -205,7 +207,24 @@ export async function enviarTextoFixoPendente(
       }
 
       const proactiveContext={organizationId:job.organization_id as string,contactId,enrollmentId,nodeId,jobId:job.id,jobClaim};
-      await assertAgendaEffectSupabase(admin,proactiveContext);
+      // #3813 (portado do original) — a escolha do FLUXO quando o contato tem
+      // horário marcado. `nao_enviar` encerra o passo como pulo com motivo, e
+      // não como falha (que o dead-man leria como worker morto).
+      const escolhaDaAgenda = await escolhaDoFluxo(admin, job.organization_id as string, enrollmentId);
+      try {
+        await assertAgendaEffectSupabase(admin, {...proactiveContext, escolhaNoEnvio: escolhaDaAgenda});
+      } catch (err) {
+        if (!(err instanceof AgendaPuladoError)) throw err;
+        logger.info("[followup] texto fixo pulado: contato com horário marcado", {
+          organization_id: job.organization_id,
+          enrollment_id: enrollmentId,
+          motivo: MOTIVO_DO_PULO,
+          appointment_id: err.protection.appointment_id,
+        });
+        await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, { kind: "skipped", reason: MOTIVO_DO_PULO }, undefined, job.id, jobClaim);
+        await settle(job.organization_id, job.id, jobClaim.acquired_at, true, MOTIVO_DO_PULO);
+        continue;
+      }
       await espacarEnvio(linha.channel_session_id);
       // As variáveis do texto com o contato de AGORA, a mesma regra do worker
       // (`interpolarVariaveisDoContato`). O ledger guarda o texto que saiu.
