@@ -138,7 +138,7 @@ export async function previewGateContext(
 export const SCENARIO_READS = new Set([
   'crm_list_pipelines',
   'crm_list_stages',
-  'crm_list_appointment_types',
+  'crm_list_event_types',
   'crm_find_free_slots',
   // Catálogo e acervo são material da ORGANIZAÇÃO, não de um contato: sem eles o
   // Testar (que roda sem contato) não responde preço nem agenda e o agente cai
