@@ -8,6 +8,16 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.44.1] — 2026-11-02
+
+### Corrigido
+
+- **Tela de chaves avisa quando falta o Operador de agenda** Os escopos `agenda:reschedule` (remarcar) e `agenda:outcome` (marcar como realizado) só
+  funcionam com o papel `role:ai_operator`. Sem ele, a chave era criada normalmente e cada
+  chamada voltava "Role 'agent' insufficient". Agora a tela de criação de chave mostra um aviso
+  assim que um desses escopos é marcado sem o Operador de agenda, e o aviso some quando ele é
+  marcado. A chave continua podendo ser criada; o aviso só evita o tropeço.
+
 ## [4.44.0] — 2026-11-02
 
 ### Adicionado
@@ -8515,7 +8525,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.44.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.44.1...HEAD
+[4.44.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.44.0...v4.44.1
 [4.44.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.43.1...v4.44.0
 [4.43.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.43.0...v4.43.1
 [4.43.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.42.0...v4.43.0
