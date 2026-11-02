@@ -8,6 +8,57 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.41.0] — 2026-11-02
+
+### Adicionado
+
+- **Regra de automação e follow-up escolhem o que fazer quando o contato tem horário marcado** Até aqui, todo envio automático para quem tinha um compromisso pendente ou confirmado na
+  agenda ficava adiado até o horário, mesmo que o compromisso fosse daqui a meses. Agora as
+  ações de enviar mensagem (texto e IA) de uma regra e a configuração de follow-up do agente
+  aceitam `quando_ha_compromisso`: `adiar` (o padrão, igual a antes), `enviar` (a agenda não
+  segura este envio) ou `nao_enviar` (o envio é pulado e registrado com o motivo
+  `compromisso_na_agenda`).
+
+  O pulo vale nos três caminhos de envio: regra de automação, texto fixo do follow-up e o
+  worker do follow-up. Numa regra, a aba Atividade mostra o motivo; no follow-up, a inscrição
+  é encerrada com esse motivo. Se o pulo acontecer com a mensagem já criada, ela aparece no
+  Inbox com o selo "Pulada pela agenda", sem o botão "Tentar de novo", porque reenviar
+  furaria a escolha.
+
+  Opt-out, janela do número e limite diário continuam valendo sempre. A escolha ainda não tem
+  controle na tela: por enquanto ela é gravada pela API da regra e pela configuração do
+  agente. Quem não configura nada não vê diferença.
+
+  Portado do projeto original (DeskcommCRM, PR #3818, #3840, #3850 de @webtecnica).
+
+### Corrigido
+
+- **Menos avisos falsos de promessa na Central, encerrar caso sem avisar o cliente e resposta ao paciente fora do limite do dia** Portado do projeto original (DeskcommCRM):
+
+  - quando o agente só oferece atendimento humano ("Quer que eu encaminhe para a
+    equipe?"), isso deixa de contar como promessa de humano, inclusive com uma
+    abertura curta de reconhecimento antes ("Entendi! Quer que eu encaminhe para
+    a equipe?"). Antes o envio era vetado e podia virar caso automático e aviso
+    de promessa não cumprida na Central. Qualquer frase que prometa algo de fato
+    continua sendo conferida (PR #2629 de @vitorlacerdadigital, a parte da
+    pergunta de consentimento, e PR #3740 de @webtecnica);
+  - "Já encaminhei!" ou "Pronto, encaminhado!" sem dizer o quê passa a contar
+    como promessa de humano e só sai se alguém tiver sido acionado de fato.
+    "Já te encaminhei o link" segue livre (PR #3786 de @melgarafael);
+  - na tela do caso aparece a opção "Encerrar sem avisar o cliente", para o caso
+    que perdeu o sentido. A nota é obrigatória e fica só no caso; o caso vira
+    cancelado, os avisos da Central daquele caso (inclusive o lembrete de caso
+    parado) somem na hora e nada é enviado ao cliente. A mesma ação existe em
+    `POST /api/v1/ai/cases/{id}/close` (PR #3819 de @webtecnica);
+  - o limite diário do número (aquecimento e Conexões, Proteção de envio) passa a
+    contar só as mensagens que o número inicia: primeira mensagem, follow-up e
+    campanha. A resposta a quem acabou de escrever não conta e não fica mais para
+    o dia seguinte; a janela de resposta e o intervalo entre mensagens continuam
+    valendo. Migration 0399, aplicada pela atualização normal (PR #3769 de
+    @ZvisionAutomations).
+
+  Nada precisa ser feito na instalação.
+
 ## [4.40.0] — 2026-10-28
 
 ### Adicionado
@@ -8411,7 +8462,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.40.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.41.0...HEAD
+[4.41.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.40.0...v4.41.0
 [4.40.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.39.1...v4.40.0
 [4.39.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.39.0...v4.39.1
 [4.39.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.38.1...v4.39.0
