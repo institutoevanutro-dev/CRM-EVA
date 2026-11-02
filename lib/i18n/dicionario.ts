@@ -4804,6 +4804,7 @@ export const DICIONARIO: Traducoes = {
   "Inglês (Reino Unido)": { es: "Inglés (Reino Unido)" },
   // ─── Configurações: API Tokens ───
   "Selecione ao menos um escopo.": { es: "Selecciona al menos un alcance." },
+  "Remarcar e marcar como realizado só funcionam com o escopo role:ai_operator (Operador de agenda). Marque-o também.": { es: "Reprogramar y marcar como realizado solo funcionan con el alcance role:ai_operator (Operador de agenda). Márcalo también." },
   "Criar token": { es: "Crear token" },
   "Nenhum token criado ainda.": { es: "Ningún token creado todavía." },
   Prefixo: { es: "Prefijo" },

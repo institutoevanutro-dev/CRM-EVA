@@ -43,6 +43,9 @@ import { useT } from "@/hooks/i18n/useT";
  * inalcançável — a API sempre aceitou os escopos; só o catálogo daqui os
  * escondia.
  */
+/** Escopos de agenda cuja tool exige o papel ai_operator; sem ele a chave nasce inútil. */
+const PEDEM_OPERADOR = ["agenda:reschedule", "agenda:outcome"];
+
 const SCOPES: { id: string; label: string }[] = [
   { id: "prontuario:contacts:read", label: "Prontuário: pesquisar cadastro de contatos" },
   { id: "prontuario:contacts:demographics:read", label: "Prontuário: importar CPF e endereço do CRM (requer leitura de contatos)" },
@@ -51,7 +54,7 @@ const SCOPES: { id: string; label: string }[] = [
   { id: "agenda:reschedule", label: "Prontuário: remarcar compromissos da agenda" },
   // Só "Realizado": não registra falta, não remarca, não cancela (migration 0401).
   { id: "agenda:outcome", label: "Prontuário: marcar compromisso como realizado (requer operador de agenda)" },
-  { id: "role:ai_operator", label: "Operador de agenda (necessário para remarcar)" },
+  { id: "role:ai_operator", label: "Operador de agenda (necessário para remarcar ou marcar como realizado)" },
   // Só a rota do Financeiro aceita: não abre MCP nem conversas.
   { id: "financeiro:contatos", label: "Financeiro: ler nome, telefone e e-mail de um contato" },
   { id: "mcp:read", label: "Agentes de IA podem LER o CRM (MCP)" },
@@ -108,6 +111,8 @@ export function ApiTokensClient() {
       /* noop */
     }
   };
+
+  const faltaOperador = scopes.some((s) => PEDEM_OPERADOR.includes(s)) && !scopes.includes("role:ai_operator");
 
   const toggleScope = (s: string) => {
     setScopes((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
@@ -202,6 +207,11 @@ export function ApiTokensClient() {
                   </button>
                 ))}
               </div>
+              {faltaOperador && (
+                <p className="text-xs text-warning-fg" role="alert">
+                  {t("Remarcar e marcar como realizado só funcionam com o escopo role:ai_operator (Operador de agenda). Marque-o também.")}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="t-exp">{t("Expira em (dias) — opcional")}</Label>
