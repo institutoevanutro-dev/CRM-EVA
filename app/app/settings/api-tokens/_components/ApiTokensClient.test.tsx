@@ -45,3 +45,13 @@ it("o contrato de criação aceita a chave do Financeiro do jeito que a tela a e
   expect(createApiTokenSchema.parse({ name: "Financeiro leitura", scopes: ["financeiro:contatos"], expires_in_days: 365 }))
     .toEqual({ name: "Financeiro leitura", scopes: ["financeiro:contatos"], expires_in_days: 365 });
 });
+
+it("avisa quando um escopo de agenda é marcado sem o Operador de agenda, e o aviso some ao marcá-lo", () => {
+  render(<ApiTokensClient />);
+  fireEvent.click(screen.getByRole("button", { name: "Criar token" }));
+  expect(screen.queryByText(/só funcionam com o escopo role:ai_operator/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /^agenda:outcome —/ }));
+  expect(screen.getByRole("alert")).toHaveTextContent(/role:ai_operator/);
+  fireEvent.click(screen.getByRole("button", { name: /^role:ai_operator —/ }));
+  expect(screen.queryByText(/só funcionam com o escopo role:ai_operator/)).toBeNull();
+});
