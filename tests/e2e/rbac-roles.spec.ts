@@ -8,6 +8,7 @@
  * Pré-requisito: `npx tsx scripts/seed-e2e-credentials.ts` (o spec roda o seed
  * sozinho se .e2e-creds.json estiver ausente/incompleto).
  */
+import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -126,6 +127,46 @@ test.describe("rbac role matrix (spec 13 §4)", () => {
     await page.goto("/app/settings/billing");
     await expect(page.getByRole("heading", { name: "Plano e cobrança" })).toBeVisible();
     await expectNoBlockingA11y(page);
+  });
+
+  test("admin cria pela tela a chave só do Financeiro, que não lista contatos e para de valer ao revogar", async ({ page }) => {
+    expect(creds.admin_totp?.secret, "seed deve gravar admin_totp em .e2e-creds.json").toBeTruthy();
+    await loginWithTotp(page, creds.users.admin!.email, creds.admin_totp!.secret);
+    await page.goto("/app/settings/api-tokens");
+    await expect(page.getByRole("heading", { name: "Chaves de integração" })).toBeVisible();
+
+    const nome = `Financeiro leitura e2e ${Date.now()}`;
+    await page.getByRole("button", { name: "Criar token" }).click();
+    const novo = page.getByRole("dialog", { name: "Criar novo token" });
+    await novo.getByLabel("Nome", { exact: true }).fill(nome);
+    const opcao = novo.getByRole("button", { name: /^financeiro:contatos —/ });
+    await expect(opcao).toHaveAttribute("title", "Financeiro: ler nome, telefone e e-mail de um contato");
+    await opcao.click();
+    await novo.getByLabel(/^Expira em/).fill("365");
+    await novo.screenshot({ path: ".superpowers/evidence/escopo-financeiro/criar-chave-do-financeiro.png" });
+    await novo.getByRole("button", { name: "Criar", exact: true }).click();
+
+    const criado = page.getByRole("dialog", { name: "Token criado" });
+    const chave = (await criado.locator("code").innerText()).trim();
+    expect(chave).toMatch(/^dsk_[0-9a-f]{8}_/);
+    await page.keyboard.press("Escape");
+    const linha = page.getByRole("row", { name: new RegExp(nome) });
+    await expect(linha.getByText("financeiro:contatos", { exact: true })).toBeVisible();
+
+    const comChave = { headers: { authorization: `Bearer ${chave}` } };
+    const rotaDoFinanceiro = `/api/v1/integrations/financeiro/contacts/${randomUUID()}`;
+
+    // Passou da régua de escopo. O e2e não liga a integração, então a rota para
+    // na organização ("forbidden"); sem o escopo a resposta seria "unauthenticated".
+    const financeiro = await page.request.get(rotaDoFinanceiro, comChave);
+    const corpo = (await financeiro.json()) as { error?: { code?: string } };
+    expect(financeiro.status() === 404 || corpo.error?.code === "forbidden", JSON.stringify(corpo)).toBe(true);
+
+    expect((await page.request.get("/api/v1/contacts", comChave)).status()).toBe(403);
+
+    await linha.getByRole("button", { name: "Revogar" }).click();
+    await expect(linha.getByText("Revogado")).toBeVisible();
+    expect((await page.request.get(rotaDoFinanceiro, comChave)).status()).toBe(401);
   });
 
   test("agent vê inbox e kanban", async ({ page }) => {
