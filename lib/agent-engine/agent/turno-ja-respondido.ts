@@ -61,6 +61,9 @@ export interface AlvoDoTurno {
  *    transcrição fica pronta, e a pergunta do áudio ficaria sem resposta. A régua
  *    é a do drain: derivável, com arquivo, sem estado final e mais nova que o
  *    teto de espera (passado o teto, o drain segue sem o texto, e o turno também).
+ *    No `inbound_turn` o handler a chama DEPOIS da espera da mídia
+ *    (`espera-da-midia.ts`): a que virou texto durante a espera entra na
+ *    promessa, e a que segue pendente e mais nova que o teto fica de fora.
  *
  *  - Retentativa de um job que JÁ enviou (`send_ledger` aceito, na fila ou em
  *    voo) não reescreve a anotação: o ledger devolve "já enviado" e nada novo

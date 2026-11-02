@@ -19,12 +19,8 @@ import { insertInboxItem } from '../../db/repository';
 import type { Logger } from '../../obs/logger';
 import { enqueueJob } from '../../queue/queue';
 import { avisoDeEventoMorto, IA_QUE_NAO_RESPONDEU } from '@/lib/event-log/aviso-de-evento-morto';
-import {
-  TIPOS_DERIVAVEIS,
-  DERIVACAO_TERMINADA,
-  TETO_ESPERA_DERIVACAO_MS,
-  sqlMidiaVaiSerLida,
-} from '@/lib/messaging/media/derivable';
+import { TETO_ESPERA_DERIVACAO_MS } from '@/lib/messaging/media/derivable';
+import { midiaDerivavelPendente } from './midia-derivavel';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 
 const DRAIN_CONSUMER = 'agent-engine';
@@ -202,7 +198,8 @@ const ESPERA_DERIVACAO_MS = 4_000;
  * de transcrição lenta (como o do Alfran) sem impor essa espera longa.
  *
  * O valor (`TETO_ESPERA_DERIVACAO_MS`) mora em `lib/messaging/media/derivable.ts`:
- * a anotação do turno usa a mesma régua.
+ * a anotação do turno usa a mesma régua, e a espera do handler de `inbound_turn`
+ * (`agent/espera-da-midia.ts`) lê o mesmo teto.
  */
 
 type DesfechoEvento = 'processado' | 'adiar';
@@ -444,33 +441,16 @@ async function processEvent(
   // entregue com atraso (aparelho offline, canal reconectando) nasceria "além do
   // teto" e o turno seguiria sem esperar a leitura que acabou de começar.
   //
-  // `media_url is not null` é a pré-condição de TODA a esteira: sem ela o
-  // `media.persist_requested` nem é emitido, a derivação nunca é pedida e o
-  // status fica null para sempre — esperar por ela só atrasaria a resposta.
-  //
-  // E só a mídia que VAI ser lida (`sqlMidiaVaiSerLida`): o vídeo com a leitura
-  // desligada e a mídia importada do histórico só ganham estado final depois de
-  // baixadas, e segurar o texto por elas atrasava a resposta até o teto.
-  const { rows: midias } = await pool.query<{
-    type: string;
-    media_derived_status: string | null;
-    quando: string;
-  }>(
-    `select type, media_derived_status, created_at as quando
-       from messages m
-      where organization_id = $1
-        and conversation_id = $2
-        and direction = 'inbound'
-        and type = any($3::text[])
-        and media_url is not null
-        and ${sqlMidiaVaiSerLida('m')}
-      order by created_at desc
-      limit 20`,
-    [event.organization_id, p.conversation_id, [...TIPOS_DERIVAVEIS]],
-  );
+  // A consulta em si (tipos deriváveis, `media_url is not null`,
+  // `sqlMidiaVaiSerLida`, status fora de `DERIVACAO_TERMINADA`) mora em
+  // `./midia-derivavel.ts`, porque o handler de `inbound_turn` faz a mesma
+  // pergunta antes de rotear (#3836 do original) e as duas não podem discordar.
   // A mais RECENTE que ainda não terminou: é ela que o turno não pode perder.
-  const midia = midias.find((m) => !DERIVACAO_TERMINADA.has(m.media_derived_status ?? ''));
-  if (midia !== undefined) {
+  const midia = await midiaDerivavelPendente(pool, {
+    organizationId: event.organization_id,
+    conversationId: p.conversation_id,
+  });
+  if (midia !== null) {
     const esperandoHa = Date.now() - new Date(midia.quando).getTime();
     if (esperandoHa < TETO_ESPERA_DERIVACAO_MS) {
       log.info('drain: mídia ainda sendo transcrita — turno adiado', {

@@ -48,6 +48,8 @@ import {
   type LeadContextMessage,
   type LeadContextResult,
 } from '../edge/crm/get-lead-context';
+import { esperarMidiaDerivavel } from './espera-da-midia';
+import { TETO_ESPERA_DERIVACAO_MS } from '@/lib/messaging/media/derivable';
 import { citationsFromHits, searchKnowledge } from './search-knowledge';
 import type { CrmEdgeConfig } from '../edge/crm/mcp-client';
 import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
@@ -1736,6 +1738,14 @@ export interface AgentTurnInput {
   conversationId: string;
   /** Id da mensagem que criou o job inbound; não é usado por follow-ups. */
   inboundMessageId?: string;
+  /**
+   * A espera da mídia do handler de `inbound_turn` (`espera-da-midia.ts`) acabou no
+   * TETO depois de esperar: este turno lê alguma mídia como `[tipo]`, e a mensagem
+   * mais antiga sem resposta envelheceu na espera. A régua de resposta obsoleta
+   * ignora então o teto dela (ver `send_message`): se a mídia tem job ou pedido de
+   * despacho pendente, é ele que responde. Só o handler de `inbound_turn` preenche.
+   */
+  esperaDaMidiaNoTeto?: boolean;
   /** monta a abertura APÓS o ritual de leitura (inbound vs. bloco temporal do follow-up). */
   buildOpening: (ritual: {
     previous: LeadCheckpointRow | null;
@@ -3799,7 +3809,10 @@ async function executarTurnoDoAgente(
           (await respostaFicouObsoleta(
             pool,
             { organizationId: tenantId, conversationId: input.conversationId, jobId: liveJob().id },
-            tetoObsoleta,
+            // A espera da mídia estourou o teto (handler): a mais antiga sem resposta envelheceu
+            // esperando, e o teto de 120 s deixaria sair a resposta que leu a mídia como `[tipo]`.
+            // ponytail: 24 h = "sem teto" sem estourar o intervalo do Postgres.
+            input.esperaDaMidiaNoTeto === true && tetoObsoleta > 0 ? 86_400_000 : tetoObsoleta,
           ))
         ) {
           runLog.info('resposta descartada — o cliente escreveu de novo durante o turno', {
@@ -5907,6 +5920,26 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       });
       return;
     }
+    // A MÍDIA QUE CHEGA DEPOIS DE O TURNO SER ENFILEIRADO (#3836 do original). O
+    // drain segura o despacho pela mídia que já está na conversa; o áudio que chega
+    // depois (debounce, job na fila atrás de outro turno do contato) ia ao prompt
+    // como `[audio]`, e o agente dizia não ter ouvido segundos antes de a
+    // transcrição ficar pronta. A espera mora AQUI, e não dentro do turno, porque:
+    //   1. o roteador logo abaixo lê a inbound mais nova, e áudio sem transcrição
+    //      não é sinal nenhum para ele — o turno ficaria com o agente do texto;
+    //   2. a anotação abaixo já deixa de fora a mídia pendente: anotar DEPOIS da
+    //      espera promete exatamente o que o turno vai ler, sem reanotar;
+    //   3. a janela anti-ban e o horário do agente são avaliados depois dela;
+    //   4. só `inbound_turn` espera: follow-up e caso não passam por aqui.
+    // O rascunho do modo assistido, mais abaixo, também sai com a transcrição. Teto
+    // e desfechos nomeados em `espera-da-midia.ts`.
+    const espera = await esperarMidiaDerivavel(pool, {
+      organizationId: job.organization_id,
+      conversationId: payload.conversation_id,
+      prazoMs: Date.now() + TETO_ESPERA_DERIVACAO_MS,
+      log: withFields(deps.log, { job_id: job.id, conversation_id: payload.conversation_id }),
+      ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+    });
     const resolvedAgent = await resolveConversationTurn(pool, deps.llmCfg, {
       tenantId: job.organization_id,
       leadId: job.contact_id,
@@ -6017,6 +6050,7 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       channelSessionId: payload.channel_session_id,
       conversationId: payload.conversation_id,
       inboundMessageId: payload.inbound_message_id,
+      esperaDaMidiaNoTeto: espera.desfecho === 'teto_da_espera' && espera.recheques > 0,
       buildOpening: ({
         previous,
         leadState,
