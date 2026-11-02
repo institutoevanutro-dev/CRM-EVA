@@ -10,7 +10,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const requestId = randomUUID();
   try {
     const auth = await validateBearerToken(req.headers.get("authorization"));
-    ensureScope(auth.scopes, "mcp:read");
+    // `financeiro:contatos` é o escopo dedicado desta rota e não abre nenhuma
+    // outra; `mcp:read` segue aceito pela chave que já está instalada.
+    if (!auth.scopes.includes("financeiro:contatos")) ensureScope(auth.scopes, "mcp:read");
     ensureRole(auth.role, "agent");
     // Este conector é de UMA organização; o token não escolhe o destino financeiro.
     if (auth.organizationId !== process.env.FINANCEIRO_ORGANIZATION_ID)

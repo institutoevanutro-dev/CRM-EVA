@@ -11,9 +11,9 @@ Variáveis opcionais (o compose já usa `env_file: .env`):
 - `FINANCEIRO_ORGANIZATION_ID`: UUID da organização que será vinculada. Outras organizações não consultam esse financeiro.
 - `FINANCEIRO_TOKEN`: segredo exclusivo de leitura do resumo, igual ao `CRM_RESUMO_TOKEN` no financeiro. Pelo menos 32 caracteres; gerar localmente e transferir fora do chat.
 
-O financeiro precisa também de um token de API do CRM, restrito à organização configurada, com `mcp:read` e role agent. Guardá-lo somente como `CRM_TOKEN` no servidor financeiro. Nunca usar service_role, NEXT_PUBLIC_ ou token em URL.
+O financeiro precisa também de uma chave de integração do CRM, criada na organização configurada em Configurações › Chaves de integração, só com o escopo `financeiro:contatos` (papel agent, o padrão). Esse escopo abre apenas a rota abaixo: não lê conversas, não lista contatos e não usa as ferramentas dos agentes de IA. Uma chave antiga com `mcp:read` continua aceita, mas `mcp:read` também lê todas as conversas pelo MCP. Guardá-la somente como `CRM_TOKEN` no servidor financeiro. Nunca usar service_role, NEXT_PUBLIC_ ou token em URL.
 
-A exportação mínima de contato fica em `GET /api/v1/integrations/financeiro/contacts/[id]`: Bearer existente, organização derivada do token e comparada com a configurada, scope de leitura, limite de 120/min por org. Não exporta contato anonimizado. Os cinco campos são id, organization_id, name, phone, email.
+A exportação mínima de contato fica em `GET /api/v1/integrations/financeiro/contacts/[id]`: Bearer existente, organização derivada do token e comparada com a configurada, escopo `financeiro:contatos` (ou `mcp:read`, da chave antiga), limite de 120/min por org. Não exporta contato anonimizado. Os cinco campos são id, organization_id, name, phone, email.
 
 A consulta do resumo pelo navegador passa por `/api/v1/contacts/[id]/financeiro`: sessão, MFA/role manager do gate existente, organização ativa e contato não anonimizado. Só o servidor chama o financeiro. `Cache-Control: no-store`; timeout de 8s; sem redirects. Limite de 120/min por org.
 
@@ -23,6 +23,7 @@ A consulta do resumo pelo navegador passa por `/api/v1/contacts/[id]/financeiro`
 3. Com um contato de teste, vincular ao paciente e criar uma proposta no financeiro. Atualizar a aba do CRM e conferir o número e valor.
 4. Registrar pagamento parcial e estorno em dados de teste; confirmar que a consulta acompanha o saldo.
 5. Confirmar que outra organização, usuário sem perfil e contato anonimizado não acessam o resumo.
+6. Para trocar uma chave antiga com `mcp:read`: criar a chave nova só com `financeiro:contatos`, gravá-la como `CRM_TOKEN` no financeiro e aplicar a mudança pelo procedimento dele, abrir no financeiro um paciente vinculado e conferir o nome do contato, e só então revogar a chave antiga na tela de chaves do CRM.
 
 Não há migração de schema no CRM. O banco financeiro continua separado. Login único e prontuário não fazem parte desta etapa. Nenhuma credencial foi criada ou implantada por este patch.
 
