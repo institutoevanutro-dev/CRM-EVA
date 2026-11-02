@@ -8,6 +8,15 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.43.1] — 2026-11-02
+
+### Corrigido
+
+- **O botão Testar do agente volta a consultar a lista de atendimentos** No botão Testar do agente, a lista de atendimentos da agenda ficava bloqueada por um nome
+  escrito errado. Sem ela, a IA não descobria o atendimento pedido (por exemplo, um procedimento)
+  e respondia sem consultar os horários livres. O atendimento real pelo WhatsApp não era afetado.
+  Nada a fazer na instalação.
+
 ## [4.43.0] — 2026-11-02
 
 ### Adicionado
@@ -8491,7 +8500,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.43.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.43.1...HEAD
+[4.43.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.43.0...v4.43.1
 [4.43.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.42.0...v4.43.0
 [4.42.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.41.0...v4.42.0
 [4.41.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.40.0...v4.41.0
