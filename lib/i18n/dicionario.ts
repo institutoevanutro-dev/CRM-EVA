@@ -6629,6 +6629,13 @@ export const DICIONARIO: Traducoes = {
     {
       es: "Uno de los contactos seleccionados no está disponible — puede haber sido anonimizado o ya fusionado en otro.",
     },
+  "Não foi possível conferir as fichas antes de juntar.": {
+    es: "No se pudieron revisar las fichas antes de juntarlas.",
+  },
+  "A ficha ligada ao prontuário tem de ser a que fica. Se as duas estão ligadas, são pacientes diferentes no prontuário e não se juntam.":
+    {
+      es: "La ficha vinculada a la historia clínica tiene que ser la que se queda. Si las dos están vinculadas, son pacientes distintos en la historia clínica y no se juntan.",
+    },
   "Organização ativa não resolvida.": { es: "No se resolvió la organización activa." },
   "Mostrando os duplicados entre os contatos mais antigos. Junte estes e reabra para ver os próximos.": {
     es: "Mostrando los duplicados entre los contactos más antiguos. Junta estos y vuelve a abrir para ver los siguientes.",
