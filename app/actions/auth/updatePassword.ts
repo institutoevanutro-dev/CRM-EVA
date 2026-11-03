@@ -17,7 +17,8 @@ export type UpdatePasswordResult = {
     | "update_failed"
     | "mfa_required"
     | "mfa_invalid"
-    | "mfa_locked";
+    | "mfa_locked"
+    | "mfa_locked_today";
   details?: Record<string, unknown>;
 };
 
@@ -55,11 +56,12 @@ export async function updatePassword(
   const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
   if (aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2") {
     if (!parsed.data.mfa_code) return { ok: false, error: "mfa_required" };
-    // Mesmo balde por usuário do verifyMfa: o código conferido aqui é o mesmo.
-    if (await mfaBloqueadoPorFalhas(user.id)) return { ok: false, error: "mfa_locked" };
     const { data: factors } = await supabase.auth.mfa.listFactors();
     const totp = factors?.totp?.[0];
     if (!totp) return { ok: false, error: "update_failed" };
+    // Mesmo balde por usuário e autenticador do verifyMfa: o código conferido aqui é o mesmo.
+    const bloqueio = await mfaBloqueadoPorFalhas(user.id, totp.id);
+    if (bloqueio) return { ok: false, error: bloqueio === "dia" ? "mfa_locked_today" : "mfa_locked" };
     const { data: challenge, error: chErr } = await supabase.auth.mfa.challenge({
       factorId: totp.id,
     });
@@ -70,8 +72,18 @@ export async function updatePassword(
       code: parsed.data.mfa_code,
     });
     if (verifyErr) {
-      await registrarFalhaDeMfa(user.id);
-      return { ok: false, error: "mfa_invalid" };
+      const fechou = await registrarFalhaDeMfa(user.id, totp.id);
+      // Conta no mesmo teto da tela de entrada, então entra na trilha igual:
+      // sem isto, quem errou aqui ficava trancado sem rastro do porquê.
+      await audit({
+        action: "auth.mfa_failed",
+        actorUserId: user.id,
+        metadata: { tela: "reset", locked: fechou !== null, janela: fechou },
+        requestId,
+        ip,
+        userAgent,
+      });
+      return { ok: false, error: fechou === "dia" ? "mfa_locked_today" : "mfa_invalid" };
     }
   }
 

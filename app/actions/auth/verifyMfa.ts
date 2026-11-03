@@ -12,7 +12,8 @@ import { mfaBloqueadoPorFalhas, registrarFalhaDeMfa } from "@/lib/auth/rate-limi
 
 export type VerifyMfaResult =
   | { ok: false; error: "mfa_invalid" }
-  | { ok: false; error: "mfa_locked"; retry_in_seconds: number };
+  | { ok: false; error: "mfa_locked"; retry_in_seconds: number }
+  | { ok: false; error: "mfa_locked_today" };
 
 const ATTEMPT_COOKIE = "mfa_attempts";
 const ATTEMPT_TTL_SECONDS = 60;
@@ -22,12 +23,14 @@ const MAX_ATTEMPTS = 3;
  * Confere o código TOTP do fator verificado e, se acertar, sobe a sessão para
  * AAL2. Dois limites de erro se somam:
  *  - no servidor (`mfaBloqueadoPorFalhas` em `lib/auth/rate-limit.ts`): 3
- *    erros por usuário no minuto (janela fixa; 30 por IP) e 15 por usuário no
- *    dia (UTC), o MESMO balde do `updatePassword` — é ele que barra o cliente
- *    que não devolve o cookie;
+ *    erros por usuário e autenticador no minuto (janela fixa; 30 por IP) e 15
+ *    no dia (UTC), o MESMO balde do `updatePassword` — é ele que barra o
+ *    cliente que não devolve o cookie;
  *  - o cookie `mfa_attempts`, por navegador: 3 erros em 60 s desde o último.
  *
- * `retry_in_seconds` é sempre 60, mesmo quando quem barrou foi a janela diária.
+ * O teto curto responde `mfa_locked` com `retry_in_seconds` 60. O do dia
+ * responde `mfa_locked_today`: a espera vai até a virada do dia UTC (21h de
+ * Brasília), e uma contagem de 60 s que destrava e barra de novo mentiria.
  */
 export async function verifyMfa(code: string, next?: string): Promise<VerifyMfaResult> {
   const supabase = await createClient();
@@ -54,7 +57,12 @@ export async function verifyMfa(code: string, next?: string): Promise<VerifyMfaR
     const parsed = parseInt(raw, 10);
     if (!Number.isNaN(parsed)) attempts = parsed;
   }
-  if (attempts >= MAX_ATTEMPTS || (await mfaBloqueadoPorFalhas(user.id))) {
+  // Barrado não audita: a tentativa não confere código nenhum, e quem tem a
+  // senha poderia inflar à vontade uma trilha que é só-acréscimo. A falha que
+  // FECHOU o teto já está lá, com `locked` e `janela`.
+  const bloqueio = await mfaBloqueadoPorFalhas(user.id, totp.id);
+  if (bloqueio === "dia") return { ok: false, error: "mfa_locked_today" };
+  if (bloqueio || attempts >= MAX_ATTEMPTS) {
     return { ok: false, error: "mfa_locked", retry_in_seconds: ATTEMPT_TTL_SECONDS };
   }
 
@@ -77,7 +85,7 @@ export async function verifyMfa(code: string, next?: string): Promise<VerifyMfaR
   });
 
   if (verifyErr) {
-    await registrarFalhaDeMfa(user.id);
+    const fechou = await registrarFalhaDeMfa(user.id, totp.id);
     const newAttempts = attempts + 1;
     store.set(ATTEMPT_COOKIE, String(newAttempts), {
       httpOnly: true,
@@ -90,11 +98,14 @@ export async function verifyMfa(code: string, next?: string): Promise<VerifyMfaR
     await audit({
       action: "auth.mfa_failed",
       actorUserId: user.id,
-      metadata: { locked, attempts: newAttempts },
+      // `attempts` é o do cookie; quem tranca o cliente que não o devolve é o
+      // servidor, e é dele que vêm `locked` e `janela`.
+      metadata: { locked: locked || fechou !== null, attempts: newAttempts, janela: fechou },
       requestId,
       ip,
       userAgent,
     });
+    if (fechou === "dia") return { ok: false, error: "mfa_locked_today" };
     if (locked) {
       return { ok: false, error: "mfa_locked", retry_in_seconds: ATTEMPT_TTL_SECONDS };
     }

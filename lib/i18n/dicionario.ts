@@ -7547,6 +7547,9 @@ export const DICIONARIO: Traducoes = {
   "e tente novamente.": { es: "e intenta de nuevo." },
   "Muitas tentativas. Tente novamente em": { es: "Demasiados intentos. Intenta de nuevo en" },
   "Perdi acesso ao autenticador": { es: "Perdí acceso al autenticador" },
+  "Muitos códigos errados hoje: novas tentativas só a partir das 21h (horário de Brasília). Para não esperar, use “Perdi acesso ao autenticador”.": {
+    es: "Demasiados códigos incorrectos hoy: nuevos intentos solo a partir de las 21h (hora de Brasilia). Para no esperar, usa “Perdí acceso al autenticador”.",
+  },
   "Códigos copiados para a área de transferência.": {
     es: "Códigos copiados al portapapeles.",
   },

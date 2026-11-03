@@ -49,6 +49,15 @@ export function MfaForm({ next }: MfaFormProps) {
           `${t("Muitas tentativas. Aguarde")} ${res.retry_in_seconds ?? 60}s ${t("e tente novamente.")}`,
         );
         setCode("");
+      } else if (res.error === "mfa_locked_today") {
+        // O teto do dia não tem contagem que sirva: a tela diz até quando e
+        // aponta a saída, que é o link logo abaixo.
+        setError(
+          t(
+            "Muitos códigos errados hoje: novas tentativas só a partir das 21h (horário de Brasília). Para não esperar, use “Perdi acesso ao autenticador”.",
+          ),
+        );
+        setCode("");
       } else {
         setError(t("Código inválido. Tente novamente."));
         setCode("");

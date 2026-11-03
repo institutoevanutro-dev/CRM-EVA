@@ -299,16 +299,32 @@ export async function registrarFalhaDeToken(
   }
 }
 
-/** Janela longa do segundo fator: só por usuário (o teto por IP é o da janela curta). */
+/**
+ * Janela longa do segundo fator: só por conta (o teto por IP é o da janela curta).
+ * O dia é o UTC, então zera às 21h de Brasília — é a hora que as telas de entrada
+ * e de troca de senha prometem a quem cai nele (`mfa_locked_today`).
+ */
 const MFA_DIARIO = { id: 15, windowSec: 86400 } as const;
+
+/** Qual teto do segundo fator está fechado: o do minuto, o do dia, ou nenhum. */
+export type BloqueioDeMfa = "minuto" | "dia" | null;
 
 /**
  * Bloqueio por FALHA no segundo fator (MFA/TOTP), contado no servidor e não
  * no navegador — a mesma dupla proteção do `login`:
- *  - janela curta (`AUTH_LIMITS.mfa`, 3 falhas / 60s por usuário e 30 por IP);
- *  - janela diária (`MFA_DIARIO`, 15 falhas por dia por usuário). O dia é o
+ *  - janela curta (`AUTH_LIMITS.mfa`, 3 falhas / 60s por conta e 30 por IP);
+ *  - janela diária (`MFA_DIARIO`, 15 falhas por dia por conta). O dia é o
  *    UTC (janela fixa): a contagem zera às 21h de Brasília, não 24h depois do
  *    primeiro erro.
+ * Quando os dois estão fechados vale o do dia: é ele que diz quanto se espera.
+ *
+ * A conta é o usuário E o autenticador (`fatorId`): o que se adivinha é o
+ * segredo de UM autenticador. Quem sai do teto do dia pelo código de
+ * recuperação (ou pelo `reset-mfa.sh`) perde o autenticador e cadastra outro;
+ * contando só por usuário, o código certo do novo seguia barrado até as 21h.
+ * Cadastrar outro com um fator verificado exige a sessão em AAL2 (`enrollMfa`
+ * e `confirmMfaEnroll`), então quem só tem a senha não ganha contagem nova; e
+ * quem conseguisse cadastrar um autenticador seu nem precisaria adivinhar.
  *
  * Toda tela que confere o código do segundo fator consulta e alimenta este
  * mesmo balde: `verifyMfa` e `updatePassword`.
@@ -321,34 +337,49 @@ const MFA_DIARIO = { id: 15, windowSec: 86400 } as const;
  */
 export async function mfaBloqueadoPorFalhas(
   userId: string,
+  fatorId: string,
   limits: AuthRateLimits = AUTH_LIMITS.mfa,
   diario: { id: number; windowSec: number } = MFA_DIARIO,
-): Promise<boolean> {
+): Promise<BloqueioDeMfa> {
+  const conta = opaque(`${userId}:${fatorId}`);
+  const atualDia = await peekRateLimit(`auth:mfa_fail_daily:id:${conta}`, diario.windowSec);
+  if (atualDia >= diario.id) return "dia";
   const ip = await clientIp();
   if (ip !== null) {
     const atualIp = await peekRateLimit(`auth:mfa_fail:ip:${opaque(ip)}`, limits.windowSec);
-    if (atualIp >= limits.ip) return true;
+    if (atualIp >= limits.ip) return "minuto";
   }
   if (limits.id !== undefined) {
-    const atualId = await peekRateLimit(`auth:mfa_fail:id:${opaque(userId)}`, limits.windowSec);
-    if (atualId >= limits.id) return true;
+    const atualId = await peekRateLimit(`auth:mfa_fail:id:${conta}`, limits.windowSec);
+    if (atualId >= limits.id) return "minuto";
   }
-  const atualDia = await peekRateLimit(`auth:mfa_fail_daily:id:${opaque(userId)}`, diario.windowSec);
-  return atualDia >= diario.id;
+  return null;
 }
 
-/** Registra uma tentativa de MFA/TOTP que falhou no contador do servidor. */
+/**
+ * Registra uma tentativa de MFA/TOTP que falhou no contador do servidor e
+ * devolve o teto que ela fechou, com as contagens que o próprio `INCR` devolve
+ * (sem ida a mais ao Redis). É daqui que a auditoria tira `locked`: o cookie
+ * não serve, porque o cliente que não o devolve fica sempre na 1ª tentativa.
+ */
 export async function registrarFalhaDeMfa(
   userId: string,
+  fatorId: string,
   limits: AuthRateLimits = AUTH_LIMITS.mfa,
   diario: { id: number; windowSec: number } = MFA_DIARIO,
-): Promise<void> {
+): Promise<BloqueioDeMfa> {
+  const conta = opaque(`${userId}:${fatorId}`);
   const ip = await clientIp();
+  let minuto = false;
   if (ip !== null) {
-    await checkRateLimit(`auth:mfa_fail:ip:${opaque(ip)}`, limits.ip, limits.windowSec);
+    const porIp = await checkRateLimit(`auth:mfa_fail:ip:${opaque(ip)}`, limits.ip, limits.windowSec);
+    minuto = porIp.count >= limits.ip;
   }
   if (limits.id !== undefined) {
-    await checkRateLimit(`auth:mfa_fail:id:${opaque(userId)}`, limits.id, limits.windowSec);
+    const porConta = await checkRateLimit(`auth:mfa_fail:id:${conta}`, limits.id, limits.windowSec);
+    minuto ||= porConta.count >= limits.id;
   }
-  await checkRateLimit(`auth:mfa_fail_daily:id:${opaque(userId)}`, diario.id, diario.windowSec);
+  const noDia = await checkRateLimit(`auth:mfa_fail_daily:id:${conta}`, diario.id, diario.windowSec);
+  if (noDia.count >= diario.id) return "dia";
+  return minuto ? "minuto" : null;
 }

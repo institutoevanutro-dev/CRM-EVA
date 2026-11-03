@@ -87,6 +87,26 @@ describe("MfaForm — a espera tem teto", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("Código inválido. Tente novamente.");
   });
+
+  it("o teto do dia diz até quando e aponta a recuperação, em vez de contar 60 s em loop", async () => {
+    vi.mocked(verifyMfa).mockResolvedValue({ ok: false, error: "mfa_locked_today" });
+
+    render(<MfaForm />);
+    digitarCodigo();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    const aviso = screen.getByRole("alert");
+    expect(aviso).toHaveTextContent("21h (horário de Brasília)");
+    expect(aviso).toHaveTextContent("“Perdi acesso ao autenticador”");
+    expect(aviso).not.toHaveTextContent("Tente novamente em");
+    expect(screen.getByRole("link", { name: "Perdi acesso ao autenticador" })).toHaveAttribute(
+      "href",
+      "/login/recovery",
+    );
+  });
 });
 
 /**
