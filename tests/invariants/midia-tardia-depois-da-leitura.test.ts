@@ -34,6 +34,11 @@ import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
  *     de fora deriva antes de o turno ler a conversa: a anotação passa a cobrir o
  *     que o turno leu, e o turno do texto seguinte não responde de novo. Se ele
  *     deriva logo DEPOIS da leitura, o turno relê antes de prometê-lo.
+ *  5. A RELEITURA DO MODELO (`get_lead_context`) — vale a mesma régua: o áudio
+ *     que derivou enquanto o modelo pensava faz a releitura reanotar. Mas não
+ *     com envio no mesmo passo (a resposta foi escrita sobre `[audio]`), nem
+ *     sobre a mensagem que chegou depois da anotação, nem sobre o áudio que só
+ *     passou do teto, ainda sem texto.
  *
  * A régua `respostaFicouObsoleta` do fork só descarta quando a mensagem nova tem
  * turno próprio CONFERIDO (job pendente ou pedido de despacho na fila): os casos
@@ -75,7 +80,7 @@ type Modules = {
 let m: Modules;
 
 let enviados = 0;
-/** O prompt da 1ª chamada do modelo, por turno — o que cada turno LEU. */
+/** O prompt da chamada do modelo que pede o envio, por turno — o que cada turno LEU. */
 const prompts: string[] = [];
 
 // A régua compara com `now()`, então os instantes são relativos ao relógio real.
@@ -190,33 +195,38 @@ const USO = {
 };
 
 /**
- * Modelo fake: 1ª chamada pede `send_message` (com `corpo`) e guarda o prompt em
- * `prompts`; depois encerra. `onPrimeiraChamada` roda enquanto o "modelo pensa"
- * — é a mensagem que chega durante o turno.
+ * Modelo fake: pede `send_message` (com `corpo`) e guarda o prompt DESSA chamada
+ * em `prompts`; depois encerra. `onPrimeiraChamada` roda enquanto o "modelo
+ * pensa" a 1ª chamada — é a mensagem que chega durante o turno. Com `releitura`,
+ * pede também `get_lead_context`: numa chamada ANTES do envio, ou JUNTO com ele,
+ * na mesma resposta (o SDK roda as duas ferramentas em paralelo).
  */
 function modelo(
   onPrimeiraChamada?: () => Promise<void>,
   corpo = "Tudo bem também! Como posso te ajudar?",
+  releitura?: "antes" | "junto",
 ) {
+  const envie = {
+    type: "tool-call" as const,
+    toolCallId: "c1",
+    toolName: "send_message",
+    input: JSON.stringify({ body: corpo }),
+  };
+  const releia = { ...envie, toolCallId: "r1", toolName: "get_lead_context", input: "{}" };
+  const pede = (content: (typeof envie)[]) => ({
+    content,
+    finishReason: { unified: "tool-calls" as const, raw: undefined },
+    usage: USO,
+    warnings: [],
+  });
   let chamadas = 0;
   return async (opts?: { prompt?: unknown }) => {
     chamadas += 1;
-    if (chamadas === 1) {
+    if (chamadas === 1 && onPrimeiraChamada !== undefined) await onPrimeiraChamada();
+    if (chamadas === 1 && releitura === "antes") return pede([releia]);
+    if (chamadas === (releitura === "antes" ? 2 : 1)) {
       prompts.push(JSON.stringify(opts?.prompt ?? null));
-      if (onPrimeiraChamada !== undefined) await onPrimeiraChamada();
-      return {
-        content: [
-          {
-            type: "tool-call" as const,
-            toolCallId: "c1",
-            toolName: "send_message",
-            input: JSON.stringify({ body: corpo }),
-          },
-        ],
-        finishReason: { unified: "tool-calls" as const, raw: undefined },
-        usage: USO,
-        warnings: [],
-      };
+      return pede(releitura === "junto" ? [envie, releia] : [envie]);
     }
     return {
       content: [
@@ -246,6 +256,8 @@ async function rodarJob(
     onPrimeiraChamada?: () => Promise<void>;
     /** O que o modelo fake responde (default: a frase de sempre). */
     corpo?: string;
+    /** O modelo chama `get_lead_context` antes do envio ou junto com ele (ver `modelo`). */
+    releitura?: "antes" | "junto";
   } = {},
 ): Promise<void> {
   const [claimed] = await m.queue.claimJobs(pool, { workerId: "midia-tardia", maxConcurrency: 1 });
@@ -270,7 +282,9 @@ async function rodarJob(
       },
     },
     log: m.createLogger(),
-    registry: m.createFakeRegistry(modelo(opcoes.onPrimeiraChamada, opcoes.corpo) as never),
+    registry: m.createFakeRegistry(
+      modelo(opcoes.onPrimeiraChamada, opcoes.corpo, opcoes.releitura) as never,
+    ),
     channel: () =>
       ({
         channel: "captura",
@@ -634,6 +648,163 @@ describe("a mídia que chega depois de o turno ser enfileirado", () => {
       anotacao!.getTime(),
       "a anotação não cobre o que o turno releu — o turno do \"?\" responderia de novo",
     ).toBeGreaterThanOrEqual((await chegadaDe(interrogacao)).getTime());
+  });
+
+  /** A cena do caso 4, para o 5: o áudio e o "?" chegam durante o roteamento, cada um com o seu pedido. */
+  function chegamAudioEInterrogacao(cena: { audioId: string; interrogacao: string }) {
+    return async () => {
+      cena.audioId = await audio(new Date(Date.now() - 2).toISOString());
+      await pedidoDeDespacho(cena.audioId);
+      cena.interrogacao = await inbound("?", new Date().toISOString());
+      await pedidoDeDespacho(cena.interrogacao);
+    };
+  }
+
+  it("TRANSCRIÇÃO ANTES DO get_lead_context: a releitura do modelo reanota, e o turno do \"?\" não responde de novo", async () => {
+    // A abertura lê o áudio como [audio] e a anotação para antes dele. A
+    // transcrição fica pronta enquanto o modelo pensa; ele chama
+    // `get_lead_context`, lê a transcrição e o "?" e responde a tudo. Uma
+    // releitura que não reanotasse deixaria a anotação antes do áudio: com a
+    // pergunta além dos 120 s a resposta sai, e o turno do "?" responderia de novo.
+    const pergunta = await inbound(PERGUNTA, haSegundos(125));
+    const job = await jobDoTurno(pergunta);
+    const cena = { audioId: "", interrogacao: "" };
+
+    await rodarJob(job, {
+      antesDaAnotacao: chegamAudioEInterrogacao(cena),
+      onPrimeiraChamada: async () => {
+        await derivar(cena.audioId);
+      },
+      releitura: "antes",
+    });
+
+    expect(prompts[0], "a abertura já leu a transcrição — o caso não chega à releitura").toContain(
+      "[audio]",
+    );
+    expect(prompts[0], "a releitura não trouxe a transcrição").toContain(TRANSCRICAO);
+    expect(enviados, "a resposta que leu tudo não saiu").toBe(1);
+
+    await envioAceitoDoJob(job, "Tudo bem também! Como posso te ajudar?");
+    await pool.query("delete from pacing_ledger where organization_id = $1", [ORG]);
+    await rodarJob(await jobDoTurno(cena.interrogacao), {
+      corpo: "Sobre a limpeza de pele: temos horário na quinta.",
+    });
+    expect(enviados, "o turno do \"?\" respondeu de novo ao que a releitura já tinha respondido").toBe(1);
+
+    const anotacao = await anotacaoDoJob(job);
+    expect(anotacao, "o turno não anotou o que viu").not.toBeNull();
+    expect(
+      anotacao!.getTime(),
+      "a releitura do modelo não reanotou — o turno do \"?\" responderia de novo",
+    ).toBeGreaterThanOrEqual((await chegadaDe(cena.interrogacao)).getTime());
+  });
+
+  it("MENSAGEM QUE CHEGA ENQUANTO O MODELO PENSA: a releitura reanota até a anotação, nunca além", async () => {
+    // A cena anterior, e o cliente escreve de novo antes do `get_lead_context`. A
+    // releitura mostra a mensagem nova, mas a abertura não a listou entre as que o
+    // turno responde: prometê-la calaria o turno dela. Sobra a resposta dupla de antes.
+    const pergunta = await inbound(PERGUNTA, haSegundos(125));
+    const job = await jobDoTurno(pergunta);
+    const cena = { audioId: "", interrogacao: "" };
+    const NOVA = "e quanto custa?";
+    let novaId = "";
+
+    await rodarJob(job, {
+      antesDaAnotacao: chegamAudioEInterrogacao(cena),
+      onPrimeiraChamada: async () => {
+        await derivar(cena.audioId);
+        novaId = await inbound(NOVA, new Date().toISOString());
+        await pedidoDeDespacho(novaId);
+      },
+      releitura: "antes",
+    });
+
+    expect(prompts[0], "a bancada não montou a cena: a releitura não trouxe a mensagem nova").toContain(NOVA);
+    expect(enviados).toBe(1);
+    const anotacao = await anotacaoDoJob(job);
+    expect(anotacao, "o turno não anotou o que viu").not.toBeNull();
+    expect(anotacao!.getTime(), "a releitura não reanotou o que a abertura listou").toBeGreaterThanOrEqual(
+      (await chegadaDe(cena.interrogacao)).getTime(),
+    );
+    expect(
+      anotacao!.getTime(),
+      "a releitura prometeu a mensagem que chegou enquanto o modelo pensava",
+    ).toBeLessThan((await chegadaDe(novaId)).getTime());
+    await envioAceitoDoJob(job, "Tudo bem também! Como posso te ajudar?");
+    expect(await turnoSeguinteCalado(), "o turno da mensagem nova foi calado").toBe(false);
+  });
+
+  it("get_lead_context NO MESMO PASSO DO ENVIO: a anotação não avança, e o turno do \"?\" não é calado", async () => {
+    // O modelo pede `send_message` e `get_lead_context` na mesma resposta. A
+    // resposta foi escrita sobre a abertura, que leu o áudio como [audio]: se a
+    // releitura reanotasse, a anotação prometeria o áudio e calaria o turno do
+    // "?", o único que lê a transcrição. Fica a resposta dupla de antes.
+    const pergunta = await inbound(PERGUNTA, haSegundos(125));
+    const job = await jobDoTurno(pergunta);
+    const cena = { audioId: "", interrogacao: "" };
+
+    await rodarJob(job, {
+      antesDaAnotacao: chegamAudioEInterrogacao(cena),
+      onPrimeiraChamada: async () => {
+        await derivar(cena.audioId);
+      },
+      releitura: "junto",
+    });
+
+    expect(prompts[0], "a bancada não montou a cena: a resposta não foi escrita sobre [audio]").toContain(
+      "[audio]",
+    );
+    expect(enviados, "a resposta escrita sobre a abertura não saiu").toBe(1);
+    const anotacao = await anotacaoDoJob(job);
+    expect(anotacao, "o turno não anotou o que viu").not.toBeNull();
+    expect(
+      anotacao!.getTime(),
+      "a releitura do mesmo passo prometeu o áudio que a resposta leu como [audio]",
+    ).toBeLessThan((await chegadaDe(cena.audioId)).getTime());
+    await envioAceitoDoJob(job, "Tudo bem também! Como posso te ajudar?");
+    expect(
+      await turnoSeguinteCalado(),
+      "o turno do \"?\" foi calado — ninguém responderia à transcrição",
+    ).toBe(false);
+  });
+
+  it("ÁUDIO DO CORTE ALÉM DO TETO, AINDA SEM TEXTO: a reconferência não o promete; transcrito, promete", async () => {
+    // Entre a anotação e um `get_lead_context` o áudio do corte pode passar dos
+    // 120 s sem texto. A releitura ainda o mostra como [audio]: prometê-lo calaria
+    // o turno dele, que lê a transcrição se ela chegar atrasada.
+    const pergunta = await inbound(PERGUNTA, haSegundos(130));
+    const audioId = await audio(haSegundos(125));
+    const interrogacao = await inbound("?", haSegundos(124));
+    const job = await jobDoTurno(pergunta);
+    // A anotação feita quando o áudio ainda era novo: parou antes dele.
+    await pool.query(
+      `update job_queue
+          set payload = payload || jsonb_build_object('ultima_inbound_vista_em',
+                (select created_at from messages where id = $3))
+        where organization_id = $1 and id = $2`,
+      [ORG, job, pergunta],
+    );
+    const {
+      rows: [corte],
+    } = await pool.query<{ em: string; ate: string }>(
+      `select a.created_at::text as em, i.created_at::text as ate
+         from messages a, messages i where a.id = $1 and i.id = $2`,
+      [audioId, interrogacao],
+    );
+    const alvo = { organizationId: ORG, conversationId: CONV, jobId: job };
+
+    expect(
+      await m.regua.reanotarSeOCorteMudou(pool, alvo, corte!),
+      "a reconferência soltou o áudio que só passou do teto",
+    ).toBeNull();
+    expect((await anotacaoDoJob(job))!.getTime()).toBeLessThan((await chegadaDe(audioId)).getTime());
+
+    // A transcrição chega atrasada: agora a anotação avança sobre o áudio e o "?".
+    await derivar(audioId);
+    expect(await m.regua.reanotarSeOCorteMudou(pool, alvo, corte!)).toEqual({ corte: null });
+    expect((await anotacaoDoJob(job))!.getTime()).toBeGreaterThanOrEqual(
+      (await chegadaDe(interrogacao)).getTime(),
+    );
   });
 
   // CONTROLES de `esperaDaMidiaNoTeto`: cada um derruba uma condição da trava

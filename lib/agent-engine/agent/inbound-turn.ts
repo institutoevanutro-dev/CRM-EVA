@@ -226,6 +226,7 @@ import { renderAgora } from '@/lib/tempo/agora';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 import {
   anotarUltimaInboundVista,
+  type CorteDaAnotacao,
   reanotarSeOCorteMudou,
   respostaFicouObsoleta,
   ultimaInboundJaRespondida,
@@ -1749,12 +1750,13 @@ export interface AgentTurnInput {
   esperaDaMidiaNoTeto?: boolean;
   /**
    * A mídia pendente antes da qual a anotação do turno parou, como
-   * `anotarUltimaInboundVista` devolve (`null`: nenhuma). Com ela, a abertura
-   * confere depois de ler a conversa se essa mídia mudou de estado no meio do
-   * caminho e, se mudou, reanota e relê (`reanotarSeOCorteMudou`). Só o handler de
-   * `inbound_turn` e a reexecução da passagem de assunto preenchem.
+   * `anotarUltimaInboundVista` devolve (`null`: nenhuma). Com ela, cada leitura
+   * da conversa (abertura e `get_lead_context`) confere depois de ler se essa
+   * mídia virou texto no meio do caminho e, se virou, reanota e relê
+   * (`reanotarSeOCorteMudou`). Só o handler de `inbound_turn` e a reexecução da
+   * passagem de assunto preenchem.
    */
-  corteDaAnotacao?: string | null;
+  corteDaAnotacao?: CorteDaAnotacao | null;
   /** monta a abertura APÓS o ritual de leitura (inbound vs. bloco temporal do follow-up). */
   buildOpening: (ritual: {
     previous: LeadCheckpointRow | null;
@@ -2681,34 +2683,47 @@ async function executarTurnoDoAgente(
     ? (preview.previous ?? null)
     : await latestCheckpoint(pool, tenantId, leadId);
   const leadState = preview?.kind === 'sandbox' ? null : await getLeadState(pool, tenantId, leadId);
-  const lerAbertura = (): Promise<LeadContextResult> =>
+  const lerConversa = (): Promise<LeadContextResult> =>
     getLeadContext(
       pool,
       deps.crmCfg,
       { tenantId, leadId, conversationId: input.conversationId, fuso: fusoDaOrg },
       turnContextKnobs,
     );
-  let leitura: LeadContextResult = preview ? preview.context : await lerAbertura();
-  // A ANOTAÇÃO DESCREVE ESTA LEITURA. Ela foi feita antes e parou antes de uma
-  // mídia ainda sem texto; se essa mídia virou texto entre a anotação e o fim da
-  // leitura, o turno a leu e a anotação promete menos — o turno do texto seguinte
-  // responderia de novo. Reanota e relê, sempre nessa ordem. Ver
-  // `reanotarSeOCorteMudou`.
-  // ponytail: até 3 releituras, cada uma exige outra mídia mudando de estado nos
-  // milissegundos de uma leitura; passado isso, a anotação promete menos do que
-  // foi lido, nunca mais.
+  // A ANOTAÇÃO DESCREVE CADA LEITURA DA CONVERSA — a da abertura e a de cada
+  // `get_lead_context`. Ela foi feita antes e parou antes de uma mídia ainda sem
+  // texto; se essa mídia virou texto antes de uma leitura terminar, o turno a leu
+  // e a anotação promete menos — o turno do texto seguinte responderia de novo.
+  // Reanota e relê, sempre nessa ordem. Ver `reanotarSeOCorteMudou`.
+  // `podeReanotar` é a guarda da ferramenta: com tentativa de envio no turno (no
+  // mesmo passo, em paralelo, inclusive) a resposta foi escrita sobre a leitura
+  // anterior, e prometer o resto calaria quem ainda responde a ele. Ali sobra a
+  // resposta dupla de antes, que é melhor que o silêncio.
+  // ponytail: até 3 releituras por leitura, cada uma exige outra mídia mudando de
+  // estado nos milissegundos de uma leitura; passado isso, a anotação promete
+  // menos do que foi lido, nunca mais.
   let corte = preview ? null : (input.corteDaAnotacao ?? null);
-  for (let releituras = 0; corte !== null && job !== null && leitura.ok && releituras < 3; releituras++) {
-    const reanotacao = await reanotarSeOCorteMudou(
-      pool,
-      { organizationId: tenantId, conversationId: input.conversationId, jobId: job.id },
-      corte,
-    );
-    if (reanotacao === null) break;
-    corte = reanotacao.corte;
-    leitura = await lerAbertura();
-  }
-  const openingContext = leitura;
+  const lerComAnotacaoEmDia = async (
+    podeReanotar = (): boolean => true,
+  ): Promise<LeadContextResult> => {
+    let leitura = await lerConversa();
+    for (
+      let releituras = 0;
+      corte !== null && job !== null && leitura.ok && releituras < 3 && podeReanotar();
+      releituras++
+    ) {
+      const reanotacao = await reanotarSeOCorteMudou(
+        pool,
+        { organizationId: tenantId, conversationId: input.conversationId, jobId: job.id },
+        corte,
+      );
+      if (reanotacao === null) break;
+      corte = reanotacao.corte;
+      leitura = await lerConversa();
+    }
+    return leitura;
+  };
+  const openingContext = preview ? preview.context : await lerComAnotacaoEmDia();
   if (!openingContext.ok) {
     // Sem contexto não há turno: transiente (CRM fora) OU permanente (lead
     // sumiu) — ambos re-tentam pela fila e morrem em 'dead' se persistirem.
@@ -3358,14 +3373,13 @@ async function executarTurnoDoAgente(
         | { ok: false; error: { code: string; message: string } }
       > => {
         try {
+          // A mesma porta da abertura: a mídia que virou texto enquanto o modelo
+          // pensava aparece aqui, e a anotação tem de cobri-la — só sem tentativa de
+          // envio no turno. A do mesmo passo (o SDK roda as ferramentas em paralelo)
+          // ainda não está no ledger quando esta leitura acaba.
           const releitura = preview
             ? preview.context
-            : await getLeadContext(
-                pool,
-                deps.crmCfg,
-                { tenantId, leadId, conversationId: input.conversationId, fuso: fusoDaOrg },
-                turnContextKnobs,
-              );
+            : await lerComAnotacaoEmDia(() => tentativasDeEnvio === 0 && !midiaEnviadaNoTurno);
           // Sem esta linha a projeção da abertura seria decorativa: bastaria o
           // modelo chamar esta ferramenta para receber o contexto CRU de volta,
           // com `lead_id`, `conversation_id` e caminho de mídia. A releitura é a
@@ -5958,8 +5972,8 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
     //   1. o roteador logo abaixo lê a inbound mais nova, e áudio sem transcrição
     //      não é sinal nenhum para ele — o turno ficaria com o agente do texto;
     //   2. a anotação abaixo já deixa de fora a mídia pendente: anotar DEPOIS da
-    //      espera promete o que o turno vai ler (a mídia que virar texto entre a
-    //      anotação e a leitura faz a abertura reanotar e reler);
+    //      espera promete o que o turno vai ler (a mídia que virar texto antes de
+    //      uma leitura do turno o faz reanotar e reler — ver `lerComAnotacaoEmDia`);
     //   3. a janela anti-ban e o horário do agente são avaliados depois dela;
     //   4. só `inbound_turn` espera: follow-up e caso não passam por aqui.
     // O rascunho do modo assistido, mais abaixo, também sai com a transcrição. Teto

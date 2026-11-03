@@ -21,7 +21,8 @@
  * `inbound-turn.ts`), ANTES de rotear e ANTES de anotar o que o turno viu. O
  * roteador lê a inbound mais nova, e áudio sem transcrição não é sinal nenhum
  * para ele; a anotação já deixa de fora a mídia pendente, então anotar depois da
- * espera promete exatamente o que o turno vai ler. Follow-up e caso não esperam.
+ * espera promete o que o turno vai ler (a que vira texto antes de uma leitura do
+ * turno o faz reanotar e reler: `reanotarSeOCorteMudou`). Follow-up e caso não esperam.
  *
  * ─── O teto, e o que acontece quando ele estoura ─────────────────────────────
  *
