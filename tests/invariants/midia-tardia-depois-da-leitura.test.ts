@@ -34,10 +34,12 @@ import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
  *     de fora deriva antes de o turno ler a conversa: a anotação passa a cobrir o
  *     que o turno leu, e o turno do texto seguinte não responde de novo. Se ele
  *     deriva logo DEPOIS da leitura, o turno relê antes de prometê-lo.
- *  5. A RELEITURA DO MODELO (`get_lead_context`) — vale a mesma régua: o áudio
- *     que derivou enquanto o modelo pensava faz a releitura reanotar. Mas não
- *     com envio no mesmo passo (a resposta foi escrita sobre `[audio]`), nem
- *     sobre a mensagem que chegou depois da anotação, nem sobre o áudio que só
+ *  5. A RELEITURA DO MODELO (`get_lead_context`) NÃO REANOTA — a anotação é a da
+ *     abertura. O áudio que derivou enquanto o modelo pensava chega a ele pela
+ *     releitura, e o turno do texto seguinte responde de novo: é a resposta dupla
+ *     rara, aceita. Reanotar ali, numa corrida com o envio do mesmo passo escrito
+ *     sobre `[audio]`, calaria o turno do áudio. Na abertura, a reanotação não
+ *     passa da inbound mais nova que a anotação via, nem solta o áudio que só
  *     passou do teto, ainda sem texto.
  *
  * A régua `respostaFicouObsoleta` do fork só descarta quando a mensagem nova tem
@@ -660,12 +662,14 @@ describe("a mídia que chega depois de o turno ser enfileirado", () => {
     };
   }
 
-  it("TRANSCRIÇÃO ANTES DO get_lead_context: a releitura do modelo reanota, e o turno do \"?\" não responde de novo", async () => {
+  it("TRANSCRIÇÃO ANTES DO get_lead_context: a releitura do modelo não reanota, e o turno do \"?\" responde de novo (a resposta dupla aceita)", async () => {
     // A abertura lê o áudio como [audio] e a anotação para antes dele. A
     // transcrição fica pronta enquanto o modelo pensa; ele chama
-    // `get_lead_context`, lê a transcrição e o "?" e responde a tudo. Uma
-    // releitura que não reanotasse deixaria a anotação antes do áudio: com a
-    // pergunta além dos 120 s a resposta sai, e o turno do "?" responderia de novo.
+    // `get_lead_context`, lê a transcrição e o "?" e responde a tudo. A releitura
+    // não reanota, então a anotação fica antes do áudio: com a pergunta além dos
+    // 120 s a resposta sai, e o turno do "?" responde de novo. É o preço aceito —
+    // reanotar na ferramenta, numa corrida com um envio do mesmo passo escrito
+    // sobre [audio], calaria o turno do "?", o único que lê a transcrição.
     const pergunta = await inbound(PERGUNTA, haSegundos(125));
     const job = await jobDoTurno(pergunta);
     const cena = { audioId: "", interrogacao: "" };
@@ -689,20 +693,22 @@ describe("a mídia que chega depois de o turno ser enfileirado", () => {
     await rodarJob(await jobDoTurno(cena.interrogacao), {
       corpo: "Sobre a limpeza de pele: temos horário na quinta.",
     });
-    expect(enviados, "o turno do \"?\" respondeu de novo ao que a releitura já tinha respondido").toBe(1);
+    expect(enviados, "o turno do \"?\" foi calado — a releitura do modelo prometeu o áudio").toBe(2);
 
     const anotacao = await anotacaoDoJob(job);
     expect(anotacao, "o turno não anotou o que viu").not.toBeNull();
     expect(
       anotacao!.getTime(),
-      "a releitura do modelo não reanotou — o turno do \"?\" responderia de novo",
-    ).toBeGreaterThanOrEqual((await chegadaDe(cena.interrogacao)).getTime());
+      "a releitura do modelo reanotou — numa corrida com o envio do mesmo passo, o áudio ficaria sem resposta",
+    ).toBeLessThan((await chegadaDe(cena.audioId)).getTime());
   });
 
-  it("MENSAGEM QUE CHEGA ENQUANTO O MODELO PENSA: a releitura reanota até a anotação, nunca além", async () => {
-    // A cena anterior, e o cliente escreve de novo antes do `get_lead_context`. A
-    // releitura mostra a mensagem nova, mas a abertura não a listou entre as que o
-    // turno responde: prometê-la calaria o turno dela. Sobra a resposta dupla de antes.
+  it("MENSAGEM QUE CHEGA ANTES DA LEITURA DA ABERTURA: a reanotação vai até o que a anotação via, nunca além", async () => {
+    // A cena do caso 4, e entre a anotação e a leitura da abertura a transcrição
+    // fica pronta E o cliente escreve de novo. A abertura lê tudo e reanota, mas
+    // só até a inbound mais nova que a anotação via (`ate`): o que chegou depois
+    // dela tem turno próprio, como em todo turno só de texto. O pior caso é a
+    // resposta dupla de antes, nunca o turno da mensagem nova calado.
     const pergunta = await inbound(PERGUNTA, haSegundos(125));
     const job = await jobDoTurno(pergunta);
     const cena = { audioId: "", interrogacao: "" };
@@ -711,24 +717,25 @@ describe("a mídia que chega depois de o turno ser enfileirado", () => {
 
     await rodarJob(job, {
       antesDaAnotacao: chegamAudioEInterrogacao(cena),
-      onPrimeiraChamada: async () => {
+      depoisDaAnotacao: async () => {
         await derivar(cena.audioId);
-        novaId = await inbound(NOVA, new Date().toISOString());
+        // +1 ms: estritamente depois do "?", mesmo que tudo caia no mesmo milissegundo.
+        novaId = await inbound(NOVA, new Date(Date.now() + 1).toISOString());
         await pedidoDeDespacho(novaId);
       },
-      releitura: "antes",
     });
 
-    expect(prompts[0], "a bancada não montou a cena: a releitura não trouxe a mensagem nova").toContain(NOVA);
+    expect(prompts[0], "a bancada não montou a cena: a abertura não leu a mensagem nova").toContain(NOVA);
+    expect(prompts[0], "a abertura não releu a transcrição").toContain(TRANSCRICAO);
     expect(enviados).toBe(1);
     const anotacao = await anotacaoDoJob(job);
     expect(anotacao, "o turno não anotou o que viu").not.toBeNull();
-    expect(anotacao!.getTime(), "a releitura não reanotou o que a abertura listou").toBeGreaterThanOrEqual(
+    expect(anotacao!.getTime(), "a abertura não reanotou o que a anotação via").toBeGreaterThanOrEqual(
       (await chegadaDe(cena.interrogacao)).getTime(),
     );
     expect(
       anotacao!.getTime(),
-      "a releitura prometeu a mensagem que chegou enquanto o modelo pensava",
+      "a reanotação prometeu a mensagem que chegou depois da anotação",
     ).toBeLessThan((await chegadaDe(novaId)).getTime());
     await envioAceitoDoJob(job, "Tudo bem também! Como posso te ajudar?");
     expect(await turnoSeguinteCalado(), "o turno da mensagem nova foi calado").toBe(false);
@@ -738,7 +745,10 @@ describe("a mídia que chega depois de o turno ser enfileirado", () => {
     // O modelo pede `send_message` e `get_lead_context` na mesma resposta. A
     // resposta foi escrita sobre a abertura, que leu o áudio como [audio]: se a
     // releitura reanotasse, a anotação prometeria o áudio e calaria o turno do
-    // "?", o único que lê a transcrição. Fica a resposta dupla de antes.
+    // "?", o único que lê a transcrição. A ferramenta não reanota em ordem
+    // nenhuma: no worker o envio só conta depois das consultas da fronteira de
+    // serviço, e uma guarda que olhasse o envio perderia essa corrida. Fica a
+    // resposta dupla de antes.
     const pergunta = await inbound(PERGUNTA, haSegundos(125));
     const job = await jobDoTurno(pergunta);
     const cena = { audioId: "", interrogacao: "" };
@@ -769,9 +779,10 @@ describe("a mídia que chega depois de o turno ser enfileirado", () => {
   });
 
   it("ÁUDIO DO CORTE ALÉM DO TETO, AINDA SEM TEXTO: a reconferência não o promete; transcrito, promete", async () => {
-    // Entre a anotação e um `get_lead_context` o áudio do corte pode passar dos
-    // 120 s sem texto. A releitura ainda o mostra como [audio]: prometê-lo calaria
-    // o turno dele, que lê a transcrição se ela chegar atrasada.
+    // O áudio do corte, perto dos 120 s, pode passá-los sem texto entre a
+    // anotação e o fim da leitura da abertura. A leitura ainda o mostra como
+    // [audio]: prometê-lo calaria o turno dele, que lê a transcrição se ela
+    // chegar atrasada.
     const pergunta = await inbound(PERGUNTA, haSegundos(130));
     const audioId = await audio(haSegundos(125));
     const interrogacao = await inbound("?", haSegundos(124));

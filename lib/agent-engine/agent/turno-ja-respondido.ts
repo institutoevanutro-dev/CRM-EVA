@@ -75,8 +75,8 @@ export interface AlvoDoTurno {
  *    Reescrever faria a mensagem que chegou no meio-tempo parecer respondida.
  *
  * Devolve o CORTE (`CorteDaAnotacao`), ou `null` quando nenhuma mídia cortou
- * (todo turno só de texto) ou quando nada foi escrito. Com corte, cada leitura da
- * conversa no turno confere depois de ler: ver `reanotarSeOCorteMudou`.
+ * (todo turno só de texto) ou quando nada foi escrito. Com corte, a abertura do
+ * turno confere depois de ler a conversa: ver `reanotarSeOCorteMudou`.
  */
 export async function anotarUltimaInboundVista(
   db: Queryable,
@@ -102,8 +102,10 @@ export interface CorteDaAnotacao {
 
 /**
  * A mídia que cortou a anotação virou texto antes de o turno terminar de LER a
- * conversa? Quem chama é cada leitura do turno — a da abertura e a de cada
- * `get_lead_context` (`lerComAnotacaoEmDia`, `inbound-turn.ts`) —, logo depois de ler.
+ * conversa? Quem chama é a abertura do turno (`inbound-turn.ts`), logo depois de
+ * ler. A releitura do modelo (`get_lead_context`) não chama: ela pode correr junto
+ * com um envio escrito sobre a abertura, e prometer a mídia ali calaria o turno
+ * dela — ver a ferramenta.
  *
  * A anotação vem antes da leitura, e entre as duas a transcrição pode ficar
  * pronta. A leitura então mostra o áudio COM texto (e o que veio depois dele),
@@ -116,13 +118,15 @@ export interface CorteDaAnotacao {
  * e a anotação vale.
  *
  * A reanotação só avança sobre mídia que terminou de derivar, com duas travas:
- *  - o teto não solta a mídia que segue sem texto desde o corte: entre a anotação
- *    e um `get_lead_context` ela pode passar dos 120 s, e a leitura ainda a mostra
- *    como `[tipo]`. Prometê-la calaria o turno dela, que lê a transcrição se ela
- *    chegar atrasada;
- *  - nada que chegou depois da anotação (`ate`): a releitura do modelo mostra a
- *    mensagem nova, mas a abertura não a listou entre as que o turno responde, e
- *    prometê-la calaria o turno dela.
+ *  - o teto não solta a mídia que segue sem texto desde o corte: a que estava
+ *    perto dos 120 s pode passá-los entre a anotação e o fim da leitura, e a
+ *    leitura ainda a mostra como `[tipo]`. Prometê-la calaria o turno dela, que
+ *    lê a transcrição se ela chegar atrasada;
+ *  - nada que chegou depois da anotação (`ate`): a reanotação não promete mais do
+ *    que a anotação feita antes da leitura prometeria. O que chegou depois dela
+ *    tem turno próprio, como em todo turno só de texto — a régua de resposta
+ *    obsoleta segue valendo para ela, e o pior caso é uma resposta dupla, nunca o
+ *    turno dela calado.
  *
  * Se mudou, reanota AGORA e devolve o corte novo: quem chama tem de reler a
  * conversa, porque a anotação nova descreve a leitura que vem DEPOIS dela, como a
