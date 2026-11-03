@@ -417,15 +417,21 @@ contato calado era inscrito de novo no minuto seguinte, para sempre.
 |---|------|-------------|-----------|
 | J9c.1 | Sequência termina (End), contato segue calado | nenhuma reinscrição nas varreduras seguintes | PASS (invariante, laço real) |
 | J9c.2 | Inscrição `completed`/`dead`/`cancelled` no mesmo silêncio | não reinscreve | PASS (invariante) |
-| J9c.3 | Contato responde e cala de novo | sequência nova do primeiro toque | PASS (invariante) |
+| J9c.3 | Contato responde e cala de novo | sequência nova do primeiro toque (exceto J9c.9) | PASS (invariante) |
 | J9c.4 | Ativar o fluxo com conversas caladas há meses | ninguém que calou antes da ativação entra | PASS (invariante + unit) |
 | J9c.5 | Desativar e publicar de novo | vigência zera; republicar versão num fluxo ativo não zera | PASS (invariante) |
 | J9c.6 | Contato anonimizado calado | não entra | PASS (unit da consulta de produção) |
 | J9c.7 | Mais de 1000 conversas abertas | todas consideradas (keyset até a página vazia) | PASS (unit) |
 | J9c.8 | Pela tela, ponta a ponta | `followup-journey` e `j20-elegibilidade-followup` recuam a vigência que semeiam | NÃO RODADO localmente — prova no `e2e` do CI |
+| J9c.9 | Contato só responde com emoji (sem letra nem dígito) a mensagem automática — regra de automação, lembrete da Agenda, campanha ou texto fixo de fluxo (pós-consulta) — em até 48 h, sem nada com conteúdo nas 48 h antes dela | não entra no fluxo de silêncio; com conteúdo no período, entra | PASS (unit) |
 
 **Limite declarado:** "qualquer resposta encerra a sequência" só vale com
 "cancelar ao responder" ligado no gatilho (vem desligado).
+
+**Limite declarado (J9c.9, sem tela):** o contato excluído não ganha inscrição,
+e o motivo só aparece como `skipped_resposta_a_automacao` no metadata de
+`followup.silence_sweep_run` quando o tick já audita por outro efeito. Não há
+inscrição manual pela tela; a conversa segue no Inbox para a recepção.
 
 ---
 

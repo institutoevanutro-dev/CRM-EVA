@@ -149,6 +149,8 @@ describe("enviarTextoFixoPendente · liberação do número (gate do canal)", ()
     expect(sendMessageHandler).toHaveBeenCalledOnce();
     // A marca que deixa o follow-up sair no Instagram dentro das 24h.
     expect(sendMessageHandler.mock.calls[0]?.[1]).toMatchObject({ origemDoEnvio: "followup" });
+    // A marca que a varredura de silêncio lê como "mensagem automática" (#3729 do original).
+    expect(sendMessageHandler.mock.calls[0]?.[2]).toMatchObject({ metadata: { texto_fixo_do_fluxo: "true" } });
   });
 
   it("erro ao conferir → NÃO envia, job volta pra 'pending' (fail-closed)", async () => {

@@ -45,6 +45,7 @@ import { AgendaPuladoError, MOTIVO_DO_PULO, decidirNoEnvio } from '@/lib/agenda/
 import { escolhaDoFluxoPg } from '@/lib/agenda/escolha-no-envio-leitura';
 import { protecaoAgendaPg } from '@/lib/agenda/protecao-followup';
 import { aplicarPessoaNoComandoAoTurno } from '@/lib/followup/pessoa-no-comando-no-turno';
+import { MARCA_DO_TEXTO_FIXO_DO_FLUXO } from '@/lib/followup/resposta-a-automacao';
 import {
   MOTIVO_TEXTO_VAZIO_SEM_VALOR,
   OUTCOME_DO_BLOQUEIO,
@@ -1066,7 +1067,9 @@ async function sendFixedOutbound(
               ),
           }
         : {}),
-      send: (finalBody) => channel.send({ tenantId, leadId, jobId: job.id, jobClaim:claimOfJob(job), seq, conversationId, body: finalBody, ...(mediaLibraryItemId !== undefined ? { mediaLibraryItemId } : {}), origemDoEnvio: 'followup' }),
+      // A marca diz "texto que ninguém escreveu na conversa" e vence o `ai_actor_id`
+      // que este caminho grava (ver `resposta-a-automacao.ts`).
+      send: (finalBody) => channel.send({ tenantId, leadId, jobId: job.id, jobClaim:claimOfJob(job), seq, conversationId, body: finalBody, ...(mediaLibraryItemId !== undefined ? { mediaLibraryItemId } : {}), origemDoEnvio: 'followup', metadata: { [MARCA_DO_TEXTO_FIXO_DO_FLUXO]: 'true' } }),
     });
   } catch (err) {
     // Mídia sumiu ou deixou de estar pronta: encerra a sequência (decisão do dono) e avisa.

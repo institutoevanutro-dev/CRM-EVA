@@ -47,8 +47,10 @@ export interface ChannelSendInput {
   origemDoEnvio?: 'followup';
   /**
    * Marcas de origem gravadas em `messages.metadata`, ao lado da
-   * `idempotency_key` (que sempre vence). Hoje só a resposta pronta usa
-   * (`resposta_pronta_id`) — é o que o balão lê para dizer "Resposta pronta".
+   * `idempotency_key` (que sempre vence). Hoje são duas: a resposta pronta
+   * (`resposta_pronta_id`), que o balão lê para dizer "Resposta pronta", e o
+   * texto fixo do fluxo de follow-up (`texto_fixo_do_fluxo`), que a varredura de
+   * silêncio lê para reconhecer resposta a mensagem automática.
    */
   metadata?: Record<string, string>;
 }
