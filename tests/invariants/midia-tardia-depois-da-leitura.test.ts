@@ -15,7 +15,7 @@ import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
  * conversa ANTES de rotear e de anotar o que o turno viu
  * (`ultima_inbound_vista_em`), e a anotação já deixa de fora a mídia pendente
  * mais nova que o teto. Caminho de produção: job `inbound_turn` →
- * `createInboundTurnHandler` → `runAgentTurn`, com modelo fake. Quatro fatos:
+ * `createInboundTurnHandler` → `runAgentTurn`, com modelo fake. Os fatos:
  *
  *  1. SEM REGRESSÃO — a mídia que derivou durante a espera entra na anotação, e
  *     a resposta sai uma vez só. É o caso que DISCRIMINA o porte: sem a espera,
