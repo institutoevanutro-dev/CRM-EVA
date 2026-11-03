@@ -5714,6 +5714,16 @@ export const DICIONARIO: Traducoes = {
   "Enviar anexo": { es: "Enviar adjunto" },
   "Legenda (opcional)": { es: "Descripción (opcional)" },
   Legenda: { es: "Descripción" },
+  // Arquivo arrastado para a caixa (porte do original #3713).
+  "Solte o arquivo para anexar": { es: "Suelta el archivo para adjuntarlo" },
+  "Solte um arquivo por vez.": { es: "Suelta un archivo a la vez." },
+  "Não consegui ler esse arquivo. Salve no computador e arraste de novo, ou use o +.": {
+    es: "No pude leer ese archivo. Guárdalo en la computadora y arrástralo de nuevo, o usa el +.",
+  },
+  "Arquivo de áudio não vai na resposta. Grave pelo microfone ou anexe na nota interna.": {
+    es: "El archivo de audio no va en la respuesta. Graba con el micrófono o adjúntalo en la nota interna.",
+  },
+  "Para: {nome}": { es: "Para: {nome}" },
   "Gravar áudio": { es: "Grabar audio" },
   "Cancelar gravação": { es: "Cancelar grabación" },
   "Enviar áudio": { es: "Enviar audio" },
