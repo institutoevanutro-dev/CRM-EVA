@@ -41,7 +41,11 @@ export default async function SetupAiPage() {
     .filter((r): r is string => Boolean(r))
     .map((r) => traduzir(r, idioma));
 
-  const conferencias = CONFERENCIAS_DE_SAIDA.map((c) => traduzir(c.rotulo, idioma));
+  // A de horário da agenda fica de fora: por padrão ela só observa (HORARIO_DA_AGENDA_MODO),
+  // e esta lista promete "nunca vai fazer". O painel Segurança do agente a mostra com o modo explicado.
+  const conferencias = CONFERENCIAS_DE_SAIDA.filter((c) => c.nome !== "horario_da_agenda").map((c) =>
+    traduzir(c.rotulo, idioma),
+  );
 
   return (
     <div className="space-y-6">

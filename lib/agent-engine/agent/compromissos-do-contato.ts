@@ -52,12 +52,18 @@ export const MAXIMO_DE_COMPROMISSOS_NO_BLOCO = 5;
  * `cancelled` fica de fora: um compromisso cancelado no bloco faria o agente
  * afirmar ao cliente uma reunião que não existe mais — trocaria o defeito de
  * "não vê o que marcou" por "promete o que foi desmarcado", que é pior.
+ *
+ * `limite` só muda para o turno do agente, que lê até 50 linhas desde 24h antes
+ * para o gate de horário (`horario-da-agenda.ts`) reconhecer o compromisso que o
+ * contato já tem. O bloco continua com o teto padrão: uma linha a mais que ele,
+ * para saber que truncou.
  */
 export async function compromissosDoContato(
   db: Queryable,
   organizationId: string,
   contactId: string,
   agora: Date,
+  limite = MAXIMO_DE_COMPROMISSOS_NO_BLOCO + 1,
 ): Promise<CompromissoDoContato[]> {
   const { rows } = await db.query<CompromissoDoContato>(
     `select id, title, starts_at, ends_at, time_zone, status, meeting_state, meeting_url
@@ -68,7 +74,7 @@ export async function compromissosDoContato(
         and ends_at >= $3
       order by starts_at
       limit $4`,
-    [organizationId, contactId, agora.toISOString(), MAXIMO_DE_COMPROMISSOS_NO_BLOCO + 1],
+    [organizationId, contactId, agora.toISOString(), limite],
   );
   return rows;
 }

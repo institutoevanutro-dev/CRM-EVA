@@ -36,6 +36,17 @@ describe("retentionCopy — tradução leiga dos vetos before_send", () => {
     expect(retentionCopy("disclosure_required", ctx).kind).toBe("quality");
   });
 
+  it("horário que a agenda não devolveu é qualidade, dito em português e sem o código cru", () => {
+    for (const code of ["horario_sem_fonte", "agenda_confirmou_sem_marcar"]) {
+      const copy = retentionCopy(code, ctx);
+      expect(copy.kind).toBe("quality");
+      expect(copy.description).not.toContain("código");
+      expect(copy.description).not.toContain(code);
+    }
+    expect(retentionCopy("horario_sem_fonte", ctx).description).toContain("agenda");
+    expect(retentionCopy("agenda_confirmou_sem_marcar", ctx).description).toContain("marcação");
+  });
+
   it("código desconhecido ou null cai no fallback de proteção sem quebrar", () => {
     expect(retentionCopy(null, ctx).kind).toBe("protection");
     const unknown = retentionCopy("gate_novo_do_engine", ctx);

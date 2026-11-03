@@ -2,11 +2,12 @@
  * Tipos de mensagem cujo conteúdo vira TEXTO antes de o agente responder
  * (áudio → transcrição, imagem → descrição, documento → extração).
  *
- * Vive fora do worker porque duas peças precisam da MESMA resposta e não podem
- * discordar: o worker que deriva e o drain que decide se vale esperar a
- * derivação antes de despachar o turno. Duas listas separadas divergiriam no
- * primeiro tipo novo, e o sintoma seria o agente respondendo "não consigo
- * ouvir" só para um formato.
+ * Vive fora do worker porque três peças precisam da MESMA resposta e não podem
+ * discordar: o worker que deriva, o drain que decide se vale esperar a
+ * derivação antes de despachar o turno e a espera do handler de `inbound_turn`
+ * (`agent/espera-da-midia.ts`), que faz a mesma pergunta antes de rotear. Duas
+ * listas separadas divergiriam no primeiro tipo novo, e o sintoma seria o agente
+ * respondendo "não consigo ouvir" só para um formato.
  */
 export const TIPOS_DERIVAVEIS: ReadonlySet<string> = new Set([
   "audio",
@@ -29,7 +30,8 @@ export const DERIVACAO_TERMINADA: ReadonlySet<string> = new Set(["ready", "faile
  * Quanto o drain espera a derivação de uma mídia antes de despachar o turno sem
  * ela (o racional e as medições estão em `edge/crm/drain.ts`). Mora aqui porque
  * a anotação do turno (`agent/turno-ja-respondido.ts`) usa a mesma régua para
- * saber o que o turno pôde ler.
+ * saber o que o turno pôde ler, e a espera do handler de `inbound_turn`
+ * (`agent/espera-da-midia.ts`) lê o mesmo teto.
  */
 export const TETO_ESPERA_DERIVACAO_MS = 120_000;
 
@@ -43,8 +45,9 @@ export const TETO_ESPERA_DERIVACAO_MS = 120_000;
  *  - mídia importada do histórico do número oficial (`importada_do_historico`),
  *    que o worker de download guarda sem derivar.
  *
- * Usado pelo drain (espera) e pela anotação do turno (o que ele pôde ler): as
- * duas réguas não podem discordar.
+ * Usado pelo drain e pela espera do handler de `inbound_turn` (os dois por
+ * `edge/crm/midia-derivavel.ts`) e pela anotação do turno (o que ele pôde ler):
+ * as réguas não podem discordar.
  */
 export function sqlMidiaVaiSerLida(m: string): string {
   return `(coalesce(${m}.metadata->>'importada_do_historico', '') <> 'true'

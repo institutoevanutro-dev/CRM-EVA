@@ -35,6 +35,8 @@ export async function generateReplyDraft(
     channelId: string;
     boundary?: ServiceBoundary;
     agent?: PublishedAgentConfig;
+    /** Só o clique em "Sugerir resposta"; o rascunho que o worker escreve sozinho não liga. */
+    pedidoHumano?: boolean;
   },
 ) {
   const agent =
@@ -99,6 +101,7 @@ export async function generateReplyDraft(
         feedback: JSON.stringify(feedback.map((r) => r.feedback)),
         contactId: input.contactId,
         channelId: input.channelId,
+        ...(input.pedidoHumano ? { pedidoHumano: true } : {}),
         result,
       });
       const body = result.candidates.map((c) => c.body).join("\n\n");
