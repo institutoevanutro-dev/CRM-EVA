@@ -130,3 +130,39 @@ describe("sem IP identificável — o balde global que era um DoS", () => {
     expect(veredito).toEqual([false, false, true]);
   });
 });
+
+describe("mfaBloqueadoPorFalhas & registrarFalhaDeMfa", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it("barra após 3 falhas de TOTP na mesma conta mesmo sem cookie e trocando de IP", async () => {
+    const { mfaBloqueadoPorFalhas, registrarFalhaDeMfa } = await import("./rate-limit");
+    const userId = "user-mfa-123";
+
+    for (let i = 0; i < 3; i++) {
+      comIp(`198.51.100.${50 + i}`);
+      expect(await mfaBloqueadoPorFalhas(userId)).toBe(false);
+      await registrarFalhaDeMfa(userId);
+    }
+
+    comIp("198.51.100.99");
+    expect(await mfaBloqueadoPorFalhas(userId)).toBe(true);
+  });
+
+  it("15 falhas no mesmo dia trancam, mesmo com a janela curta folgada", async () => {
+    // Sem relógio falso nem data fixa: contra um Redis de pé, usuário e dia
+    // fixos fariam cada nova rodada do mesmo dia UTC começar já em 15. A janela
+    // curta vai folgada para que só o teto diário (o padrão) decida.
+    const { mfaBloqueadoPorFalhas, registrarFalhaDeMfa } = await import("./rate-limit");
+    vi.mocked(headers).mockResolvedValue({ get: () => null } as never);
+    const userId = crypto.randomUUID();
+    const folgada = { ip: 1_000, id: 1_000, windowSec: 60 };
+
+    for (let i = 0; i < 14; i++) await registrarFalhaDeMfa(userId, folgada);
+    expect(await mfaBloqueadoPorFalhas(userId, folgada)).toBe(false);
+
+    await registrarFalhaDeMfa(userId, folgada);
+    expect(await mfaBloqueadoPorFalhas(userId, folgada)).toBe(true);
+  });
+});

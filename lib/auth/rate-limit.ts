@@ -153,6 +153,10 @@ export const AUTH_LIMITS = {
   // Aviso da Conta: já protegido por HMAC; o teto folgado só impede que uma
   // enxurrada de corpos forjados martele o banco.
   evalink_aviso: { ip: 600, windowSec: 300 },
+  // Código errado do segundo fator (TOTP): 3 por conta no minuto do relógio
+  // (janela fixa); o teto do dia mora em `MFA_DIARIO`. Os 30 por IP são só
+  // anti-enxurrada, folgados por causa de NAT compartilhado.
+  mfa: { ip: 30, id: 3, windowSec: 60 },
 } satisfies Record<string, AuthRateLimits>;
 
 export const __LOGIN_IP_DEFAULT_PARA_TESTE = LOGIN_IP_DEFAULT;
@@ -293,4 +297,58 @@ export async function registrarFalhaDeToken(
       err instanceof Error ? err.message : err,
     );
   }
+}
+
+/** Janela longa do segundo fator: só por usuário (o teto por IP é o da janela curta). */
+const MFA_DIARIO = { id: 15, windowSec: 86400 } as const;
+
+/**
+ * Bloqueio por FALHA no segundo fator (MFA/TOTP), contado no servidor e não
+ * no navegador — a mesma dupla proteção do `login`:
+ *  - janela curta (`AUTH_LIMITS.mfa`, 3 falhas / 60s por usuário e 30 por IP);
+ *  - janela diária (`MFA_DIARIO`, 15 falhas por dia por usuário). O dia é o
+ *    UTC (janela fixa): a contagem zera às 21h de Brasília, não 24h depois do
+ *    primeiro erro.
+ *
+ * Toda tela que confere o código do segundo fator consulta e alimenta este
+ * mesmo balde: `verifyMfa` e `updatePassword`.
+ *
+ * ponytail: consultar e depois incrementar não é atômico (igual a
+ * `contaBloqueadaPorFalhas`), então uma rajada paralela passa até as falhas
+ * serem gravadas. Quem limita a rajada é o teto por IP do próprio Supabase Auth
+ * para challenge/verify (rajada de até 30 requisições), e o teto diário fecha o
+ * dia depois dela. Upgrade: reservar com INCR antes do verify e devolver no acerto.
+ */
+export async function mfaBloqueadoPorFalhas(
+  userId: string,
+  limits: AuthRateLimits = AUTH_LIMITS.mfa,
+  diario: { id: number; windowSec: number } = MFA_DIARIO,
+): Promise<boolean> {
+  const ip = await clientIp();
+  if (ip !== null) {
+    const atualIp = await peekRateLimit(`auth:mfa_fail:ip:${opaque(ip)}`, limits.windowSec);
+    if (atualIp >= limits.ip) return true;
+  }
+  if (limits.id !== undefined) {
+    const atualId = await peekRateLimit(`auth:mfa_fail:id:${opaque(userId)}`, limits.windowSec);
+    if (atualId >= limits.id) return true;
+  }
+  const atualDia = await peekRateLimit(`auth:mfa_fail_daily:id:${opaque(userId)}`, diario.windowSec);
+  return atualDia >= diario.id;
+}
+
+/** Registra uma tentativa de MFA/TOTP que falhou no contador do servidor. */
+export async function registrarFalhaDeMfa(
+  userId: string,
+  limits: AuthRateLimits = AUTH_LIMITS.mfa,
+  diario: { id: number; windowSec: number } = MFA_DIARIO,
+): Promise<void> {
+  const ip = await clientIp();
+  if (ip !== null) {
+    await checkRateLimit(`auth:mfa_fail:ip:${opaque(ip)}`, limits.ip, limits.windowSec);
+  }
+  if (limits.id !== undefined) {
+    await checkRateLimit(`auth:mfa_fail:id:${opaque(userId)}`, limits.id, limits.windowSec);
+  }
+  await checkRateLimit(`auth:mfa_fail_daily:id:${opaque(userId)}`, diario.id, diario.windowSec);
 }
