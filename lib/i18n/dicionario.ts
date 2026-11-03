@@ -7550,6 +7550,12 @@ export const DICIONARIO: Traducoes = {
   "Muitos códigos errados hoje: novas tentativas só a partir das 21h (horário de Brasília). Para não esperar, use “Perdi acesso ao autenticador”.": {
     es: "Demasiados códigos incorrectos hoy: nuevos intentos solo a partir de las 21h (hora de Brasilia). Para no esperar, usa “Perdí acceso al autenticador”.",
   },
+  "Muitos códigos errados hoje: novas tentativas só a partir das 21h (horário de Brasília). Para não esperar, use “Perdi acesso ao autenticador” e, depois do código de recuperação, peça um novo link em “Esqueci minha senha”.": {
+    es: "Demasiados códigos incorrectos hoy: nuevos intentos solo a partir de las 21h (hora de Brasilia). Para no esperar, usa “Perdí acceso al autenticador” y, después del código de recuperación, pide un nuevo enlace en “Olvidé mi contraseña”.",
+  },
+  "Autenticador removido. Entre com a sua senha. Se você estava trocando a senha, peça um novo link em “Esqueci minha senha”.": {
+    es: "Autenticador eliminado. Entra con tu contraseña. Si estabas cambiando la contraseña, pide un nuevo enlace en “Olvidé mi contraseña”.",
+  },
   "Códigos copiados para a área de transferência.": {
     es: "Códigos copiados al portapapeles.",
   },

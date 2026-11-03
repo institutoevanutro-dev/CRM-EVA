@@ -44,13 +44,18 @@ describe("ResetPasswordForm — o bloqueio do segundo fator", () => {
     expect(screen.getByLabelText("Código de verificação (2 etapas)")).toBeInTheDocument();
   });
 
-  it("o teto do dia diz até quando e leva ao código de recuperação", async () => {
+  it("o teto do dia diz até quando, leva ao código de recuperação e avisa que depois vem um link novo", async () => {
     vi.mocked(updatePassword).mockResolvedValue({ ok: false, error: "mfa_locked_today" });
 
     render(<ResetPasswordForm />);
     await definirSenha();
 
-    expect(await screen.findByText(/21h \(horário de Brasília\)/)).toBeInTheDocument();
+    const aviso = await screen.findByText(/21h \(horário de Brasília\)/);
+    // O código de recuperação leva a /login, não de volta para cá: sem isto a
+    // pessoa chegava lá sem saber que a troca precisa de outro e-mail.
+    expect(aviso).toHaveTextContent(
+      "depois do código de recuperação, peça um novo link em “Esqueci minha senha”",
+    );
     expect(screen.getByLabelText("Código de verificação (2 etapas)")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Perdi acesso ao autenticador" })).toHaveAttribute(
       "href",

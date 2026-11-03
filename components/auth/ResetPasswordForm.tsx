@@ -48,9 +48,10 @@ export function ResetPasswordForm() {
         setServerError(t("Muitas tentativas. Aguarde alguns minutos."));
       } else if (res.error === "mfa_locked_today") {
         setNeedsMfa(true);
+        // O código de recuperação leva à tela de entrada, não de volta para cá.
         setServerError(
           t(
-            "Muitos códigos errados hoje: novas tentativas só a partir das 21h (horário de Brasília). Para não esperar, use “Perdi acesso ao autenticador”.",
+            "Muitos códigos errados hoje: novas tentativas só a partir das 21h (horário de Brasília). Para não esperar, use “Perdi acesso ao autenticador” e, depois do código de recuperação, peça um novo link em “Esqueci minha senha”.",
           ),
         );
       } else if (res.error === "session_expired") {

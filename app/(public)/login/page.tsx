@@ -14,9 +14,15 @@ export const metadata = { title: "Entrar" };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; reset?: string; error?: string; evalink?: string }>;
+  searchParams: Promise<{
+    next?: string;
+    reset?: string;
+    error?: string;
+    evalink?: string;
+    recovery_used?: string;
+  }>;
 }) {
-  const { next, reset, error, evalink } = await searchParams;
+  const { next, reset, error, evalink, recovery_used } = await searchParams;
   const evalinkLigado = configEvalink() !== null;
   const mensagemEvalink = mensagemDoEvalink(evalink);
   // Fora da árvore de `app/app/layout.tsx` — sem `IdiomaProvider` do lado do
@@ -61,6 +67,22 @@ export default async function LoginPage({
           role="status"
         >
           {t("Senha redefinida com sucesso. Entre com a nova senha.")}
+        </div>
+      )}
+      {/*
+        O código de recuperação (useRecoveryCode) sempre volta para cá, venha a
+        pessoa da entrada ou da troca de senha. Quem trocava a senha não a sabe, e
+        voltar para /login/reset não serve: o cookie daquela sessão ainda lista o
+        autenticador apagado. Um link novo abre sessão sem ele.
+      */}
+      {recovery_used === "1" && (
+        <div
+          className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm"
+          role="status"
+        >
+          {t(
+            "Autenticador removido. Entre com a sua senha. Se você estava trocando a senha, peça um novo link em “Esqueci minha senha”.",
+          )}
         </div>
       )}
       {error === "link_invalido" && (
