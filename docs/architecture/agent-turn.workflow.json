@@ -868,11 +868,12 @@
     },
     {
       "dot": "rose",
-      "title": "Ordem dos 10 gates (invariante)",
+      "title": "Ordem dos gates (invariante)",
       "items": [
-        "1 stop/opt-out · 2 LGPD · 3 pacing anti-ban · 4 janela de atendimento",
-        "5 spinning · 6 promise · 7 promise semântica · 8 promise de caso",
-        "9 internal_vocabulary (vocabulário interno) · 10 disclosure (1ª msg se apresenta como IA)",
+        "A lista e a ordem vivem em BEFORE_SEND_GATES (lib/agent-engine/guardrails/before-send.ts), com a versão em BEFORE_SEND_CHAIN_VERSION",
+        "stop/opt-out primeiro, depois LGPD, anti-ban, janela e as conferências do texto do modelo",
+        "agenda_stall e logo depois horario_da_agenda (horário que a agenda não devolveu, \"está agendado\" sem marcação), antes do disclosure",
+        "disclosure por último: a 1ª mensagem se apresenta como IA",
         "Veto volta ao modelo como erro instrutivo",
         "A ordem é constante de código, travada por tests/unit/before-send-chain-shape.test.ts"
       ]

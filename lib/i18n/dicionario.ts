@@ -5804,6 +5804,12 @@ export const DICIONARIO: Traducoes = {
   "A primeira mensagem a um contato novo precisa se apresentar como assistente virtual. O assistente foi orientado a corrigir antes de enviar.": {
     es: "El primer mensaje a un contacto nuevo debe presentarse como asistente virtual. Se orientó al asistente a corregir antes de enviar.",
   },
+  "A resposta citava um horário que a agenda não devolveu. O assistente foi orientado a consultar a agenda antes de enviar.": {
+    es: "La respuesta citaba un horario que la agenda no devolvió. Se orientó al asistente a consultar la agenda antes de enviar.",
+  },
+  "A resposta dizia que o horário estava agendado, mas nenhuma marcação foi gravada. O assistente foi orientado a corrigir antes de enviar.": {
+    es: "La respuesta decía que el horario estaba agendado, pero no se registró ninguna cita. Se orientó al asistente a corregir antes de enviar.",
+  },
   "Uma trava de segurança segurou esta resposta": { es: "Un bloqueo de seguridad retuvo esta respuesta" },
   "Ela não foi enviada ao contato.": { es: "No se le envió al contacto." },
   "Resposta segurada pela proteção do número": { es: "Respuesta retenida por la protección del número" },
@@ -9852,6 +9858,12 @@ export const DICIONARIO: Traducoes = {
   "Não enviei: a mensagem usava termos internos do sistema que o cliente não deve ler": {
     es: "No envié: el mensaje usaba términos internos del sistema que el cliente no debe leer",
   },
+  "Não enviei: a mensagem prometia uma nova tentativa ou resposta que não foi programada": {
+    es: "No envié: el mensaje prometía un nuevo intento o una respuesta que no fue programada",
+  },
+  "Não enviei: a mensagem citava horário que a agenda não devolveu ou dizia que estava agendado sem ter marcado": {
+    es: "No envié: el mensaje citaba un horario que la agenda no devolvió o decía que estaba agendado sin haberlo registrado",
+  },
   "A sugestão de retomar contato venceu sem decisão": {
     es: "La sugerencia de retomar contacto venció sin decisión",
   },
@@ -10204,6 +10216,15 @@ export const DICIONARIO: Traducoes = {
   // ─── lib/ai/guardrails/lista-de-conferencia.ts (Painel de Segurança) ───
   "Não prometer checar a agenda sem checar de verdade": {
     es: "No prometer revisar la agenda sin revisarla de verdad",
+  },
+  "Só oferecer horário que a agenda devolveu": {
+    es: "Solo ofrecer horarios que la agenda devolvió",
+  },
+  "Confere o \"está agendado\" sem marcação gravada nesta resposta e o horário oferecido que a agenda não devolveu. Lembrar o horário que o cliente já tem continua livre. Quando barra, o assistente refaz; se insistir, cita só o horário marcado ou o que o cliente já tem, ou nenhum.": {
+    es: "Revisa el \"está agendado\" sin una cita registrada en esta respuesta y el horario ofrecido que la agenda no devolvió. Recordar el horario que el cliente ya tiene sigue permitido. Cuando bloquea, el asistente rehace la respuesta; si insiste, cita solo el horario agendado o el que el cliente ya tiene, o ninguno.",
+  },
+  "Enquanto a instalação não liga o bloqueio, ela fica em observação: anota o que barraria e deixa a mensagem sair. Horário inventado vira consulta marcada em cima de outra, e confirmação sem marcação vira cliente esperando um horário que não existe.": {
+    es: "Mientras la instalación no active el bloqueo, queda en observación: anota lo que bloquearía y deja salir el mensaje. Un horario inventado se convierte en una cita encima de otra, y una confirmación sin cita registrada deja al cliente esperando un horario que no existe.",
   },
   "Se a pessoa respondeu STOP, SAIR ou pediu para não receber mais, nada é enviado a ela.": {
     es: "Si la persona respondió STOP, SALIR o pidió no recibir más, no se le envía nada.",

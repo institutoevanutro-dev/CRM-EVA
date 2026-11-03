@@ -541,6 +541,10 @@ describe("resposta obsoleta: o cliente escreveu de novo enquanto o turno pensava
 describe("resposta obsoleta — a porta: o handler real não envia o que ficou desatualizado", () => {
   const haSegundos = (s: number): string => new Date(Date.now() - s * 1000).toISOString();
 
+  // O que cada chamada ao modelo recebeu, para conferir que o turno descartado não
+  // ganhou a correção do turno mudo (porte do #3673).
+  let prompts: string[] = [];
+
   /**
    * Modelo fake: na 1ª chamada a pergunta do cliente CHEGA (como no caso medido,
    * durante os 10–40 s do modelo) e ele pede `send_message`; depois encerra.
@@ -548,6 +552,7 @@ describe("resposta obsoleta — a porta: o handler real não envia o que ficou d
   function modeloQueDemora(resultados: unknown[]) {
     let chamadas = 0;
     return async (opts: { prompt?: unknown }) => {
+      prompts.push(JSON.stringify(opts.prompt));
       for (const msg of (opts.prompt ?? []) as Array<{ content?: unknown }>) {
         if (!Array.isArray(msg.content)) continue;
         for (const parte of msg.content as Array<Record<string, unknown>>) {
@@ -587,6 +592,7 @@ describe("resposta obsoleta — a porta: o handler real não envia o que ficou d
 
   async function rodar(tetoMs: number): Promise<unknown[]> {
     const resultados: unknown[] = [];
+    prompts = [];
     await inbound("Oi", haSegundos(20));
     const msg = await inbound("Tudo bem?", haSegundos(15));
     const { job } = await m.queue.enqueueJob(pool, ORG, {
@@ -647,6 +653,14 @@ describe("resposta obsoleta — a porta: o handler real não envia o que ficou d
     const resultados = await rodar(120_000);
     expect(enviados).toBe(0);
     expect(JSON.stringify(resultados)).toContain("resposta_obsoleta");
+    // O descarte é decisão: a tentativa de envio já não cala a correção do turno mudo
+    // (#3673), e uma correção aqui pagaria até 6 passos com ferramentas de escrita
+    // enquanto o turno da pergunta nova responde.
+    expect(prompts.length).toBeGreaterThan(0);
+    expect(
+      prompts.some((p) => p.includes("Este turno terminou SEM nenhuma mensagem ao cliente")),
+      "o turno descartado como obsoleto pediu a correção do turno mudo",
+    ).toBe(false);
   });
 
   it("controle: com a régua desligada, a mesma cena envia (é o defeito de antes)", async () => {

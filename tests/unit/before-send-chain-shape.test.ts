@@ -35,6 +35,7 @@ const ORDEM_ESPERADA = [
   "unscheduled_followup",
   "internal_vocabulary",
   "agenda_stall",
+  "horario_da_agenda",
   "disclosure",
 ] as const;
 
@@ -66,8 +67,8 @@ describe("forma da cadeia before_send", () => {
     // O par (tamanho, versão) é o que amarra os dois. Acrescentar um gate sem
     // bumpar deixa o trace de auditoria mentindo sobre qual cadeia rodou — e o
     // trace é justamente a prova que as Fases 0–2 usam para dizer "não regrediu".
-    expect(BEFORE_SEND_GATES).toHaveLength(12);
-    expect(BEFORE_SEND_CHAIN_VERSION).toBe(8);
+    expect(BEFORE_SEND_GATES).toHaveLength(13);
+    expect(BEFORE_SEND_CHAIN_VERSION).toBe(9);
   });
 
   it("internal_vocabulary roda ANTES do disclosure — inspeciona o texto do modelo, não o emendado", () => {
@@ -83,6 +84,14 @@ describe("forma da cadeia before_send", () => {
     const nomes = BEFORE_SEND_GATES.map((g) => g.name);
     expect(nomes.indexOf("agenda_stall")).toBeLessThan(nomes.indexOf("disclosure"));
     expect(nomes.indexOf("agenda_stall")).toBe(nomes.indexOf("internal_vocabulary") + 1);
+  });
+
+  it("horario_da_agenda fica logo depois de agenda_stall — a família da agenda junta, antes do disclosure", () => {
+    // Porte do #3596. Confere o dia+horário que o MODELO escreveu contra o que a agenda
+    // devolveu; depois de o disclosure emendar o corpo, o texto julgado já não seria só dele.
+    const nomes = BEFORE_SEND_GATES.map((g) => g.name);
+    expect(nomes.indexOf("horario_da_agenda")).toBe(nomes.indexOf("agenda_stall") + 1);
+    expect(nomes.indexOf("horario_da_agenda")).toBeLessThan(nomes.indexOf("disclosure"));
   });
 
   it("nenhum gate repetido — nome duplicado quebraria a leitura do trace", () => {

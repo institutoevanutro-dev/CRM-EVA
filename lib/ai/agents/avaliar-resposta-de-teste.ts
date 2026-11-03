@@ -76,6 +76,11 @@ const NAO_AVALIAVEIS_SEM_TURNO: ReadonlyArray<{ gate: string; porque: string }> 
     gate: "agenda_stall",
     porque: "depende de a ferramenta de agenda ter sido chamada neste turno — não há turno real no teste",
   },
+  {
+    gate: "horario_da_agenda",
+    porque:
+      "depende do que as ferramentas de agenda devolveram neste turno e dos compromissos do contato — não há turno real no teste",
+  },
   { gate: "disclosure", porque: "depende de esta ser a primeira mensagem ao contato" },
 ];
 

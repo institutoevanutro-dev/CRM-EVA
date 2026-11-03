@@ -128,10 +128,11 @@ describe("painel de segurança — o que se confere antes de enviar", () => {
     renderPainel();
 
     const fixas = CONFERENCIAS_DE_SAIDA.filter((c) => c.escolha === null);
-    // 11 das 12 hoje (a nova proteção contra retorno não programado também é fixa — ver
-    // `before-send.ts`). A contagem entra na asserção de propósito: se alguém tornar
-    // uma delas "configurável", este número muda e a mudança tem de ser deliberada.
-    expect(fixas).toHaveLength(11);
+    // 12 das 13 hoje (a proteção contra retorno não programado e a de horário que a agenda
+    // não devolveu também são fixas — ver `before-send.ts`). A contagem entra na asserção
+    // de propósito: se alguém tornar uma delas "configurável", este número muda e a
+    // mudança tem de ser deliberada.
+    expect(fixas).toHaveLength(12);
     for (const c of fixas) {
       const linha = screen.getByTestId(`conferencia-${c.nome}-fixa`);
       expect(linha.textContent).toContain("não se desliga");

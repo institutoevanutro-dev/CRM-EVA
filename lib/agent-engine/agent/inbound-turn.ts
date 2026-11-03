@@ -48,6 +48,8 @@ import {
   type LeadContextMessage,
   type LeadContextResult,
 } from '../edge/crm/get-lead-context';
+import { esperarMidiaDerivavel } from './espera-da-midia';
+import { TETO_ESPERA_DERIVACAO_MS } from '@/lib/messaging/media/derivable';
 import { citationsFromHits, searchKnowledge } from './search-knowledge';
 import type { CrmEdgeConfig } from '../edge/crm/mcp-client';
 import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
@@ -78,7 +80,7 @@ import {
   type LeadStateRow,
 } from './lead-state';
 import { applySaveLeadNote, buildNotesIndexBlock, getLeadNoteBody } from './lead-notes';
-import { buildCompromissosBlock } from './compromissos-do-contato';
+import { compromissosDoContato, renderCompromissos } from './compromissos-do-contato';
 import { agendaNoFechamento } from './agenda-no-fechamento';
 import { applyScheduleFollowup, type FollowupWindowKnobs } from './schedule-followup';
 import {
@@ -176,7 +178,14 @@ import {
 } from './skills';
 import { readSkillReference, skillHasReferences } from './skill-references';
 import { READ_ONLY_TOOLS, wrapToolsWithBreaker, type ToolBreakerThresholds } from './tool-breaker';
-import { loadChannelProvider, nomesDasFerramentas, runBeforeSend } from '../guardrails/before-send';
+import {
+  loadChannelProvider,
+  nomesDasFerramentas,
+  runBeforeSend,
+  type GateContext,
+  VETOS_IRREVOGAVEIS,
+} from '../guardrails/before-send';
+import { colherDaFerramenta, VETOS_DO_HORARIO } from '../guardrails/horario-da-agenda';
 import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
@@ -191,11 +200,19 @@ import { classifyPromise, memoizarPorCandidata } from '../guardrails/promise/sem
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { diffCheckpoint } from '@/lib/leads/checkpoint-diff';
 import {
-  CORRECAO_DO_TURNO_MUDO,
+  correcaoDoTurnoMudo,
+  PASSOS_DA_CORRECAO,
   semChamadasSemResultado,
   turnoMudoPedeCorrecao,
   turnoMudoPorCorte,
 } from './turno-mudo';
+// #3557 (issue #3281 do original): o clique humano pode ocupar a vaga da correção do
+// turno mudo. Veto, falha e oferta existente não autorizam outra geração.
+import {
+  INSTRUCAO_DO_PEDIDO_HUMANO,
+  previaContinuaAtePropor,
+  tetoDePassosAtingido,
+} from './proposta-sob-pedido';
 import {
   CASO_DE_REPETICAO,
   decidirSaidaDaRepeticao,
@@ -221,9 +238,12 @@ import {
 import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import { renderAgora } from '@/lib/tempo/agora';
+import { fusoUtilizavel } from '@/lib/tempo/fusos';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 import {
   anotarUltimaInboundVista,
+  type CorteDaAnotacao,
+  reanotarSeOCorteMudou,
   respostaFicouObsoleta,
   ultimaInboundJaRespondida,
 } from './turno-ja-respondido';
@@ -1048,6 +1068,40 @@ const AGENDA_CADEIA_SYSTEM_BLOCK =
   'Nunca invente um `slug`: ele vem da lista, escrito igualzinho.';
 
 /**
+ * O bloco de modo da PRÉVIA, por tipo (#3757, portado do original).
+ *
+ * As duas prévias rodam o agente publicado, mas o destino do texto é outro:
+ *
+ *   - `sandbox` — o botão "Testar" do agente. Quem lê é quem está configurando o
+ *     agente, e a fala é do próprio agente. O texto abaixo NÃO muda: é o mesmo de
+ *     antes desta separação.
+ *   - `assisted` — o botão "Sugerir resposta" do Inbox. O rascunho cai na caixa do
+ *     atendente HUMANO, que vai revisar e enviar. Sem dizer isso, o prompt de
+ *     atendimento automático (que ensina a passar a vez a uma pessoa) vazava: a
+ *     sugestão saía na voz do assistente — "vou avisar o atendente e ele já te
+ *     responde" — e o atendente descartava o rascunho.
+ *
+ * Neste fork o `assisted` também é o rascunho AUTOMÁTICO que o worker escreve
+ * para agente em `operation_mode='assisted'` (os dois `generateReplyDraft` deste
+ * arquivo). Uma pessoa revisa e envia os dois, então a voz do atendente vale
+ * para ambos. O bloco é só texto do prompt: não liga nem desliga gate nenhum.
+ */
+const BLOCO_PREVIA: Record<TurnPreview['kind'], string> = {
+  sandbox:
+    'MODO PRÉVIA: proponha a resposta com send_message. Operações são propostas separadas; nunca diga que executou uma proposta. Nenhum envio real acontece.',
+  assisted:
+    'MODO ASSISTIDO: você escreve o RASCUNHO da próxima mensagem que o atendente humano desta conversa vai revisar e enviar ao cliente, em nome dele. ' +
+    'Escreva na primeira pessoa, como esse atendente, com base no histórico, nas notas e no conhecimento disponível. ' +
+    'Não fale como assistente nem como IA, não diga que vai avisar, chamar ou transferir para alguém e não proponha passar o atendimento. ' +
+    'Proponha a mensagem com send_message. Operações são propostas separadas; nunca diga que executou uma proposta. Nenhum envio real acontece.',
+};
+
+/** O bloco do modo de prévia que entra no `system` — decisão num lugar só, testável. */
+export function blocoDoModoDePrevia(kind: TurnPreview['kind']): string {
+  return BLOCO_PREVIA[kind];
+}
+
+/**
  * Os blocos de agenda que ESTE agente recebe — a decisão num lugar só, testável.
  *
  * A régua é o que o agente TEM: os dois blocos de ensino nomeiam ferramentas, e
@@ -1212,6 +1266,11 @@ export interface InboundTurnKnobs {
    * `respostaFicouObsoleta`. Ausente = desligada (testes que não a exercitam).
    */
   respostaObsoletaTetoMs?: number;
+  /**
+   * Modo da conferência de horário da agenda (HORARIO_DA_AGENDA_MODO). Ausente =
+   * 'observar', o padrão do env: o veredito vai ao trace e nada é barrado.
+   */
+  horarioDaAgendaModo?: 'observar' | 'barrar';
   /** circuit breaker de tools por run (F2-15) — env TOOL_BREAKER_* */
   breaker: ToolBreakerThresholds;
   /**
@@ -1736,6 +1795,23 @@ export interface AgentTurnInput {
   conversationId: string;
   /** Id da mensagem que criou o job inbound; não é usado por follow-ups. */
   inboundMessageId?: string;
+  /**
+   * A espera da mídia do handler de `inbound_turn` (`espera-da-midia.ts`) acabou no
+   * TETO depois de esperar: este turno lê alguma mídia como `[tipo]`, e a mensagem
+   * mais antiga sem resposta envelheceu na espera. A régua de resposta obsoleta
+   * ignora então o teto dela (ver `send_message`): se a mídia tem job ou pedido de
+   * despacho pendente, é ele que responde. Só o handler de `inbound_turn` preenche.
+   */
+  esperaDaMidiaNoTeto?: boolean;
+  /**
+   * A mídia pendente antes da qual a anotação do turno parou, como
+   * `anotarUltimaInboundVista` devolve (`null`: nenhuma). Com ela, a abertura
+   * confere depois de ler a conversa se essa mídia virou texto no meio do caminho
+   * e, se virou, reanota e relê (`reanotarSeOCorteMudou`). A releitura do modelo
+   * (`get_lead_context`) não reanota. Só o handler de `inbound_turn` e a
+   * reexecução da passagem de assunto preenchem.
+   */
+  corteDaAnotacao?: CorteDaAnotacao | null;
   /** monta a abertura APÓS o ritual de leitura (inbound vs. bloco temporal do follow-up). */
   buildOpening: (ritual: {
     previous: LeadCheckpointRow | null;
@@ -2131,7 +2207,7 @@ export async function runAgentTurn(
     // A anotação do que o turno viu é de ANTES do turno de origem. O destino lê
     // a conversa de novo, então ela é refeita: mensagem que chegou enquanto a
     // origem pensava também vai ser respondida por ele.
-    await anotarUltimaInboundVista(pool, {
+    const corteDaAnotacao = await anotarUltimaInboundVista(pool, {
       organizationId: job.organization_id,
       contactId: leadIdDoJob,
       conversationId: input.conversationId,
@@ -2141,6 +2217,7 @@ export async function runAgentTurn(
       ...input,
       resolvedAgent: passagem.destino,
       passagem: passagem.de,
+      corteDaAnotacao,
     });
   }
 }
@@ -2652,23 +2729,52 @@ async function executarTurnoDoAgente(
     agentId: agentConfig?.agentId ?? null,
   });
   if (outrosAssuntos.length > 0) blocosResidentes.push(blocoDaPassagem(outrosAssuntos));
-  if (preview)
-    blocosResidentes.push(
-      'MODO PRÉVIA: proponha a resposta com send_message. Operações são propostas separadas; nunca diga que executou uma proposta. Nenhum envio real acontece.',
-    );
+  // #3757: o bloco da prévia diz de QUEM é a voz. São duas prévias com donos
+  // diferentes — o "Testar" (sandbox) é do agente falando como agente, mas o
+  // "Sugerir resposta" (assisted) escreve o rascunho que o ATENDENTE humano vai
+  // revisar e enviar. Com um bloco só, o prompt de atendimento automático (que
+  // ensina a passar a vez a uma pessoa) vazava para a caixa do atendente e o
+  // rascunho saía em terceira pessoa — "vou avisar o atendente e ele responde".
+  // Vive em função de módulo (`blocoDoModoDePrevia`) para poder ser testada.
+  if (preview) blocosResidentes.push(blocoDoModoDePrevia(preview.kind));
   const system = blocosResidentes.join('\n\n');
   const previous = preview
     ? (preview.previous ?? null)
     : await latestCheckpoint(pool, tenantId, leadId);
   const leadState = preview?.kind === 'sandbox' ? null : await getLeadState(pool, tenantId, leadId);
-  const openingContext = preview
-    ? preview.context
-    : await getLeadContext(
-        pool,
-        deps.crmCfg,
-        { tenantId, leadId, conversationId: input.conversationId, fuso: fusoDaOrg },
-        turnContextKnobs,
-      );
+  const lerConversa = (): Promise<LeadContextResult> =>
+    getLeadContext(
+      pool,
+      deps.crmCfg,
+      { tenantId, leadId, conversationId: input.conversationId, fuso: fusoDaOrg },
+      turnContextKnobs,
+    );
+  let leitura: LeadContextResult = preview ? preview.context : await lerConversa();
+  // A ANOTAÇÃO DESCREVE A LEITURA DA ABERTURA. Ela foi feita antes e parou antes
+  // de uma mídia ainda sem texto; se essa mídia virou texto entre a anotação e o
+  // fim da leitura, o turno a leu e a anotação promete menos — o turno do texto
+  // seguinte responderia de novo. Reanota e relê, sempre nessa ordem. Ver
+  // `reanotarSeOCorteMudou`. A releitura do modelo não reanota: ver
+  // `get_lead_context`, abaixo.
+  // ponytail: até 3 releituras, cada uma exige outra mídia mudando de estado nos
+  // milissegundos de uma leitura; passado isso, a anotação promete menos do que
+  // foi lido, nunca mais.
+  let corte = preview ? null : (input.corteDaAnotacao ?? null);
+  for (
+    let releituras = 0;
+    corte !== null && job !== null && leitura.ok && releituras < 3;
+    releituras++
+  ) {
+    const reanotacao = await reanotarSeOCorteMudou(
+      pool,
+      { organizationId: tenantId, conversationId: input.conversationId, jobId: job.id },
+      corte,
+    );
+    if (reanotacao === null) break;
+    corte = reanotacao.corte;
+    leitura = await lerConversa();
+  }
+  const openingContext = leitura;
   if (!openingContext.ok) {
     // Sem contexto não há turno: transiente (CRM fora) OU permanente (lead
     // sumiu) — ambos re-tentam pela fila e morrem em 'dead' se persistirem.
@@ -3044,10 +3150,19 @@ async function executarTurnoDoAgente(
   // de `get-lead-context.ts:193` diz o mesmo). Passar essa variável para um
   // parâmetro chamado `contactId` é correto pelo VALOR; o nome é que mente, e é
   // o que a issue #509 conserta. Não troque por um `lead_id` "mais coerente".
-  const compromissosBlock =
+  //
+  // Uma leitura serve aos dois (porte do #3596): o bloco continua mostrando só os
+  // compromissos que ainda não terminaram, 5 no máximo, com o aviso de corte; o gate de
+  // horário (`horariosDaAgenda`, abaixo) vê também os que terminaram nas últimas 24h, até
+  // 50, para "sua consulta de hoje às 9h" seguir sendo do contato.
+  const aberturaDoTurno = clock();
+  const compromissosDoTurno =
     preview?.kind === 'sandbox'
-      ? ''
-      : await buildCompromissosBlock(pool, tenantId, leadId, new Date());
+      ? []
+      : await compromissosDoContato(pool, tenantId, leadId, new Date(aberturaDoTurno.getTime() - 86_400_000), 50);
+  const compromissosBlock = renderCompromissos(
+    compromissosDoTurno.filter((c) => c.ends_at !== null && new Date(c.ends_at) >= aberturaDoTurno),
+  );
   // Observabilidade da memória (Fase 2A): SÓ ids/contagens no log — headline/corpo
   // são PII e nunca saem do prompt. Prova auditável de que a memória durável do
   // lead entrou no contexto DESTE turno.
@@ -3081,10 +3196,17 @@ async function executarTurnoDoAgente(
   // incluídas), nunca em veto de gate. Checar `seq` antes de tentar o próximo envio
   // barra o modelo sem gastar uma chamada de before-send à toa.
   const maxSendsPerTurn = deps.knobs.maxSendsPerTurn ?? DEFAULT_MAX_SENDS_PER_TURN;
-  // TURNO MUDO: quantas vezes o modelo chamou `send_message` e se passou a conversa à
-  // equipe. Os dois dizem que o silêncio foi decisão — só sem eles o motor pede a
-  // correção do turno que terminou sem falar com o cliente (ver depois da chamada principal).
+  // TURNO MUDO: o que diz se o silêncio do turno foi decisão — sem nenhum deles o motor
+  // pede a correção do turno que terminou sem falar com o cliente (ver depois da chamada
+  // principal e `turno-mudo.ts`). `tentativasDeEnvio` é só informativo desde o #3673:
+  // tentativa vetada não entregou nada, e não cala a correção.
   let tentativasDeEnvio = 0;
+  // Veto que manda PARAR (stop/LGPD/janela fechada): pedir a correção seria pedir ao
+  // modelo que tente de novo o que a cadeia proíbe — ver `VETOS_IRREVOGAVEIS`.
+  let vetoIrrevogavel = false;
+  // A resposta foi DESCARTADA dentro do `send_message`: ficou obsoleta, ou a guarda de
+  // repetição a calou. O silêncio aí é decisão, e já não chega pela tentativa.
+  let respostaDescartadaNoTurno = false;
   let passouParaAEquipe = false;
   // PASSAGEM DE ASSUNTO: preenchida quando `transfer_to_subject` gravou o novo
   // dono. Para o loop do modelo; no fim, sem nada enviado, volta a `runAgentTurn`,
@@ -3191,6 +3313,40 @@ async function executarTurnoDoAgente(
   // as tools do modelo rodam em passos anteriores do mesmo loop, o valor já está certo
   // quando o modelo decide mandar a resposta.
   let agendaToolCalledThisTurn = false;
+  // Arma o `horarioDaAgendaGate` (porte do #3596): não basta a tool ter RODADO, o texto
+  // precisa citar o que ela DEVOLVEU. Colhido no mesmo wrapper das tools MCP que marca
+  // `agendaToolCalledThisTurn`; lido no momento do envio. Os compromissos do contato vêm
+  // da leitura da abertura (`compromissosDoTurno`), sem consulta a mais.
+  const horariosLivresDoTurno = new Set<string>();
+  const marcadosNesteTurno = new Set<string>();
+  let marcouNesteTurno = false;
+  let consultouHorariosNesteTurno = false;
+  let horarioVetoCount = 0;
+  let fusoDaAgenda: string | null = compromissosDoTurno.find((c) => c.time_zone)?.time_zone ?? null;
+  // `fusoUtilizavel`: um fuso inválido faria o Intl lançar dentro do gate, e o turno
+  // falharia; cai no da organização.
+  // `soAfirmacao`: no repasse de um caso só "está agendado" é conferido. O horário que a
+  // equipe combinou (um encaixe fora da grade) não vem da agenda, e a nota dela é a fonte.
+  //
+  // O ÚNICO ponto que arma o gate (envio, mídia e prévia passam por aqui). Só 'barrar'
+  // (HORARIO_DA_AGENDA_MODO) arma: em 'observar', o padrão, o gate fica desarmado — sem
+  // veto, sem linha na timeline, sem escalada, sem correção de turno mudo, sem impedimento
+  // na prévia — e só registra no trace o que barraria. Quem não tem agenda fica de fora.
+  const modoDoHorario =
+    agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds)
+      ? (deps.knobs.horarioDaAgendaModo ?? 'observar')
+      : null;
+  const horariosDaAgenda = (): NonNullable<GateContext['horariosDaAgenda']> => ({
+    ativo: modoDoHorario === 'barrar',
+    observar: modoDoHorario === 'observar',
+    fuso: fusoUtilizavel(fusoDaAgenda, fusoDaOrg),
+    livres: [...horariosLivresDoTurno],
+    doContato: [...compromissosDoTurno.map((c) => new Date(c.starts_at).toISOString()), ...marcadosNesteTurno],
+    marcouNesteTurno,
+    vetosAnteriores: horarioVetoCount,
+    consultouHorarios: consultouHorariosNesteTurno,
+    soAfirmacao: job?.kind === 'case_reply_turn',
+  });
   // Lido pelo `casePromiseGate`: true só depois de `schedule_followup` AGENDAR com
   // sucesso neste turno. Libera apenas a promessa de retorno do próprio assistente.
   let followupAgendadoNesteTurno = false;
@@ -3318,14 +3474,17 @@ async function executarTurnoDoAgente(
         | { ok: false; error: { code: string; message: string } }
       > => {
         try {
-          const releitura = preview
-            ? preview.context
-            : await getLeadContext(
-                pool,
-                deps.crmCfg,
-                { tenantId, leadId, conversationId: input.conversationId, fuso: fusoDaOrg },
-                turnContextKnobs,
-              );
+          // SÓ LÊ: nunca reanota — a anotação é a da abertura. O modelo pode pedir
+          // esta leitura na mesma resposta de um envio escrito sobre a abertura (o
+          // SDK roda as ferramentas em paralelo), e no worker o envio só conta
+          // depois das consultas da fronteira de serviço (`guardServiceTools`):
+          // daqui não há como saber, sem corrida, se uma resposta que leu a mídia
+          // como `[tipo]` está a caminho. Reanotar prometeria a mídia e calaria o
+          // turno dela, o único que lê a transcrição. O preço é uma resposta dupla
+          // rara — a mídia que virou texto enquanto o modelo pensava, lida e
+          // respondida aqui, volta a ser respondida pelo turno da mensagem que veio
+          // depois dela —, melhor que o silêncio.
+          const releitura = preview ? preview.context : await lerConversa();
           // Sem esta linha a projeção da abertura seria decorativa: bastaria o
           // modelo chamar esta ferramenta para receber o contexto CRU de volta,
           // com `lead_id`, `conversation_id` e caminho de mídia. A releitura é a
@@ -3429,6 +3588,8 @@ async function executarTurnoDoAgente(
               toolCalledThisTurn: agendaToolCalledThisTurn,
               presencaConfirmadaNoTurno: presencaConfirmadaNoTurno,
             },
+            // A legenda é texto do modelo: o gate de horário vale para ela também.
+            horariosDaAgenda: horariosDaAgenda(),
             followup: {
               disponivel: rawTools.schedule_followup !== undefined,
               agendadoNesteTurno: followupAgendadoNesteTurno,
@@ -3477,6 +3638,7 @@ async function executarTurnoDoAgente(
             },
           });
           if (chain.status === 'vetoed') {
+            if (VETOS_DO_HORARIO.has(chain.code)) horarioVetoCount += 1;
             // Cap de pacing: reagenda o job no fim do turno, como no send_message.
             if (
               (chain.code === 'warmup_cap' || chain.code === 'daily_cap') &&
@@ -3484,6 +3646,7 @@ async function executarTurnoDoAgente(
             ) {
               pacingCapVeto = { code: chain.code, nextAllowedAt: chain.nextAllowedAt };
             }
+            if (VETOS_IRREVOGAVEIS.has(chain.code)) vetoIrrevogavel = true;
             return { ok: false, error: { code: chain.code, message: chain.message } };
           }
           const outcome = chain.outcome;
@@ -3659,6 +3822,7 @@ async function executarTurnoDoAgente(
         });
 
         if (chain.status === 'vetoed') {
+          if (VETOS_IRREVOGAVEIS.has(chain.code)) vetoIrrevogavel = true;
           return { ok: false, error: { code: chain.code, message: chain.message } };
         }
         const outcome = chain.outcome;
@@ -3799,13 +3963,17 @@ async function executarTurnoDoAgente(
           (await respostaFicouObsoleta(
             pool,
             { organizationId: tenantId, conversationId: input.conversationId, jobId: liveJob().id },
-            tetoObsoleta,
+            // A espera da mídia estourou o teto (handler): a mais antiga sem resposta envelheceu
+            // esperando, e o teto de 120 s deixaria sair a resposta que leu a mídia como `[tipo]`.
+            // ponytail: 24 h = "sem teto" sem estourar o intervalo do Postgres.
+            input.esperaDaMidiaNoTeto === true && tetoObsoleta > 0 ? 86_400_000 : tetoObsoleta,
           ))
         ) {
           runLog.info('resposta descartada — o cliente escreveu de novo durante o turno', {
             job_id: liveJob().id,
             conversation_id: input.conversationId,
           });
+          respostaDescartadaNoTurno = true;
           return {
             ok: false,
             error: {
@@ -3820,8 +3988,11 @@ async function executarTurnoDoAgente(
         // pouco (o "OK" do paciente respondido três vezes com a mesma frase, produção
         // 19/10/2026). PULO SILENCIOSO, não veto: `ok: true`, nada sai, e o modelo é
         // mandado encerrar — veto o faria reescrever a mesma ideia. Só aqui, no texto
-        // livre do `inbound_turn`; ver `repeticao-na-conversa.ts`. Conta como tentativa
-        // de envio (`tentativasDeEnvio` acima), então o turno mudo não pede correção.
+        // livre do `inbound_turn`; ver `repeticao-na-conversa.ts`. O turno mudo não pede
+        // correção depois disso, e o descarte é DITO: o pulo marca
+        // `respostaDescartadaNoTurno`, a frase fixa e o caso marcam
+        // `repeticaoEncerrouOTurno`. A tentativa de envio já não basta desde o #3673 —
+        // sem a marca, a correção mandaria reescrever o que a guarda não reconheceria.
         if (!preview && liveJob().kind === 'inbound_turn') {
           const repeticao = await repetiuNaConversa(pool, {
             organizationId: tenantId,
@@ -3877,6 +4048,7 @@ async function executarTurnoDoAgente(
               return { ok: true, status: 'nao_enviada_repetida', message: MENSAGEM_DO_CASO_DE_REPETICAO };
             }
             if (saida.acao !== 'frase') {
+              respostaDescartadaNoTurno = true;
               return { ok: true, status: 'nao_enviada_repetida', message: MENSAGEM_DE_REPETICAO };
             }
             // A frase segue pelo MESMO caminho de envio daqui para baixo: opt-out,
@@ -3961,6 +4133,8 @@ async function executarTurnoDoAgente(
               toolCalledThisTurn: agendaToolCalledThisTurn,
               presencaConfirmadaNoTurno: presencaConfirmadaNoTurno,
             },
+            // O que a agenda DEVOLVEU neste turno (porte do #3596), lido no momento do envio.
+            horariosDaAgenda: horariosDaAgenda(),
             followup: {
               disponivel: rawTools.schedule_followup !== undefined,
               agendadoNesteTurno: followupAgendadoNesteTurno,
@@ -4124,6 +4298,9 @@ async function executarTurnoDoAgente(
             });
           }
           if (chain.status === 'vetoed') {
+            // Conta AQUI, no ramo final, e não logo depois da 1ª rodada: assim o veto que
+            // veio do re-run dos fail-safes acima também escala o ensino do gate de horário.
+            if (VETOS_DO_HORARIO.has(chain.code)) horarioVetoCount += 1;
             // Cap de warm-up/diário: reescrever o texto não resolve (é rate limit, não
             // conteúdo) — ensinar o modelo a "tentar de novo" só gasta passo. Guardamos
             // pra reagendar o JOB inteiro depois que o turno terminar (mesmo padrão de
@@ -4135,6 +4312,7 @@ async function executarTurnoDoAgente(
             ) {
               pacingCapVeto = { code: chain.code, nextAllowedAt: chain.nextAllowedAt };
             }
+            if (VETOS_IRREVOGAVEIS.has(chain.code)) vetoIrrevogavel = true;
             // Erro de ENSINO pt-br (mesmo shape de get_lead_context/breaker): o
             // modelo o vê no turno seguinte. NÃO é exceção — não derruba o run.
             return { ok: false, error: { code: chain.code, message: chain.message } };
@@ -4861,7 +5039,19 @@ async function executarTurnoDoAgente(
                 ...mcpTool,
                 execute: (async (...args: Parameters<typeof executeOriginal>) => {
                   agendaToolCalledThisTurn = true;
-                  return executeOriginal(...args);
+                  const resultado = await executeOriginal(...args);
+                  // Colheita para o `horarioDaAgendaGate`, de QUALQUER tool de agenda: a
+                  // conjunta com o horário ocupado devolve `horarios[]` e manda oferecer um
+                  // deles. Pura e sem exceção — embalagem inesperada colhe nada. O wrapper
+                  // do `crm_confirm_appointment`, abaixo, NÃO colhe: o `compromisso` que ele
+                  // devolve contaria como marcação feita neste turno.
+                  const colheita = colherDaFerramenta(resultado);
+                  if (colheita.fuso !== null) fusoDaAgenda = colheita.fuso;
+                  if (colheita.consultou) consultouHorariosNesteTurno = true;
+                  for (const i of colheita.livres) horariosLivresDoTurno.add(i);
+                  if (colheita.marcou) marcouNesteTurno = true;
+                  for (const i of colheita.marcados) marcadosNesteTurno.add(i);
+                  return resultado;
                 }) as typeof mcpTool.execute,
               };
             } else if (name === 'crm_confirm_appointment' && typeof mcpTool.execute === 'function') {
@@ -4953,6 +5143,13 @@ async function executarTurnoDoAgente(
                 ferramentas: previewContext.agenda?.ferramentas ?? [],
                 toolCalledThisTurn: agendaToolCalledThisTurn,
                 presencaConfirmadaNoTurno: presencaConfirmadaNoTurno,
+              },
+              // Na prévia o veto vira impedimento, não veto do `runBeforeSend`: o contador
+              // do turno real não anda aqui, então os vetos anteriores saem dos impedimentos.
+              // Sem isto, Testar e Sugerir resposta nunca escalariam o ensino.
+              horariosDaAgenda: {
+                ...horariosDaAgenda(),
+                vetosAnteriores: preview.result.impediments.filter((i) => VETOS_DO_HORARIO.has(i.code)).length,
               },
             }),
           )
@@ -5286,25 +5483,73 @@ async function executarTurnoDoAgente(
     // qualquer outro. O fechamento lê a fita das DUAS chamadas.
     let mensagensDoTurno: ModelMessage[] = turn.result.responseMessages;
     // Lido DE NOVO depois da correção (para o aviso de corte): o que ela fez —
-    // enviar, levar veto, passar à equipe — muda a resposta.
+    // enviar, levar veto que manda parar, passar à equipe — muda a resposta.
     const silencioDoTurno = () => ({
       tentativasDeEnvio,
+      // stop/LGPD/janela fechada: a nova tentativa cairia no mesmo veto.
+      vetoIrrevogavel,
       enviadas: outcomes.length,
-      // O descarte por resposta obsoleta acontece DENTRO de send_message e já
-      // conta como tentativa de envio. O de pessoa no comando pode vir do
-      // send_media, que não conta: sem isto a correção pediria ao modelo para
-      // falar por cima de quem assumiu (o sink barraria, mas gastando modelo).
-      turnoDescartado: pessoaAssumiuNoTurno,
+      // Cada descarte é dito, porque desde o #3673 a tentativa de envio vetada não
+      // cala a correção: a resposta obsoleta e o pulo da guarda de repetição
+      // (`respostaDescartadaNoTurno`); a frase fixa ou o caso que a guarda já mandou
+      // (`repeticaoEncerrouOTurno` — na correção, o send_message só devolveria
+      // `nao_enviada_repetida`); e a pessoa no comando, que pode vir do send_media
+      // (sem isto a correção falaria por cima de quem assumiu; o sink barraria,
+      // mas gastando modelo).
+      turnoDescartado: pessoaAssumiuNoTurno || respostaDescartadaNoTurno || repeticaoEncerrouOTurno,
       // Passar a conversa a outro assunto também é silêncio por decisão.
       passouParaAEquipe: passouParaAEquipe || passagem !== null,
       capDeEnvio: capDeEnvioAtingido(),
     });
-    let correcaoCortada = false;
-    if (!preview && liveJob().kind === 'inbound_turn' && turnoMudoPedeCorrecao(silencioDoTurno())) {
-      runLog.warn('turno terminou sem mensagem ao cliente — pedindo UMA correção', {
-        job_id: liveJob().id,
+    // PEDIDO HUMANO (porte do #3557): quem clicou em "Sugerir resposta" pediu um texto.
+    // O primeiro passo do rascunho é o turno como o automático o faria; se ele calou sem
+    // oferta, sem impedimento e sem falha, com mensagem do cliente sem resposta, a prévia
+    // pede a proposta UMA vez, na MESMA vaga da correção abaixo — nunca uma terceira
+    // chamada. Só no clique: o rascunho que o worker escreve sozinho não liga
+    // `pedidoHumano` e segue calando como antes.
+    //
+    // Só conta como oferta a proposta que o cliente veria (send_template, send_media):
+    // sem o #3093 do original, o rascunho que só propõe nota, estado do lead ou marcação
+    // termina `failed` em `reply-drafts.ts`, e pedir o texto é estritamente melhor. Na
+    // prévia `tentativasDeEnvio` fica em 0 (o envio é o de `applyPreviewPolicy`): o veto
+    // dela chega em `impediments`.
+    const pedidoHumano =
+      preview?.kind === 'assisted' &&
+      preview.pedidoHumano === true &&
+      previaContinuaAtePropor({
+        candidatos: preview.result.candidates.length,
+        propostas: preview.result.proposals.filter(
+          (p) => p.tool === 'send_template' || p.tool === 'send_media',
+        ).length,
+        impedimentos: preview.result.impediments.map((i) => i.code),
+        tentativasDeEnvio,
+        textoEscrito: turn.result.text,
+        inboundsSemResposta: inboundsNaoRespondidos(preview.context.context.messages).length,
+        finishReason: turn.result.finishReason,
+        saidaTruncada: saidaCortada,
+        tetoDePassosAtingido: tetoDePassosAtingido({
+          passosUsados: turn.result.steps?.length ?? 0,
+          maxSteps,
+          finishReason: turn.result.finishReason,
+        }),
       });
-      const pedidoDeCorrecao: ModelMessage = { role: 'user', content: CORRECAO_DO_TURNO_MUDO };
+    let correcaoCortada = false;
+    if (
+      pedidoHumano ||
+      (!preview && liveJob().kind === 'inbound_turn' && turnoMudoPedeCorrecao(silencioDoTurno()))
+    ) {
+      // `liveJob()` lança na prévia, que não tem job.
+      runLog.warn('turno terminou sem mensagem ao cliente — pedindo UMA correção', {
+        job_id: job?.id ?? null,
+        previa: preview?.kind ?? null,
+      });
+      // A receita de remarcar só vai a quem lista e remarca compromissos (`turno-mudo.ts`).
+      const pedidoDeCorrecao: ModelMessage = {
+        role: 'user',
+        content: pedidoHumano
+          ? INSTRUCAO_DO_PEDIDO_HUMANO
+          : correcaoDoTurnoMudo(agentConfig?.toolIds ?? []),
+      };
       const correcao = await runModelCall(
         pool,
         deps.llmCfg,
@@ -5313,11 +5558,17 @@ async function executarTurnoDoAgente(
           leadId: leadId || null,
           jobId: job?.id,
           agentId: agentConfig?.agentId ?? null,
-          purpose: 'agent_turn',
+          purpose: preview ? 'agent_preview' : 'agent_turn',
           system,
           messages: [...openingMessages, ...semChamadasSemResultado(turn.result.responseMessages), pedidoDeCorrecao],
           tools,
-          maxSteps: Math.min(maxSteps, 3),
+          // Teto em `PASSOS_DA_CORRECAO` (turno-mudo.ts): com 3 passos uma remarcação
+          // (localizar → horário → mover → enviar) não cabia, e a correção morria antes de enviar.
+          maxSteps: Math.min(maxSteps, PASSOS_DA_CORRECAO),
+          // Rascunho: para na primeira resposta ACEITA, como a primeira chamada.
+          ...(preview?.kind === 'assisted'
+            ? { pararQuando: () => preview.result.candidates.length > 0 }
+            : {}),
           ...(agentConfig !== null
             ? {
                 model: agentConfig.model,
@@ -5907,6 +6158,27 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       });
       return;
     }
+    // A MÍDIA QUE CHEGA DEPOIS DE O TURNO SER ENFILEIRADO (#3836 do original). O
+    // drain segura o despacho pela mídia que já está na conversa; o áudio que chega
+    // depois (debounce, job na fila atrás de outro turno do contato) ia ao prompt
+    // como `[audio]`, e o agente dizia não ter ouvido segundos antes de a
+    // transcrição ficar pronta. A espera mora AQUI, e não dentro do turno, porque:
+    //   1. o roteador logo abaixo lê a inbound mais nova, e áudio sem transcrição
+    //      não é sinal nenhum para ele — o turno ficaria com o agente do texto;
+    //   2. a anotação abaixo já deixa de fora a mídia pendente: anotar DEPOIS da
+    //      espera promete o que a abertura do turno vai ler (a mídia que virar
+    //      texto entre a anotação e a leitura faz a abertura reanotar e reler);
+    //   3. a janela anti-ban e o horário do agente são avaliados depois dela;
+    //   4. só `inbound_turn` espera: follow-up e caso não passam por aqui.
+    // O rascunho do modo assistido, mais abaixo, também sai com a transcrição. Teto
+    // e desfechos nomeados em `espera-da-midia.ts`.
+    const espera = await esperarMidiaDerivavel(pool, {
+      organizationId: job.organization_id,
+      conversationId: payload.conversation_id,
+      prazoMs: Date.now() + TETO_ESPERA_DERIVACAO_MS,
+      log: withFields(deps.log, { job_id: job.id, conversation_id: payload.conversation_id }),
+      ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+    });
     const resolvedAgent = await resolveConversationTurn(pool, deps.llmCfg, {
       tenantId: job.organization_id,
       leadId: job.contact_id,
@@ -6011,12 +6283,14 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       });
       return;
     }
-    await anotarUltimaInboundVista(pool, alvo);
+    const corteDaAnotacao = await anotarUltimaInboundVista(pool, alvo);
     await runAgentTurn(deps, job, pool, ctx, {
       resolvedAgent,
       channelSessionId: payload.channel_session_id,
       conversationId: payload.conversation_id,
       inboundMessageId: payload.inbound_message_id,
+      esperaDaMidiaNoTeto: espera.desfecho === 'teto_da_espera' && espera.recheques > 0,
+      corteDaAnotacao,
       buildOpening: ({
         previous,
         leadState,

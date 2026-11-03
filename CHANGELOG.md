@@ -8,6 +8,128 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.45.0] — 2026-11-03
+
+### Adicionado
+
+- **Conferência de horário da agenda, em observação** Uma nova conferência antes do envio compara cada dia e horário que o assistente
+  escreve ao cliente com o que a agenda devolveu. Numa resposta em que ele
+  consultou a agenda, todo horário com data precisa ter vindo dessa consulta ou
+  ser um compromisso que o cliente já tem. Sem consulta, só o horário que ele
+  oferece ("tenho 05/11 às 10h") é conferido. A mesma conferência pega "está
+  agendado" ou "está confirmado" quando nenhuma marcação foi gravada naquela
+  resposta.
+
+  Nesta versão ela entra em observação: não barra nada, e a mensagem sai como
+  antes. O registro de cada envio (`before_send_traces`) anota o que ela teria
+  barrado, como `observado:horario_sem_fonte` ou
+  `observado:agenda_confirmou_sem_marcar`. A regra ainda erra em frases comuns de
+  recusa, de lembrete e de duração, e o bloqueio só deve ser ligado depois de
+  medir esses registros em conversas reais.
+
+  Falar do compromisso que o cliente já tem não deveria contar. Duração, horário
+  de chegada, horário de funcionamento, faixas como "das 8h às 18h" (e o fim de
+  "14h às 15h"), término previsto, eventos, promoções, horário de remédio,
+  resultados e confirmação de pagamento não deveriam ser conferidos, mas a regra
+  depende de listas de palavras e ainda erra em frases comuns desses tipos, como
+  "venha às 8h45" ou "encerramos às 12h". Recusar o horário que
+  o cliente pediu ("às 15h não tenho vaga, mas tenho às 16h") passa, e o horário
+  oferecido no lugar continua conferido. No repasse da resposta de um caso, só a
+  afirmação de que está agendado é conferida: o horário que a equipe combinou fora
+  da agenda pode ser repassado.
+
+  Para ligar o bloqueio, ponha `HORARIO_DA_AGENDA_MODO=barrar` no `.env` e recrie o
+  app e o worker. Barrando, o assistente refaz a resposta; se insistir, ela sai
+  sem horário, ou só com o horário marcado naquela resposta, ou, na confirmação,
+  só com o compromisso que o cliente já tem. O motivo aparece na linha do tempo
+  do lead e no aviso do Inbox. A conferência aparece no painel Segurança do
+  agente e só vale para agentes com ferramenta de agenda. Nada precisa ser feito
+  na instalação para atualizar.
+
+  Portado do projeto original (DeskcommCRM, PR #3596 de @fillipeagra-cyber), adaptado.
+
+### Alterado
+
+- **"Sugerir resposta" propõe um texto quando o agente ficaria em silêncio** No Inbox, quando alguém clica em "Sugerir resposta" numa conversa com mensagem do
+  cliente ainda sem resposta e o agente, seguindo o próprio roteiro, ficaria em
+  silêncio, ele agora recebe um pedido explícito: uma pessoa da equipe pediu um texto
+  para essa conversa. A sugestão aparece para revisão, como qualquer outra.
+
+  Isso custa uma chamada a mais ao modelo, e só no clique. Quando uma regra de
+  conteúdo, de janela ou de ritmo recusa a resposta, quando a geração falha e quando
+  a conversa já foi respondida, a sugestão continua vazia, como antes. O texto
+  aprovado passa pelas mesmas conferências antes de sair, e nada é enviado sem a
+  aprovação de quem pediu.
+
+  O atendimento automático e os rascunhos que o agente escreve sozinho no modo
+  "Assistido: revisar antes de enviar" não mudaram. Nada precisa ser feito na
+  instalação.
+
+  Portado do projeto original (DeskcommCRM, PR #3557 de @webtecnica, issue #3281), adaptado: só no clique, sem a correção de texto solto da prévia (PR #3093), que este fork ainda não tem.
+
+### Corrigido
+
+- **O agente espera a transcrição do áudio que chega logo depois da mensagem** Quando o paciente escrevia uma mensagem e mandava um áudio logo em seguida, a
+  resposta ao texto podia começar antes de o áudio virar texto. O agente lia o
+  áudio como "[audio]", e a resposta deixava de fora o que o paciente tinha dito.
+
+  Agora, antes de escolher o agente e de escrever a resposta, o sistema confere se
+  há áudio, foto ou documento da conversa ainda sendo transcrito e espera por ele,
+  dentro do mesmo teto de 2 minutos que já valia. Assim o agente certo responde ao
+  texto e ao áudio de uma vez.
+
+  Passado o teto, a resposta sai sem o texto, como antes, e o registro do worker
+  diz que a espera terminou no teto. Se a mídia que não ficou pronta tem a própria
+  resposta a caminho, a resposta desatualizada é descartada e só uma sai.
+
+  A primeira resposta pode demorar alguns segundos a mais numa conversa com áudio
+  recém-chegado. Nada precisa ser feito na instalação.
+
+  Portado do projeto original (DeskcommCRM, PR #3841 e PR #3846 de @webtecnica).
+
+- **Confirmação sem agendar é conferida, remarcação não duplica e turno mudo se corrige** Uma resposta que abre a frase com "Confirmado", "Agendado" ou "Marcado", com dia e
+  horário, agora é conferida antes do envio quando nada foi marcado naquela resposta,
+  mesmo que o assistente tenha consultado a agenda — também quando o dia e o horário
+  vêm no cartão das linhas de baixo (📅 e 🕒). O mesmo vale para "Remarcado", "troca
+  feita" ou "foi alterada para" quando a remarcação não foi gravada. Confirmar a
+  presença ou lembrar um horário que o cliente já tem deveria passar; lembrete
+  com duração ou com oferta de retorno na mesma frase ainda é pego quando o
+  bloqueio está ligado. A regra
+  mora na conferência de horários da agenda, a mesma que aparece no painel
+  Segurança do agente, e entra em observação junto com ela: só barra com
+  `HORARIO_DA_AGENDA_MODO=barrar`.
+
+  As descrições das ferramentas de agenda passam a mandar a remarcação mover o mesmo
+  compromisso, em vez de marcar um segundo e deixar o antigo no lugar.
+
+  Quando um envio é recusado por uma regra de texto e a resposta termina sem nenhuma
+  mensagem ao cliente, o assistente recebe uma única nova tentativa, agora com passos
+  suficientes para consultar a agenda e responder. Nada é tentado de novo quando o
+  contato pediu para sair, é interno, está com a equipe ou foi anonimizado, quando a
+  janela de envio fechou, quando a resposta ficou desatualizada porque o cliente
+  escreveu de novo, ou quando a guarda de repetição barrou a mensagem. A orientação
+  de remarcar dessa nova tentativa só vai aos agentes que listam e remarcam
+  compromissos. Nada precisa ser feito na instalação.
+
+  Portado do projeto original (DeskcommCRM, PR #3673 de @victor-will), adaptado.
+
+- **"Sugerir resposta" escreve o rascunho na voz do atendente** No Inbox, o botão "Sugerir resposta" roda o agente da conversa para escrever o
+  rascunho que o atendente revisa e envia. Até aqui o agente recebia a mesma
+  instrução da aba "Teste" do agente e seguia o próprio roteiro de atendimento
+  automático. Numa conversa já assumida, o rascunho saía como fala da assistente,
+  em terceira pessoa ("vou avisar o atendente e ele já te responde"), e o
+  atendente tinha de reescrever.
+
+  Agora o rascunho é pedido em primeira pessoa, como o atendente que vai enviar,
+  sem falar como IA e sem propor passar o atendimento a outra pessoa. Os
+  rascunhos que o agente escreve sozinho no modo "Assistido: revisar antes de
+  enviar" saem na mesma voz.
+
+  A aba "Teste" do agente e o atendimento automático não mudaram. Nada precisa
+  ser feito na instalação.
+
+  Portado do projeto original (DeskcommCRM, PR #3763 de @webtecnica, issue #3757).
+
 ## [4.44.1] — 2026-11-02
 
 ### Corrigido
@@ -8525,7 +8647,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.44.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.45.0...HEAD
+[4.45.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.44.1...v4.45.0
 [4.44.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.44.0...v4.44.1
 [4.44.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.43.1...v4.44.0
 [4.43.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.43.0...v4.43.1
