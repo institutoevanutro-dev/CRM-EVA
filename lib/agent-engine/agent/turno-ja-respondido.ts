@@ -73,38 +73,96 @@ export interface AlvoDoTurno {
  *    voo) não reescreve a anotação: o ledger devolve "já enviado" e nada novo
  *    sai, então a resposta que existe é a do que a primeira tentativa viu.
  *    Reescrever faria a mensagem que chegou no meio-tempo parecer respondida.
+ *
+ * Devolve o CORTE — o `created_at` (texto do banco, sem perder os microssegundos)
+ * da mídia pendente antes da qual a anotação parou —, ou `null` quando nenhuma
+ * mídia cortou (todo turno só de texto) ou quando nada foi escrito. Com corte, a
+ * abertura do turno confere depois de ler a conversa: ver `reanotarSeOCorteMudou`.
  */
-export async function anotarUltimaInboundVista(db: Queryable, alvo: AlvoDoTurno): Promise<void> {
-  await db.query(
-    `update job_queue
+export async function anotarUltimaInboundVista(
+  db: Queryable,
+  alvo: AlvoDoTurno,
+): Promise<string | null> {
+  const { rows } = await db.query<{ corte: unknown }>(sqlDaAnotacao(false), parametrosDaAnotacao(alvo));
+  return corteDaLinha(rows[0]);
+}
+
+/**
+ * A mídia que cortou a anotação mudou de estado ENQUANTO o turno lia a conversa?
+ *
+ * A anotação vem antes da leitura, e entre as duas a transcrição pode ficar
+ * pronta. A leitura então mostra o áudio COM texto (e o que veio depois dele),
+ * mas a anotação segue parada antes do áudio: a resposta sai, o turno do texto
+ * seguinte não é calado por `ultimaInboundJaRespondida` e responde de novo ao
+ * que já foi respondido. A leitura em si não diz o que viu da mídia (o resultado
+ * vai inteiro ao modelo pela ferramenta `get_lead_context`), então a conferência
+ * é pelo corte: se a mídia mais antiga ainda sem texto é a MESMA de antes da
+ * leitura, ela estava sem texto durante a leitura inteira — o status não volta —
+ * e a anotação vale.
+ *
+ * Se mudou, reanota AGORA, pela mesma régua, e devolve o corte novo: quem chama
+ * tem de reler a conversa, porque a anotação nova descreve a leitura que vem
+ * DEPOIS dela, como a primeira. `null` = o corte não mudou (ou a retentativa já
+ * enviou), e a leitura feita vale.
+ */
+export async function reanotarSeOCorteMudou(
+  db: Queryable,
+  alvo: Pick<AlvoDoTurno, 'organizationId' | 'conversationId' | 'jobId'>,
+  corte: string,
+): Promise<{ corte: string | null } | null> {
+  const { rows } = await db.query<{ corte: unknown }>(sqlDaAnotacao(true), [
+    ...parametrosDaAnotacao(alvo),
+    corte,
+  ]);
+  return rows.length === 0 ? null : { corte: corteDaLinha(rows[0]) };
+}
+
+/**
+ * O UPDATE da anotação: a inbound mais nova antes do CORTE, a mídia pendente mais
+ * antiga pela régua do drain (derivável, com arquivo, sem estado final e mais
+ * nova que o teto). Com `soSeOCorteMudou`, só escreve quando o corte de agora não
+ * é o `$7` que a abertura recebeu.
+ */
+function sqlDaAnotacao(soSeOCorteMudou: boolean): string {
+  return `with corte as (
+       select min(p.created_at) as em from messages p
+        where p.organization_id = $1 and p.conversation_id = $2 and p.direction = 'inbound'
+          and p.type = any($4::text[])
+          and p.media_url is not null
+          and coalesce(p.media_derived_status, '') <> all($5::text[])
+          and p.created_at > now() - ($6 * interval '1 millisecond')
+          and ${sqlMidiaVaiSerLida('p')})
+     update job_queue
         set payload = payload || jsonb_build_object(
           'ultima_inbound_vista_em',
           (select max(m.created_at) from messages m
             where m.organization_id = $1 and m.conversation_id = $2 and m.direction = 'inbound'
-              and m.created_at < coalesce(
-                (select min(p.created_at) from messages p
-                  where p.organization_id = $1 and p.conversation_id = $2 and p.direction = 'inbound'
-                    and p.type = any($4::text[])
-                    and p.media_url is not null
-                    and coalesce(p.media_derived_status, '') <> all($5::text[])
-                    and p.created_at > now() - ($6 * interval '1 millisecond')
-                    and ${sqlMidiaVaiSerLida('p')}),
-                'infinity')))
+              and m.created_at < coalesce((select em from corte), 'infinity')))
       where organization_id = $1 and id = $3
         and not exists (
           select 1 from send_ledger s
            where s.organization_id = $1 and s.job_id = $3
-             and s.status in ('requested', 'accepted', 'queued'))`,
-    [
-      alvo.organizationId,
-      alvo.conversationId,
-      alvo.jobId,
-      [...TIPOS_DERIVAVEIS],
-      [...DERIVACAO_TERMINADA],
-      TETO_ESPERA_DERIVACAO_MS,
-    ],
-  );
+             and s.status in ('requested', 'accepted', 'queued'))${
+           soSeOCorteMudou ? `
+        and (select em from corte) is distinct from $7::timestamptz` : ''}
+     returning (select em::text from corte) as corte`;
 }
+
+function parametrosDaAnotacao(
+  alvo: Pick<AlvoDoTurno, 'organizationId' | 'conversationId' | 'jobId'>,
+): unknown[] {
+  return [
+    alvo.organizationId,
+    alvo.conversationId,
+    alvo.jobId,
+    [...TIPOS_DERIVAVEIS],
+    [...DERIVACAO_TERMINADA],
+    TETO_ESPERA_DERIVACAO_MS,
+  ];
+}
+
+const corteDaLinha = (linha: { corte: unknown } | undefined): string | null =>
+  typeof linha?.corte === 'string' ? linha.corte : null;
 
 /**
  * `true` quando OUTRO turno de resposta deste contato, nesta conversa, viu a

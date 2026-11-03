@@ -15,7 +15,7 @@ import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
  * conversa ANTES de rotear e de anotar o que o turno viu
  * (`ultima_inbound_vista_em`), e a anotação já deixa de fora a mídia pendente
  * mais nova que o teto. Caminho de produção: job `inbound_turn` →
- * `createInboundTurnHandler` → `runAgentTurn`, com modelo fake. Três fatos:
+ * `createInboundTurnHandler` → `runAgentTurn`, com modelo fake. Quatro fatos:
  *
  *  1. SEM REGRESSÃO — a mídia que derivou durante a espera entra na anotação, e
  *     a resposta sai uma vez só. É o caso que DISCRIMINA o porte: sem a espera,
@@ -30,6 +30,10 @@ import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
  *     `[audio]`, e o job do áudio responderia outra vez. Com um texto DEPOIS do
  *     áudio, a anotação não pode passar por cima dele. Os CONTROLES (a), (b) e
  *     (c) prendem as três condições da trava.
+ *  4. TRANSCRIÇÃO ENTRE A ANOTAÇÃO E A LEITURA — o áudio que a anotação deixou
+ *     de fora deriva antes de o turno ler a conversa: a anotação passa a cobrir o
+ *     que o turno leu, e o turno do texto seguinte não responde de novo. Se ele
+ *     deriva logo DEPOIS da leitura, o turno relê antes de prometê-lo.
  *
  * A régua `respostaFicouObsoleta` do fork só descarta quando a mensagem nova tem
  * turno próprio CONFERIDO (job pendente ou pedido de despacho na fila): os casos
@@ -71,6 +75,8 @@ type Modules = {
 let m: Modules;
 
 let enviados = 0;
+/** O prompt da 1ª chamada do modelo, por turno — o que cada turno LEU. */
+const prompts: string[] = [];
 
 // A régua compara com `now()`, então os instantes são relativos ao relógio real.
 const haSegundos = (s: number): string => new Date(Date.now() - s * 1000).toISOString();
@@ -128,14 +134,25 @@ async function pedidoDeDespacho(messageId: string): Promise<void> {
   );
 }
 
+/** Ganchos de BANCADA do pool espião — cada um roda uma vez, na primeira ocorrência. */
+interface Ganchos {
+  /** Imediatamente antes do UPDATE da anotação do handler. */
+  antesDaAnotacao?: () => Promise<void>;
+  /** Logo depois dele, antes de o turno ler a conversa. */
+  depoisDaAnotacao?: () => Promise<void>;
+  /** Logo depois da leitura da conversa (`getLeadContext`). */
+  depoisDaLeitura?: () => Promise<void>;
+}
+
 /**
- * Pool espião — o mesmo do banco, com um poder de BANCADA: roda `antesDaAnotacao`
- * imediatamente antes do UPDATE da anotação do turno. É como este arquivo
+ * Pool espião — o mesmo do banco, com os `Ganchos`. É como este arquivo
  * reproduz, sem corrida, a mídia que chega no round-trip entre a última checagem
- * da espera e a anotação.
+ * da espera e a anotação, e a transcrição que fica pronta antes ou depois da
+ * leitura da conversa.
  */
-function poolEspiao(real: pg.Pool, antesDaAnotacao: (() => Promise<void>) | null): pg.Pool {
+function poolEspiao(real: pg.Pool, ganchos: Ganchos): pg.Pool {
   let anotacoes = 0;
+  let leituras = 0;
   const queryOriginal = real.query.bind(real) as unknown as (
     sql: unknown,
     params?: unknown,
@@ -146,13 +163,19 @@ function poolEspiao(real: pg.Pool, antesDaAnotacao: (() => Promise<void>) | null
         return async (sql: unknown, params?: unknown) => {
           const texto = typeof sql === "string" ? sql : "";
           // `ultima_inbound_vista_em` também aparece na LEITURA da régua
-          // (`ultimaInboundJaRespondida`); a anotação é o UPDATE. O fork anota
-          // UMA vez, no handler, depois da espera.
-          if (texto.includes("update job_queue") && texto.includes("ultima_inbound_vista_em")) {
-            anotacoes += 1;
-            if (antesDaAnotacao !== null && anotacoes === 1) await antesDaAnotacao();
-          }
-          return queryOriginal(sql, params);
+          // (`ultimaInboundJaRespondida`); a anotação é o UPDATE. Os ganchos
+          // valem para a PRIMEIRA, a do handler depois da espera.
+          const ehAnotacao =
+            texto.includes("update job_queue") && texto.includes("ultima_inbound_vista_em");
+          // A leitura da conversa é a única consulta do turno que pede `media_mime`.
+          const ehLeitura = texto.includes("from messages") && texto.includes("media_mime");
+          if (ehAnotacao) anotacoes += 1;
+          if (ehLeitura) leituras += 1;
+          if (ehAnotacao && anotacoes === 1) await ganchos.antesDaAnotacao?.();
+          const resultado = await queryOriginal(sql, params);
+          if (ehAnotacao && anotacoes === 1) await ganchos.depoisDaAnotacao?.();
+          if (ehLeitura && leituras === 1) await ganchos.depoisDaLeitura?.();
+          return resultado;
         };
       }
       const valor = Reflect.get(alvo, prop, recv);
@@ -167,14 +190,19 @@ const USO = {
 };
 
 /**
- * Modelo fake: 1ª chamada pede `send_message`; depois encerra. `onPrimeiraChamada`
- * roda enquanto o "modelo pensa" — é a mensagem que chega durante o turno.
+ * Modelo fake: 1ª chamada pede `send_message` (com `corpo`) e guarda o prompt em
+ * `prompts`; depois encerra. `onPrimeiraChamada` roda enquanto o "modelo pensa"
+ * — é a mensagem que chega durante o turno.
  */
-function modelo(onPrimeiraChamada?: () => Promise<void>) {
+function modelo(
+  onPrimeiraChamada?: () => Promise<void>,
+  corpo = "Tudo bem também! Como posso te ajudar?",
+) {
   let chamadas = 0;
-  return async () => {
+  return async (opts?: { prompt?: unknown }) => {
     chamadas += 1;
     if (chamadas === 1) {
+      prompts.push(JSON.stringify(opts?.prompt ?? null));
       if (onPrimeiraChamada !== undefined) await onPrimeiraChamada();
       return {
         content: [
@@ -182,7 +210,7 @@ function modelo(onPrimeiraChamada?: () => Promise<void>) {
             type: "tool-call" as const,
             toolCallId: "c1",
             toolName: "send_message",
-            input: JSON.stringify({ body: "Tudo bem também! Como posso te ajudar?" }),
+            input: JSON.stringify({ body: corpo }),
           },
         ],
         finishReason: { unified: "tool-calls" as const, raw: undefined },
@@ -211,12 +239,13 @@ function modelo(onPrimeiraChamada?: () => Promise<void>) {
  */
 async function rodarJob(
   jobId: string,
-  opcoes: {
-    antesDaAnotacao?: () => Promise<void>;
+  opcoes: Ganchos & {
     aoDormir?: () => Promise<void>;
     /** `RESPOSTA_OBSOLETA_TETO_MS` do operador (default: o de produção). */
     tetoMs?: number;
     onPrimeiraChamada?: () => Promise<void>;
+    /** O que o modelo fake responde (default: a frase de sempre). */
+    corpo?: string;
   } = {},
 ): Promise<void> {
   const [claimed] = await m.queue.claimJobs(pool, { workerId: "midia-tardia", maxConcurrency: 1 });
@@ -241,7 +270,7 @@ async function rodarJob(
       },
     },
     log: m.createLogger(),
-    registry: m.createFakeRegistry(modelo(opcoes.onPrimeiraChamada) as never),
+    registry: m.createFakeRegistry(modelo(opcoes.onPrimeiraChamada, opcoes.corpo) as never),
     channel: () =>
       ({
         channel: "captura",
@@ -259,9 +288,7 @@ async function rodarJob(
       if (opcoes.aoDormir !== undefined) await opcoes.aoDormir();
     },
   });
-  await handler(claimed!, poolEspiao(pool, opcoes.antesDaAnotacao ?? null), {
-    workerId: "midia-tardia",
-  });
+  await handler(claimed!, poolEspiao(pool, opcoes), { workerId: "midia-tardia" });
   await m.queue.completeJob(pool, claimed!.id, "midia-tardia");
 }
 
@@ -297,6 +324,25 @@ async function jobDoTurno(inboundMessageId: string): Promise<string> {
     maxAttempts: 1,
   });
   return job.id;
+}
+
+/**
+ * O envio aceito do turno `jobId`: a outbound e a linha do `send_ledger` que o
+ * `sendWithLedger` de produção grava — o canal fake desta bancada não grava.
+ */
+async function envioAceitoDoJob(jobId: string, corpo: string): Promise<void> {
+  const msgId = crypto.randomUUID();
+  await pool.query(
+    `insert into messages (id, organization_id, conversation_id, channel_session_id, contact_id,
+       type, direction, status, body, sent_via, sent_at, created_at)
+     values ($1,$2,$3,$4,$5,'text','outbound','sent',$6,'ai',now(),now())`,
+    [msgId, ORG, CONV, SESSION, CONTACT, corpo],
+  );
+  await pool.query(
+    `insert into send_ledger (organization_id, contact_id, job_id, seq, body_hash, status, crm_message_id)
+     values ($1,$2,$3,1,'h','accepted',$4)`,
+    [ORG, CONTACT, jobId, msgId],
+  );
 }
 
 /** O turno que LERIA a mensagem mais nova está calado pela régua? */
@@ -341,6 +387,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   enviados = 0;
+  prompts.length = 0;
   await pool.query("delete from send_ledger where organization_id = $1", [ORG]);
   // Ritmo e cópia de envio são contados por número, fora das tabelas acima: o
   // envio de um caso (a mesma frase do modelo fake) acionaria o throttle e o
@@ -506,6 +553,87 @@ describe("a mídia que chega depois de o turno ser enfileirado", () => {
       anotacao!.getTime(),
       "a anotação passou por cima do áudio que o turno leu como [audio]",
     ).toBeLessThan((await chegadaDe(audioId)).getTime());
+  });
+
+  it("TRANSCRIÇÃO ENTRE A ANOTAÇÃO E A LEITURA: a anotação cobre o que o turno leu, e o turno do \"?\" não responde de novo", async () => {
+    // A pergunta tem 125 s e não há mídia pendente na espera. Entre a espera e a
+    // anotação (o roteador, no fork) chegam um áudio e um "?", cada um com o seu
+    // pedido de turno. A anotação para antes do áudio pendente; a transcrição
+    // fica pronta logo DEPOIS dela e ANTES da leitura. O turno lê o áudio com
+    // texto e o "?" e responde a tudo. Uma anotação que ficasse antes do áudio
+    // deixaria o turno do "?" (o drain supera o pedido do áudio pelo dele)
+    // responder outra vez ao que já foi respondido.
+    const pergunta = await inbound(PERGUNTA, haSegundos(125));
+    const job = await jobDoTurno(pergunta);
+
+    let audioId = "";
+    let interrogacao = "";
+    await rodarJob(job, {
+      antesDaAnotacao: async () => {
+        audioId = await audio(new Date(Date.now() - 2).toISOString());
+        await pedidoDeDespacho(audioId);
+        interrogacao = await inbound("?", new Date().toISOString());
+        await pedidoDeDespacho(interrogacao);
+      },
+      depoisDaAnotacao: async () => {
+        await derivar(audioId);
+      },
+    });
+
+    expect(prompts[0], "a bancada não montou a cena: o turno não leu a transcrição").toContain(
+      TRANSCRICAO,
+    );
+    expect(enviados, "a resposta que leu tudo não saiu").toBe(1);
+
+    // O turno do "?", com o envio do primeiro aceito e o ritmo zerado: calado.
+    await envioAceitoDoJob(job, "Tudo bem também! Como posso te ajudar?");
+    await pool.query("delete from pacing_ledger where organization_id = $1", [ORG]);
+    await rodarJob(await jobDoTurno(interrogacao), {
+      corpo: "Sobre a limpeza de pele: temos horário na quinta.",
+    });
+    expect(enviados, "o turno do \"?\" respondeu de novo ao que já tinha sido respondido").toBe(1);
+
+    // O porquê: a anotação cobre o que o turno leu, o "?" inclusive.
+    const anotacao = await anotacaoDoJob(job);
+    expect(anotacao, "o turno não anotou o que viu").not.toBeNull();
+    expect(
+      anotacao!.getTime(),
+      "a anotação ficou antes do que o turno leu — o turno do \"?\" responderia de novo",
+    ).toBeGreaterThanOrEqual((await chegadaDe(interrogacao)).getTime());
+  });
+
+  it("TRANSCRIÇÃO LOGO DEPOIS DA LEITURA: o turno relê antes de prometer o áudio, e responde com a transcrição", async () => {
+    // A mesma cena, e a transcrição fica pronta logo DEPOIS de o turno ler a
+    // conversa com o áudio como [audio]. Prometer o áudio sem reler deixaria sair
+    // a resposta escrita com [audio] e calaria o turno do "?": ninguém
+    // responderia à transcrição.
+    const pergunta = await inbound(PERGUNTA, haSegundos(125));
+    const job = await jobDoTurno(pergunta);
+
+    let audioId = "";
+    let interrogacao = "";
+    await rodarJob(job, {
+      antesDaAnotacao: async () => {
+        audioId = await audio(new Date(Date.now() - 2).toISOString());
+        await pedidoDeDespacho(audioId);
+        interrogacao = await inbound("?", new Date().toISOString());
+        await pedidoDeDespacho(interrogacao);
+      },
+      depoisDaLeitura: async () => {
+        await derivar(audioId);
+      },
+    });
+
+    expect(prompts[0], "a resposta foi escrita com o áudio como [audio] — o turno não releu").toContain(
+      TRANSCRICAO,
+    );
+    expect(enviados).toBe(1);
+    const anotacao = await anotacaoDoJob(job);
+    expect(anotacao, "o turno não anotou o que viu").not.toBeNull();
+    expect(
+      anotacao!.getTime(),
+      "a anotação não cobre o que o turno releu — o turno do \"?\" responderia de novo",
+    ).toBeGreaterThanOrEqual((await chegadaDe(interrogacao)).getTime());
   });
 
   // CONTROLES de `esperaDaMidiaNoTeto`: cada um derruba uma condição da trava

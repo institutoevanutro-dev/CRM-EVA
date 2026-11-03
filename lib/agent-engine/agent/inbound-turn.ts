@@ -226,6 +226,7 @@ import { renderAgora } from '@/lib/tempo/agora';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 import {
   anotarUltimaInboundVista,
+  reanotarSeOCorteMudou,
   respostaFicouObsoleta,
   ultimaInboundJaRespondida,
 } from './turno-ja-respondido';
@@ -1746,6 +1747,14 @@ export interface AgentTurnInput {
    * despacho pendente, é ele que responde. Só o handler de `inbound_turn` preenche.
    */
   esperaDaMidiaNoTeto?: boolean;
+  /**
+   * A mídia pendente antes da qual a anotação do turno parou, como
+   * `anotarUltimaInboundVista` devolve (`null`: nenhuma). Com ela, a abertura
+   * confere depois de ler a conversa se essa mídia mudou de estado no meio do
+   * caminho e, se mudou, reanota e relê (`reanotarSeOCorteMudou`). Só o handler de
+   * `inbound_turn` e a reexecução da passagem de assunto preenchem.
+   */
+  corteDaAnotacao?: string | null;
   /** monta a abertura APÓS o ritual de leitura (inbound vs. bloco temporal do follow-up). */
   buildOpening: (ritual: {
     previous: LeadCheckpointRow | null;
@@ -2141,7 +2150,7 @@ export async function runAgentTurn(
     // A anotação do que o turno viu é de ANTES do turno de origem. O destino lê
     // a conversa de novo, então ela é refeita: mensagem que chegou enquanto a
     // origem pensava também vai ser respondida por ele.
-    await anotarUltimaInboundVista(pool, {
+    const corteDaAnotacao = await anotarUltimaInboundVista(pool, {
       organizationId: job.organization_id,
       contactId: leadIdDoJob,
       conversationId: input.conversationId,
@@ -2151,6 +2160,7 @@ export async function runAgentTurn(
       ...input,
       resolvedAgent: passagem.destino,
       passagem: passagem.de,
+      corteDaAnotacao,
     });
   }
 }
@@ -2671,14 +2681,34 @@ async function executarTurnoDoAgente(
     ? (preview.previous ?? null)
     : await latestCheckpoint(pool, tenantId, leadId);
   const leadState = preview?.kind === 'sandbox' ? null : await getLeadState(pool, tenantId, leadId);
-  const openingContext = preview
-    ? preview.context
-    : await getLeadContext(
-        pool,
-        deps.crmCfg,
-        { tenantId, leadId, conversationId: input.conversationId, fuso: fusoDaOrg },
-        turnContextKnobs,
-      );
+  const lerAbertura = (): Promise<LeadContextResult> =>
+    getLeadContext(
+      pool,
+      deps.crmCfg,
+      { tenantId, leadId, conversationId: input.conversationId, fuso: fusoDaOrg },
+      turnContextKnobs,
+    );
+  let leitura: LeadContextResult = preview ? preview.context : await lerAbertura();
+  // A ANOTAÇÃO DESCREVE ESTA LEITURA. Ela foi feita antes e parou antes de uma
+  // mídia ainda sem texto; se essa mídia virou texto entre a anotação e o fim da
+  // leitura, o turno a leu e a anotação promete menos — o turno do texto seguinte
+  // responderia de novo. Reanota e relê, sempre nessa ordem. Ver
+  // `reanotarSeOCorteMudou`.
+  // ponytail: até 3 releituras, cada uma exige outra mídia mudando de estado nos
+  // milissegundos de uma leitura; passado isso, a anotação promete menos do que
+  // foi lido, nunca mais.
+  let corte = preview ? null : (input.corteDaAnotacao ?? null);
+  for (let releituras = 0; corte !== null && job !== null && leitura.ok && releituras < 3; releituras++) {
+    const reanotacao = await reanotarSeOCorteMudou(
+      pool,
+      { organizationId: tenantId, conversationId: input.conversationId, jobId: job.id },
+      corte,
+    );
+    if (reanotacao === null) break;
+    corte = reanotacao.corte;
+    leitura = await lerAbertura();
+  }
+  const openingContext = leitura;
   if (!openingContext.ok) {
     // Sem contexto não há turno: transiente (CRM fora) OU permanente (lead
     // sumiu) — ambos re-tentam pela fila e morrem em 'dead' se persistirem.
@@ -5928,7 +5958,8 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
     //   1. o roteador logo abaixo lê a inbound mais nova, e áudio sem transcrição
     //      não é sinal nenhum para ele — o turno ficaria com o agente do texto;
     //   2. a anotação abaixo já deixa de fora a mídia pendente: anotar DEPOIS da
-    //      espera promete exatamente o que o turno vai ler, sem reanotar;
+    //      espera promete o que o turno vai ler (a mídia que virar texto entre a
+    //      anotação e a leitura faz a abertura reanotar e reler);
     //   3. a janela anti-ban e o horário do agente são avaliados depois dela;
     //   4. só `inbound_turn` espera: follow-up e caso não passam por aqui.
     // O rascunho do modo assistido, mais abaixo, também sai com a transcrição. Teto
@@ -6044,13 +6075,14 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       });
       return;
     }
-    await anotarUltimaInboundVista(pool, alvo);
+    const corteDaAnotacao = await anotarUltimaInboundVista(pool, alvo);
     await runAgentTurn(deps, job, pool, ctx, {
       resolvedAgent,
       channelSessionId: payload.channel_session_id,
       conversationId: payload.conversation_id,
       inboundMessageId: payload.inbound_message_id,
       esperaDaMidiaNoTeto: espera.desfecho === 'teto_da_espera' && espera.recheques > 0,
+      corteDaAnotacao,
       buildOpening: ({
         previous,
         leadState,
