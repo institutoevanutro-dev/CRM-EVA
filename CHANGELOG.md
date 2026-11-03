@@ -8,6 +8,99 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.46.0] — 2026-11-03
+
+### Adicionado
+
+- **Duplicados sugere nomes parecidos, e dá para juntar duas fichas pela ficha** Para gestor, Contatos › Duplicados ganha a seção "Parecidos — confira": pares de fichas
+  com nome parecido, separados dos duplicados por telefone ou e-mail. Nome parecido não
+  prova que é a mesma pessoa (pode ser alguém da mesma família), então nada acontece sem
+  conferir: "Comparar" mostra as duas fichas lado a lado (nascimento, CPF cadastrado sem o
+  número, endereço, vínculo com o prontuário, pedido para não receber mensagens, estado da
+  IA, conversas e negócios), e só depois aparecem "Juntar" e "Não são a mesma pessoa", que
+  tira a sugestão da lista para toda a equipe. Na ficha do contato, "Juntar com outra ficha"
+  busca outra ficha por nome ou telefone, compara e junta com a mesma confirmação, que agora
+  lista o que não passa para quem fica (telefone, CPF, endereço).
+
+  Regras novas em toda junção, inclusive a dos duplicados por telefone: quem fica herda a
+  pausa da IA e a marca "Sempre atendimento humano" da ficha absorvida, e a ficha ligada ao
+  prontuário não pode ser a absorvida. Só em "Parecidos — confira" e em "Juntar com outra
+  ficha" ela já começa marcada como a que fica. Nos duplicados por telefone ou e-mail a
+  sugestão continua sendo a ficha de atividade mais recente, e o cartão não mostra o
+  vínculo: se a ficha ligada ficar como absorvida, a junção é recusada com a explicação, e
+  é só trocar qual ficha fica e juntar de novo. A seção "Parecidos — confira" não aparece
+  para atendente.
+
+  Portado do projeto original (DeskcommCRM, PR #3640 de @paulolimajr77).
+  Nada a fazer na VPS.
+
+- **O balão da IA no Inbox mostra qual agente respondeu, e o +N das etiquetas mostra as que não couberam** No Inbox, a mensagem enviada por um agente de IA passa a mostrar "IA · <nome do agente>" no balão, em vez de só "IA". Com o roteador e vários agentes no mesmo número, a recepção sabe qual deles respondeu sem abrir nada. O nome é gravado na mensagem no momento do envio: mensagens antigas, e as enviadas por caminhos que não identificam o agente, continuam mostrando "IA", e a resposta pronta continua dizendo "Resposta pronta". Renomear um agente não muda as mensagens já enviadas. O texto que o paciente recebe não muda. Na lista de conversas, passar o mouse sobre o "+N" das etiquetas mostra as que não couberam.
+
+  Portado do projeto original (DeskcommCRM, PR #3665 de @webtecnica).
+
+  Nada precisa ser feito na instalação.
+
+- **Arrastar um arquivo para a conversa abre a mesma prévia do botão de anexar** No Inbox, soltar um arquivo sobre a caixa de mensagem abre a mesma prévia do botão "+" (nome do arquivo, legenda, Enviar e Cancelar), e nada sobe antes de confirmar. Enquanto o arquivo está sendo arrastado, a caixa se destaca com o aviso "Solte o arquivo para anexar".
+
+  Um arquivo por vez: soltar vários juntos mostra um aviso e nenhum é anexado. Arquivo de áudio não vai na resposta, porque sairia como mensagem de voz e a legenda não chegaria ao cliente; na nota interna ele entra.
+
+  Valem as travas do botão: conversa encerrada, envio em andamento, prévia já aberta e, nos canais que as têm, janela de atendimento fechada ou canal que só recebe. Contato bloqueado nem mostra a caixa.
+
+  A prévia agora diz para onde o anexo vai, nos três jeitos de anexar (botão, Ctrl+V e arrastar): "Para:" com o nome do contato na resposta, "Nota interna · só o time vê" na nota. Na nota o arquivo fica com a equipe; na resposta ele vai ao cliente e pausa a IA, como qualquer resposta da equipe.
+
+  Trocar de conversa com a prévia de anexo (ou a de resposta rápida com imagens) aberta a descarta, em vez de enviar para a conversa nova.
+
+  Arquivo solto fora da caixa (lista de mensagens, cabeçalho, fundo da prévia) não troca mais a página pelo arquivo. Arrastar texto ou link segue como antes. Nada a configurar na VPS.
+
+  Portado do projeto original (DeskcommCRM, PR #3713 de @webtecnica, issue #3708), adaptado.
+
+### Corrigido
+
+- **Duplicados varre além dos primeiros 1.000 contatos** A tela Contatos › Duplicados lia só os 1.000 contatos mais antigos e dizia que tinha
+  varrido todos, porque o banco corta cada resposta em 1.000 linhas sem avisar. Agora a
+  leitura é feita em páginas, até 2.000 contatos, e a tela avisa quando há mais do que isso.
+  Nada era gravado errado antes: era a leitura que parava cedo.
+
+  Portado do projeto original (DeskcommCRM, PR #2585 de @Tong-bit-art, issue #2561).
+  Nada a fazer na VPS.
+
+- **Follow-up de silêncio não insiste com quem só respondeu com emoji a uma mensagem automática** Quando a clínica manda uma mensagem por iniciativa própria — regra de automação
+  (aniversário, pesquisa, aviso), lembrete da Agenda, campanha, envio por integração ou
+  texto fixo de um fluxo de follow-up, como o pós-consulta — e o contato responde só com
+  emoji (texto sem nenhuma letra nem dígito), o fluxo de follow-up por silêncio não o
+  inscreve mais, desde que a resposta tenha chegado em até 48 horas e ele não tenha escrito
+  nada com conteúdo nas 48 horas antes da mensagem automática. Antes, um "❤️" ao parabéns
+  virava "lead frio" e recebia a sequência de venda.
+
+  Continua no fluxo quem escreveu qualquer coisa com conteúdo nesse período — "quero,
+  quanto custa?", "Obrigada!", uma foto, um áudio ou uma figurinha. Não contam como
+  mensagem automática as respostas dos agentes de IA, a "Mensagem escrita pela IA" das
+  automações, os passos do fluxo escritos pela IA, o aviso de fora do horário e o aviso de
+  passagem para a equipe. A reação por toque do WhatsApp não chega ao CRM e por isso nunca
+  reiniciou o fluxo. Fluxos por etapa, por caso e por retorno seguem iguais; nada a fazer
+  na instalação.
+
+  Portado do projeto original (DeskcommCRM, PR #3729 de @webtecnica).
+
+- **A lista do Inbox atualiza a conversa no lugar, sem refazer a busca** Quando uma conversa muda sem mensagem nova (lida por outra pessoa, encerrada, etiquetada,
+  ocultada), a linha dela muda no lugar, com a ordem, a seleção e a rolagem preservadas, e a
+  lista não é buscada de novo. A conversa que deixa de pertencer à aba aberta sai na hora.
+
+  Continuam recarregando a lista pelo servidor: mensagem nova, conversa nova, junção de fichas,
+  pausa ou devolução do atendimento automático, conversas de cliente que está com a equipe ou
+  pediu para não receber mensagens, e a conversa cuja pausa curta do automático está para
+  acabar. Nada precisa ser feito na instalação.
+
+  Portado do projeto original (DeskcommCRM, PR #3806 de @webtecnica), adaptado.
+
+- **As abas do Inbox carregam sem erro de hidratação** O número ao lado das abas do Inbox e o seletor de número da empresa passam a aparecer logo
+  depois que a página termina de carregar. Se esses dados chegassem no meio do carregamento, o
+  navegador registraria um erro de hidratação e montaria a área de novo. A correção é
+  preventiva: o caso só é provável para quem administra, que tem o indicador de conexões no
+  menu. Nada precisa ser feito na instalação.
+
+  Portado do projeto original (DeskcommCRM, PR #3832 de @webtecnica), adaptado.
+
 ## [4.45.0] — 2026-11-03
 
 ### Adicionado
@@ -8647,7 +8740,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.45.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.46.0...HEAD
+[4.46.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.45.0...v4.46.0
 [4.45.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.44.1...v4.45.0
 [4.44.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.44.0...v4.44.1
 [4.44.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.43.1...v4.44.0
