@@ -176,7 +176,13 @@ import {
 } from './skills';
 import { readSkillReference, skillHasReferences } from './skill-references';
 import { READ_ONLY_TOOLS, wrapToolsWithBreaker, type ToolBreakerThresholds } from './tool-breaker';
-import { loadChannelProvider, nomesDasFerramentas, runBeforeSend, type GateContext } from '../guardrails/before-send';
+import {
+  loadChannelProvider,
+  nomesDasFerramentas,
+  runBeforeSend,
+  type GateContext,
+  VETOS_IRREVOGAVEIS,
+} from '../guardrails/before-send';
 import { colherDaFerramenta, VETOS_DO_HORARIO } from '../guardrails/horario-da-agenda';
 import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
@@ -192,7 +198,8 @@ import { classifyPromise, memoizarPorCandidata } from '../guardrails/promise/sem
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { diffCheckpoint } from '@/lib/leads/checkpoint-diff';
 import {
-  CORRECAO_DO_TURNO_MUDO,
+  correcaoDoTurnoMudo,
+  PASSOS_DA_CORRECAO,
   semChamadasSemResultado,
   turnoMudoPedeCorrecao,
   turnoMudoPorCorte,
@@ -3130,10 +3137,17 @@ async function executarTurnoDoAgente(
   // incluídas), nunca em veto de gate. Checar `seq` antes de tentar o próximo envio
   // barra o modelo sem gastar uma chamada de before-send à toa.
   const maxSendsPerTurn = deps.knobs.maxSendsPerTurn ?? DEFAULT_MAX_SENDS_PER_TURN;
-  // TURNO MUDO: quantas vezes o modelo chamou `send_message` e se passou a conversa à
-  // equipe. Os dois dizem que o silêncio foi decisão — só sem eles o motor pede a
-  // correção do turno que terminou sem falar com o cliente (ver depois da chamada principal).
+  // TURNO MUDO: o que diz se o silêncio do turno foi decisão — sem nenhum deles o motor
+  // pede a correção do turno que terminou sem falar com o cliente (ver depois da chamada
+  // principal e `turno-mudo.ts`). `tentativasDeEnvio` é só informativo desde o #3673:
+  // tentativa vetada não entregou nada, e não cala a correção.
   let tentativasDeEnvio = 0;
+  // Veto que manda PARAR (stop/LGPD/janela fechada): pedir a correção seria pedir ao
+  // modelo que tente de novo o que a cadeia proíbe — ver `VETOS_IRREVOGAVEIS`.
+  let vetoIrrevogavel = false;
+  // A resposta foi DESCARTADA dentro do `send_message`: ficou obsoleta, ou a guarda de
+  // repetição a calou. O silêncio aí é decisão, e já não chega pela tentativa.
+  let respostaDescartadaNoTurno = false;
   let passouParaAEquipe = false;
   // PASSAGEM DE ASSUNTO: preenchida quando `transfer_to_subject` gravou o novo
   // dono. Para o loop do modelo; no fim, sem nada enviado, volta a `runAgentTurn`,
@@ -3557,6 +3571,7 @@ async function executarTurnoDoAgente(
             ) {
               pacingCapVeto = { code: chain.code, nextAllowedAt: chain.nextAllowedAt };
             }
+            if (VETOS_IRREVOGAVEIS.has(chain.code)) vetoIrrevogavel = true;
             return { ok: false, error: { code: chain.code, message: chain.message } };
           }
           const outcome = chain.outcome;
@@ -3732,6 +3747,7 @@ async function executarTurnoDoAgente(
         });
 
         if (chain.status === 'vetoed') {
+          if (VETOS_IRREVOGAVEIS.has(chain.code)) vetoIrrevogavel = true;
           return { ok: false, error: { code: chain.code, message: chain.message } };
         }
         const outcome = chain.outcome;
@@ -3879,6 +3895,7 @@ async function executarTurnoDoAgente(
             job_id: liveJob().id,
             conversation_id: input.conversationId,
           });
+          respostaDescartadaNoTurno = true;
           return {
             ok: false,
             error: {
@@ -3893,8 +3910,11 @@ async function executarTurnoDoAgente(
         // pouco (o "OK" do paciente respondido três vezes com a mesma frase, produção
         // 19/10/2026). PULO SILENCIOSO, não veto: `ok: true`, nada sai, e o modelo é
         // mandado encerrar — veto o faria reescrever a mesma ideia. Só aqui, no texto
-        // livre do `inbound_turn`; ver `repeticao-na-conversa.ts`. Conta como tentativa
-        // de envio (`tentativasDeEnvio` acima), então o turno mudo não pede correção.
+        // livre do `inbound_turn`; ver `repeticao-na-conversa.ts`. O turno mudo não pede
+        // correção depois disso, e o descarte é DITO: o pulo marca
+        // `respostaDescartadaNoTurno`, a frase fixa e o caso marcam
+        // `repeticaoEncerrouOTurno`. A tentativa de envio já não basta desde o #3673 —
+        // sem a marca, a correção mandaria reescrever o que a guarda não reconheceria.
         if (!preview && liveJob().kind === 'inbound_turn') {
           const repeticao = await repetiuNaConversa(pool, {
             organizationId: tenantId,
@@ -3950,6 +3970,7 @@ async function executarTurnoDoAgente(
               return { ok: true, status: 'nao_enviada_repetida', message: MENSAGEM_DO_CASO_DE_REPETICAO };
             }
             if (saida.acao !== 'frase') {
+              respostaDescartadaNoTurno = true;
               return { ok: true, status: 'nao_enviada_repetida', message: MENSAGEM_DE_REPETICAO };
             }
             // A frase segue pelo MESMO caminho de envio daqui para baixo: opt-out,
@@ -4213,6 +4234,7 @@ async function executarTurnoDoAgente(
             ) {
               pacingCapVeto = { code: chain.code, nextAllowedAt: chain.nextAllowedAt };
             }
+            if (VETOS_IRREVOGAVEIS.has(chain.code)) vetoIrrevogavel = true;
             // Erro de ENSINO pt-br (mesmo shape de get_lead_context/breaker): o
             // modelo o vê no turno seguinte. NÃO é exceção — não derruba o run.
             return { ok: false, error: { code: chain.code, message: chain.message } };
@@ -5383,15 +5405,20 @@ async function executarTurnoDoAgente(
     // qualquer outro. O fechamento lê a fita das DUAS chamadas.
     let mensagensDoTurno: ModelMessage[] = turn.result.responseMessages;
     // Lido DE NOVO depois da correção (para o aviso de corte): o que ela fez —
-    // enviar, levar veto, passar à equipe — muda a resposta.
+    // enviar, levar veto que manda parar, passar à equipe — muda a resposta.
     const silencioDoTurno = () => ({
       tentativasDeEnvio,
+      // stop/LGPD/janela fechada: a nova tentativa cairia no mesmo veto.
+      vetoIrrevogavel,
       enviadas: outcomes.length,
-      // O descarte por resposta obsoleta acontece DENTRO de send_message e já
-      // conta como tentativa de envio. O de pessoa no comando pode vir do
-      // send_media, que não conta: sem isto a correção pediria ao modelo para
-      // falar por cima de quem assumiu (o sink barraria, mas gastando modelo).
-      turnoDescartado: pessoaAssumiuNoTurno,
+      // Cada descarte é dito, porque desde o #3673 a tentativa de envio vetada não
+      // cala a correção: a resposta obsoleta e o pulo da guarda de repetição
+      // (`respostaDescartadaNoTurno`); a frase fixa ou o caso que a guarda já mandou
+      // (`repeticaoEncerrouOTurno` — na correção, o send_message só devolveria
+      // `nao_enviada_repetida`); e a pessoa no comando, que pode vir do send_media
+      // (sem isto a correção falaria por cima de quem assumiu; o sink barraria,
+      // mas gastando modelo).
+      turnoDescartado: pessoaAssumiuNoTurno || respostaDescartadaNoTurno || repeticaoEncerrouOTurno,
       // Passar a conversa a outro assunto também é silêncio por decisão.
       passouParaAEquipe: passouParaAEquipe || passagem !== null,
       capDeEnvio: capDeEnvioAtingido(),
@@ -5401,7 +5428,8 @@ async function executarTurnoDoAgente(
       runLog.warn('turno terminou sem mensagem ao cliente — pedindo UMA correção', {
         job_id: liveJob().id,
       });
-      const pedidoDeCorrecao: ModelMessage = { role: 'user', content: CORRECAO_DO_TURNO_MUDO };
+      // A receita de remarcar só vai a quem lista e remarca compromissos (`turno-mudo.ts`).
+      const pedidoDeCorrecao: ModelMessage = { role: 'user', content: correcaoDoTurnoMudo(agentConfig?.toolIds ?? []) };
       const correcao = await runModelCall(
         pool,
         deps.llmCfg,
@@ -5414,7 +5442,9 @@ async function executarTurnoDoAgente(
           system,
           messages: [...openingMessages, ...semChamadasSemResultado(turn.result.responseMessages), pedidoDeCorrecao],
           tools,
-          maxSteps: Math.min(maxSteps, 3),
+          // Teto em `PASSOS_DA_CORRECAO` (turno-mudo.ts): com 3 passos uma remarcação
+          // (localizar → horário → mover → enviar) não cabia, e a correção morria antes de enviar.
+          maxSteps: Math.min(maxSteps, PASSOS_DA_CORRECAO),
           ...(agentConfig !== null
             ? {
                 model: agentConfig.model,

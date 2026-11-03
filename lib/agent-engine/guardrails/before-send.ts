@@ -355,6 +355,29 @@ export interface Gate {
   evaluate(ctx: GateContext): GateVerdict;
 }
 
+/**
+ * Os códigos de veto que mandam PARAR, não reescrever: o gate `stop` (regra dura nº 2) e o
+ * `lgpd`. Reescrever o texto não muda o veredito deles, e o `reason` de cada um diz "encerre o
+ * turno sem tentar de novo". Quem decide se vale pedir outra tentativa ao modelo (a correção do
+ * turno mudo, `turno-mudo.ts`) consulta esta lista — e não a da cadeia inteira, porque os vetos
+ * de ENSINO (agenda_stall, promessa…) são exatamente os que uma nova tentativa conserta.
+ * Também a janela de envio que fechou no meio do turno (`outside_window`, do pacing): a nova
+ * tentativa cai no mesmo veto. `messaging_window_closed` fica FORA de propósito: o `reason`
+ * dele oferece o `send_template` como saída, e a correção pode usá-la.
+ *
+ * Os nomes são os que ESTE fork emite (porte do #3673): `conversa_com_humano`, não o
+ * `atendimento_com_humano` do original — com o nome de lá, a pessoa que assume no meio do
+ * turno receberia por cima uma correção com ferramentas de escrita.
+ */
+export const VETOS_IRREVOGAVEIS: ReadonlySet<string> = new Set([
+  'contato_bloqueado',
+  'contato_interno',
+  'conversa_com_humano',
+  'lgpd_anonymized',
+  'lgpd_missing_legal_basis',
+  'outside_window',
+]);
+
 /** Gate 1 — STOP/opt-out/força-humano: veto IRREVOGÁVEL (regra dura nº 2), 1ª linha. */
 const stopGate: Gate = {
   name: 'stop',
@@ -755,6 +778,10 @@ export function nomesDasFerramentas(nomes: readonly string[]): string {
  * não confia no modelo se corrigir sozinho — se ele tentar de novo sem chamar a ferramenta,
  * veta de novo (sem fail-safe de N tentativas como o de vocabulário interno: aqui NÃO existe
  * versão aceitável do texto vetado, só a alternativa de chamar a ferramenta).
+ *
+ * A forma com o particípio ABRINDO a frase ("Confirmado: manicure dia 29/10 às 9h") não mora
+ * aqui: quem a julga é o `horarioDaAgendaGate`, que conhece os compromissos do contato e roda
+ * também no turno que consultou a agenda (porte do #3673; o original a pôs neste gate).
  *
  * Posição 6.9 de `BEFORE_SEND_GATES`: DEPOIS do `internalVocabularyGate` e ANTES do
  * `disclosureGate` (que pode emendar o corpo — este gate precisa ver o texto do MODELO).

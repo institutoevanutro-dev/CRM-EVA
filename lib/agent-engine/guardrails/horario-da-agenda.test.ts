@@ -299,7 +299,10 @@ const CLINICA: Caso[] = [
   caso('FP mutirão', 'A data do mutirão ficou marcada: 22/11 das 9h às 17h.', {}, 'PASS'),
   caso('FP Confirmado: evento', 'Confirmado: nosso evento é dia 20/11 às 19h.', {}, 'PASS'),
   caso('FP fechado no feriado', 'Atenção: confirmado que dia 15/11 estaremos fechados, voltamos dia 16/11 às 8h.', {}, 'PASS'),
+  caso('residual: retorno de ligação', 'Combinado, agendado: te ligo amanhã às 14h.', {}, 'VETO agenda_confirmou_sem_marcar'),
+  caso('residual: Dra. te liga', 'Ok, marcado: amanhã às 10h a Dra. te liga para explicar.', {}, 'VETO agenda_confirmou_sem_marcar'),
   caso('OK lembrete: Sim, marcado', 'Oi, Maria! Sim, marcado para amanhã às 9h com a Dra. Ana 😊', { doContato: [APPT9] }, 'PASS'),
+  caso('TP Sim, marcado sem compromisso', 'Oi, Maria! Sim, marcado para amanhã às 9h com a Dra. Ana 😊', {}, 'VETO agenda_confirmou_sem_marcar'),
   caso('OK Isso, agendado', 'Isso mesmo! Agendado para quinta às 14h.', { doContato: [APPT9] }, 'PASS'),
   caso('OK tudo certo confirmado', 'Tudo certo, confirmado para amanhã às 10h então.', { doContato: [APPT9] }, 'PASS'),
   caso('OK certinho', 'Certinho, amanhã às 9h! Te esperamos.', {}, 'PASS'),
@@ -307,11 +310,13 @@ const CLINICA: Caso[] = [
   caso('OK pergunta de pé', 'Bom dia! Sua avaliação, agendada para hoje às 15h, segue de pé?', {}, 'PASS'),
   caso('OK presença (tool) Confirmado, te esperamos', 'Confirmado, te esperamos amanhã às 9h 😊', { doContato: [APPT9] }, 'PASS'),
   caso('OK presença dia 05/11', 'Confirmado, te esperamos dia 05/11 às 9h!', { doContato: [APPT9] }, 'PASS'),
+  caso('TP Confirmado 05/11 sem compromisso', 'Confirmado, te esperamos dia 05/11 às 9h!', {}, 'VETO agenda_confirmou_sem_marcar'),
   caso('OK task: Confirmado! Te esperamos', 'Confirmado! Te esperamos dia 05/11 às 9h.', { doContato: [APPT9] }, 'PASS'),
   caso('FN aceito: Confirmado! (ponto) sem compromisso', 'Confirmado! Te esperamos dia 05/11 às 9h.', {}, 'PASS'),
   caso('OK certinho te esperamos', 'Certinho, te esperamos amanhã às 9h! 😊', {}, 'PASS'),
   caso('OK certinho até amanhã', 'Certinho, Maria, até amanhã às 9h!', {}, 'PASS'),
   caso('OK pagamento + avaliação existente', 'Confirmado, Maria: pagamento recebido e sua avaliação fica para amanhã às 9h.', { doContato: [APPT9] }, 'PASS'),
+  caso('TP pagamento + avaliação sem compromisso', 'Confirmado, Maria: pagamento recebido e sua avaliação fica para amanhã às 9h.', {}, 'VETO agenda_confirmou_sem_marcar'),
   caso('OK lembrete do bloco', 'Sua consulta está agendada para amanhã, dia 05/11, às 9h, com a Dra. Ana.', { doContato: [APPT9] }, 'PASS'),
   caso('OK pergunta certo?', 'Você tem horário marcado amanhã às 9h, certo?', {}, 'PASS'),
   caso('OK posso deixar confirmado?', 'Posso deixar confirmado para quinta às 9h?', {}, 'PASS'),
@@ -322,6 +327,9 @@ const CLINICA: Caso[] = [
   caso('TP ficou agendado', 'Ficou agendado para 05/11 às 10h!', { livres: [L10], ...C }, 'VETO agenda_confirmou_sem_marcar'),
   caso('TP pix + agendada', 'Seu pix foi confirmado e sua avaliação está agendada para 05/11 às 10h.', { livres: [L10], ...C }, 'VETO agenda_confirmou_sem_marcar'),
   caso('TP data diferente da existente', 'Sua consulta está confirmada: 📅 quinta, 05/11 🕒 11h', { doContato: [APPT9] }, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP Prontinho, agendado', 'Prontinho, agendado para 05/11 às 10h!', { livres: [L10], ...C }, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP Agendado! emoji', 'Agendado! 📅 05/11 🕒 10h', { livres: [L10], ...C }, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP ✅ Agendado:', '✅ Agendado: avaliação 05/11 às 10h', { livres: [L10], ...C }, 'VETO agenda_confirmou_sem_marcar'),
   caso('TP Marquei', 'Perfeito! Marquei sua avaliação para 05/11 às 10h.', { livres: [L10], ...C }, 'VETO agenda_confirmou_sem_marcar'),
   caso('TP Agendei quinta', 'Pronto, Maria! Agendei sua consulta para quinta às 10h.', {}, 'VETO agenda_confirmou_sem_marcar'),
   caso('TP multilinha está agendado', 'Tudo certo! Está agendado ✅\n📅 terça-feira, 03/11\n🕒 11:00', { doContato: [APPT9] }, 'VETO agenda_confirmou_sem_marcar'),
@@ -330,9 +338,16 @@ const CLINICA: Caso[] = [
   caso('TP multilinha com sucesso', 'Perfeito! Agendado com sucesso:\n📅 03/11\n🕒 10h', { doContato: [APPT9] }, 'VETO agenda_confirmou_sem_marcar'),
   caso('TP ficou marcada quinta', 'Combinado! Sua avaliação ficou marcada para quinta.', {}, 'VETO agenda_confirmou_sem_marcar'),
   caso('TP Dra confirmou ficou agendado', 'Prontinho! A Dra. Ana confirmou e ficou agendado para 05/11 às 10h.', {}, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP 3673 medida 1', 'Confirmado: manicure dia 29/10 às 9h.', { agora: AGORA_3673 }, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP 3673 medida 2', 'Confirmado, a 9h está livre pra manicure na quinta, dia 29/10. 😊', { agora: AGORA_3673 }, 'VETO agenda_confirmou_sem_marcar'),
   caso('3673 borda só dia', 'Confirmado! Te chamo amanhã sobre o orçamento.', { agora: AGORA_3673 }, 'PASS'),
   caso('3673 borda só hora', 'Confirmado: te ligo às 14h com a resposta.', { agora: AGORA_3673 }, 'PASS'),
   caso('3673 medida 1 após remarcar', 'Confirmado: manicure dia 29/10 às 9h.', { agora: AGORA_3673, marcouNesteTurno: true }, 'PASS'),
+  caso('TP abre após saudação', 'Perfeito, Maria! Confirmado: avaliação dia 05/11 às 10h.', {}, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP abre após vírgula', 'Ótimo, confirmado para quinta às 9h!', {}, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP emoji Agendado amanhã', '✅ Agendado para amanhã às 9h com a Dra. Ana', {}, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP 10h30', 'Confirmado: avaliação dia 05/11 às 10h30.', {}, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP DD/MM sem dia', 'Confirmado: avaliação 05/11 às 10h.', {}, 'VETO agenda_confirmou_sem_marcar'),
   caso('TP remarcada sem remarcar', 'Sua consulta foi remarcada para 06/11 às 10h.', { doContato: [APPT9] }, 'VETO agenda_confirmou_sem_marcar'),
   caso('OK remarcada após remarcar', 'Prontinho! Sua consulta foi remarcada para 05/11 às 11h.', { marcouNesteTurno: true, doContato: [APPT9, L11], livres: [L11], ...C }, 'PASS'),
   caso('OK vou reservar', 'Ótimo, vou reservar terça, 03/11, às 11h para você.', { livres: [L0311_11], ...C }, 'PASS'),
@@ -370,10 +385,13 @@ const CLINICA: Caso[] = [
 // As frases levantadas pelas duas críticas do plano.
 const CRITICAS: Caso[] = [
   caso('agendado e confirmado, com compromisso', 'Perfeito! Agendado e confirmado para amanhã às 9h.', { doContato: [AMANHA9] }, 'PASS'),
+  caso('agendado e confirmado, sem compromisso', 'Perfeito! Agendado e confirmado para amanhã às 9h.', {}, 'VETO agenda_confirmou_sem_marcar'),
   caso('Marcado, até amanhã, com compromisso', 'Show! Marcado, até amanhã às 9h então.', { doContato: [AMANHA9] }, 'PASS'),
+  caso('Marcado, até amanhã, sem compromisso', 'Show! Marcado, até amanhã às 9h então.', {}, 'VETO agenda_confirmou_sem_marcar'),
   caso('certinho te esperamos', 'Certinho, te esperamos amanhã às 9h! 😊', {}, 'PASS'),
   caso('certinho até amanhã', 'Certinho, Maria, até amanhã às 9h!', {}, 'PASS'),
   caso('Combinado! Confirmado, com compromisso', 'Combinado! Confirmado para amanhã às 9h, te esperamos.', { doContato: [AMANHA9] }, 'PASS'),
+  caso('Confirmado: dia e hora que não são do compromisso', 'Confirmado: avaliação 05/11 às 10h.', { doContato: [APPT9] }, 'VETO agenda_confirmou_sem_marcar'),
   caso('ficou para…, combinado?', 'Sua avaliação ficou para 05/11 às 10h, combinado?', {}, 'PASS'),
   caso('marquei a preferência', 'Marquei aqui sua preferência por manhã.', {}, 'PASS'),
   caso('agendei um lembrete', 'Agendei um lembrete para te avisar.', {}, 'PASS'),
@@ -414,9 +432,9 @@ const CONSULTOU: Caso[] = [
 
 describe('o corpus medido', () => {
   it('as tabelas têm o tamanho medido — linha apagada não passa calada', () => {
-    // 121 frases de clínica, 26 das críticas e 13 de turno que consultou, menos as 18 que
-    // dependem da forma "Confirmado: dia/hora" (porte do #3673, no commit seguinte).
-    expect([CLINICA.length, CRITICAS.length, CONSULTOU.length]).toEqual([106, 23, 13]);
+    // 121 frases de clínica, 26 das críticas e 13 de turno que consultou. 18 delas dependem
+    // da forma com o particípio abrindo a frase ("Confirmado: dia/hora", porte do #3673).
+    expect([CLINICA.length, CRITICAS.length, CONSULTOU.length]).toEqual([121, 26, 13]);
   });
 
   it.each(CLINICA)('clínica — $nome → $esperado', ({ corpo, estado, esperado }) => {

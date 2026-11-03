@@ -211,6 +211,18 @@ const AFIRMACOES: ReadonlyArray<{ re: RegExp; sozinho: (participio: string) => b
     re: /\b(?:agendamento|reserva)\s+(?:foi\s+)?(confirmad|feit|realizad|efetuad)[oa]\b|\b(?:consulta|teleconsulta)\s+(confirmad)a\b/g,
     sozinho: () => true,
   },
+  // #3673 — o particípio ABRE a frase ("Confirmado: manicure dia 29/10 às 9h"), com dia e hora.
+  // O original pôs esta forma no `agendaStallGate`; aqui ela ganha a isenção do compromisso que
+  // o contato já tem (lembrete e confirmação de presença passam) e vale também no turno que
+  // consultou a agenda. "Confirmado!" fecha a frase no "!" e não chega à data: não é afirmação.
+  {
+    re: new RegExp(
+      String.raw`(?<=(?:^|[.!?\n,:;])\W*)(confirmad|marcad|remarcad)[oa]s?\b(?=[^.!?\n]{0,80}${DIA})(?=[^.!?\n]{0,80}?${HH})`,
+      'g',
+    ),
+    sozinho: () => true,
+  },
+  { re: /(?<=(?:^|[.!?\n,:;])\W*)(agendad)[oa]s?\b/g, sozinho: () => true },
   // 1ª pessoa: "Marquei sua avaliação para 05/11 às 10h" — e não "Marquei na sua ficha".
   { re: /\b(agend|marqu|reserv|remarqu)ei\b/g, sozinho: () => false },
 ];

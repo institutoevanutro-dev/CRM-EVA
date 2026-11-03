@@ -5,6 +5,7 @@ import type * as InboundTurn from "@/lib/agent-engine/agent/inbound-turn";
 import type * as Providers from "@/lib/agent-engine/edge/llm/providers";
 import type * as Queue from "@/lib/agent-engine/queue/queue";
 import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
+import type * as Repeticao from "@/lib/agent-engine/guardrails/repeticao-na-conversa";
 
 /**
  * TURNO MUDO — o turno de resposta que terminou sem mensagem ao cliente pede
@@ -28,6 +29,10 @@ import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
  * Veto do gate de horário (porte do upstream #3596): numa sessão com agente que tem
  * ferramenta de agenda, "está agendada" sem marcação volta ao modelo como ensino
  * dentro do mesmo turno, e a resposta reescrita sai pela cadeia.
+ *
+ * Veto e correção (porte do upstream #3673): tentativa vetada que terminou em texto
+ * solto ainda pede a correção; o veto que manda parar (opt-out, conversa com a
+ * equipe) e o pulo silencioso da guarda de repetição, não.
  */
 
 const container = process.env.TEST_DB_CONTAINER;
@@ -61,6 +66,7 @@ type Modules = {
   queue: typeof Queue;
   createLogger: typeof ObsLogger.createLogger;
   createFakeRegistry: typeof Providers.createFakeRegistry;
+  repeticaoPadrao: typeof Repeticao.REPETICAO_PADRAO;
 };
 let m: Modules;
 
@@ -112,11 +118,16 @@ function modelo(roteiro: Resposta[]) {
 
 /**
  * Um turno de entrada. Com `conversa`, a conversa é criada na `sessao` indicada — é
- * assim que o turno roda com o agente publicado nela.
+ * assim que o turno roda com o agente publicado nela. `repeticao` troca os knobs da
+ * guarda de repetição.
  */
 async function turno(
   fake: ReturnType<typeof modelo>["fake"],
-  { sessao = SESSION, conversa = CONV }: { sessao?: string; conversa?: string } = {},
+  {
+    sessao = SESSION,
+    conversa = CONV,
+    repeticao,
+  }: { sessao?: string; conversa?: string; repeticao?: typeof Repeticao.REPETICAO_PADRAO } = {},
 ): Promise<void> {
   if (conversa !== CONV) {
     await pool.query(
@@ -155,6 +166,7 @@ async function turno(
       notesIndexMaxTokens: 500,
       maxSteps: 12,
       queuedRetryDelayMs: 1000,
+      ...(repeticao !== undefined ? { repeticao } : {}),
       breaker: {
         exactFailureWarn: 2,
         exactFailureBlock: 5,
@@ -190,6 +202,7 @@ beforeAll(async () => {
     queue: await import("@/lib/agent-engine/queue/queue"),
     createLogger: (await import("@/lib/agent-engine/obs/logger")).createLogger,
     createFakeRegistry: (await import("@/lib/agent-engine/edge/llm/providers")).createFakeRegistry,
+    repeticaoPadrao: (await import("@/lib/agent-engine/guardrails/repeticao-na-conversa")).REPETICAO_PADRAO,
   };
   await pool.query(
     `insert into organizations (id, slug, legal_name, display_name)
@@ -341,5 +354,111 @@ describe("o turno de resposta que terminou sem mensagem ao cliente", () => {
 
     expect(enviados).toEqual(["Olá, sua consulta está confirmada."]);
     expect(await avisosDaConversa()).toEqual([]);
+  });
+
+  it("⭐ veto + texto solto: tentativa vetada, nada entregue, a correção recupera", async () => {
+    // Teste 10 do aceite do original (2026-10-25, job 217c6925): o modelo chamou
+    // send_message com confirmação de agenda SEM ter chamado a ferramenta, o
+    // agenda_stall vetou (o erro de ensino voltou DENTRO do loop) e ele encerrou
+    // o turno em TEXTO SOLTO. Com a regra antiga (`tentativasDeEnvio === 0`) a
+    // correção era suprimida e o cliente ficava sem resposta.
+    const { fake, prompts } = modelo([
+      enviar("Seu agendamento está confirmado para amanhã às 9h"),
+      texto("(reformulo mas acabo em texto solto)"),
+      enviar("Combinado! Até logo 😊"),
+    ]);
+    await turno(fake, { sessao: SESSION_VETO, conversa: crypto.randomUUID() });
+
+    expect(
+      enviados,
+      "a confirmação passou sem veto — o agenda_stall não estava armado (fixture de agente com agenda)",
+    ).toEqual(["Combinado! Até logo 😊"]);
+    // O veto ensinou DENTRO do loop: a 2ª chamada do 1º run já carrega o erro.
+    expect(prompts[1], "o veto não voltou como ensino na chamada seguinte").toContain("NESTE turno");
+    // …e mesmo assim o turno terminou mudo — é aí que a correção precisa rodar.
+    expect(
+      prompts[2],
+      "tentativa vetada não entregou nada: a correção do turno mudo não foi pedida",
+    ).toContain(MARCA_DA_CORRECAO);
+  });
+
+  it("⭐ veto irrevogável (opt-out) + texto solto: NÃO pede correção nem chamada extra de modelo", async () => {
+    // O contraponto do caso acima: o cliente pediu para sair (is_blocked=true) e o
+    // gate `stop` vetou com "encerre o turno sem tentar de novo". Pedir a correção
+    // aqui mandaria o modelo chamar send_message de novo, contra o veto, e pagaria
+    // uma chamada de modelo (até PASSOS_DA_CORRECAO passos, com as ferramentas de
+    // escrita) por toda mensagem de opt-out.
+    await pool.query(`update contacts set is_blocked = true where organization_id = $1 and id = $2`, [
+      ORG,
+      CONTACT,
+    ]);
+    const { fake, prompts } = modelo([
+      enviar("Ok, você foi removido da nossa lista."),
+      texto("(o envio foi vetado; encerro)"),
+      // sem 3ª resposta roteirizada: a 3ª chamada é o fechamento (JSON padrão do
+      // dublê); se a correção fosse pedida, ela consumiria esse lugar.
+    ]);
+    await turno(fake);
+
+    expect(enviados, "mensagem saiu para um contato que pediu para sair").toEqual([]);
+    expect(
+      prompts.some((p) => p.includes(MARCA_DA_CORRECAO)),
+      "veto irrevogável pediu a correção do turno mudo — o motor mandou tentar de novo o que o stop proíbe",
+    ).toBe(false);
+    // turno (2 chamadas: envio vetado + encerramento) + fechamento = 3, sem correção.
+    expect(prompts).toHaveLength(3);
+  });
+
+  it("⭐ a equipe assumiu no meio do turno: o veto `conversa_com_humano` não pede correção", async () => {
+    // O nome deste fork. O original lista `atendimento_com_humano`, que o gate stop
+    // daqui não emite: com aquele nome, a pessoa que assumiu receberia por cima uma
+    // correção com as ferramentas de escrita.
+    const { fake: roteiro, prompts } = modelo([
+      enviar("Já te passo os horários disponíveis."),
+      texto("(o envio foi vetado; encerro)"),
+    ]);
+    const fake: typeof roteiro = async (options) => {
+      // A pessoa assume enquanto o modelo pensa: o início do turno já passou.
+      if (prompts.length === 0) {
+        await pool.query(`update contacts set force_human = true where organization_id = $1 and id = $2`, [
+          ORG,
+          CONTACT,
+        ]);
+      }
+      return roteiro(options);
+    };
+    await turno(fake);
+
+    expect(enviados, "mensagem saiu por cima da pessoa que assumiu").toEqual([]);
+    expect(
+      prompts.some((p) => p.includes(MARCA_DA_CORRECAO)),
+      "a conversa com a equipe recebeu a correção do turno mudo",
+    ).toBe(false);
+  });
+
+  it("⭐ pulo silencioso da repetição não pede correção", async () => {
+    // A guarda de repetição calou a fala (sem frase curta configurada): o turno
+    // DECIDIU não falar. Antes, a tentativa de envio calava a correção de carona;
+    // sem a marca do descarte, a correção mandaria reescrever a mesma ideia — a
+    // paráfrase que a guarda já não reconheceria.
+    const repetida =
+      "Assim que eu tiver a validação do financeiro, te explico certinho como seguimos, combinado?";
+    await pool.query(
+      `insert into messages (id, organization_id, conversation_id, channel_session_id, contact_id,
+         type, direction, status, body, sent_via, sent_at, created_at)
+       values ($1,$2,$3,$4,$5,'text','outbound','sent',$6,'ai',
+               now() - interval '1 minute', now() - interval '1 minute')`,
+      [crypto.randomUUID(), ORG, CONV, SESSION, CONTACT, repetida],
+    );
+    const { fake, prompts } = modelo([enviar(repetida), texto("(a guarda calou; encerro)")]);
+    await turno(fake, { repeticao: { ...m.repeticaoPadrao, frases: [] } });
+
+    expect(enviados, "a fala repetida saiu").toEqual([]);
+    expect(
+      prompts.some((p) => p.includes(MARCA_DA_CORRECAO)),
+      "o pulo da repetição pediu a correção do turno mudo",
+    ).toBe(false);
+    // turno (2 chamadas: envio pulado + encerramento) + fechamento = 3, sem correção.
+    expect(prompts).toHaveLength(3);
   });
 });
