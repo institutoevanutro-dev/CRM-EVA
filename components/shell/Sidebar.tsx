@@ -20,6 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { usePrefetchPorIntencao } from "@/hooks/navigation/prefetchPorIntencao";
 
 
 interface SidebarContentProps {
@@ -53,6 +54,9 @@ export function SidebarContent({
   const [isPending, startTransition] = useTransition();
   const [saindo, sair] = useTransition();
   const { user, activeOrg, signOut } = useAuth();
+  // O menu não pede tela nenhuma sozinho, só quando alguém vai para ela (porte do
+  // original #3613): ver hooks/navigation/prefetchPorIntencao.ts.
+  const intencao = usePrefetchPorIntencao();
   const quem = [
     user.is_platform_admin && !user.support,
     activeOrg?.role ?? null,
@@ -88,6 +92,7 @@ export function SidebarContent({
   const inicio = (
     <Link
       href="/app/inicio"
+      {...intencao("/app/inicio")}
       title={collapsed ? t("Início") : undefined}
       aria-current={atual === "inicio" ? "page" : undefined}
       onClick={onNavigate}
@@ -110,6 +115,7 @@ export function SidebarContent({
           {/* O nome leva à primeira tela do grupo (e ele abre); no grupo em que a pessoa já está, abre e fecha. */}
           <Link
             href={item.itens[0]!.href}
+            {...intencao(item.itens[0]!.href)}
             title={collapsed ? t(item.label) : undefined}
             aria-current={ativa ? "page" : undefined}
             onClick={(e) => {
@@ -147,7 +153,7 @@ export function SidebarContent({
               const Ic = d.icon;
               const ligada = d.href === abaAtual;
               return (
-                <Link key={d.href} href={d.href} aria-current={ligada ? "page" : undefined} onClick={onNavigate} className={estiloDoItem(ligada)}>
+                <Link key={d.href} href={d.href} {...intencao(d.href)} aria-current={ligada ? "page" : undefined} onClick={onNavigate} className={estiloDoItem(ligada)}>
                   <Ic size={18} weight={ligada ? "fill" : "light"} aria-hidden />
                   <span className="truncate">{t(d.label)}</span>
                 </Link>
@@ -227,6 +233,7 @@ export function SidebarContent({
             voz). Fica fixa aqui, fora da área que rola: é o que se procura quando não se acha algo. */}
         <Link
           href={CONFIGURACOES}
+          {...intencao(CONFIGURACOES)}
           title={collapsed ? t("Configurações") : undefined}
           aria-current={atual === "configuracoes" ? "page" : undefined}
           onClick={onNavigate}
@@ -261,7 +268,7 @@ export function SidebarContent({
           <DropdownMenuContent side="top" align="start" className="min-w-[200px]">
             {conta.map((d) => (
               <DropdownMenuItem key={d.href} asChild>
-                <Link href={d.href} aria-current={d.href === abaAtual ? "page" : undefined} onClick={onNavigate}>
+                <Link href={d.href} {...intencao(d.href)} aria-current={d.href === abaAtual ? "page" : undefined} onClick={onNavigate}>
                   {t(d.label)}
                 </Link>
               </DropdownMenuItem>

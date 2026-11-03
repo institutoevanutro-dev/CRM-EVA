@@ -28,6 +28,7 @@ vi.mock("@/hooks/auth/AuthProvider", () => ({
 }));
 const rota = { atual: "/app/inbox" };
 vi.mock("next/navigation", () => ({
+  useRouter: () => ({ prefetch: vi.fn() }),
   usePathname: () => rota.atual,
 }));
 vi.mock("@/components/connections/ConnectionHealthDot", () => ({

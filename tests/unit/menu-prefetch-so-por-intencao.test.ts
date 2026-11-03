@@ -1,0 +1,80 @@
+/**
+ * CERCA: NENHUM `<Link>` DO MENU VOLTA A PREFETCHAR A ÁRVORE INTEIRA
+ * (porte do original #3613, issue #3170 lá).
+ *
+ * O conserto é uma linha por link (`prefetch={false}` + prefetch por intenção,
+ * em `hooks/navigation/prefetchPorIntencao.ts`). O defeito, porém, volta
+ * sozinho: basta alguém escrever um `<Link href={item.href}>` novo no menu, e o
+ * `<Link>` do App Router prefetcha por padrão. Nesta base, cada item visível
+ * custa um render RSC completo (`proxy.ts` + as consultas de
+ * `app/app/layout.tsx`) a cada carga de tela de `/app`; no original a rajada
+ * foi medida, e é ela que disputa o servidor com o clique.
+ *
+ * A régua é dura de propósito e não olha o nome da variável: TODO `<Link>` do
+ * menu tem de receber as props do hook (o espalhamento `{...algo(href)}`), ou
+ * declarar `prefetch={false}` à mão. Ler o texto-fonte é a mesma técnica de
+ * `i18n-espanhol-cobre-a-tela` e das cercas de navegação: o que se prende é a
+ * FORMA do JSX, não o resultado de um render.
+ *
+ * Duas armadilhas da régua textual (as duas reprovam, nunca passam por engano):
+ * a tag é cortada no primeiro `>`, então o espalhamento vem ANTES de qualquer
+ * `=>` da tag (o `onClick` do cabeçalho do grupo); e um comentário em
+ * `Sidebar.tsx` com o literal da abertura da tag vira uma tag a mais.
+ */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+// Só a lateral: aqui não há BarraInferior, e a gaveta do celular
+// (`MobileSidebar`) reaproveita o `SidebarContent` da lateral.
+const ARQUIVOS_DO_MENU = ["components/shell/Sidebar.tsx"];
+
+function fonte(relativo: string): string {
+  return readFileSync(join(process.cwd(), relativo), "utf8");
+}
+
+/** Cada `<Link ...>` do arquivo, do `<Link` até o fecho da tag de abertura. */
+function tagsLink(texto: string): string[] {
+  const tags: string[] = [];
+  let de = texto.indexOf("<Link");
+  while (de !== -1) {
+    const fim = texto.indexOf(">", de);
+    tags.push(texto.slice(de, fim === -1 ? undefined : fim));
+    de = texto.indexOf("<Link", fim === -1 ? texto.length : fim);
+  }
+  return tags;
+}
+
+/**
+ * As props do hook viajam juntas: `prefetch: false` + `onPointerEnter`/`onFocus`.
+ * O argumento aceita caminho literal (`"/app/inicio"`) e o `!` de
+ * `item.itens[0]!.href`.
+ */
+const PEDE_POR_INTENCAO = /\{\.\.\.[A-Za-z_$][\w$]*\(\s*[\w.$[\]'"/!]+\s*\)\}/;
+const PREFETCH_DESLIGADO = /prefetch\s*=\s*\{false\}/;
+
+describe("o menu não prefetcha a árvore inteira (porte do original #3613)", () => {
+  for (const arquivo of ARQUIVOS_DO_MENU) {
+    it(`${arquivo}: todo <Link> declara prefetch por intenção`, () => {
+      const tags = tagsLink(fonte(arquivo));
+      expect(tags.length, `${arquivo} não tem <Link> nenhum — a cerca perdeu o alvo`).toBeGreaterThan(0);
+      const semPrefetch = tags.filter(
+        (tag) => !PEDE_POR_INTENCAO.test(tag) && !PREFETCH_DESLIGADO.test(tag),
+      );
+      expect(
+        semPrefetch,
+        `Todo <Link> do menu precisa de \`{...intencao(href)}\` (ou \`prefetch={false}\`). ` +
+          `Sem isso o Next prefetcha a tela inteira sozinho e disputa o servidor com o clique:\n` +
+          semPrefetch.join("\n---\n"),
+      ).toEqual([]);
+    });
+  }
+
+  it("o hook que desliga o prefetch automático existe e é o do módulo de navegação", () => {
+    const texto = fonte("hooks/navigation/prefetchPorIntencao.ts");
+    expect(texto).toContain("export function usePrefetchPorIntencao");
+    expect(texto).toContain("prefetch: false as const");
+    expect(texto).toContain("router.prefetch(href)");
+  });
+});
