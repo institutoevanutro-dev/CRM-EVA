@@ -56,43 +56,145 @@ export interface AlvoDoTurno {
  *
  * "Visível" é o que o turno pode LER, não só o que já foi gravado:
  *
- *  - Mídia ainda sendo transcrita ou descrita não entra. O turno a lê como
- *    "[áudio]"; contá-la como vista calaria o turno que o drain cria quando a
- *    transcrição fica pronta, e a pergunta do áudio ficaria sem resposta. A régua
- *    é a do drain: derivável, com arquivo, sem estado final e mais nova que o
- *    teto de espera (passado o teto, o drain segue sem o texto, e o turno também).
+ *  - Mídia ainda sendo transcrita ou descrita não entra — e a anotação PARA ANTES
+ *    da mais antiga delas. O turno a lê como "[áudio]"; contá-la como vista
+ *    calaria o turno que o drain cria quando a transcrição fica pronta, e a
+ *    pergunta do áudio ficaria sem resposta. A anotação é UM carimbo, lido como
+ *    "vi tudo até aqui": se cobrisse o texto que chegou DEPOIS do áudio, cobriria
+ *    o áudio junto, e o turno desse texto seria calado. A régua é a do drain:
+ *    derivável, com arquivo, sem estado final e mais nova que o teto de espera
+ *    (passado o teto, o drain segue sem o texto, e o turno também).
+ *    No `inbound_turn` o handler a chama DEPOIS da espera da mídia
+ *    (`espera-da-midia.ts`): a que virou texto durante a espera entra na
+ *    promessa, e a que segue pendente e mais nova que o teto fica de fora — com
+ *    o que veio depois dela.
  *
  *  - Retentativa de um job que JÁ enviou (`send_ledger` aceito, na fila ou em
  *    voo) não reescreve a anotação: o ledger devolve "já enviado" e nada novo
  *    sai, então a resposta que existe é a do que a primeira tentativa viu.
  *    Reescrever faria a mensagem que chegou no meio-tempo parecer respondida.
+ *
+ * Devolve o CORTE (`CorteDaAnotacao`), ou `null` quando nenhuma mídia cortou
+ * (todo turno só de texto) ou quando nada foi escrito. Com corte, a abertura do
+ * turno confere depois de ler a conversa: ver `reanotarSeOCorteMudou`.
  */
-export async function anotarUltimaInboundVista(db: Queryable, alvo: AlvoDoTurno): Promise<void> {
-  await db.query(
-    `update job_queue
+export async function anotarUltimaInboundVista(
+  db: Queryable,
+  alvo: AlvoDoTurno,
+): Promise<CorteDaAnotacao | null> {
+  const { rows } = await db.query<{ corte: unknown; ate: unknown }>(
+    sqlDaAnotacao(false),
+    parametrosDaAnotacao(alvo),
+  );
+  const linha = rows[0];
+  return typeof linha?.corte === 'string' && typeof linha.ate === 'string'
+    ? { em: linha.corte, ate: linha.ate }
+    : null;
+}
+
+/** Onde a anotação parou. Os dois `created_at` são texto do banco, sem perder os microssegundos. */
+export interface CorteDaAnotacao {
+  /** A mídia pendente antes da qual a anotação parou. */
+  em: string;
+  /** A inbound mais nova que a anotação via: a reanotação nunca promete o que chegou depois. */
+  ate: string;
+}
+
+/**
+ * A mídia que cortou a anotação virou texto antes de o turno terminar de LER a
+ * conversa? Quem chama é a abertura do turno (`inbound-turn.ts`), logo depois de
+ * ler. A releitura do modelo (`get_lead_context`) não chama: ela pode correr junto
+ * com um envio escrito sobre a abertura, e prometer a mídia ali calaria o turno
+ * dela — ver a ferramenta.
+ *
+ * A anotação vem antes da leitura, e entre as duas a transcrição pode ficar
+ * pronta. A leitura então mostra o áudio COM texto (e o que veio depois dele),
+ * mas a anotação segue parada antes do áudio: a resposta sai, o turno do texto
+ * seguinte não é calado por `ultimaInboundJaRespondida` e responde de novo ao
+ * que já foi respondido. A leitura em si não diz o que viu da mídia (o resultado
+ * vai inteiro ao modelo pela ferramenta `get_lead_context`), então a conferência
+ * é pelo corte: se a mídia mais antiga ainda sem texto é a MESMA de antes da
+ * leitura, ela estava sem texto durante a leitura inteira — o status não volta —
+ * e a anotação vale.
+ *
+ * A reanotação só avança sobre mídia que terminou de derivar, com duas travas:
+ *  - o teto não solta a mídia que segue sem texto desde o corte: a que estava
+ *    perto dos 120 s pode passá-los entre a anotação e o fim da leitura, e a
+ *    leitura ainda a mostra como `[tipo]`. Prometê-la calaria o turno dela, que
+ *    lê a transcrição se ela chegar atrasada;
+ *  - nada que chegou depois da anotação (`ate`): a reanotação não promete mais do
+ *    que a anotação feita antes da leitura prometeria. O que chegou depois dela
+ *    tem turno próprio, como em todo turno só de texto — a régua de resposta
+ *    obsoleta segue valendo para ela, e o pior caso é uma resposta dupla, nunca o
+ *    turno dela calado.
+ *
+ * Se mudou, reanota AGORA e devolve o corte novo: quem chama tem de reler a
+ * conversa, porque a anotação nova descreve a leitura que vem DEPOIS dela, como a
+ * primeira. `null` = o corte não mudou (ou o job já tem envio no ledger), e a
+ * leitura feita vale.
+ */
+export async function reanotarSeOCorteMudou(
+  db: Queryable,
+  alvo: Pick<AlvoDoTurno, 'organizationId' | 'conversationId' | 'jobId'>,
+  corte: CorteDaAnotacao,
+): Promise<{ corte: CorteDaAnotacao | null } | null> {
+  const { rows } = await db.query<{ corte: unknown }>(sqlDaAnotacao(true), [
+    ...parametrosDaAnotacao(alvo),
+    corte.em,
+    corte.ate,
+  ]);
+  if (rows.length === 0) return null;
+  const em = rows[0]?.corte;
+  return { corte: typeof em === 'string' ? { em, ate: corte.ate } : null };
+}
+
+/**
+ * O UPDATE da anotação: a inbound mais nova antes do CORTE, a mídia pendente mais
+ * antiga pela régua do drain (derivável, com arquivo, sem estado final e mais
+ * nova que o teto). Na `reconferencia`, só escreve quando o corte de agora não é
+ * o `$7` que o turno recebeu, a mídia pendente desde `$7` segura o corte mesmo
+ * além do teto, e nada depois de `$8` (o `ate`) entra.
+ */
+function sqlDaAnotacao(reconferencia: boolean): string {
+  const dentroDoTeto = `p.created_at > now() - ($6 * interval '1 millisecond')`;
+  return `with corte as (
+       select min(p.created_at) as em from messages p
+        where p.organization_id = $1 and p.conversation_id = $2 and p.direction = 'inbound'
+          and p.type = any($4::text[])
+          and p.media_url is not null
+          and coalesce(p.media_derived_status, '') <> all($5::text[])
+          and ${reconferencia ? `(${dentroDoTeto} or p.created_at >= $7::timestamptz)` : dentroDoTeto}
+          and ${sqlMidiaVaiSerLida('p')})
+     update job_queue
         set payload = payload || jsonb_build_object(
           'ultima_inbound_vista_em',
           (select max(m.created_at) from messages m
             where m.organization_id = $1 and m.conversation_id = $2 and m.direction = 'inbound'
-              and not (m.type = any($4::text[])
-                       and m.media_url is not null
-                       and coalesce(m.media_derived_status, '') <> all($5::text[])
-                       and m.created_at > now() - ($6 * interval '1 millisecond')
-                       and ${sqlMidiaVaiSerLida('m')})))
+              and m.created_at < coalesce((select em from corte), 'infinity')${
+                reconferencia ? ` and m.created_at <= $8::timestamptz` : ''}))
       where organization_id = $1 and id = $3
         and not exists (
           select 1 from send_ledger s
            where s.organization_id = $1 and s.job_id = $3
-             and s.status in ('requested', 'accepted', 'queued'))`,
-    [
-      alvo.organizationId,
-      alvo.conversationId,
-      alvo.jobId,
-      [...TIPOS_DERIVAVEIS],
-      [...DERIVACAO_TERMINADA],
-      TETO_ESPERA_DERIVACAO_MS,
-    ],
-  );
+             and s.status in ('requested', 'accepted', 'queued'))${
+           reconferencia ? `
+        and (select em from corte) is distinct from $7::timestamptz` : ''}
+     returning (select em::text from corte) as corte,
+               (select max(v.created_at)::text from messages v
+                 where v.organization_id = $1 and v.conversation_id = $2 and v.direction = 'inbound') as ate`;
+}
+
+function parametrosDaAnotacao(
+  alvo: Pick<AlvoDoTurno, 'organizationId' | 'conversationId' | 'jobId'>,
+): unknown[] {
+  return [
+    alvo.organizationId,
+    alvo.conversationId,
+    alvo.jobId,
+    [...TIPOS_DERIVAVEIS],
+    [...DERIVACAO_TERMINADA],
+    TETO_ESPERA_DERIVACAO_MS,
+  ];
 }
 
 /**

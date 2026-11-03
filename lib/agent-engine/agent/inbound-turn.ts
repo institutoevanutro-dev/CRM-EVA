@@ -48,6 +48,8 @@ import {
   type LeadContextMessage,
   type LeadContextResult,
 } from '../edge/crm/get-lead-context';
+import { esperarMidiaDerivavel } from './espera-da-midia';
+import { TETO_ESPERA_DERIVACAO_MS } from '@/lib/messaging/media/derivable';
 import { citationsFromHits, searchKnowledge } from './search-knowledge';
 import type { CrmEdgeConfig } from '../edge/crm/mcp-client';
 import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
@@ -240,6 +242,8 @@ import { fusoUtilizavel } from '@/lib/tempo/fusos';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 import {
   anotarUltimaInboundVista,
+  type CorteDaAnotacao,
+  reanotarSeOCorteMudou,
   respostaFicouObsoleta,
   ultimaInboundJaRespondida,
 } from './turno-ja-respondido';
@@ -1791,6 +1795,23 @@ export interface AgentTurnInput {
   conversationId: string;
   /** Id da mensagem que criou o job inbound; não é usado por follow-ups. */
   inboundMessageId?: string;
+  /**
+   * A espera da mídia do handler de `inbound_turn` (`espera-da-midia.ts`) acabou no
+   * TETO depois de esperar: este turno lê alguma mídia como `[tipo]`, e a mensagem
+   * mais antiga sem resposta envelheceu na espera. A régua de resposta obsoleta
+   * ignora então o teto dela (ver `send_message`): se a mídia tem job ou pedido de
+   * despacho pendente, é ele que responde. Só o handler de `inbound_turn` preenche.
+   */
+  esperaDaMidiaNoTeto?: boolean;
+  /**
+   * A mídia pendente antes da qual a anotação do turno parou, como
+   * `anotarUltimaInboundVista` devolve (`null`: nenhuma). Com ela, a abertura
+   * confere depois de ler a conversa se essa mídia virou texto no meio do caminho
+   * e, se virou, reanota e relê (`reanotarSeOCorteMudou`). A releitura do modelo
+   * (`get_lead_context`) não reanota. Só o handler de `inbound_turn` e a
+   * reexecução da passagem de assunto preenchem.
+   */
+  corteDaAnotacao?: CorteDaAnotacao | null;
   /** monta a abertura APÓS o ritual de leitura (inbound vs. bloco temporal do follow-up). */
   buildOpening: (ritual: {
     previous: LeadCheckpointRow | null;
@@ -2186,7 +2207,7 @@ export async function runAgentTurn(
     // A anotação do que o turno viu é de ANTES do turno de origem. O destino lê
     // a conversa de novo, então ela é refeita: mensagem que chegou enquanto a
     // origem pensava também vai ser respondida por ele.
-    await anotarUltimaInboundVista(pool, {
+    const corteDaAnotacao = await anotarUltimaInboundVista(pool, {
       organizationId: job.organization_id,
       contactId: leadIdDoJob,
       conversationId: input.conversationId,
@@ -2196,6 +2217,7 @@ export async function runAgentTurn(
       ...input,
       resolvedAgent: passagem.destino,
       passagem: passagem.de,
+      corteDaAnotacao,
     });
   }
 }
@@ -2720,14 +2742,39 @@ async function executarTurnoDoAgente(
     ? (preview.previous ?? null)
     : await latestCheckpoint(pool, tenantId, leadId);
   const leadState = preview?.kind === 'sandbox' ? null : await getLeadState(pool, tenantId, leadId);
-  const openingContext = preview
-    ? preview.context
-    : await getLeadContext(
-        pool,
-        deps.crmCfg,
-        { tenantId, leadId, conversationId: input.conversationId, fuso: fusoDaOrg },
-        turnContextKnobs,
-      );
+  const lerConversa = (): Promise<LeadContextResult> =>
+    getLeadContext(
+      pool,
+      deps.crmCfg,
+      { tenantId, leadId, conversationId: input.conversationId, fuso: fusoDaOrg },
+      turnContextKnobs,
+    );
+  let leitura: LeadContextResult = preview ? preview.context : await lerConversa();
+  // A ANOTAÇÃO DESCREVE A LEITURA DA ABERTURA. Ela foi feita antes e parou antes
+  // de uma mídia ainda sem texto; se essa mídia virou texto entre a anotação e o
+  // fim da leitura, o turno a leu e a anotação promete menos — o turno do texto
+  // seguinte responderia de novo. Reanota e relê, sempre nessa ordem. Ver
+  // `reanotarSeOCorteMudou`. A releitura do modelo não reanota: ver
+  // `get_lead_context`, abaixo.
+  // ponytail: até 3 releituras, cada uma exige outra mídia mudando de estado nos
+  // milissegundos de uma leitura; passado isso, a anotação promete menos do que
+  // foi lido, nunca mais.
+  let corte = preview ? null : (input.corteDaAnotacao ?? null);
+  for (
+    let releituras = 0;
+    corte !== null && job !== null && leitura.ok && releituras < 3;
+    releituras++
+  ) {
+    const reanotacao = await reanotarSeOCorteMudou(
+      pool,
+      { organizationId: tenantId, conversationId: input.conversationId, jobId: job.id },
+      corte,
+    );
+    if (reanotacao === null) break;
+    corte = reanotacao.corte;
+    leitura = await lerConversa();
+  }
+  const openingContext = leitura;
   if (!openingContext.ok) {
     // Sem contexto não há turno: transiente (CRM fora) OU permanente (lead
     // sumiu) — ambos re-tentam pela fila e morrem em 'dead' se persistirem.
@@ -3427,14 +3474,17 @@ async function executarTurnoDoAgente(
         | { ok: false; error: { code: string; message: string } }
       > => {
         try {
-          const releitura = preview
-            ? preview.context
-            : await getLeadContext(
-                pool,
-                deps.crmCfg,
-                { tenantId, leadId, conversationId: input.conversationId, fuso: fusoDaOrg },
-                turnContextKnobs,
-              );
+          // SÓ LÊ: nunca reanota — a anotação é a da abertura. O modelo pode pedir
+          // esta leitura na mesma resposta de um envio escrito sobre a abertura (o
+          // SDK roda as ferramentas em paralelo), e no worker o envio só conta
+          // depois das consultas da fronteira de serviço (`guardServiceTools`):
+          // daqui não há como saber, sem corrida, se uma resposta que leu a mídia
+          // como `[tipo]` está a caminho. Reanotar prometeria a mídia e calaria o
+          // turno dela, o único que lê a transcrição. O preço é uma resposta dupla
+          // rara — a mídia que virou texto enquanto o modelo pensava, lida e
+          // respondida aqui, volta a ser respondida pelo turno da mensagem que veio
+          // depois dela —, melhor que o silêncio.
+          const releitura = preview ? preview.context : await lerConversa();
           // Sem esta linha a projeção da abertura seria decorativa: bastaria o
           // modelo chamar esta ferramenta para receber o contexto CRU de volta,
           // com `lead_id`, `conversation_id` e caminho de mídia. A releitura é a
@@ -3913,7 +3963,10 @@ async function executarTurnoDoAgente(
           (await respostaFicouObsoleta(
             pool,
             { organizationId: tenantId, conversationId: input.conversationId, jobId: liveJob().id },
-            tetoObsoleta,
+            // A espera da mídia estourou o teto (handler): a mais antiga sem resposta envelheceu
+            // esperando, e o teto de 120 s deixaria sair a resposta que leu a mídia como `[tipo]`.
+            // ponytail: 24 h = "sem teto" sem estourar o intervalo do Postgres.
+            input.esperaDaMidiaNoTeto === true && tetoObsoleta > 0 ? 86_400_000 : tetoObsoleta,
           ))
         ) {
           runLog.info('resposta descartada — o cliente escreveu de novo durante o turno', {
@@ -6105,6 +6158,27 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       });
       return;
     }
+    // A MÍDIA QUE CHEGA DEPOIS DE O TURNO SER ENFILEIRADO (#3836 do original). O
+    // drain segura o despacho pela mídia que já está na conversa; o áudio que chega
+    // depois (debounce, job na fila atrás de outro turno do contato) ia ao prompt
+    // como `[audio]`, e o agente dizia não ter ouvido segundos antes de a
+    // transcrição ficar pronta. A espera mora AQUI, e não dentro do turno, porque:
+    //   1. o roteador logo abaixo lê a inbound mais nova, e áudio sem transcrição
+    //      não é sinal nenhum para ele — o turno ficaria com o agente do texto;
+    //   2. a anotação abaixo já deixa de fora a mídia pendente: anotar DEPOIS da
+    //      espera promete o que a abertura do turno vai ler (a mídia que virar
+    //      texto entre a anotação e a leitura faz a abertura reanotar e reler);
+    //   3. a janela anti-ban e o horário do agente são avaliados depois dela;
+    //   4. só `inbound_turn` espera: follow-up e caso não passam por aqui.
+    // O rascunho do modo assistido, mais abaixo, também sai com a transcrição. Teto
+    // e desfechos nomeados em `espera-da-midia.ts`.
+    const espera = await esperarMidiaDerivavel(pool, {
+      organizationId: job.organization_id,
+      conversationId: payload.conversation_id,
+      prazoMs: Date.now() + TETO_ESPERA_DERIVACAO_MS,
+      log: withFields(deps.log, { job_id: job.id, conversation_id: payload.conversation_id }),
+      ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+    });
     const resolvedAgent = await resolveConversationTurn(pool, deps.llmCfg, {
       tenantId: job.organization_id,
       leadId: job.contact_id,
@@ -6209,12 +6283,14 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       });
       return;
     }
-    await anotarUltimaInboundVista(pool, alvo);
+    const corteDaAnotacao = await anotarUltimaInboundVista(pool, alvo);
     await runAgentTurn(deps, job, pool, ctx, {
       resolvedAgent,
       channelSessionId: payload.channel_session_id,
       conversationId: payload.conversation_id,
       inboundMessageId: payload.inbound_message_id,
+      esperaDaMidiaNoTeto: espera.desfecho === 'teto_da_espera' && espera.recheques > 0,
+      corteDaAnotacao,
       buildOpening: ({
         previous,
         leadState,

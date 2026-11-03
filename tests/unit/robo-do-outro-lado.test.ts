@@ -151,8 +151,10 @@ describe('createInboundTurnHandler — disjuntor antes do modelo', () => {
   });
 
   it('leitura da janela quebrada degrada ABERTO (o turno segue)', async () => {
+    // Só a leitura da janela quebra: a espera da mídia, logo depois, também lê
+    // `from messages m` e, quebrada, nem deixaria chegar ao roteador.
     const p = { query: vi.fn(async (sql: string) => {
-      if (/from messages m/.test(sql)) throw new Error('connection terminated');
+      if (/from messages m\s+join conversations c/.test(sql)) throw new Error('connection terminated');
       return { rows: [] };
     }) };
     await expect(createInboundTurnHandler(deps)(job as never, p as never, { workerId: 'w' })).rejects.toThrow();
