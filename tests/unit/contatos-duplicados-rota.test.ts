@@ -13,11 +13,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * erro. O dublê impõe esse corte, respeita `range` e devolve `count` só quando
  * pedido — um dublê que devolvesse a lista inteira passaria nos dois mundos e
  * não mediria nada, e o laço paginado releria a mesma lista até o teto.
+ *
+ * Nome parecido (porte do #3640): só para gestor, depois dos fortes, sem os
+ * pares dispensados; a leitura das dispensas e a trilha `contact.listed` são
+ * mockadas aqui (quem prova a dispensa no banco é tests/invariants/).
  */
+import { auditarLeitura } from "@/lib/audit/leitura";
+import { parDeContatos } from "@/lib/contacts/duplicados";
+
+const sessao = vi.hoisted(() => ({ papel: "viewer" }));
+const dispensa = vi.hoisted(() => ({ pares: new Set<string>(), erro: false, leituras: 0 }));
+
 vi.mock("@/lib/auth/server", () => ({
   loadAuthUser: async () => ({ id: "U1", idioma: "pt" }),
-  resolveActiveOrg: async () => ({ orgId: "ORG" }),
+  resolveActiveOrg: async () => ({ orgId: "ORG", name: "Org", role: sessao.papel }),
 }));
+vi.mock("@/lib/contacts/dispensar-par", () => ({
+  lerParesDispensados: async () => {
+    dispensa.leituras += 1;
+    if (dispensa.erro) throw new Error("permission denied for table merge_queue");
+    return new Set(dispensa.pares);
+  },
+}));
+vi.mock("@/lib/audit/leitura", () => ({ auditarLeitura: vi.fn() }));
 
 type Linha = Record<string, unknown>;
 type Chamada = { tabela: string; metodo: string; args: unknown[] };
@@ -67,7 +85,8 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-const { GET } = await import("@/app/api/v1/contacts/duplicates/route");
+const rota = await import("@/app/api/v1/contacts/duplicates/route");
+const GET = (url = "http://localhost/api/v1/contacts/duplicates") => rota.GET(new Request(url));
 
 /** Um contato vivo, de nome técnico (não forma par por nome) e celular único, em `created_at` crescente. */
 function contato(i: number, parcial: Linha = {}): Linha {
@@ -110,6 +129,11 @@ beforeEach(() => {
   erroIdentidades = null;
   maxRows = 1000;
   contatos = PAR_INSTAGRAM_WHATSAPP;
+  sessao.papel = "viewer";
+  dispensa.pares.clear();
+  dispensa.erro = false;
+  dispensa.leituras = 0;
+  vi.mocked(auditarLeitura).mockClear();
 });
 
 describe("GET /api/v1/contacts/duplicates — identidades do Instagram", () => {
@@ -191,5 +215,89 @@ describe("GET /api/v1/contacts/duplicates — a varredura passa dos 1.000 do Pos
 
     expect(corpo.meta).toEqual({ varreu_tudo: false, contatos_varridos: 2000 });
     expect(corpo.data[0]!.contatos.map((c) => c.id).sort()).toEqual(["contato-0005", "contato-1500"]);
+  });
+});
+
+describe("GET /api/v1/contacts/duplicates — nome parecido, só para gestor (porte do #3640)", () => {
+  /** Um grupo forte (o mesmo celular, com e sem o nono dígito) e um par só pelo nome. */
+  function cenario(): Linha[] {
+    const linhas = Array.from({ length: 60 }, (_, k) => contato(k + 1));
+    linhas[4] = contato(5, { phone_number: "+553198966398" });
+    linhas[5] = contato(6, { phone_number: "+5531998966398" });
+    linhas[9] = contato(10, { name: "Clínica Santos Odontologia" });
+    linhas[19] = contato(20, { name: "Santos Odontologia Clínica Avançada" });
+    return linhas;
+  }
+
+  it("(3) gestor: o par por nome vem com motivos nome_parecido, DEPOIS do grupo forte", async () => {
+    // Sabotagem: concatenar os parecidos ANTES dos fortes deixa a ordem vermelha.
+    sessao.papel = "manager";
+    contatos = cenario();
+
+    const corpo = (await (await GET()).json()) as Corpo;
+
+    expect(corpo.data.map((g) => g.motivos)).toEqual([["telefone"], ["nome_parecido"]]);
+    expect(corpo.data[1]!.contatos.map((c) => c.id)).toEqual(["contato-0010", "contato-0020"]);
+    expect(dispensa.leituras).toBe(1);
+  });
+
+  it("(4) par dispensado, gravado com os ids invertidos, não aparece", async () => {
+    // Sabotagem: ignorar `lerParesDispensados` deixa o par de nome na lista.
+    sessao.papel = "manager";
+    contatos = cenario();
+    dispensa.pares.add(parDeContatos("contato-0020", "contato-0010"));
+
+    const corpo = (await (await GET()).json()) as Corpo;
+
+    expect(corpo.data.map((g) => g.motivos)).toEqual([["telefone"]]);
+  });
+
+  it.each(["viewer", "agent"])("(5) %s: nada de nome_parecido, e as dispensas nem são lidas", async (papel) => {
+    // Sabotagem: calcular os parecidos para todo papel deixa este caso vermelho.
+    sessao.papel = papel;
+    contatos = cenario();
+
+    const corpo = (await (await GET()).json()) as Corpo;
+
+    expect(corpo.data.map((g) => g.motivos)).toEqual([["telefone"]]);
+    expect(dispensa.leituras).toBe(0);
+  });
+
+  it("(6) erro ao ler as dispensas: 500 sem a lista (um par dispensado não volta calado)", async () => {
+    sessao.papel = "manager";
+    contatos = cenario();
+    dispensa.erro = true;
+
+    const res = await GET();
+    const corpo = (await res.json()) as { data?: unknown; error?: { code: string; message: string } };
+
+    expect(res.status).toBe(500);
+    expect(corpo.data).toBeUndefined();
+    expect(corpo.error?.code).toBe("internal_error");
+    expect(corpo.error?.message).not.toMatch(/merge_queue/);
+  });
+
+  it("(7) a abertura com grupos deixa UMA linha contact.listed com os ids; recarga e lista vazia, nenhuma", async () => {
+    // Sabotagem: auditar sem olhar `ehAberturaDeLeitura` faz a recarga marcada gravar outra linha.
+    sessao.papel = "manager";
+    contatos = cenario();
+
+    await GET();
+    expect(auditarLeitura).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(auditarLeitura).mock.calls[0]![0]).toMatchObject({
+      action: "contact.listed",
+      actorUserId: "U1",
+      organizationId: "ORG",
+      resourceType: "contact",
+      metadata: { recurso: "duplicados", ids: ["contato-0005", "contato-0006", "contato-0010", "contato-0020"] },
+    });
+
+    vi.mocked(auditarLeitura).mockClear();
+    await GET("http://localhost/api/v1/contacts/duplicates?atualizacao=1");
+    expect(auditarLeitura).not.toHaveBeenCalled();
+
+    contatos = Array.from({ length: 10 }, (_, k) => contato(k + 1));
+    await GET();
+    expect(auditarLeitura).not.toHaveBeenCalled();
   });
 });

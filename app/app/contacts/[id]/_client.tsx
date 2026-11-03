@@ -36,6 +36,7 @@ import { canonicalTagsDoFunil } from "@/lib/contacts/etiquetas";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { TimelineView } from "@/components/contacts/TimelineView";
 import { EditContactDialog } from "@/components/contacts/EditContactDialog";
+import { JuntarComOutraFicha } from "@/components/contacts/JuntarComOutraFicha";
 import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
 import { PropostasDeDado } from "@/components/contacts/PropostasDeDado";
 import { ConversaNoDossie } from "@/components/kanban/ConversaNoDossie";
@@ -74,6 +75,7 @@ export function ContactDetailClient({ contactId }: Props) {
   const canonicalTags = canonicalTagsDoFunil(pipelineQuery.data?.pipeline.settings ?? null);
   const [editOpen, setEditOpen] = useState(false);
   const [anonOpen, setAnonOpen] = useState(false);
+  const [juntarOpen, setJuntarOpen] = useState(false);
   // Desfazer o descadastro é o override da regra W-02 — só admin, e auditado.
   // O hook fica ANTES dos early returns: chamá-lo depois mudaria a ordem dos
   // hooks entre renderizações e o React reprova.
@@ -107,6 +109,8 @@ export function ContactDetailClient({ contactId }: Props) {
   // aparecia como "Sem nome" aqui e com o número no inbox.
   const displayName = rotuloDoContato(contact, t);
   const podeReiniciarTeste = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
+  // Juntar com outra ficha (porte do #3640): gestor, o mesmo piso da fusão.
+  const podeJuntar = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
   // "Sempre atendimento humano" é edição do contato: agent+, como as outras.
   const podeMarcarSempreHumano = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent;
   const marcadoSempreHumano = contact.ai_opt_out === true;
@@ -254,6 +258,16 @@ export function ContactDetailClient({ contactId }: Props) {
               variante="botao"
             />
             <DialButton contactId={contactId} hasPhone={!!contact.phone_number} />
+            {podeJuntar && (
+              <Button
+                variant="outline"
+                onClick={() => setJuntarOpen(true)}
+                className="shrink-0"
+                data-testid="juntar-com-outra-ficha"
+              >
+                <span>{t("Juntar com outra ficha")}</span>
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setEditOpen(true)} className="shrink-0">
               <PencilSimple size={16} weight="bold" aria-hidden />
               <span>{t("Editar")}</span>
@@ -433,6 +447,7 @@ export function ContactDetailClient({ contactId }: Props) {
         canonicalTags={canonicalTags}
       />
       <AnonymizeDialog contactId={contactId} open={anonOpen} onOpenChange={setAnonOpen} />
+      {podeJuntar && <JuntarComOutraFicha contatoAtual={contact} open={juntarOpen} onOpenChange={setJuntarOpen} />}
     </div>
   );
 }
