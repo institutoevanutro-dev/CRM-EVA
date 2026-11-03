@@ -19,10 +19,12 @@ barrado, como `observado:horario_sem_fonte` ou
 recusa, de lembrete e de duração, e o bloqueio só deve ser ligado depois de
 medir esses registros em conversas reais.
 
-Falar do compromisso que o cliente já tem não conta. Duração, horário de
-chegada, horário de funcionamento, faixas como "das 8h às 18h" (e o fim de
+Falar do compromisso que o cliente já tem não deveria contar. Duração, horário
+de chegada, horário de funcionamento, faixas como "das 8h às 18h" (e o fim de
 "14h às 15h"), término previsto, eventos, promoções, horário de remédio,
-resultados e confirmação de pagamento não são conferidos. Recusar o horário que
+resultados e confirmação de pagamento não deveriam ser conferidos, mas a regra
+depende de listas de palavras e ainda erra em frases comuns desses tipos, como
+"venha às 8h45" ou "encerramos às 12h". Recusar o horário que
 o cliente pediu ("às 15h não tenho vaga, mas tenho às 16h") passa, e o horário
 oferecido no lugar continua conferido. No repasse da resposta de um caso, só a
 afirmação de que está agendado é conferida: o horário que a equipe combinou fora

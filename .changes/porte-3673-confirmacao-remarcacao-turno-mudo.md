@@ -9,7 +9,9 @@ horário, agora é conferida antes do envio quando nada foi marcado naquela resp
 mesmo que o assistente tenha consultado a agenda — também quando o dia e o horário
 vêm no cartão das linhas de baixo (📅 e 🕒). O mesmo vale para "Remarcado", "troca
 feita" ou "foi alterada para" quando a remarcação não foi gravada. Confirmar a
-presença ou lembrar um horário que o cliente já tem continua passando. A regra
+presença ou lembrar um horário que o cliente já tem deveria passar; lembrete
+com duração ou com oferta de retorno na mesma frase ainda é pego quando o
+bloqueio está ligado. A regra
 mora na conferência de horários da agenda, a mesma que aparece no painel
 Segurança do agente, e entra em observação junto com ela: só barra com
 `HORARIO_DA_AGENDA_MODO=barrar`.

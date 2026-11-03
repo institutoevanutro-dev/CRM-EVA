@@ -1,5 +1,5 @@
 /**
- * Gate de HORÁRIO SEM FONTE — a garantia DURA de que todo dia+horário que o modelo
+ * Gate de HORÁRIO SEM FONTE — confere se todo dia+horário que o modelo
  * escreve ao cliente saiu da agenda NESTE turno, e de que "está agendada" só sai
  * depois de a marcação ter sido gravada.
  *
