@@ -1795,6 +1795,8 @@ comportamento não vermelhece quando o comportamento morre.**
 | JR.4 | O hook não autentica por conta própria (fonte única) | idem |
 | JR.5 | Token perto de vencer é renovado; token válido vem do cache | idem |
 | JR.6 | As duas pontas do inbox têm rede de segurança | `tests/unit/realtime-reconecta.test.ts` |
+| JR.7 | Conversa lida em outra tela: a linha muda NO LUGAR, sem refazer a busca (porte do original #3806, 2026-11-03) | `tests/e2e/inbox-tempo-real.spec.ts`, 2º caso — com as respostas de `GET /api/v1/conversations` presas 8 s, a pílula de não lidas some em 3 s; controle: mensagem nova ainda busca a lista. Roda local (a spec está em `FORA_DO_CI`). Evidência: `evidence/inbox-tempo-real/leitura-sem-refazer-busca.png`. Unidade, com as guardas provadas por sabotagem: `tests/unit/inbox-atualizacao-na-lista.test.tsx` e `tests/unit/inbox-atualizacao-regua-do-servidor.test.ts` |
+| JR.8 | A contagem das abas e o seletor de número entram depois da hidratação, sem React #418 (porte do original #3832, 2026-11-03) | Determinístico: `tests/unit/hidratacao-do-badge-das-abas.test.tsx` (`renderToString` + `hydrateRoot` de verdade, com os dados chegando entre os dois). Pela tela: `tests/e2e/inbox-abas-espelham-o-comando.spec.ts`, três cargas em que a aba Fila termina com o número; os erros de hidratação vão para o log até ~10 rodadas limpas contra a main sem o conserto liberarem a asserção |
 
 **Sabotagens que confirmam que os testes vigiam** (rodadas em 2026-08-24, com o
 conserto já commitado):

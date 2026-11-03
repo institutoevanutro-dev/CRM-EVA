@@ -80,13 +80,16 @@ import { execFileSync, spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page } from "@playwright/test";
+
+import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 
 interface E2ECreds {
   password: string;
   users: Record<string, { id: string; email: string; role: string }>;
   /** Bloco gravado por `seed-e2e-queue.ts` — a conversa que este teste usa. */
-  queue?: { conversation_id: string; contact_name: string };
+  queue?: { conversation_id: string; contact_id: string; contact_name: string };
 }
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
@@ -553,5 +556,140 @@ test.describe("inbox em tempo real", () => {
       timeout: 25_000,
     });
     await expect(primeiro).toContainText(corpo, { timeout: 25_000 });
+  });
+
+  /**
+   * A LINHA MUDA NO LUGAR, SEM REFAZER A BUSCA (#2366) — com as buscas da lista
+   * SEGURADAS, só a mescla consegue.
+   *
+   * Portado do projeto original (DeskcommCRM, PR #3806 de @webtecnica), adaptado:
+   * o original não tinha prova pela tela.
+   *
+   * Ninguém abre a conversa: abrir marca como lida, e a leitura é justamente o
+   * evento que chega de FORA aqui (outra recepção leu). Enquanto ele chega, toda
+   * resposta de `GET /api/v1/conversations` fica 8 s presa no `page.route` — se a
+   * pílula de não lidas some em 3 s, quem a tirou foi a mescla, não uma busca.
+   * Quantas buscas saíram na janela vai para o log, sem asserção: a rede de
+   * segurança de 45 s e o foco de janela podem disparar uma, e ela ficaria presa
+   * do mesmo jeito.
+   *
+   * Resto de instabilidade, conhecido: se o relógio de 45 s disparar no ~0,5 s
+   * entre "lista ociosa" e o evento, a busca em voo manda o evento para a recarga
+   * (de propósito) e a pílula só some depois dos 8 s — perto de 1% das rodadas.
+   * E se o Realtime e o PostgREST um dia formatarem `timestamptz` de jeitos
+   * diferentes, todo evento vai para o servidor (a direção segura, sem ganho) e
+   * este teste reprova: é o aviso que se quer.
+   */
+  test("conversa lida em outra tela: a linha muda na lista sem refazer a busca", async ({ page }) => {
+    const credenciais = credenciaisSupabaseDeTeste();
+    const db = createClient(credenciais.url, credenciais.serviceRole, {
+      auth: { persistSession: false },
+    });
+
+    // 1) O ponto de partida. O teste anterior ABRIU esta conversa (abrir marca
+    // como lida), e `chegarMensagem` não soma não lidas. O contato fica fora da
+    // equipe: linha de contato com a equipe vai sempre ao servidor.
+    const { error: eConversa } = await db
+      .from("conversations")
+      .update({
+        unread_count_for_assignee: 3,
+        assigned_to_user_id: null,
+        assigned_to_user_name: null,
+        assignee_kind: null,
+        assigned_at: null,
+        status: "open",
+        bot_silenced_until: null,
+      } as never)
+      .eq("id", fila.conversation_id);
+    if (eConversa) throw new Error(`ponto de partida da conversa: ${eConversa.message}`);
+    const { error: eContato } = await db
+      .from("contacts")
+      .update({ force_human: false, is_blocked: false } as never)
+      .eq("id", fila.contact_id);
+    if (eContato) throw new Error(`ponto de partida do contato: ${eContato.message}`);
+
+    // As buscas da LISTA — não as contagens (`/conversations/counts`) nem a
+    // conversa aberta —, contadas desde antes do login.
+    const ehDaLista = (url: string) => new URL(url).pathname === "/api/v1/conversations";
+    let emVoo = 0;
+    let iniciadas = 0;
+    page.on("request", (r) => {
+      if (!ehDaLista(r.url())) return;
+      emVoo += 1;
+      iniciadas += 1;
+    });
+    const terminou = (r: { url(): string }) => {
+      if (ehDaLista(r.url())) emVoo -= 1;
+    };
+    page.on("requestfinished", terminou);
+    page.on("requestfailed", terminou);
+
+    await login(page, c.users.manager!.email, c.password);
+
+    // 2) Todas, sem abrir conversa nenhuma.
+    await page.goto("/app/inbox?filter=all");
+    await expect(page.locator("[data-realtime-status]")).toHaveAttribute(
+      "data-realtime-status",
+      "subscribed",
+      { timeout: 20_000 },
+    );
+
+    // 3) Uma mensagem traz a linha para o topo: o seed a deixa 20 min atrás, e a
+    // lista pede 50 por página.
+    await chegarMensagem(fila.conversation_id, `para o topo ${Date.now()}`);
+    const primeira = page.locator("[data-conversation-id]").first();
+    await expect(primeira).toHaveAttribute("data-conversation-id", fila.conversation_id, {
+      timeout: 25_000,
+    });
+    // A pílula de não lidas da linha (`ConversationListItem`).
+    const naoLidas = primeira.locator("span.bg-accent");
+    await expect(naoLidas).toHaveText("3", { timeout: 25_000 });
+
+    // 4) Lista ociosa: nenhuma busca em voo — senão o evento iria para a recarga.
+    await expect.poll(() => emVoo, { timeout: 15_000 }).toBe(0);
+
+    // 5) Daqui em diante, toda resposta da lista fica 8 s presa.
+    await page.route(
+      (url) => url.pathname === "/api/v1/conversations",
+      async (rota) => {
+        await new Promise((r) => setTimeout(r, 8_000));
+        await rota.continue();
+      },
+    );
+    const antesDaLeitura = iniciadas;
+
+    // 6) Outra recepção leu a conversa.
+    const { error: eLida } = await db
+      .from("conversations")
+      .update({ unread_count_for_assignee: 0 } as never)
+      .eq("id", fila.conversation_id);
+    if (eLida) throw new Error(`leitura: ${eLida.message}`);
+
+    // 7) A pílula some em 3 s, com a linha no mesmo lugar.
+    await expect(naoLidas, "a linha esperou a busca presa: o evento não foi mesclado").toHaveCount(0, {
+      timeout: 3_000,
+    });
+    await expect(primeira).toHaveAttribute("data-conversation-id", fila.conversation_id);
+    console.info(
+      "[inbox-tempo-real] buscas da lista na janela da leitura:",
+      iniciadas - antesDaLeitura,
+    );
+
+    // 8) A evidência vai para `evidence/`, que é versionado.
+    await page.screenshot({
+      path: "evidence/inbox-tempo-real/leitura-sem-refazer-busca.png",
+      fullPage: true,
+    });
+
+    // 9) CONTROLE: mensagem nova continua indo ao servidor (a ordem é da rota).
+    await page.unrouteAll({ behavior: "wait" });
+    const antesDaMensagem = iniciadas;
+    const corpo = `controle ${Date.now()}`;
+    await chegarMensagem(fila.conversation_id, corpo);
+    await expect.poll(() => iniciadas - antesDaMensagem, { timeout: 25_000 }).toBeGreaterThan(0);
+    await expect(primeira).toHaveAttribute("data-conversation-id", fila.conversation_id, {
+      timeout: 25_000,
+    });
+    await expect(primeira).toContainText(corpo, { timeout: 25_000 });
   });
 });
