@@ -6595,7 +6595,6 @@ export const DICIONARIO: Traducoes = {
   "mesmo nome no Instagram e no WhatsApp": {
     es: "mismo nombre en Instagram y en WhatsApp",
   },
-  "Manter este cadastro": { es: "Mantener esta ficha" },
   "Este fica": { es: "Esta se queda" },
   "Será absorvido por quem fica": { es: "Será absorbida por la que se queda" },
   "Conversas, mensagens, negócios e histórico passam para quem fica. O cadastro antigo não é apagado — vira registro de fusão. Não há como desfazer.": {

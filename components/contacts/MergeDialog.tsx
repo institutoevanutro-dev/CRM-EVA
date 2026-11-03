@@ -140,7 +140,6 @@ function GrupoDeDuplicados({
               className="mt-1"
               checked={c.id === principal}
               onChange={() => setPrincipal(c.id)}
-              aria-label={t("Manter este cadastro")}
             />
             <span className="min-w-0">
               <span className="block truncate font-medium">{rotuloDoContato(c, t)}</span>

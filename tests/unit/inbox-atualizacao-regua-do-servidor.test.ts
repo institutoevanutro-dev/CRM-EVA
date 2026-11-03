@@ -133,6 +133,14 @@ describe("pedeOServidor: o que o evento não responde vai para a recarga", () =>
     expect(pedeOServidor(descadastrado, { id: "c1", tags: ["vip"] })).toBe(true);
   });
 
+  it("trava do contato ligada em outra tela (0332) pede; a trava desligada de todo evento comum não", () => {
+    // O Realtime manda a linha inteira, então `contato_segura_robo` vem em TODO
+    // evento. Comparar com a linha em cache (que a rota não preenche) mandaria
+    // todo evento ao servidor; só a trava ligada num contato livre em cache pede.
+    expect(pedeOServidor(base, { id: "c1", contato_segura_robo: true })).toBe(true);
+    expect(pedeOServidor(base, { id: "c1", contato_segura_robo: false, tags: ["vip"] })).toBe(false);
+  });
+
   it("etiqueta, não lidos e status sozinhos — e o mesmo instante repetido — não pedem", () => {
     expect(pedeOServidor(base, { id: "c1", tags: ["vip"] })).toBe(false);
     expect(pedeOServidor(base, { id: "c1", unread_count_for_assignee: 0 })).toBe(false);

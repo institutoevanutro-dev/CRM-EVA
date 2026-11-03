@@ -30,7 +30,8 @@ import { marcadoresEscolhidos } from "@/lib/inbox/marcador-da-conversa";
  *  - INSERT/DELETE, e conversa que não está na lista (pode ter ENTRADO na aba);
  *  - busca da lista em voo: a resposta foi pedida ANTES do evento e, ao chegar,
  *    apagaria a linha mesclada;
- *  - o que muda a ordem ou o que a rota resolve (`pedeOServidor`);
+ *  - o que muda a ordem, o que a rota resolve e a trava do contato
+ *    (`pedeOServidor`);
  *  - busca, etiqueta e a aba Ocultos (`julgarAtualizacao` → `indecidivel`);
  *  - a pausa curta do automático perto do fim, na Fila e no Automático.
  *
@@ -86,17 +87,27 @@ const CAMPOS_DO_SERVIDOR = [
 /**
  * A atualização pede o servidor?
  *
- * Linha cujo contato em cache está com a equipe (`force_human`) ou descadastrado
- * (`is_blocked`) vai sempre: `comandoDaConversa` decide quem responde a partir
- * desses dois fatos do CONTATO, e nenhum evento de `conversations` diz se eles
- * mudaram — "Devolver ao automático" limpa `force_human` num UPDATE que este
- * canal nunca vê.
+ * `comandoDaConversa` decide quem responde a partir de dois fatos do CONTATO,
+ * `force_human` e `is_blocked`, que a linha em cache só conhece pelo embed da
+ * rota. Desde a migration 0332 o gatilho `trg_contato_propaga_trava` copia
+ * `force_human or is_blocked` para `conversations.contato_segura_robo` em todas
+ * as conversas do contato: travar ou destravar o contato em outra tela chega
+ * aqui como um UPDATE que muda só essa coluna. O evento diz que a trava mudou,
+ * mas não qual dos dois fatos, e o embed é a rota que monta. Por isso:
+ *  - contato em cache com a equipe ou descadastrado vai sempre (destravar chega
+ *    como `contato_segura_robo: false` e a mescla manteria o embed velho);
+ *  - trava ligada no evento para um contato livre em cache também vai: mesclada,
+ *    a conversa ficaria no "Automático" com a IA já calada.
+ *
+ * `contato_segura_robo` não entra em `CAMPOS_DO_SERVIDOR`: a rota não seleciona a
+ * coluna, a linha em cache não a tem, e todo evento pareceria mudança.
  */
 export function pedeOServidor(
   anterior: ConversationWithContact,
   atualizacao: Record<string, unknown>,
 ): boolean {
   if (anterior.contacts?.force_human === true || anterior.contacts?.is_blocked === true) return true;
+  if (atualizacao.contato_segura_robo === true) return true;
   return CAMPOS_DO_SERVIDOR.some((campo) => {
     const valor = atualizacao[campo];
     if (valor === undefined) return false;

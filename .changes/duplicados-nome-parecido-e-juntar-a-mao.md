@@ -16,8 +16,12 @@ lista o que não passa para quem fica (telefone, CPF, endereço).
 
 Regras novas em toda junção, inclusive a dos duplicados por telefone: quem fica herda a
 pausa da IA e a marca "Sempre atendimento humano" da ficha absorvida, e a ficha ligada ao
-prontuário não pode ser a absorvida (ela começa marcada como a que fica). A seção não
-aparece para atendente.
+prontuário não pode ser a absorvida. Só em "Parecidos — confira" e em "Juntar com outra
+ficha" ela já começa marcada como a que fica. Nos duplicados por telefone ou e-mail a
+sugestão continua sendo a ficha de atividade mais recente, e o cartão não mostra o
+vínculo: se a ficha ligada ficar como absorvida, a junção é recusada com a explicação, e
+é só trocar qual ficha fica e juntar de novo. A seção "Parecidos — confira" não aparece
+para atendente.
 
 Portado do projeto original (DeskcommCRM, PR #3640 de @paulolimajr77).
 Nada a fazer na VPS.

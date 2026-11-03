@@ -26,7 +26,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /** O que "chega" do servidor de dados. `null`/vazio = ainda não chegou. */
 const dados = vi.hoisted(() => ({
-  contagens: null as { fila: number } | null,
+  contagens: null as Record<string, number> | null,
   canais: [] as { id: string; display_name: string }[],
 }));
 
@@ -58,8 +58,8 @@ import { InboxFilters, type InboxFiltersValue } from "@/components/inbox/InboxFi
 const FILTRO: InboxFiltersValue = { tab: "unassigned", search: "", onlyUnread: false };
 
 /** HTML do servidor, `antesDeHidratar` (a resposta que chega no meio), hidratação. */
-async function hidratar(antesDeHidratar: () => void) {
-  const html = renderToString(<InboxFilters value={FILTRO} onChange={() => {}} />);
+async function hidratar(antesDeHidratar: () => void, filtro: InboxFiltersValue = FILTRO) {
+  const html = renderToString(<InboxFilters value={filtro} onChange={() => {}} />);
   antesDeHidratar();
 
   const erros: unknown[] = [];
@@ -69,7 +69,7 @@ async function hidratar(antesDeHidratar: () => void) {
   document.body.appendChild(container);
 
   await act(async () => {
-    hydrateRoot(container, <InboxFilters value={FILTRO} onChange={() => {}} />, {
+    hydrateRoot(container, <InboxFilters value={filtro} onChange={() => {}} />, {
       onRecoverableError: (erro) => erros.push(erro),
     });
   });
@@ -107,6 +107,22 @@ describe("Inbox › as abas hidratam sem divergir do HTML do servidor (#3736)", 
     // E a contagem NÃO foi escondida para sempre: depois de montar, ela está lá.
     expect(container.querySelectorAll(".tabular-nums").length).toBe(1);
     expect(container.textContent).toContain("41");
+  });
+
+  it("aba de 'Mais' ativa (Fechadas): a contagem do gatilho chega DURANTE a hidratação sem erro, e aparece depois", async () => {
+    // A Fila não alcança a segunda guarda: com aba principal ativa, o gatilho
+    // "Mais" não mostra contagem nenhuma. Recarregar /app/inbox?filter=closed é
+    // o caminho em que o servidor renderiza o gatilho com a aba secundária.
+    const { container, erros, avisosDeHidratacao } = await hidratar(
+      () => {
+        dados.contagens = { closed: 25 };
+      },
+      { ...FILTRO, tab: "closed" },
+    );
+
+    expect(erros, "o React teve de recuperar a árvore: a contagem do gatilho divergiu do HTML").toEqual([]);
+    expect(avisosDeHidratacao).toEqual([]);
+    expect(container.querySelector("[aria-label='Mais abas']")?.textContent).toContain("25");
   });
 
   it("os canais chegam DURANTE a hidratação: nenhum erro recuperável, e o seletor de número aparece depois", async () => {

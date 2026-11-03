@@ -25,9 +25,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *   e as guardas do fork:
  *   (a) busca da lista EM VOO: o evento vai para a recarga — a resposta velha
  *       em voo apagaria a mescla;
- *   (b) contato trocado, silêncio trocado e a linha de contato com a equipe
- *       ("Devolver ao automático" limpa `contacts.force_human` num UPDATE que
- *       este canal nunca vê) vão ao servidor;
+ *   (b) contato trocado, silêncio trocado, a linha de contato com a equipe e a
+ *       trava do contato ligada em outra tela vão ao servidor (desde a 0332 a
+ *       trava chega como `conversations.contato_segura_robo`, mas o embed do
+ *       contato é a rota que monta);
  *   (c) contato oculto do Inbox (0372) sai da aba, sem GET;
  *   (d) as OUTRAS abas em cache ficam marcadas como velhas, sem GET;
  *   (e) a mescla que lança não perde o evento: recarga, e o erro é reportado.
@@ -378,6 +379,18 @@ describe("as guardas do fork: o que a mescla não decide", () => {
       mudanca: { id: "c1", status: "ai_handling", assignee_kind: "ai", bot_silenced_until: null },
       // O servidor sabe que `contacts.force_human` foi limpo: a conversa é do
       // automático e saiu da Fila.
+      doServidor: [],
+      depois: [],
+    },
+    {
+      caso: "contato travado em outra tela, no Automático: o evento só traz contato_segura_robo (0332)",
+      filtros: { comando: ["automatico"] } as ConversationsFilters,
+      emCache: conversa("c1"),
+      // "Sempre atendimento humano" grava só em `contacts`; o gatilho da 0332
+      // copia a trava para as conversas do contato, e é esse UPDATE que chega.
+      // O embed em cache ainda diz `force_human: false`: mesclado, ficaria aqui.
+      mudanca: { id: "c1", status: "open", contato_segura_robo: true },
+      // O servidor já conta a conversa como aguardando: ela sai do Automático.
       doServidor: [],
       depois: [],
     },

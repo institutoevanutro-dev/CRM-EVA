@@ -63,22 +63,24 @@ export function motivoQueImpedeAJuncao(fica: FichaParaComparar, absorvida: Ficha
 
 /** O que a junção faz com a ficha absorvida, só o que se aplica, na ordem da confirmação. */
 export function avisosDaJuncao(fica: FichaParaComparar, absorvida: FichaParaComparar, t: T): string[] {
+  // O nome entra por FUNÇÃO no replace: com string, "$&", "$'" e "$`" de um nome
+  // (o pushName do WhatsApp chega cru) viram padrão e desfiguram o aviso.
   const nome = rotuloDoContato(absorvida, t);
   const avisos: string[] = [];
   if (absorvida.is_blocked && !fica.is_blocked) {
     avisos.push(
-      t("{nome} pediu para não receber mensagens. Quem fica também deixa de receber, inclusive lembretes de consulta.").replace("{nome}", nome),
+      t("{nome} pediu para não receber mensagens. Quem fica também deixa de receber, inclusive lembretes de consulta.").replace("{nome}", () => nome),
     );
   }
   if (absorvida.ai_opt_out && !fica.ai_opt_out) {
-    avisos.push(t("{nome} está como Sempre atendimento humano. Quem fica passa a ter a mesma marca.").replace("{nome}", nome));
+    avisos.push(t("{nome} está como Sempre atendimento humano. Quem fica passa a ter a mesma marca.").replace("{nome}", () => nome));
   } else if (absorvida.force_human && !fica.force_human) {
     avisos.push(
-      t("{nome} está com a IA pausada. Quem fica passa a ser atendido só pela equipe até alguém devolver ao automático.").replace("{nome}", nome),
+      t("{nome} está com a IA pausada. Quem fica passa a ser atendido só pela equipe até alguém devolver ao automático.").replace("{nome}", () => nome),
     );
   }
   if (absorvida.inbox_hidden_at && !fica.inbox_hidden_at) {
-    avisos.push(t("{nome} está oculta do Inbox. Quem fica continua no Inbox, e a IA pode responder.").replace("{nome}", nome));
+    avisos.push(t("{nome} está oculta do Inbox. Quem fica continua no Inbox, e a IA pode responder.").replace("{nome}", () => nome));
   }
   if (
     absorvida.phone_number &&
@@ -88,19 +90,19 @@ export function avisosDaJuncao(fica: FichaParaComparar, absorvida: FichaParaComp
     avisos.push(
       t(
         "O número {tel} não passa para quem fica: a ficha guarda um telefone só. Se chegar mensagem desse número, pode nascer uma ficha nova. Se é o número que a pessoa usa, troque o telefone depois de juntar.",
-      ).replace("{tel}", phoneForDisplay(absorvida.phone_number)),
+      ).replace("{tel}", () => phoneForDisplay(absorvida.phone_number)),
     );
   }
   if (absorvida.cpf_available && fica.cpf_available) {
     avisos.push(
-      t("As duas fichas têm CPF, e são CPFs diferentes: confira se não são duas pessoas. O CPF de {nome} não passa para quem fica.").replace("{nome}", nome),
+      t("As duas fichas têm CPF, e são CPFs diferentes: confira se não são duas pessoas. O CPF de {nome} não passa para quem fica.").replace("{nome}", () => nome),
     );
   } else if (absorvida.cpf_available) {
-    avisos.push(t("O CPF de {nome} não passa para quem fica.").replace("{nome}", nome));
+    avisos.push(t("O CPF de {nome} não passa para quem fica.").replace("{nome}", () => nome));
   }
   const endereco = absorvida.endereco?.trim();
   if (endereco && endereco !== fica.endereco?.trim()) {
-    avisos.push(t("O endereço de {nome} não passa para quem fica.").replace("{nome}", nome));
+    avisos.push(t("O endereço de {nome} não passa para quem fica.").replace("{nome}", () => nome));
   }
   return avisos;
 }

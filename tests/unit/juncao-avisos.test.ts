@@ -131,6 +131,15 @@ describe("avisosDaJuncao", () => {
     ]);
   });
 
+  it("nome com '$' entra literal: o pushName do WhatsApp não vira padrão do replace", () => {
+    // Sabotagem: `.replace("{nome}", nome)` troca "$&" pelo próprio "{nome}",
+    // "$'" pelo resto da frase e "$$" por "$".
+    const sai = ficha("sai", { name: "Ana $& Lima $' Ca$$ia", force_human: true });
+    expect(avisosDaJuncao(ficha("fica"), sai, t)).toEqual([
+      "Ana $& Lima $' Ca$$ia está com a IA pausada. Quem fica passa a ser atendido só pela equipe até alguém devolver ao automático.",
+    ]);
+  });
+
   it("endereço: igual não avisa; diferente avisa", () => {
     const rua = { endereco: "Rua das Flores, 10" };
     expect(avisosDaJuncao(ficha("fica", rua), ficha("sai", rua), t)).toEqual([]);

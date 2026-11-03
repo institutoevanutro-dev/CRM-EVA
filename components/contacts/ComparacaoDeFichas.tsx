@@ -177,6 +177,8 @@ export function ComparacaoDeFichas({ ids, principalId, onEscolherPrincipal }: Pr
         return (
           <div key={f.id} className="min-w-0 border-b border-border pb-2">
             {onEscolherPrincipal ? (
+              // Sem `aria-label` no rádio: o nome dele é o do <label>, o nome da
+              // ficha e o que acontece com ela, por extenso nas DUAS fichas.
               <label className="flex cursor-pointer items-start gap-2">
                 <input
                   type="radio"
@@ -184,11 +186,14 @@ export function ComparacaoDeFichas({ ids, principalId, onEscolherPrincipal }: Pr
                   className="mt-1"
                   checked={escolhida}
                   onChange={() => onEscolherPrincipal(f.id)}
-                  aria-label={t("Manter este cadastro")}
                 />
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{nomes[i]}</span>
-                  <span className="block text-xs font-medium text-primary">{escolhida ? t("Este fica") : ""}</span>
+                  {escolhida ? (
+                    <span className="block text-xs font-medium text-primary">{t("Este fica")}</span>
+                  ) : principalId ? (
+                    <span className="block text-xs text-muted-foreground">{t("Será absorvido por quem fica")}</span>
+                  ) : null}
                 </span>
               </label>
             ) : (
@@ -209,8 +214,10 @@ export function ComparacaoDeFichas({ ids, principalId, onEscolherPrincipal }: Pr
             </div>
             {linha.valores.map((valor, i) => (
               <div key={i} className={`min-w-0 rounded-md px-2 py-1.5 text-sm ${igual ? "bg-muted/60" : ""}`}>
-                {/* Em tela estreita o valor perde a coluna: o nome da ficha volta na frente. */}
-                <span className="mb-0.5 block truncate text-xs text-muted-foreground sm:hidden">{nomes[i]}</span>
+                {/* Em tela estreita o valor perde a coluna: o nome da ficha volta na frente.
+                    Em tela larga ele sai da vista, mas não do leitor de tela: a grade
+                    não tem cabeçalho, e o valor sem dono não diz de qual ficha é. */}
+                <span className="mb-0.5 block truncate text-xs text-muted-foreground sm:sr-only">{nomes[i]}</span>
                 {valor === null ? (
                   <span className="text-muted-foreground">—</span>
                 ) : (

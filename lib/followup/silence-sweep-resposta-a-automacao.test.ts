@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { logger } from "@/lib/logger";
-import { runSilenceSweep, type ContatoEmSilencio, type SilenceSweepDb } from "./silence-sweep";
+import {
+  createSupabaseSilenceSweepDb,
+  runSilenceSweep,
+  type ContatoEmSilencio,
+  type SilenceSweepDb,
+} from "./silence-sweep";
 
 /**
  * Porte da #3729 do original: a varredura de silêncio não inscreve quem só
@@ -183,5 +188,117 @@ describe("runSilenceSweep — resposta a mensagem automática (#3729 do original
       "2026-10-28T12:11:00.123456+00:00",
       "2026-10-28T11:00:00+00:00",
     ]);
+  });
+});
+
+/**
+ * A LIGAÇÃO DE PRODUÇÃO: `createSupabaseSilenceSweepDb()` monta os candidatos com
+ * a conversa do inbound vencedor (`origins`, preenchido por `loadSilentContacts`)
+ * e o `sent_at` dele (`ultima_entrada_em`). A guarda falha aberta, então um
+ * mapeamento quebrado — outra chave, `contact_id` no lugar da conversa,
+ * `created_at` no lugar do `sent_at`, pular todo contato — deixava verde tudo o
+ * que está acima. Este caso olha a consulta que sai para `messages`.
+ */
+describe("createSupabaseSilenceSweepDb — a guarda ligada na consulta de produção (#3729)", () => {
+  type Chamada = { metodo: string; args: unknown[] };
+
+  /** PostgREST falso: `conversations` pagina até a página vazia, `messages` responde pela direção, tudo fica registrado. */
+  function supabaseGravado(conversas: unknown[], mensagens: { saida: unknown[]; entradas: unknown[] }) {
+    const consultas: Array<{ tabela: string; chamadas: Chamada[] }> = [];
+    let conversasLidas = false;
+    const from = (tabela: string) => {
+      const chamadas: Chamada[] = [];
+      consultas.push({ tabela, chamadas });
+      const chain: Record<string, unknown> = new Proxy(
+        {},
+        {
+          get(_t, prop) {
+            if (prop === "then") {
+              return (resolve: (v: unknown) => unknown) => {
+                let data: unknown[] = [];
+                if (tabela === "conversations") {
+                  data = conversasLidas ? [] : conversas;
+                  conversasLidas = true;
+                } else if (tabela === "messages") {
+                  const direcao = chamadas.find((c) => c.metodo === "eq" && c.args[0] === "direction")?.args[1];
+                  data = direcao === "outbound" ? mensagens.saida : mensagens.entradas;
+                }
+                return resolve({ data, error: null });
+              };
+            }
+            return (...args: unknown[]) => {
+              chamadas.push({ metodo: String(prop), args });
+              return chain;
+            };
+          },
+        },
+      );
+      return chain;
+    };
+    return { admin: { from } as never, consultas };
+  }
+
+  /** Uma conversa aberta do contato, com o inbound mais novo dela (gravado um pouco depois do `sent_at`). */
+  function conversa(id: string, sentAt: string, createdAt: string) {
+    return {
+      id,
+      service_revision: 1,
+      current_demanda_id: null,
+      demandas: null,
+      status: "open",
+      contact_id: "so-reagiu",
+      last_inbound_at: sentAt,
+      messages: [
+        {
+          organization_id: "org",
+          contact_id: "so-reagiu",
+          conversation_id: id,
+          service_revision: 1,
+          demanda_id: null,
+          demanda_revision: null,
+          sent_at: sentAt,
+          created_at: createdAt,
+        },
+      ],
+      contacts: { tags: [], is_blocked: false, is_anonymized: false, ai_authorized_at: null, phone_number: "+5527999990000" },
+      sessao: { metadata: { ai_gate: "open" } },
+    };
+  }
+
+  it("pergunta na conversa do inbound vencedor, pelo sent_at dele, e barra quem só reagiu", async () => {
+    const { admin, consultas } = supabaseGravado(
+      [
+        conversa("conversa-antiga", "2026-09-01T09:00:00.000Z", "2026-09-01T09:00:02.000Z"),
+        conversa("conversa-do-inbound", "2026-09-01T10:00:00.000Z", "2026-09-01T10:00:01.000Z"),
+      ],
+      {
+        // O parabéns da regra de aniversário: `'ai'` sem marca de autoria.
+        saida: [
+          {
+            sent_via: "ai",
+            sent_at: "2026-09-01T09:30:00.000Z",
+            ai_actor_id: null,
+            ai_generated: null,
+            texto_escrito_pela_ia: null,
+            aviso_fora_do_horario: null,
+            texto_fixo_do_fluxo: null,
+          },
+        ],
+        entradas: [{ type: "text", body: "❤️" }],
+      },
+    );
+    const db = createSupabaseSilenceSweepDb(admin);
+    const contatos = await db.loadSilentContacts("org", "2026-09-02T10:00:00.000Z", []);
+    expect(contatos.map((c) => c.contact_id), "fixture: o contato está calado").toEqual(["so-reagiu"]);
+
+    const soReagiram = await db.loadContatosQueSoResponderamAAutomacao!("org", contatos);
+
+    expect([...soReagiram]).toEqual(["so-reagiu"]);
+    const mensagens = consultas.filter((c) => c.tabela === "messages").map((c) => c.chamadas);
+    expect(mensagens, "a saída e as entradas, uma consulta cada").toHaveLength(2);
+    for (const chamadas of mensagens) {
+      expect(chamadas).toContainEqual({ metodo: "eq", args: ["conversation_id", "conversa-do-inbound"] });
+      expect(chamadas).toContainEqual({ metodo: "lte", args: ["sent_at", "2026-09-01T10:00:00.000Z"] });
+    }
   });
 });
