@@ -204,6 +204,13 @@ import {
   turnoMudoPedeCorrecao,
   turnoMudoPorCorte,
 } from './turno-mudo';
+// #3557 (issue #3281 do original): o clique humano pode ocupar a vaga da correção do
+// turno mudo. Veto, falha e oferta existente não autorizam outra geração.
+import {
+  INSTRUCAO_DO_PEDIDO_HUMANO,
+  previaContinuaAtePropor,
+  tetoDePassosAtingido,
+} from './proposta-sob-pedido';
 import {
   CASO_DE_REPETICAO,
   decidirSaidaDaRepeticao,
@@ -5423,13 +5430,55 @@ async function executarTurnoDoAgente(
       passouParaAEquipe: passouParaAEquipe || passagem !== null,
       capDeEnvio: capDeEnvioAtingido(),
     });
+    // PEDIDO HUMANO (porte do #3557): quem clicou em "Sugerir resposta" pediu um texto.
+    // O primeiro passo do rascunho é o turno como o automático o faria; se ele calou sem
+    // oferta, sem impedimento e sem falha, com mensagem do cliente sem resposta, a prévia
+    // pede a proposta UMA vez, na MESMA vaga da correção abaixo — nunca uma terceira
+    // chamada. Só no clique: o rascunho que o worker escreve sozinho não liga
+    // `pedidoHumano` e segue calando como antes.
+    //
+    // Só conta como oferta a proposta que o cliente veria (send_template, send_media):
+    // sem o #3093 do original, o rascunho que só propõe nota, estado do lead ou marcação
+    // termina `failed` em `reply-drafts.ts`, e pedir o texto é estritamente melhor. Na
+    // prévia `tentativasDeEnvio` fica em 0 (o envio é o de `applyPreviewPolicy`): o veto
+    // dela chega em `impediments`.
+    const pedidoHumano =
+      preview?.kind === 'assisted' &&
+      preview.pedidoHumano === true &&
+      previaContinuaAtePropor({
+        candidatos: preview.result.candidates.length,
+        propostas: preview.result.proposals.filter(
+          (p) => p.tool === 'send_template' || p.tool === 'send_media',
+        ).length,
+        impedimentos: preview.result.impediments.map((i) => i.code),
+        tentativasDeEnvio,
+        textoEscrito: turn.result.text,
+        inboundsSemResposta: inboundsNaoRespondidos(preview.context.context.messages).length,
+        finishReason: turn.result.finishReason,
+        saidaTruncada: saidaCortada,
+        tetoDePassosAtingido: tetoDePassosAtingido({
+          passosUsados: turn.result.steps?.length ?? 0,
+          maxSteps,
+          finishReason: turn.result.finishReason,
+        }),
+      });
     let correcaoCortada = false;
-    if (!preview && liveJob().kind === 'inbound_turn' && turnoMudoPedeCorrecao(silencioDoTurno())) {
+    if (
+      pedidoHumano ||
+      (!preview && liveJob().kind === 'inbound_turn' && turnoMudoPedeCorrecao(silencioDoTurno()))
+    ) {
+      // `liveJob()` lança na prévia, que não tem job.
       runLog.warn('turno terminou sem mensagem ao cliente — pedindo UMA correção', {
-        job_id: liveJob().id,
+        job_id: job?.id ?? null,
+        previa: preview?.kind ?? null,
       });
       // A receita de remarcar só vai a quem lista e remarca compromissos (`turno-mudo.ts`).
-      const pedidoDeCorrecao: ModelMessage = { role: 'user', content: correcaoDoTurnoMudo(agentConfig?.toolIds ?? []) };
+      const pedidoDeCorrecao: ModelMessage = {
+        role: 'user',
+        content: pedidoHumano
+          ? INSTRUCAO_DO_PEDIDO_HUMANO
+          : correcaoDoTurnoMudo(agentConfig?.toolIds ?? []),
+      };
       const correcao = await runModelCall(
         pool,
         deps.llmCfg,
@@ -5438,13 +5487,17 @@ async function executarTurnoDoAgente(
           leadId: leadId || null,
           jobId: job?.id,
           agentId: agentConfig?.agentId ?? null,
-          purpose: 'agent_turn',
+          purpose: preview ? 'agent_preview' : 'agent_turn',
           system,
           messages: [...openingMessages, ...semChamadasSemResultado(turn.result.responseMessages), pedidoDeCorrecao],
           tools,
           // Teto em `PASSOS_DA_CORRECAO` (turno-mudo.ts): com 3 passos uma remarcação
           // (localizar → horário → mover → enviar) não cabia, e a correção morria antes de enviar.
           maxSteps: Math.min(maxSteps, PASSOS_DA_CORRECAO),
+          // Rascunho: para na primeira resposta ACEITA, como a primeira chamada.
+          ...(preview?.kind === 'assisted'
+            ? { pararQuando: () => preview.result.candidates.length > 0 }
+            : {}),
           ...(agentConfig !== null
             ? {
                 model: agentConfig.model,

@@ -8,6 +8,16 @@ import { test, expect, type Page, type TestInfo, type Locator } from "@playwrigh
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { createApprovedReplyHandler } from "../../lib/agent-engine/agent/approved-reply";
 import { seedPlatformPlaybook } from "../../lib/agent-engine/agent/playbook-seed";
+import {
+  CENARIO_DE_SILENCIO_ASSISTIDO,
+  previewFixtureRegistry,
+} from "../../lib/agent-engine/agent/preview-fixture";
+import { generateReplyDraft } from "../../lib/agent-engine/agent/reply-drafts";
+import type { InboundTurnDeps } from "../../lib/agent-engine/agent/inbound-turn";
+import { turnKnobsFromEnv } from "../../lib/agent-engine/agent/turn-knobs";
+import { loadEnv } from "../../lib/agent-engine/env";
+import { llmEdgeConfigFromEnv } from "../../lib/agent-engine/edge/llm/credentials";
+import { createLogger } from "../../lib/agent-engine/obs/logger";
 
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
@@ -23,7 +33,7 @@ async function insert(table: string, value: Record<string, unknown>) {
   if (error) throw error;
   return data.id as string;
 }
-async function fixture(pool: pg.Pool) {
+async function fixture(pool: pg.Pool, systemPrompt = "Ajude com informações confirmadas.") {
   expect(["127.0.0.1", "localhost"]).toContain(new URL(credentials.dbUrl).hostname);
   expect(process.env.INTERNAL_AGENT_RUN_STUB).toBe("true");
   // O QA não sobe o worker: reproduzir seu bootstrap idempotente, sem mover ponteiro existente.
@@ -85,14 +95,14 @@ async function fixture(pool: pg.Pool) {
   const agent = await insert("ai_agents", {
     organization_id: org,
     name: "Assistente para revisão",
-    system_prompt: "Ajude com informações confirmadas.",
+    system_prompt: systemPrompt,
     operation_mode: "assisted",
   });
   const version = await insert("ai_agent_versions", {
     organization_id: org,
     agent_id: agent,
     version_number: 1,
-    system_prompt: "Ajude com informações confirmadas.",
+    system_prompt: systemPrompt,
     provider: "anthropic",
     model: "claude-sonnet-4-6",
     channel_session_id: channel,
@@ -435,6 +445,156 @@ test("testa sem enviar, pausa preserva publicação e duas aprovações entregam
       "automatico-desktop",
     );
     expect(channel.bodies).toHaveLength(2);
+  } finally {
+    await page.close();
+    await channel.close();
+    await pool.end();
+  }
+});
+
+/**
+ * As dependências do rascunho que o WORKER escreve sozinho para agente assistido
+ * (`createInboundTurnHandler` → `generateReplyDraft`, sem clique), com o mesmo
+ * provedor de QA que o servidor usa sob `INTERNAL_AGENT_RUN_STUB`
+ * (`request-deps.ts`). O QA não sobe o worker; a função e o provedor são os dele.
+ */
+function depsDoWorker(): InboundTurnDeps {
+  const ambiente = loadEnv({
+    NODE_ENV: "test",
+    SUPABASE_DB_URL: credentials.dbUrl,
+    NEXT_PUBLIC_SUPABASE_URL: credentials.url,
+    SUPABASE_SERVICE_ROLE_KEY: credentials.serviceRole,
+  });
+  return {
+    crmCfg: { supabase: db },
+    llmCfg: { ...llmEdgeConfigFromEnv(ambiente), anthropicApiKey: "local-controlled-provider" },
+    knobs: turnKnobsFromEnv(ambiente),
+    log: createLogger(),
+    registry: previewFixtureRegistry(),
+    embed: async () => ({
+      embedding: Array(1536).fill(0.1),
+      promptTokens: 0,
+      model: "text-embedding-3-small",
+    }),
+  };
+}
+
+/**
+ * PEDIDO HUMANO (porte do #3557, issue #3281 do original): o agente que calaria
+ * propõe um texto quando uma PESSOA clica em "Sugerir resposta".
+ *
+ * O cenário é o da issue: o roteiro manda calar diante de saudação, e chegam
+ * "Bom dia!" e "Como posso ajudar?". O provedor de QA (`preview-fixture.ts`)
+ * cala enquanto o prompt não traz o pedido humano. O rascunho automático (sem
+ * clique) termina vazio e a tela mostra o motivo; o clique pede o texto UMA vez,
+ * nada sai antes da aprovação, e o texto editado é o que chega ao canal.
+ *
+ * Só a primeira metade do teste do original: a segunda provava o veto de
+ * `daily_cap` na aprovação, e neste fork a resposta a quem escreveu não conta
+ * no teto diário desde o #3769 (lote 3b).
+ */
+test("pedido humano: o rascunho automático cala e o clique em Sugerir resposta propõe o texto", async ({
+  page,
+}, info) => {
+  test.setTimeout(120_000);
+  const pool = new pg.Pool({
+    connectionString: credentials.dbUrl,
+    max: 5,
+    connectionTimeoutMillis: 5000,
+    query_timeout: 10_000,
+  });
+  const channel = await receiver();
+  try {
+    const f = await fixture(
+      pool,
+      `${CENARIO_DE_SILENCIO_ASSISTIDO} No automático, não responda a saudações.`,
+    );
+    await inbound(f, "Bom dia!");
+    await inbound(f, "Como posso ajudar?");
+
+    // O rascunho automático: a mesma função do worker, SEM o clique. Ele cala.
+    const automatico = await generateReplyDraft(pool, depsDoWorker(), {
+      organizationId: f.org,
+      conversationId: f.conversation,
+      contactId: f.contact,
+      channelId: f.channel,
+    });
+    const { rows: silencio } = await pool.query<{
+      status: string; original_body: string | null; error_code: string | null;
+    }>(
+      "select status,original_body,error_code from ai_reply_drafts where organization_id=$1 and id=$2",
+      [f.org, automatico.id],
+    );
+    expect(silencio).toEqual([{ status: "failed", original_body: "", error_code: "no_candidate" }]);
+
+    await login(page, f);
+    await page.goto(`/app/inbox/${f.conversation}`);
+    // A tela mostra o silêncio e o motivo, sem texto a aprovar.
+    await expect(panel(page).getByText("O agente terminou sem propor uma resposta.", { exact: false })).toBeVisible();
+    await expect(panel(page).getByLabel("Resposta sugerida")).toHaveCount(0);
+    await capture(page, panel(page), info, "pedido-humano-silencio");
+
+    // Relógio do BANCO, não do processo do teste: separa as chamadas do clique
+    // das do rascunho automático, que também é `agent_preview`.
+    const { rows: marco } = await pool.query<{ t: string }>("select clock_timestamp()::text t");
+    const first = await generate(page);
+    await expect(panel(page).getByLabel("Resposta sugerida")).toHaveValue(
+      "Bom dia! Posso ajudar com o seu pedido?",
+    );
+    const { rows: draft } = await pool.query<{
+      status: string; original_body: string; error_code: string | null;
+    }>(
+      "select status,original_body,error_code from ai_reply_drafts where organization_id=$1 and id=$2",
+      [f.org, first],
+    );
+    expect(draft).toEqual([{
+      status: "pending",
+      original_body: "Bom dia! Posso ajudar com o seu pedido?",
+      error_code: null,
+    }]);
+    // O rascunho automático pagou UMA chamada; o clique, duas: o turno como o
+    // automático o faria (calado) e o pedido humano, na vaga da correção.
+    const { rows: calls } = await pool.query<{ automatico: number; clique: number }>(
+      `select count(*) filter (where created_at <= $3::timestamptz)::int automatico,
+              count(*) filter (where created_at > $3::timestamptz)::int clique
+         from llm_calls
+        where organization_id=$1 and agent_id=$2 and purpose='agent_preview' and status='ok'`,
+      [f.org, f.agent, marco[0]!.t],
+    );
+    expect(calls).toEqual([{ automatico: 1, clique: 2 }]);
+    expect(channel.bodies).toHaveLength(0);
+    const before = await pool.query<{ n: number }>(
+      "select count(*)::int n from messages where organization_id=$1 and conversation_id=$2 and direction='outbound'",
+      [f.org, f.conversation],
+    );
+    expect(before.rows).toEqual([{ n: 0 }]);
+
+    const edited = "Maria, revisei sua mensagem e posso ajudar com o atendimento.";
+    await panel(page).getByLabel("Resposta sugerida").fill(edited);
+    await capture(page, panel(page), info, "pedido-humano-revisao");
+    const approved = page.waitForResponse(
+      (r) => r.url().endsWith(`/ai/replies/${first}`) && r.request().method() === "POST",
+    );
+    await panel(page).getByRole("button", { name: "Aprovar e enviar" }).click();
+    expect((await approved).status()).toBe(200);
+    await deliver(f, first, pool);
+    expect(channel.bodies).toHaveLength(1);
+    expect(channel.bodies[0]).toMatchObject({
+      session: f.sessionName,
+      chatId: "15551234567@c.us",
+      text: edited,
+    });
+    await expect(panel(page)).toHaveCount(0);
+    await expect(botaoSugerir(page)).toBeVisible();
+    writeFileSync(info.outputPath("pedido-humano-recibo.json"), JSON.stringify({
+      automatic_draft: silencio[0],
+      generation_calls_automatic: calls[0]?.automatico,
+      generation_calls_after_click: calls[0]?.clique,
+      sends_before_approval: before.rows[0]?.n,
+      delivered_after_review: channel.bodies.length,
+      provider: "roteirizado pelo conteúdo da conversa; sem modelo externo",
+      delivery: "consumidor, cadeia, ledger e HTTP locais reais",
+    }, null, 2));
   } finally {
     await page.close();
     await channel.close();

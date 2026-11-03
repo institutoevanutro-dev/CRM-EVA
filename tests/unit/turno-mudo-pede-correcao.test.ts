@@ -112,6 +112,25 @@ describe("o teto da correção", () => {
   });
 });
 
+describe("o pedido humano (porte do #3557) ocupa a vaga da correção — não é um passo a mais", () => {
+  it("da régua do pedido ao fim do rascunho: UMA chamada de modelo, nunca duas", () => {
+    // No clique em "Sugerir resposta" o pedido humano troca a INSTRUÇÃO da correção;
+    // não ganha chamada própria. Um segundo `runModelCall` aqui é um clique pagando
+    // três chamadas (turno + correção + pedido) e tem de doer neste teste.
+    const turno = fs.readFileSync(path.join(process.cwd(), "lib/agent-engine/agent/inbound-turn.ts"), "utf8");
+    const inicio = turno.indexOf("const pedidoHumano =");
+    expect(inicio).toBeGreaterThan(-1);
+    const fim = turno.indexOf("avisarSemCandidato(preview)", inicio);
+    expect(fim).toBeGreaterThan(inicio);
+    const regiao = turno.slice(inicio, fim);
+    expect(regiao.split("await runModelCall(").length - 1).toBe(1);
+    expect(regiao).toContain("INSTRUCAO_DO_PEDIDO_HUMANO");
+    // Só proposta que o cliente veria cala o pedido (sem o #3093 do original, a
+    // que só propõe nota, estado do lead ou marcação deixaria o rascunho vazio).
+    expect(regiao).toContain("p.tool === 'send_template' || p.tool === 'send_media'");
+  });
+});
+
 describe("VETOS_IRREVOGAVEIS cobre todo código que manda parar, com os nomes deste fork", () => {
   const stop = BEFORE_SEND_GATES[0]!;
   const veto = (v: GateVerdict): string => {

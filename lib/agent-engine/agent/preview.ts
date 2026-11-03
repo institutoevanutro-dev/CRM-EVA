@@ -32,6 +32,11 @@ export interface TurnPreview {
   previous?: LeadCheckpointRow | null;
   notes?: Array<{ headline: string; body: string }>;
   feedback?: string;
+  /**
+   * A pessoa clicou em "Sugerir resposta" (só a rota `draft-reply` liga). Com ele, o
+   * rascunho que calaria pede o texto uma vez (`proposta-sob-pedido.ts`, #3557).
+   */
+  pedidoHumano?: boolean;
   /** Null means a scenario, never a synthetic identifier passed to SQL. */
   contactId: string | null;
   channelId: string | null;
