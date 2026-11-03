@@ -177,6 +177,19 @@ export const CONFERENCIAS_DE_SAIDA: readonly ConferenciaDeSaida[] = [
     camada: null,
   },
   {
+    nome: "horario_da_agenda",
+    rotulo: "Só oferecer horário que a agenda devolveu",
+    oQueProtege:
+      'Barra o "está agendado" sem marcação gravada nesta resposta e o horário oferecido que a ' +
+      "agenda não devolveu. Lembrar o horário que o cliente já tem continua livre. O assistente " +
+      "refaz; se insistir, responde sem citar horário.",
+    escolha: null,
+    porQueNaoSeDesliga:
+      "Horário inventado vira consulta marcada em cima de outra, e confirmação sem marcação vira " +
+      "cliente esperando um horário que não existe. Regra fixa, sem custo.",
+    camada: null,
+  },
+  {
     nome: "disclosure",
     rotulo: "Dizer que é um assistente quando perguntam",
     oQueProtege: "Se o cliente pergunta se está falando com um robô, a resposta não pode enganar.",

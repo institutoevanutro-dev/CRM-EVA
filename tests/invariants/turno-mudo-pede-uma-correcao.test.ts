@@ -24,6 +24,10 @@ import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
  * Resposta cortada no teto de tokens (porte do upstream #2938): o `send_message`
  * pela metade não sai, e o turno que fica mudo por corte vira aviso na Central;
  * o silêncio deliberado, não.
+ *
+ * Veto do gate de horário (porte do upstream #3596): numa sessão com agente que tem
+ * ferramenta de agenda, "está agendada" sem marcação volta ao modelo como ensino
+ * dentro do mesmo turno, e a resposta reescrita sai pela cadeia.
  */
 
 const container = process.env.TEST_DB_CONTAINER;
@@ -45,6 +49,11 @@ const ORG = "ee0d0601-0000-4000-8000-000000000001";
 const CONTACT = "ee0d0601-0000-4000-8000-000000000002";
 const SESSION = "ee0d0601-0000-4000-8000-000000000003";
 const CONV = "ee0d0601-0000-4000-8000-000000000004";
+// Sessão COM agente que tem ferramenta de agenda — é o que ARMA o agenda_stall e o
+// horario_da_agenda. Sem agente, a sessão `SESSION` deixa os dois desarmados.
+const SESSION_VETO = "ee0d0601-0000-4000-8000-000000000008";
+const AGENT_VETO = "ee0d0601-0000-4000-8000-000000000009";
+const VERSION_VETO = "ee0d0601-0000-4000-8000-00000000000a";
 const MARCA_DA_CORRECAO = "Este turno terminou SEM nenhuma mensagem ao cliente";
 
 type Modules = {
@@ -101,21 +110,35 @@ function modelo(roteiro: Resposta[]) {
   return { fake, prompts };
 }
 
-async function turno(fake: ReturnType<typeof modelo>["fake"]): Promise<void> {
+/**
+ * Um turno de entrada. Com `conversa`, a conversa é criada na `sessao` indicada — é
+ * assim que o turno roda com o agente publicado nela.
+ */
+async function turno(
+  fake: ReturnType<typeof modelo>["fake"],
+  { sessao = SESSION, conversa = CONV }: { sessao?: string; conversa?: string } = {},
+): Promise<void> {
+  if (conversa !== CONV) {
+    await pool.query(
+      `insert into conversations (id, organization_id, contact_id, channel_session_id, status, is_group)
+       values ($1,$2,$3,$4,'ai_handling',false)`,
+      [conversa, ORG, CONTACT, sessao],
+    );
+  }
   const msg = crypto.randomUUID();
   await pool.query(
     `insert into messages (id, organization_id, conversation_id, channel_session_id, contact_id,
        type, direction, status, body, sent_via, sent_at, created_at)
      values ($1,$2,$3,$4,$5,'text','inbound','delivered',$6,'external_device',now(),now())`,
-    [msg, ORG, CONV, SESSION, CONTACT, "Juan Pérez, barrio Centro, portón verde, a las 12"],
+    [msg, ORG, conversa, sessao, CONTACT, "Juan Pérez, barrio Centro, portón verde, a las 12"],
   );
   const { job } = await m.queue.enqueueJob(pool, ORG, {
     kind: "inbound_turn",
     leadId: CONTACT,
     payload: {
-      conversation_id: CONV,
+      conversation_id: conversa,
       contact_id: CONTACT,
-      channel_session_id: SESSION,
+      channel_session_id: sessao,
       inbound_message_id: msg,
       crm_event_id: crypto.randomUUID(),
     },
@@ -178,6 +201,29 @@ beforeAll(async () => {
      values ($1,$2,'turno-mudo-session','WORKING','\\x00'::bytea) on conflict (id) do nothing`,
     [SESSION, ORG],
   );
+  // Agente COM ferramenta de agenda: sem ela o agenda_stall e o horario_da_agenda ficam
+  // desarmados e o "está agendada" passa — aí não há veto para reproduzir.
+  await pool.query(
+    `insert into channel_sessions (id, organization_id, waha_session_name, status, webhook_secret_encrypted)
+     values ($1,$2,'turno-mudo-veto-session','WORKING','\\x00'::bytea) on conflict (id) do nothing`,
+    [SESSION_VETO, ORG],
+  );
+  await pool.query(
+    `insert into ai_agents (id, organization_id, name, system_prompt)
+     values ($1, $2, 'Agente com agenda', 'system') on conflict (id) do nothing`,
+    [AGENT_VETO, ORG],
+  );
+  await pool.query(
+    `insert into ai_agent_versions
+       (id, organization_id, agent_id, version_number, system_prompt, provider, model, channel_session_id, status, tool_ids)
+     values ($1, $2, $3, 1, 'system', 'anthropic', 'claude-sonnet-4-6', $4, 'published', array['crm_reschedule_appointment'])
+     on conflict (id) do nothing`,
+    [VERSION_VETO, ORG, AGENT_VETO, SESSION_VETO],
+  );
+  await pool.query(`update ai_agents set published_version_id = $1 where id = $2`, [
+    VERSION_VETO,
+    AGENT_VETO,
+  ]);
   await pool.query(
     `with v as (
        insert into playbook_versions (organization_id, layer, content)
@@ -265,6 +311,28 @@ describe("o turno de resposta que terminou sem mensagem ao cliente", () => {
     expect(await avisosDaConversa()).toEqual([
       { kind: "other", title: "A IA não respondeu um cliente: a resposta passou do tamanho máximo" },
     ]);
+  });
+
+  it("⭐ \"está agendada\" sem marcação: o horario_da_agenda veta, ensina e a resposta reescrita sai", async () => {
+    // Porte do #3596, pela fiação real do turno. "consulta" não está entre os
+    // substantivos do agenda_stall, então ele deixa passar; quem barra é o
+    // horario_da_agenda, porque nada foi marcado neste turno e o contato não tem
+    // compromisso nenhum. O ensino volta DENTRO do loop, e a pergunta, que não afirma
+    // marcação nem oferece horário, sai pela cadeia.
+    const { fake, prompts } = modelo([
+      enviar("Sua consulta está agendada para 05/11 às 10h."),
+      enviar("Posso agendar sua consulta para 05/11 às 10h?"),
+    ]);
+    await turno(fake, { sessao: SESSION_VETO, conversa: crypto.randomUUID() });
+
+    expect(
+      enviados,
+      "a confirmação sem marcação chegou ao cliente — o horario_da_agenda não estava armado ou não vetou",
+    ).toEqual(["Posso agendar sua consulta para 05/11 às 10h?"]);
+    expect(prompts[1], "o veto do gate de horário não voltou como ensino na chamada seguinte").toContain(
+      "nada foi marcado nesta resposta",
+    );
+    expect(prompts[0]).not.toContain("nada foi marcado nesta resposta");
   });
 
   it("cortada e recuperada pela correção: a resposta inteira sai e não há aviso", async () => {

@@ -78,7 +78,7 @@ import {
   type LeadStateRow,
 } from './lead-state';
 import { applySaveLeadNote, buildNotesIndexBlock, getLeadNoteBody } from './lead-notes';
-import { buildCompromissosBlock } from './compromissos-do-contato';
+import { compromissosDoContato, renderCompromissos } from './compromissos-do-contato';
 import { agendaNoFechamento } from './agenda-no-fechamento';
 import { applyScheduleFollowup, type FollowupWindowKnobs } from './schedule-followup';
 import {
@@ -176,7 +176,8 @@ import {
 } from './skills';
 import { readSkillReference, skillHasReferences } from './skill-references';
 import { READ_ONLY_TOOLS, wrapToolsWithBreaker, type ToolBreakerThresholds } from './tool-breaker';
-import { loadChannelProvider, nomesDasFerramentas, runBeforeSend } from '../guardrails/before-send';
+import { loadChannelProvider, nomesDasFerramentas, runBeforeSend, type GateContext } from '../guardrails/before-send';
+import { colherDaFerramenta, VETOS_DO_HORARIO } from '../guardrails/horario-da-agenda';
 import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
@@ -221,6 +222,7 @@ import {
 import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import { renderAgora } from '@/lib/tempo/agora';
+import { fusoUtilizavel } from '@/lib/tempo/fusos';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 import {
   anotarUltimaInboundVista,
@@ -3082,10 +3084,19 @@ async function executarTurnoDoAgente(
   // de `get-lead-context.ts:193` diz o mesmo). Passar essa variável para um
   // parâmetro chamado `contactId` é correto pelo VALOR; o nome é que mente, e é
   // o que a issue #509 conserta. Não troque por um `lead_id` "mais coerente".
-  const compromissosBlock =
+  //
+  // Uma leitura serve aos dois (porte do #3596): o bloco continua mostrando só os
+  // compromissos que ainda não terminaram, 5 no máximo, com o aviso de corte; o gate de
+  // horário (`horariosDaAgenda`, abaixo) vê também os que terminaram nas últimas 24h, até
+  // 50, para "sua consulta de hoje às 9h" seguir sendo do contato.
+  const aberturaDoTurno = new Date();
+  const compromissosDoTurno =
     preview?.kind === 'sandbox'
-      ? ''
-      : await buildCompromissosBlock(pool, tenantId, leadId, new Date());
+      ? []
+      : await compromissosDoContato(pool, tenantId, leadId, new Date(aberturaDoTurno.getTime() - 86_400_000), 50);
+  const compromissosBlock = renderCompromissos(
+    compromissosDoTurno.filter((c) => c.ends_at !== null && new Date(c.ends_at) >= aberturaDoTurno),
+  );
   // Observabilidade da memória (Fase 2A): SÓ ids/contagens no log — headline/corpo
   // são PII e nunca saem do prompt. Prova auditável de que a memória durável do
   // lead entrou no contexto DESTE turno.
@@ -3229,6 +3240,27 @@ async function executarTurnoDoAgente(
   // as tools do modelo rodam em passos anteriores do mesmo loop, o valor já está certo
   // quando o modelo decide mandar a resposta.
   let agendaToolCalledThisTurn = false;
+  // Arma o `horarioDaAgendaGate` (porte do #3596): não basta a tool ter RODADO, o texto
+  // precisa citar o que ela DEVOLVEU. Colhido no mesmo wrapper das tools MCP que marca
+  // `agendaToolCalledThisTurn`; lido no momento do envio. Os compromissos do contato vêm
+  // da leitura da abertura (`compromissosDoTurno`), sem consulta a mais.
+  const horariosLivresDoTurno = new Set<string>();
+  const marcadosNesteTurno = new Set<string>();
+  let marcouNesteTurno = false;
+  let consultouHorariosNesteTurno = false;
+  let horarioVetoCount = 0;
+  let fusoDaAgenda: string | null = compromissosDoTurno.find((c) => c.time_zone)?.time_zone ?? null;
+  // `fusoUtilizavel`: um fuso inválido faria o Intl lançar dentro do gate, e o turno
+  // falharia; cai no da organização.
+  const horariosDaAgenda = (): NonNullable<GateContext['horariosDaAgenda']> => ({
+    ativo: agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds),
+    fuso: fusoUtilizavel(fusoDaAgenda, fusoDaOrg),
+    livres: [...horariosLivresDoTurno],
+    doContato: [...compromissosDoTurno.map((c) => new Date(c.starts_at).toISOString()), ...marcadosNesteTurno],
+    marcouNesteTurno,
+    vetosAnteriores: horarioVetoCount,
+    consultouHorarios: consultouHorariosNesteTurno,
+  });
   // Lido pelo `casePromiseGate`: true só depois de `schedule_followup` AGENDAR com
   // sucesso neste turno. Libera apenas a promessa de retorno do próprio assistente.
   let followupAgendadoNesteTurno = false;
@@ -3467,6 +3499,8 @@ async function executarTurnoDoAgente(
               toolCalledThisTurn: agendaToolCalledThisTurn,
               presencaConfirmadaNoTurno: presencaConfirmadaNoTurno,
             },
+            // A legenda é texto do modelo: o gate de horário vale para ela também.
+            horariosDaAgenda: horariosDaAgenda(),
             followup: {
               disponivel: rawTools.schedule_followup !== undefined,
               agendadoNesteTurno: followupAgendadoNesteTurno,
@@ -3515,6 +3549,7 @@ async function executarTurnoDoAgente(
             },
           });
           if (chain.status === 'vetoed') {
+            if (VETOS_DO_HORARIO.has(chain.code)) horarioVetoCount += 1;
             // Cap de pacing: reagenda o job no fim do turno, como no send_message.
             if (
               (chain.code === 'warmup_cap' || chain.code === 'daily_cap') &&
@@ -3999,6 +4034,8 @@ async function executarTurnoDoAgente(
               toolCalledThisTurn: agendaToolCalledThisTurn,
               presencaConfirmadaNoTurno: presencaConfirmadaNoTurno,
             },
+            // O que a agenda DEVOLVEU neste turno (porte do #3596), lido no momento do envio.
+            horariosDaAgenda: horariosDaAgenda(),
             followup: {
               disponivel: rawTools.schedule_followup !== undefined,
               agendadoNesteTurno: followupAgendadoNesteTurno,
@@ -4162,6 +4199,9 @@ async function executarTurnoDoAgente(
             });
           }
           if (chain.status === 'vetoed') {
+            // Conta AQUI, no ramo final, e não logo depois da 1ª rodada: assim o veto que
+            // veio do re-run dos fail-safes acima também escala o ensino do gate de horário.
+            if (VETOS_DO_HORARIO.has(chain.code)) horarioVetoCount += 1;
             // Cap de warm-up/diário: reescrever o texto não resolve (é rate limit, não
             // conteúdo) — ensinar o modelo a "tentar de novo" só gasta passo. Guardamos
             // pra reagendar o JOB inteiro depois que o turno terminar (mesmo padrão de
@@ -4899,7 +4939,19 @@ async function executarTurnoDoAgente(
                 ...mcpTool,
                 execute: (async (...args: Parameters<typeof executeOriginal>) => {
                   agendaToolCalledThisTurn = true;
-                  return executeOriginal(...args);
+                  const resultado = await executeOriginal(...args);
+                  // Colheita para o `horarioDaAgendaGate`, de QUALQUER tool de agenda: a
+                  // conjunta com o horário ocupado devolve `horarios[]` e manda oferecer um
+                  // deles. Pura e sem exceção — embalagem inesperada colhe nada. O wrapper
+                  // do `crm_confirm_appointment`, abaixo, NÃO colhe: o `compromisso` que ele
+                  // devolve contaria como marcação feita neste turno.
+                  const colheita = colherDaFerramenta(resultado);
+                  if (colheita.fuso !== null) fusoDaAgenda = colheita.fuso;
+                  if (colheita.consultou) consultouHorariosNesteTurno = true;
+                  for (const i of colheita.livres) horariosLivresDoTurno.add(i);
+                  if (colheita.marcou) marcouNesteTurno = true;
+                  for (const i of colheita.marcados) marcadosNesteTurno.add(i);
+                  return resultado;
                 }) as typeof mcpTool.execute,
               };
             } else if (name === 'crm_confirm_appointment' && typeof mcpTool.execute === 'function') {
@@ -4991,6 +5043,13 @@ async function executarTurnoDoAgente(
                 ferramentas: previewContext.agenda?.ferramentas ?? [],
                 toolCalledThisTurn: agendaToolCalledThisTurn,
                 presencaConfirmadaNoTurno: presencaConfirmadaNoTurno,
+              },
+              // Na prévia o veto vira impedimento, não veto do `runBeforeSend`: o contador
+              // do turno real não anda aqui, então os vetos anteriores saem dos impedimentos.
+              // Sem isto, Testar e Sugerir resposta nunca escalariam o ensino.
+              horariosDaAgenda: {
+                ...horariosDaAgenda(),
+                vetosAnteriores: preview.result.impediments.filter((i) => VETOS_DO_HORARIO.has(i.code)).length,
               },
             }),
           )

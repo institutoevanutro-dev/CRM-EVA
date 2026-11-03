@@ -61,6 +61,8 @@ export function vetoReason(gate: string, code: string): string {
       "Não enviei: a mensagem prometia uma nova tentativa ou resposta que não foi programada",
     internal_vocabulary:
       "Não enviei: a mensagem usava termos internos do sistema que o cliente não deve ler",
+    horario_da_agenda:
+      "Não enviei: a mensagem citava horário que a agenda não devolveu ou dizia que estava agendado sem ter marcado",
   };
   return porGate[gate] ?? `Não enviei: bloqueado pela regra "${gate}" (${code})`;
 }

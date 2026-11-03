@@ -5794,6 +5794,12 @@ export const DICIONARIO: Traducoes = {
   "A primeira mensagem a um contato novo precisa se apresentar como assistente virtual. O assistente foi orientado a corrigir antes de enviar.": {
     es: "El primer mensaje a un contacto nuevo debe presentarse como asistente virtual. Se orientó al asistente a corregir antes de enviar.",
   },
+  "A resposta citava um horário que a agenda não devolveu. O assistente foi orientado a consultar a agenda antes de enviar.": {
+    es: "La respuesta citaba un horario que la agenda no devolvió. Se orientó al asistente a consultar la agenda antes de enviar.",
+  },
+  "A resposta dizia que o horário estava agendado, mas nenhuma marcação foi gravada. O assistente foi orientado a corrigir antes de enviar.": {
+    es: "La respuesta decía que el horario estaba agendado, pero no se registró ninguna cita. Se orientó al asistente a corregir antes de enviar.",
+  },
   "Uma trava de segurança segurou esta resposta": { es: "Un bloqueo de seguridad retuvo esta respuesta" },
   "Ela não foi enviada ao contato.": { es: "No se le envió al contacto." },
   "Resposta segurada pela proteção do número": { es: "Respuesta retenida por la protección del número" },
@@ -10118,6 +10124,15 @@ export const DICIONARIO: Traducoes = {
   // ─── lib/ai/guardrails/lista-de-conferencia.ts (Painel de Segurança) ───
   "Não prometer checar a agenda sem checar de verdade": {
     es: "No prometer revisar la agenda sin revisarla de verdad",
+  },
+  "Só oferecer horário que a agenda devolveu": {
+    es: "Solo ofrecer horarios que la agenda devolvió",
+  },
+  "Barra o \"está agendado\" sem marcação gravada nesta resposta e o horário oferecido que a agenda não devolveu. Lembrar o horário que o cliente já tem continua livre. O assistente refaz; se insistir, responde sem citar horário.": {
+    es: "Bloquea el \"está agendado\" sin una cita registrada en esta respuesta y el horario ofrecido que la agenda no devolvió. Recordar el horario que el cliente ya tiene sigue permitido. El asistente rehace la respuesta; si insiste, responde sin citar horarios.",
+  },
+  "Horário inventado vira consulta marcada em cima de outra, e confirmação sem marcação vira cliente esperando um horário que não existe. Regra fixa, sem custo.": {
+    es: "Un horario inventado se convierte en una cita encima de otra, y una confirmación sin cita registrada deja al cliente esperando un horario que no existe. Regla fija, sin costo.",
   },
   "Se a pessoa respondeu STOP, SAIR ou pediu para não receber mais, nada é enviado a ela.": {
     es: "Si la persona respondió STOP, SALIR o pidió no recibir más, no se le envía nada.",
