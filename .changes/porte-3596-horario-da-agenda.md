@@ -13,8 +13,12 @@ oferece ("tenho 05/11 às 10h") é conferido.
 A mesma conferência barra "está agendado" ou "está confirmado" quando nenhuma
 marcação foi gravada naquela resposta. Falar do compromisso que o cliente já
 tem continua livre. Duração, horário de chegada, horário de funcionamento,
-faixas como "das 8h às 18h", eventos, promoções, horário de remédio,
-resultados e confirmação de pagamento não são conferidos.
+faixas como "das 8h às 18h" (e o fim de "14h às 15h"), término previsto,
+eventos, promoções, horário de remédio, resultados e confirmação de pagamento
+não são conferidos. Recusar o horário que o cliente pediu ("às 15h não tenho
+vaga, mas tenho às 16h") passa, e o horário oferecido no lugar continua
+conferido. No repasse da resposta de um caso, o dia e horário que a equipe
+escreveu na nota contam como vindos da agenda.
 
 Quando barra, o assistente refaz a resposta. Se insistir, a resposta sai sem
 horário, ou, depois de uma marcação de verdade, só com o horário marcado. A

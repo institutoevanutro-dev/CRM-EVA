@@ -57,9 +57,18 @@ export const VETOS_DO_HORARIO: ReadonlySet<string> = new Set(['horario_sem_fonte
 
 export interface HorarioCitado {
   instante: number;
+  /**
+   * A outra data possível: a hora fica entre duas datas da frase e a de depois não tem
+   * hora própria ("às 9h na quinta, 05/11, e às 14h na sexta, 06/11"). Vale qualquer uma.
+   */
+  alternativa?: number;
   rotulo: string;
   /** Índice da hora no corpo — a pista de oferta é lida na frase DELA. */
   pos: number;
+}
+
+function instantesDe(c: HorarioCitado): number[] {
+  return c.alternativa === undefined ? [c.instante] : [c.instante, c.alternativa];
 }
 
 const DATA_DM = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g;
@@ -71,24 +80,40 @@ function semAcento(texto: string): string {
   return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
-// Hora que não é horário de atendimento: faixa ("das 8h às 18h"), duração, chegada, jejum,
-// prazo, e a hora que a frase diz estar ocupada.
+// Hora que não é horário de atendimento: faixa ("das 8h às 18h"; na faixa solta "14h às 15h",
+// só o fim), duração, chegada, jejum, prazo, término, funcionamento, e a hora que a frase diz
+// estar ocupada — também com a recusa DEPOIS dela ("às 15h não tenho vaga, mas tenho às 16h").
+// A recusa em 1ª pessoa só vale com o objeto dela (vaga, horário…) ou fechando a oração: em
+// "tenho 05/11 às 15h, não tenho às 16h" o "não tenho" é das 16h, e as 15h seguem conferidas.
+// E o "não tenho" de ANTES da hora não atravessa vírgula, ";" nem "mas": em "às 15h não tenho
+// vaga, mas tenho às 16h" as 16h são a oferta, e são conferidas.
+// "Já está reservado" (sem "por outra pessoa") fica de fora de propósito: é também como o
+// modelo afirma uma marcação, e excluir a hora soltaria a afirmação.
 const FAIXA_ABRE = /\b(?:das?|de|entre)\s+$/;
 const FAIXA_CONTINUA = /^\s*(?:as|a|ate|e|-|–)\s*\d/;
 const FAIXA_FECHA = /\b(?:das?|de|entre)\s+\d{1,2}(?:h\d{0,2}|:\d{2})?\s*(?:as|a|ate|e|-|–)\s*$/;
+const FAIXA_SOLTA_FECHA = /\b\d{1,2}(?:h\d{0,2}|:\d{2})\s*(?:as|a|ate|-|–)\s*$/;
 const NAO_E_HORARIO_ANTES =
-  /\b(?:dura|duracao|leva|levam|jejum|cerca de|em media|em torno de|aproximadamente|chegue|chegar|chegada|antes|antecedencia|ate|a partir d[ao]s?|depois d[ao]s?|abre|abrem|abrimos|fecha|fecham|fechamos|funciona|funcionam|funcionamos|termina|terminam|encerra|acaba)\b[^0-9\n]{0,12}$|\bnao (?:tenho|temos|ha)\b[^.!?\n]{0,25}$/;
-const NAO_E_HORARIO_DEPOIS =
-  /^\s*(?:de duracao|de jejum|antes\b|de antecedencia)|^(?:(?!\d{1,2}(?:h|:\d))[^.!?\n]){0,25}\b(?:ocupad|indisponive|lotad|preenchid|nao (?:esta |tem |ha )?(?:mais )?(?:disponive|livre|vaga))/;
+  /\b(?:dura|duracao|leva|levam|jejum|cerca de|em media|em torno de|aproximadamente|chegue|chegar|chegada|antes|antecedencia|ate|a partir d[ao]s?|depois d[ao]s?|abre|abrem|abrimos|fecha|fecham|fechamos|funciona|funcionam|funcionamos|termina|terminam|termino(?: previsto)?|fim(?: previsto)?|encerra|acaba|horarios? de (?:atendimento|funcionamento))\b[^0-9\n]{0,12}$|\bnao (?:tenho|temos|ha)\b(?:(?!\bmas\b)[^.!?\n,;]){0,25}$/;
+const NAO_E_HORARIO_DEPOIS = /^\s*(?:de duracao|de jejum|antes\b|de antecedencia)/;
+const OCUPADA_DEPOIS =
+  /^(?:(?!\d{1,2}(?:h|:\d))[^.!?\n]){0,25}\b(?:ocupad|indisponive|lotad|preenchid|tomad|cheia|(?:marcad|reservad|agendad)[oa]s? por (?:outr|alguem)|ja foi\b(?=\s*(?:[,;:]|mas\b|$|[^\w\s]))|nao (?:esta |tem |ha )?(?:mais )?(?:disponive|livre|vaga)|nao (?:tenho|temos|tem|ha|consigo|vai dar|da)\b(?=[^.!?\n\d]{0,20}?\b(?:vagas?\b|horarios?\b|disponi|livres?\b|encaix|agenda|mais\b)|\s*(?:[,;:]|mas\b|$|[^\w\s])))/;
+// A oração da hora a OFERECE ("tenho 05/11 às 15h, não tenho mais vagas nesse dia"): o que vem
+// depois fala dos outros horários, e as 15h são conferidas. Vírgula, ";", "(" ou outra hora
+// no meio separam a oferta da hora.
+const OFERTA_DA_HORA =
+  /\b(?:tenho|temos|consigo|ha vagas?|disponive(?:l|is)|livres?|encaix\w*|opc(?:ao|oes))\b(?:(?!\d{1,2}(?:h|:\d))[^,;(])*$/;
 
 function naoEHorario(corpo: string, pos: number, fim: number): boolean {
   const antes = semAcento(corpo.slice(Math.max(0, pos - 30), pos));
-  const depois = semAcento(corpo.slice(fim, fim + 30));
+  const depois = semAcento(corpo.slice(fim, fim + 60));
   return (
     (FAIXA_ABRE.test(antes) && FAIXA_CONTINUA.test(depois)) ||
     FAIXA_FECHA.test(antes) ||
+    FAIXA_SOLTA_FECHA.test(antes) ||
     NAO_E_HORARIO_ANTES.test(antes) ||
-    NAO_E_HORARIO_DEPOIS.test(depois)
+    NAO_E_HORARIO_DEPOIS.test(depois) ||
+    (OCUPADA_DEPOIS.test(depois) && !OFERTA_DA_HORA.test(semAcento(corpo.slice(fraseEm(corpo, pos).ini, pos))))
   );
 }
 
@@ -132,9 +157,17 @@ function anoLocal(instante: number, fuso: string): { ano: number; mes: number; d
   return { ano: p[0] ?? 1970, mes: p[1] ?? 1, dia: p[2] ?? 1 };
 }
 
+// Frase sem data que nomeia o próprio dia ("sua avaliação de amanhã às 9h"): a hora é daquele
+// dia, não da data DD/MM de outra frase. Nome de dia não é resolvido para data (ponytail em
+// `avaliarHorarios`), então essa hora fica de fora, como "às 9h" numa mensagem sem data.
+const DIA_POR_NOME = /\b(?:hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b/;
+
 /**
- * Cada horário fica com a data `DD/MM` mais próxima ANTES dele; numa mensagem com uma
- * data só, todos os horários são dela (a mensagem de agendamento põe a hora na linha de baixo).
+ * Cada horário fica com a data `DD/MM` da PRÓPRIA frase: a de antes dele, ou a de depois
+ * quando a hora vem primeiro ("às 9h na quinta, 05/11"). Entre duas datas da frase, é da de
+ * antes — a não ser que a de depois não tenha hora própria, e aí valem as duas ("às 10h na
+ * quinta, 05/11, e às 14h na sexta, 06/11"). Na frase sem data, a mais próxima antes (a
+ * mensagem de agendamento põe a hora na linha de baixo do 📅) ou, sem ela, a de depois.
  *
  * Neste fork, a hora de faixa, duração, chegada, jejum, prazo, funcionamento e a que a
  * frase diz estar ocupada fica de fora (`naoEHorario`): não é horário de atendimento.
@@ -153,25 +186,55 @@ export function horariosCitados(corpo: string, agora: Date, fuso: string): Horar
     })
     .filter((d): d is NonNullable<typeof d> => d !== null);
   if (datas.length === 0) return [];
+  type Data = (typeof datas)[number];
+  const dentroDeData = (p: number) => datas.some((d) => p >= d.pos && p < d.fim);
+  const horas = [...corpo.matchAll(HORA)].filter((h) => !dentroDeData(h.index ?? 0));
+  const dm = (d: Data) => `${String(d.dia).padStart(2, '0')}/${String(d.mes).padStart(2, '0')}`;
 
   const out: HorarioCitado[] = [];
-  for (const h of corpo.matchAll(HORA)) {
+  for (const h of horas) {
     const pos = h.index ?? 0;
-    if (datas.some((d) => pos >= d.pos && pos < d.fim)) continue;
     if (naoEHorario(corpo, pos, pos + h[0].length)) continue;
     const hora = Number(h[1]);
     const minuto = Number(h[2] ?? h[3] ?? 0);
     if (hora > 23 || minuto > 59) continue;
-    const antes = datas.filter((d) => d.pos < pos);
-    const alvo = antes.length > 0 ? antes[antes.length - 1] : datas.length === 1 ? datas[0] : undefined;
+    const f = fraseEm(corpo, pos);
+    const naFrase = datas.filter((d) => d.pos >= f.ini && d.pos < f.fim);
+    let alvos: Data[];
+    if (naFrase.length > 0) {
+      const antes = naFrase.filter((d) => d.pos < pos).pop();
+      const depois = naFrase.find((d) => d.pos > pos);
+      if (antes && depois) {
+        const limite = naFrase.find((d) => d.pos > depois.pos)?.pos ?? f.fim;
+        const depoisTemHora = horas.some((x) => (x.index ?? 0) > depois.pos && (x.index ?? 0) < limite);
+        alvos = depoisTemHora ? [antes] : [antes, depois];
+      } else {
+        alvos = antes ? [antes] : depois ? [depois] : [];
+      }
+    } else {
+      if (DIA_POR_NOME.test(semAcento(corpo.slice(f.ini, f.fim)))) continue;
+      const alvo = datas.filter((d) => d.pos < pos).pop() ?? datas.find((d) => d.pos > pos);
+      alvos = alvo ? [alvo] : [];
+    }
+    const [alvo, outra] = alvos;
     if (!alvo) continue;
     out.push({
       pos,
       instante: instanteLocal(alvo.ano, alvo.mes, alvo.dia, hora, minuto, fuso),
-      rotulo: `${String(alvo.dia).padStart(2, '0')}/${String(alvo.mes).padStart(2, '0')} ${hora}h${minuto ? String(minuto).padStart(2, '0') : ''}`,
+      ...(outra ? { alternativa: instanteLocal(outra.ano, outra.mes, outra.dia, hora, minuto, fuso) } : {}),
+      rotulo: `${alvos.map(dm).join(' ou ')} ${hora}h${minuto ? String(minuto).padStart(2, '0') : ''}`,
     });
   }
   return out;
+}
+
+/**
+ * Os instantes que um texto de PESSOA cita com data e hora — a nota do responsável no
+ * `case_reply_turn` ("consegui encaixe 10/11 às 15h"): o encaixe combinado fora da grade
+ * não está na agenda, e quem o combinou é a fonte.
+ */
+export function instantesCitados(texto: string, agora: Date, fuso: string): string[] {
+  return horariosCitados(texto, agora, fuso).flatMap((c) => instantesDe(c).map((t) => new Date(t).toISOString()));
 }
 
 const ASSUNTO_DE_AGENDA =
@@ -201,9 +264,11 @@ function assuntoDaOracao(frase: string, i: number): 'agenda' | 'outro' | null {
 
 // `sozinho`: o particípio já é afirmação de marcação ("está agendado"). Os demais só contam
 // com assunto de agenda ou dia+hora: "confirmado" serve a pix, "marquei" serve a anotação.
-const AFIRMACOES: ReadonlyArray<{ re: RegExp; sozinho: (participio: string) => boolean }> = [
+// `comDiaEHora`: só conta com dia e hora no trecho (o da frase ou o do cartão de baixo).
+const AFIRMACOES: ReadonlyArray<{ re: RegExp; sozinho: (participio: string) => boolean; comDiaEHora?: true }> = [
   {
-    re: /\b(?:esta|ficou|foi|fica|segue|estao|ficaram|deixei|deixamos)\s+(?:(?:tudo|ja|certo|certinho|e)\s+){0,3}(confirmad|agendad|marcad|remarcad|reservad|garantid)[oa]s?\b/g,
+    // "foi marcado por outra pessoa" é recusa do horário, não afirmação sobre este contato.
+    re: /\b(?:esta|ficou|foi|fica|segue|estao|ficaram|deixei|deixamos)\s+(?:(?:tudo|ja|certo|certinho|e)\s+){0,3}(confirmad|agendad|marcad|remarcad|reservad|garantid)[oa]s?\b(?! por (?:outr|alguem))/g,
     sozinho: (p) => /^(?:agend|marc|remarc)/.test(p),
   },
   { re: /\b(confirmad|agendad|marcad|reservad)[oa]s?\s*(?:com sucesso|para voce|pra voce)\b/g, sozinho: (p) => /^(?:agend|marc)/.test(p) },
@@ -211,23 +276,33 @@ const AFIRMACOES: ReadonlyArray<{ re: RegExp; sozinho: (participio: string) => b
     re: /\b(?:agendamento|reserva)\s+(?:foi\s+)?(confirmad|feit|realizad|efetuad)[oa]\b|\b(?:consulta|teleconsulta)\s+(confirmad)a\b/g,
     sozinho: () => true,
   },
-  // #3673 — o particípio ABRE a frase ("Confirmado: manicure dia 29/10 às 9h"), com dia e hora.
-  // O original pôs esta forma no `agendaStallGate`; aqui ela ganha a isenção do compromisso que
-  // o contato já tem (lembrete e confirmação de presença passam) e vale também no turno que
-  // consultou a agenda. "Confirmado!" fecha a frase no "!" e não chega à data: não é afirmação.
-  {
-    re: new RegExp(
-      String.raw`(?<=(?:^|[.!?\n,:;])\W*)(confirmad|marcad|remarcad)[oa]s?\b(?=[^.!?\n]{0,80}${DIA})(?=[^.!?\n]{0,80}?${HH})`,
-      'g',
-    ),
-    sozinho: () => true,
-  },
+  // #3673 — o particípio ABRE a frase ("Confirmado: manicure dia 29/10 às 9h"), com dia e hora
+  // no trecho: na própria frase ou no cartão das linhas de baixo ("Confirmado ✅\n📅 06/11\n🕒
+  // 10h"). O original pôs esta forma no `agendaStallGate`; aqui ela ganha a isenção do
+  // compromisso que o contato já tem (lembrete e confirmação de presença passam) e vale também
+  // no turno que consultou a agenda. "Confirmado!" seguido de texto fecha a frase no "!" e não
+  // chega à data: não é afirmação.
+  { re: /(?<=(?:^|[.!?\n,:;])\W*)(confirmad|marcad|remarcad|trocad)[oa]s?\b/g, sozinho: () => true, comDiaEHora: true },
   { re: /(?<=(?:^|[.!?\n,:;])\W*)(agendad)[oa]s?\b/g, sozinho: () => true },
   // 1ª pessoa: "Marquei sua avaliação para 05/11 às 10h" — e não "Marquei na sua ficha".
   { re: /\b(agend|marqu|reserv|remarqu)ei\b/g, sozinho: () => false },
+  // Remarcação com outras palavras ("foi alterada para", "mudou para", "troca feita" — o
+  // "posso fazer a troca?" que a busca de horários ensina): só com dia e hora no trecho.
+  {
+    re: /\b(?:(?:esta|ficou|foi|fica|estao|ficaram|foram)\s+(?:(?:ja|e)\s+){0,2}(trocad|alterad|mudad|transferid)[oa]s?|(troca)\s+(?:foi\s+)?(?:feita|realizada|efetuada)|fiz a (troca)|(mud|pass)ou\s+(?:para|pra))\b/g,
+    sozinho: () => false,
+    comDiaEHora: true,
+  },
 ];
 
-const FIM_DE_FRASE = /[!?\n]|(?<!\b(?:dra?|sra?|prof))\.(?!\d)/g;
+// Remarcação: a hora NOVA é o que se confere. A afirmação que fecha a frase ("Pronto,
+// remarcado!") alcança a frase seguinte, e a sem hora não basta — todo contato que remarca
+// tem compromisso, e a isenção a soltaria.
+const TROCA = /^(?:remarc|remarqu|troc|alter|mud|transfer|pass)/;
+
+// `i`: "Dr." e "Dra." com maiúscula — é assim que a oferta nomeia o profissional — não fecham
+// a frase em `horaConferida`, que lê o corpo com a caixa original.
+const FIM_DE_FRASE = /[!?\n]|(?<!\b(?:dra?|sra?|prof))\.(?!\d)/gi;
 
 function fraseEm(b: string, i: number): { ini: number; fim: number } {
   let ini = 0;
@@ -239,27 +314,44 @@ function fraseEm(b: string, i: number): { ini: number; fim: number } {
   return { ini, fim: b.length };
 }
 
-/** A frase da afirmação — e, quando ela fecha a linha, as duas linhas seguintes (o 📅/🕒 da mensagem de agendamento). */
+/**
+ * A frase da afirmação — e, quando ela fecha a linha (o resto da linha é só emoji ou
+ * pontuação: "Agendado! ✅"), as duas linhas não vazias seguintes: o 📅/🕒 da mensagem de
+ * agendamento. A linha que oferece horário não é do cartão ("Confirmado! 😊\nPara o retorno,
+ * tenho 20/11 às 9h").
+ */
 function alcance(b: string, f: { ini: number; fim: number }): string {
   const frase = b.slice(f.ini, f.fim);
   const resto = b.slice(f.fim);
-  const fechaALinha = b[f.fim - 1] === '\n' || /^[ \t]*(?:\n|$)/.test(resto);
-  return fechaALinha ? frase + (resto.match(/^[^\n]*(?:\n[^\n]*){0,2}/)?.[0] ?? '') : frase;
+  const restoDaLinha = b[f.fim - 1] === '\n' ? '' : (resto.match(/^[^\n]*/)?.[0] ?? '');
+  if (/[\p{L}\p{N}]/u.test(restoDaLinha)) return frase;
+  const cartao: string[] = [];
+  for (const linha of resto.slice(restoDaLinha.length).split('\n')) {
+    if (linha.trim() === '') continue;
+    if (cartao.length === 2 || OFERTA.test(linha)) break;
+    cartao.push(linha);
+  }
+  return [frase + restoDaLinha, ...cartao].join('\n');
 }
 
 /** Cada afirmação de que algo FOI agendado, com o trecho que ela cobre. */
 export function afirmacoes(corpo: string): string[] {
   const b = semAcento(corpo);
   const out: string[] = [];
-  for (const { re, sozinho } of AFIRMACOES) {
+  for (const { re, sozinho, comDiaEHora } of AFIRMACOES) {
     for (const m of b.matchAll(re)) {
       const i = m.index ?? 0;
       if (NEGACAO.test(b.slice(Math.max(0, i - 20), i))) continue;
       const f = fraseEm(b, i);
       const frase = b.slice(f.ini, f.fim);
       if (frase.trimEnd().endsWith('?')) continue;
-      const trecho = alcance(b, f);
       const participio = m.slice(1).find((g) => g !== undefined) ?? '';
+      let trecho = alcance(b, f);
+      if (TROCA.test(participio) && !DIA_E_HORA.test(trecho)) {
+        const seguinte = alcance(b, fraseEm(b, f.fim));
+        if (!OFERTA.test(seguinte)) trecho += seguinte;
+      }
+      if (comDiaEHora && !DIA_E_HORA.test(trecho)) continue;
       const assunto = assuntoDaOracao(frase, i - f.ini);
       if (assunto === 'agenda' || (assunto === null && (sozinho(participio) || DIA_E_HORA.test(trecho)))) {
         out.push(trecho);
@@ -321,13 +413,17 @@ const razaoSemFonte = (lista: string) =>
   'Consulte a agenda do dia que vai citar e escreva SOMENTE os horários que ela devolver; não complete ' +
   'a lista de cabeça. Se o número é duração, chegada ou horário de funcionamento, escreva sem hora ' +
   '("uma hora e meia", "15 minutos antes").';
+// Depois de uma marcação, consultar a agenda de novo não devolve o horário marcado (agora
+// ocupado pelo próprio cliente, o #512): o ensino manda manter a marcação, não reconsultar.
+const razaoDepoisDeMarcar = (lista: string) =>
+  `Estes horários não vieram da agenda nem da marcação gravada nesta resposta: ${lista}. ${SAIDA_DEPOIS_DE_MARCAR}`;
 
 export function avaliarHorarios(corpo: string, agora: Date, h: HorariosDaAgenda | undefined): VereditoDoHorario {
   if (h === undefined || !h.ativo) return { pass: true };
   const doContato = new Set(h.doContato.map(minuto).filter((m): m is number => m !== null));
   const livres = new Set(h.livres.map(minuto).filter((m): m is number => m !== null));
   const escalar = h.vetosAnteriores >= 2;
-  const doMinuto = (c: HorarioCitado) => Math.floor(c.instante / 60_000);
+  const minutos = (c: HorarioCitado) => instantesDe(c).map((t) => Math.floor(t / 60_000));
 
   if (!h.marcouNesteTurno) {
     // Falar do compromisso que o cliente JÁ tem é legítimo: os horários do TRECHO da
@@ -337,7 +433,9 @@ export function avaliarHorarios(corpo: string, agora: Date, h: HorariosDaAgenda 
     // semana se o trace mostrar afirmação assim escapando.
     const semMarcacao = afirmacoes(corpo).some((trecho) => {
       const citados = horariosCitados(trecho, agora, h.fuso);
-      return citados.length > 0 ? !citados.every((c) => doContato.has(doMinuto(c))) : doContato.size === 0;
+      return citados.length > 0
+        ? !citados.every((c) => minutos(c).some((m) => doContato.has(m)))
+        : doContato.size === 0;
     });
     if (semMarcacao) {
       return { pass: false, code: 'agenda_confirmou_sem_marcar', reason: escalar ? SAIDA_SEM_AFIRMAR : RAZAO_CONFIRMOU };
@@ -347,15 +445,20 @@ export function avaliarHorarios(corpo: string, agora: Date, h: HorariosDaAgenda 
   const semFonte = horariosCitados(corpo, agora, h.fuso).filter(
     (c) =>
       horaConferida(corpo, c.pos, h.consultouHorarios) &&
-      !livres.has(doMinuto(c)) &&
-      !doContato.has(doMinuto(c)),
+      !minutos(c).some((m) => livres.has(m) || doContato.has(m)),
   );
   if (semFonte.length === 0) return { pass: true };
   const lista = [...new Set(semFonte.map((c) => c.rotulo))].slice(0, 12).join(', ');
   return {
     pass: false,
     code: 'horario_sem_fonte',
-    reason: escalar ? (h.marcouNesteTurno ? SAIDA_DEPOIS_DE_MARCAR : SAIDA_SEM_HORARIO) : razaoSemFonte(lista),
+    reason: h.marcouNesteTurno
+      ? escalar
+        ? SAIDA_DEPOIS_DE_MARCAR
+        : razaoDepoisDeMarcar(lista)
+      : escalar
+        ? SAIDA_SEM_HORARIO
+        : razaoSemFonte(lista),
   };
 }
 

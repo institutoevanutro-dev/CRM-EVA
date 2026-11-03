@@ -6,9 +6,12 @@ titulo: Agente não confirma horário sem agendar, remarcação não duplica e t
 
 Uma resposta que abre a frase com "Confirmado", "Agendado" ou "Marcado", com dia e
 horário, agora é barrada antes do envio quando nada foi marcado naquela resposta,
-mesmo que o assistente tenha consultado a agenda. Confirmar a presença ou lembrar
-um horário que o cliente já tem continua passando. A regra mora na conferência de
-horários da agenda, a mesma que aparece no painel Segurança do agente.
+mesmo que o assistente tenha consultado a agenda — também quando o dia e o horário
+vêm no cartão das linhas de baixo (📅 e 🕒). O mesmo vale para "Remarcado", "troca
+feita" ou "foi alterada para" quando a remarcação não foi gravada. Confirmar a
+presença ou lembrar um horário que o cliente já tem continua passando. A regra
+mora na conferência de horários da agenda, a mesma que aparece no painel
+Segurança do agente.
 
 As descrições das ferramentas de agenda passam a mandar a remarcação mover o mesmo
 compromisso, em vez de marcar um segundo e deixar o antigo no lugar.

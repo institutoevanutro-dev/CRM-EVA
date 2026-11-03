@@ -171,3 +171,42 @@ describe("VETOS_IRREVOGAVEIS cobre todo código que manda parar, com os nomes de
     expect(VETOS_IRREVOGAVEIS.has("messaging_window_closed")).toBe(false);
   });
 });
+
+/**
+ * FIAÇÃO — a regra pura só cala a correção se o turno marca as razões. O invariante
+ * (`turno-mudo-pede-uma-correcao.test.ts`) dirige só o `send_message`; apagar a marca no
+ * `send_media` ou no `send_template`, ou a repetição do `turnoDescartado`, deixava a suíte
+ * verde e um contato que pediu para sair pagando a correção com as ferramentas de escrita.
+ */
+describe("fiação no turno: toda razão do silêncio chega à regra", () => {
+  const FONTE = fs.readFileSync(path.join(process.cwd(), "lib/agent-engine/agent/inbound-turn.ts"), "utf8");
+  const trecho = (de: string, ate: string): string => {
+    const i = FONTE.indexOf(de);
+    expect(i, `âncora sumiu: ${de}`).toBeGreaterThan(-1);
+    const j = FONTE.indexOf(ate, i + de.length);
+    expect(j, `âncora sumiu: ${ate}`).toBeGreaterThan(i);
+    return FONTE.slice(i, j);
+  };
+
+  it.each([
+    ["send_message", "send_message: tool({", "update_lead_state: tool({"],
+    ["send_media", "send_media: tool({", "send_template: tool({"],
+    ["send_template", "send_template: tool({", "search_knowledge: tool({"],
+  ])("%s: o ramo final do veto marca o veto que manda parar", (_tool, de, ate) => {
+    const corpo = trecho(de, ate);
+    const ramo = corpo.slice(corpo.lastIndexOf("if (chain.status === 'vetoed') {"));
+    const fim = ramo.indexOf("return { ok: false");
+    expect(fim, "o ramo do veto sumiu").toBeGreaterThan(0);
+    expect(ramo.slice(0, fim)).toContain("if (VETOS_IRREVOGAVEIS.has(chain.code)) vetoIrrevogavel = true;");
+  });
+
+  it("o descarte soma a pessoa no comando, a resposta descartada e o fim pela guarda de repetição", () => {
+    const m = FONTE.match(/turnoDescartado: ([^,\n]+),/);
+    expect(m?.[1]?.split("||").map((s) => s.trim()).sort()).toEqual([
+      "pessoaAssumiuNoTurno",
+      "repeticaoEncerrouOTurno",
+      "respostaDescartadaNoTurno",
+    ]);
+    expect(trecho("const silencioDoTurno = () => ({", "});")).toContain("vetoIrrevogavel,");
+  });
+});

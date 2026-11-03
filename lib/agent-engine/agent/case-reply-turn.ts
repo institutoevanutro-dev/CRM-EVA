@@ -239,6 +239,8 @@ export function createCaseReplyTurnHandler(deps: InboundTurnDeps) {
     await runAgentTurn(deps, job, pool, ctx, {
       channelSessionId: caseConversation.channelSessionId,
       conversationId: caseConversation.conversationId,
+      // O horário que a equipe combinou (um encaixe fora da grade) pode ser repassado.
+      notaDaEquipe: casos.map((c) => c.body ?? '').join('\n'),
       buildOpening: ({ previous, leadState, context, notesIndexBlock, projeta }) =>
         buildCaseReplyOpeningMessage(casos, previous, leadState, context, notesIndexBlock, projeta),
     });

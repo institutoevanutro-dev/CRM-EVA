@@ -48,21 +48,27 @@ export async function emitVetoActivity(
   return r.routed ? { routed: true } : { routed: false, reason: r.reason };
 }
 
+/**
+ * O motivo legível de cada gate. O texto é GRAVADO em `crm_lead_activities.reason` e traduzido
+ * na LEITURA (`t(item.reason)` na timeline e no painel do Inbox): cada valor precisa de uma
+ * chave igual, byte a byte, em `lib/i18n/dicionario.ts` (bloco "Fase B").
+ */
+export const MOTIVO_DO_VETO_POR_GATE: Readonly<Record<string, string>> = {
+  stop: "Não enviei: o contato pediu para parar de receber mensagens",
+  window: "Não enviei: fora da janela de horário permitida",
+  pacing: "Não enviei: limite de ritmo de envio atingido",
+  budget: "Não enviei: orçamento de IA esgotado",
+  warmup: "Não enviei: número ainda em aquecimento",
+  promise: "Não enviei: a mensagem prometia algo que não posso garantir",
+  unscheduled_followup:
+    "Não enviei: a mensagem prometia uma nova tentativa ou resposta que não foi programada",
+  internal_vocabulary:
+    "Não enviei: a mensagem usava termos internos do sistema que o cliente não deve ler",
+  horario_da_agenda:
+    "Não enviei: a mensagem citava horário que a agenda não devolveu ou dizia que estava agendado sem ter marcado",
+};
+
 /** Motivo legível — o humano lê "não enviei porque", não um código de gate. */
 export function vetoReason(gate: string, code: string): string {
-  const porGate: Record<string, string> = {
-    stop: "Não enviei: o contato pediu para parar de receber mensagens",
-    window: "Não enviei: fora da janela de horário permitida",
-    pacing: "Não enviei: limite de ritmo de envio atingido",
-    budget: "Não enviei: orçamento de IA esgotado",
-    warmup: "Não enviei: número ainda em aquecimento",
-    promise: "Não enviei: a mensagem prometia algo que não posso garantir",
-    unscheduled_followup:
-      "Não enviei: a mensagem prometia uma nova tentativa ou resposta que não foi programada",
-    internal_vocabulary:
-      "Não enviei: a mensagem usava termos internos do sistema que o cliente não deve ler",
-    horario_da_agenda:
-      "Não enviei: a mensagem citava horário que a agenda não devolveu ou dizia que estava agendado sem ter marcado",
-  };
-  return porGate[gate] ?? `Não enviei: bloqueado pela regra "${gate}" (${code})`;
+  return MOTIVO_DO_VETO_POR_GATE[gate] ?? `Não enviei: bloqueado pela regra "${gate}" (${code})`;
 }

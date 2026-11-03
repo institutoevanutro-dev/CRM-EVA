@@ -9,6 +9,7 @@ import {
   avaliarHorarios,
   colherDaFerramenta,
   horariosCitados,
+  instantesCitados,
   marcouComSucesso,
   RAZAO_CONFIRMOU,
   SAIDA_DEPOIS_DE_MARCAR,
@@ -430,11 +431,98 @@ const CONSULTOU: Caso[] = [
   'Tenho 05/11 às 10h, que termina às 11h.',
 ].map((t) => caso(t, t, {}, t.includes('tem 1h30') ? 'VETO horario_sem_fonte' : 'PASS'));
 
+// As frases da revisão do porte (lote 4a). O paciente pediu 05/11 às 15h; a agenda devolveu
+// outros horários. Cada linha falhava antes da correção, no sentido do nome.
+const L15 = '2026-11-05T18:00:00.000Z';
+const L16 = '2026-11-05T19:00:00.000Z';
+const S10 = '2026-11-06T13:00:00.000Z'; // sexta 06/11 10h
+const S14 = '2026-11-06T17:00:00.000Z';
+const SAB9 = '2026-11-07T12:00:00.000Z';
+const D10_9 = '2026-11-10T12:00:00.000Z';
+const R20 = ['2026-11-20T12:00:00.000Z', '2026-11-20T13:00:00.000Z']; // 20/11 9h e 10h
+const PEDIU_15H = { livres: [L10, L11, L16], ...C };
+const CARTAO = '\n📅 06/11 (sexta)\n🕒 10h';
+// Remarcar 05/11 9h para 06/11 10h sem chamar a remarcação.
+const REMARCOU_DE_BOCA = [
+  'Pronto, remarcado! Sua avaliação agora é 06/11 às 10h ✅',
+  'Troca feita! ✅ Sua avaliação agora é dia 06/11 às 10h.',
+  'Prontinho, trocado! Te esperamos 06/11 às 10h 😊',
+  `Remarcado ✅${CARTAO}`,
+  'Sua avaliação foi alterada para 06/11 às 10h.',
+  'Sua avaliação mudou para 06/11 às 10h.',
+  'Sua avaliação foi transferida para 06/11 às 10h.',
+  'Sua avaliação passou para 06/11 às 10h.',
+  'Sua avaliação foi remarcada! Te esperamos 06/11 às 10h.',
+];
+
+const REVISAO: Caso[] = [
+  // A recusa do horário pedido DEPOIS da hora, com a oferta certa.
+  caso('OK recusa depois: não tenho disponibilidade', 'Quinta, 05/11, às 15h não tenho disponibilidade, mas tenho às 16h.', { livres: [L16], ...C }, 'PASS'),
+  caso('OK recusa depois: não tenho vaga', 'Para o dia 05/11 às 15h não tenho vaga, mas tenho às 16h.', { livres: [L16], ...C }, 'PASS'),
+  caso('OK recusa depois: não temos horário;', 'No dia 05/11, às 15h não temos horário; tenho às 16h.', { livres: [L16], ...C }, 'PASS'),
+  caso('OK recusa depois: não consigo encaixar', 'Dia 05/11 às 15h infelizmente não consigo encaixar, mas tenho às 16h.', { livres: [L16], ...C }, 'PASS'),
+  caso('OK recusa depois: hora antes da data', 'Às 15h do dia 05/11 não tenho vaga, mas tenho às 16h.', { livres: [L16], ...C }, 'PASS'),
+  caso('TP recusa depois + alternativa inventada', 'Para o dia 05/11 às 15h não tenho vaga, mas tenho às 16h.', { ...C }, 'VETO horario_sem_fonte'),
+  caso('TP "não tenho às 16h" não solta as 15h', 'Tenho 05/11 às 15h, não tenho às 16h.', { livres: [L16], ...C }, 'VETO horario_sem_fonte'),
+  caso('OK "não tenho às 16h" com as 15h livres', 'Tenho 05/11 às 15h, não tenho às 16h.', { livres: [L15], ...C }, 'PASS'),
+  // A oração que OFERECE a hora: a recusa que vem depois é dos outros horários.
+  caso('TP oferta + "não tenho mais vagas"', 'Tenho 05/11 às 15h, não tenho mais vagas nesse dia.', { ...C }, 'VETO horario_sem_fonte'),
+  caso('OK oferta + "não tenho mais vagas"', 'Tenho 05/11 às 15h, não tenho mais vagas nesse dia.', { livres: [L15], ...C }, 'PASS'),
+  caso('TP oferta + "a agenda está cheia" sem consulta', 'Tenho horário com a Dra. Ana dia 05/11 às 15h, a agenda está cheia no resto do dia.', {}, 'VETO horario_sem_fonte'),
+  caso('OK não temos vaga 😕', 'Dia 05/11 às 15h não temos vaga 😕 Tenho 10h, 11h ou 16h.', PEDIU_15H, 'PASS'),
+  caso('OK não tenho disponível', 'Dia 05/11 às 15h não tenho disponível. Tenho 10h, 11h ou 16h.', PEDIU_15H, 'PASS'),
+  caso('OK não consigo 😕', 'Dia 05/11 às 15h não consigo 😕 Mas tenho 10h, 11h ou 16h.', PEDIU_15H, 'PASS'),
+  caso('OK marcado por outra pessoa', 'Dia 05/11 às 15h acabou de ser marcado por outra pessoa. Tenho 10h, 11h ou 16h.', PEDIU_15H, 'PASS'),
+  caso('OK já foi marcado por outra paciente', 'Dia 05/11 às 15h já foi marcado por outra paciente. Tenho 10h, 11h ou 16h.', PEDIU_15H, 'PASS'),
+  caso('OK agenda cheia', 'Dia 05/11 às 15h a agenda está cheia. Tenho 10h, 11h ou 16h.', PEDIU_15H, 'PASS'),
+  caso('OK não vai dar', 'Dia 05/11 às 15h não vai dar, mas tenho 10h, 11h ou 16h.', PEDIU_15H, 'PASS'),
+  caso('OK já foi tomado', 'Dia 05/11 às 15h já foi tomado. Tenho 10h, 11h ou 16h.', PEDIU_15H, 'PASS'),
+  caso('OK já foi 😕', 'Dia 05/11 às 15h já foi 😕 Tenho 10h, 11h ou 16h.', PEDIU_15H, 'PASS'),
+  caso('residual: já está reservado (também é como se afirma marcação)', 'Dia 05/11 às 15h já está reservado. Tenho 10h, 11h ou 16h.', PEDIU_15H, 'VETO agenda_confirmou_sem_marcar'),
+  // Faixa solta, término e funcionamento.
+  caso('OK faixa solta depois de marcar', 'Pronto! 06/11, 14h às 15h, com a Dra. Ana ✅', { marcouNesteTurno: true, doContato: [S14], livres: [S10], ...C }, 'PASS'),
+  caso('OK término previsto depois de marcar', 'Agendado para 06/11 às 14h. Término previsto às 15h.', { marcouNesteTurno: true, doContato: [S14], livres: [S10], ...C }, 'PASS'),
+  caso('OK lembrete com faixa solta', 'Sua avaliação está confirmada: 05/11, 9h às 10h.', { doContato: [APPT9] }, 'PASS'),
+  caso('OK horário de atendimento (consultou)', 'Tenho 05/11 às 10h, 11h ou 16h. Nosso horário de atendimento: 8h às 18h.', PEDIU_15H, 'PASS'),
+  caso('OK funcionamos 8h-19h (consultou)', 'Tenho 05/11 às 10h, 11h ou 16h. Funcionamos seg a sex 8h-19h.', PEDIU_15H, 'PASS'),
+  caso('TP faixa solta: o início é conferido', 'Tenho 05/11, 14h às 15h.', { livres: [L10], ...C }, 'VETO horario_sem_fonte'),
+  // O cartão do WhatsApp sem marcação.
+  caso('TP Confirmado ✅ + cartão (consultou)', `Confirmado ✅${CARTAO}`, { livres: [S10], ...C }, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP saudação + Confirmado ✅ + cartão', `Tudo certo, Maria! Confirmado ✅${CARTAO}`, { livres: [S10], ...C }, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP Marcado ✅ + cartão (consultou)', `Marcado ✅${CARTAO}`, { livres: [S10], ...C }, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP Confirmado ✅ + cartão sem consulta', `Confirmado ✅${CARTAO}`, {}, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP Agendado! ✅ + cartão, com outro compromisso', `Agendado! ✅${CARTAO}`, { doContato: [APPT9] }, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP agendada! 🎉 + cartão, com outro compromisso', `Sua limpeza de pele está agendada! 🎉${CARTAO}`, { doContato: [APPT9] }, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP cartão depois de linha em branco', 'Prontinho! Sua avaliação está agendada!\n\n📅 Sexta, 06/11\n🕒 10h', { doContato: [APPT9] }, 'VETO agenda_confirmou_sem_marcar'),
+  caso('OK cartão depois de marcar', `Confirmado ✅${CARTAO}`, { marcouNesteTurno: true, doContato: [S10], livres: [S10], ...C }, 'PASS'),
+  caso('OK cartão do compromisso que o contato já tem', 'Confirmado ✅\n📅 05/11 (quinta)\n🕒 9h', { doContato: [APPT9] }, 'PASS'),
+  caso('OK Confirmado! 😊 + oferta na linha de baixo', 'Confirmado, Maria! 😊\nPara o retorno, tenho 20/11 às 9h ou 10h.', { doContato: [APPT9], livres: R20, ...C }, 'PASS'),
+  // Remarcação afirmada sem remarcar (veto) e depois de remarcar (passa).
+  ...REMARCOU_DE_BOCA.map((t) => caso(`TP remarcou de boca: ${t}`, t, { doContato: [APPT9] }, 'VETO agenda_confirmou_sem_marcar')),
+  caso('TP remarcou de boca (consultou)', REMARCOU_DE_BOCA[0]!, { doContato: [APPT9], livres: [S10], ...C }, 'VETO agenda_confirmou_sem_marcar'),
+  ...REMARCOU_DE_BOCA.map((t) => caso(`OK remarcou de verdade: ${t}`, t, { marcouNesteTurno: true, doContato: [APPT9, S10], livres: [S10], ...C }, 'PASS')),
+  caso('OK valor alterado não é remarcação', 'O valor da avaliação foi alterado.', {}, 'PASS'),
+  caso('OK evento mudou de data', 'O evento mudou para 20/11 às 19h.', {}, 'PASS'),
+  caso('OK foi remarcada! + oferta de retorno', 'Sua consulta foi remarcada! Para o retorno, tenho 20/11 às 9h.', { doContato: [APPT9], livres: R20, ...C }, 'PASS'),
+  // A hora antes da data, numa mensagem com duas datas.
+  caso('OK hora antes da data, duas datas', 'Tenho às 9h ou às 10h na quinta, 05/11, e às 14h na sexta, 06/11.', { livres: [APPT9, L10, S14], ...C }, 'PASS'),
+  caso('OK hora antes da data, parênteses', 'Tenho 10h ou 14h na sexta (06/11) e 9h no sábado (07/11).', { livres: [S10, S14, SAB9], ...C }, 'PASS'),
+  caso('OK amanhã às 9h não é a data da outra frase', 'Sua avaliação de amanhã às 9h segue de pé! Para o retorno tenho 06/11 às 14h.', { doContato: [AMANHA9], livres: [S14], ...C }, 'PASS'),
+  caso('TP grade inventada com a hora antes da data', 'Tenho 9h, 9h15 e 10h na quinta (05/11) e na sexta (06/11) às 14h.', { livres: [L11, S14], ...C }, 'VETO horario_sem_fonte'),
+  caso('OK às 10h na quinta (05/11) ou às 14h na sexta', 'Tenho horário às 10h na quinta (05/11) ou às 14h na sexta (06/11). Qual prefere?', { livres: [L10, S14], ...C }, 'PASS'),
+  caso('OK consigo às 10h de quinta (05/11)', 'Consigo às 10h de quinta (05/11) ou às 14h de sexta (06/11).', { livres: [L10, S14], ...C }, 'PASS'),
+  caso('TP data com hora própria não empresta a dela', 'Tenho 05/11 às 9h e 10h e 06/11 às 10h.', { livres: [S10], ...C }, 'VETO horario_sem_fonte'),
+  // "Dr." e "Dra." com maiúscula não fecham a frase.
+  caso('TP oferta com Dr. maiúsculo sem consulta', 'Tenho horário com o Dr. André dia 05/11 às 15h.', {}, 'VETO horario_sem_fonte'),
+  caso('OK evento com Dra. maiúsculo (consultou)', 'O evento com a Dra. Ana é dia 20/11 às 19h. Para a consulta, tenho 10/11 às 9h.', { livres: [D10_9], ...C }, 'PASS'),
+];
+
 describe('o corpus medido', () => {
   it('as tabelas têm o tamanho medido — linha apagada não passa calada', () => {
     // 121 frases de clínica, 26 das críticas e 13 de turno que consultou. 18 delas dependem
     // da forma com o particípio abrindo a frase ("Confirmado: dia/hora", porte do #3673).
-    expect([CLINICA.length, CRITICAS.length, CONSULTOU.length]).toEqual([121, 26, 13]);
+    // E 68 da revisão do porte (lote 4a).
+    expect([CLINICA.length, CRITICAS.length, CONSULTOU.length, REVISAO.length]).toEqual([121, 26, 13, 68]);
   });
 
   it.each(CLINICA)('clínica — $nome → $esperado', ({ corpo, estado, esperado }) => {
@@ -447,6 +535,36 @@ describe('o corpus medido', () => {
 
   it.each(CONSULTOU)('turno que consultou — $nome → $esperado', ({ corpo, estado, esperado }) => {
     expect(veredito(corpo, estado, { livres: [L10], consultouHorarios: true })).toBe(esperado);
+  });
+
+  it.each(REVISAO)('revisão — $nome → $esperado', ({ corpo, estado, esperado }) => {
+    expect(veredito(corpo, estado)).toBe(esperado);
+  });
+
+  it('hora antes da data: cada hora fica com a data da oração dela, e a ambígua leva as duas no rótulo', () => {
+    const c = horariosCitados('Tenho às 9h ou às 10h na quinta, 05/11, e às 14h na sexta, 06/11.', AGORA_CLINICA, FUSO);
+    expect(c.map((x) => x.rotulo)).toEqual(['05/11 9h', '05/11 10h', '05/11 ou 06/11 14h']);
+    const v = avaliarHorarios(
+      'Tenho 9h, 9h15 e 10h na quinta (05/11) e na sexta (06/11) às 14h.',
+      AGORA_CLINICA,
+      base({ livres: [L11, S14] }),
+    );
+    expect(!v.pass && v.reason).toContain('05/11 9h, 05/11 9h15, 05/11 10h.');
+  });
+});
+
+describe('a nota do responsável (case_reply_turn) é fonte do horário', () => {
+  // O encaixe que a equipe combinou fora da grade: a agenda nunca o devolve.
+  const NOTA = 'consegui encaixe com a Dra. Ana 10/11 às 15h, oferece pra ela';
+  const REPASSE = 'Boa notícia, Maria! Conseguimos um encaixe para você dia 10/11 às 15h com a Dra. Ana 😊 Posso confirmar?';
+
+  it('o repasse sem a nota é vetado; com os horários da nota, sai', () => {
+    const daNota = instantesCitados(NOTA, AGORA_CLINICA, FUSO);
+    expect(daNota).toEqual(['2026-11-10T18:00:00.000Z']);
+    expect(veredito(REPASSE, {})).toBe('VETO horario_sem_fonte');
+    expect(veredito(REPASSE, { livres: daNota })).toBe('PASS');
+    // Depois de consultar a grade do dia (9h e 10h), o encaixe continua valendo.
+    expect(veredito(REPASSE, { livres: [D10_9, ...daNota], ...C })).toBe('PASS');
   });
 });
 
@@ -488,6 +606,18 @@ describe('a escalada depois de dois vetos', () => {
     expect(reason('Tenho 05/11: 9h, 9h15', { livres: [L10], ...C })).toContain('05/11 9h, 05/11 9h15');
   });
 
+  it('⭐ depois de uma marcação, o 1º ensino já manda manter a marcação — não reconsultar a agenda', () => {
+    // Uma nova consulta não devolve o horário que acabou de ser marcado (o #512): "escreva
+    // SOMENTE os horários que ela devolver" faria o modelo largar a marcação do cliente.
+    const r = reason(
+      'Pronto! Sua avaliação está agendada para 05/11 às 10h. Também tenho 05/11 às 15h, se preferir.',
+      { marcouNesteTurno: true, doContato: [L10], livres: [L11], ...C },
+    );
+    expect(r).toContain('05/11 15h');
+    expect(r).toContain(SAIDA_DEPOIS_DE_MARCAR);
+    expect(r).not.toContain('Consulte a agenda');
+  });
+
   it('os dois códigos são os que o turno conta para escalar', () => {
     expect([...VETOS_DO_HORARIO].sort()).toEqual(['agenda_confirmou_sem_marcar', 'horario_sem_fonte']);
   });
@@ -496,7 +626,20 @@ describe('a escalada depois de dois vetos', () => {
 describe('os textos de ensino não criam outro veto', () => {
   const v = avaliarHorarios('Tenho 05/11: 9h, 9h15', AGORA_CLINICA, base({ livres: [L10] }));
   const razaoSemFonte = v.pass ? '' : v.reason;
-  const textos = [SAIDA_SEM_HORARIO, SAIDA_SEM_AFIRMAR, SAIDA_DEPOIS_DE_MARCAR, RAZAO_CONFIRMOU, razaoSemFonte];
+  const w = avaliarHorarios(
+    'Pronto! Sua avaliação está agendada para 05/11 às 10h. Também tenho 05/11 às 15h.',
+    AGORA_CLINICA,
+    base({ marcouNesteTurno: true, doContato: [L10], livres: [L11] }),
+  );
+  const razaoDepoisDeMarcar = w.pass ? '' : w.reason;
+  const textos = [
+    SAIDA_SEM_HORARIO,
+    SAIDA_SEM_AFIRMAR,
+    SAIDA_DEPOIS_DE_MARCAR,
+    RAZAO_CONFIRMOU,
+    razaoSemFonte,
+    razaoDepoisDeMarcar,
+  ];
 
   it.each(textos)('nem promessa de humano, nem de retorno, nem nome de ferramenta: %s', (t) => {
     expect(t.length).toBeGreaterThan(40);
@@ -568,5 +711,26 @@ describe('fiação no turno', () => {
     expect(agenda).toContain('agendaToolCalledThisTurn = true;');
     const confirmacao = trecho("name === 'crm_confirm_appointment'", 'rawTools[name] = mcpTool;');
     expect(confirmacao).not.toContain('colherDaFerramenta');
+  });
+
+  it('a leitura da abertura: relógio do turno, 24h para trás e até 50 linhas; o bloco só com o que não terminou', () => {
+    const abertura = trecho('const aberturaDoTurno =', 'const compromissosBlock');
+    // `clock()`: com `new Date()` o invariante de relógio fixo não alcança esta leitura.
+    expect(abertura).toContain('const aberturaDoTurno = clock();');
+    expect(abertura).toContain('new Date(aberturaDoTurno.getTime() - 86_400_000), 50)');
+    expect(trecho('const compromissosBlock = renderCompromissos(', ');')).toContain(
+      'compromissosDoTurno.filter((c) => c.ends_at !== null && new Date(c.ends_at) >= aberturaDoTurno)',
+    );
+    expect(trecho('const horariosDaAgenda = ()', 'marcouNesteTurno,')).toContain(
+      '...compromissosDoTurno.map((c) => new Date(c.starts_at).toISOString())',
+    );
+  });
+
+  it('case_reply_turn: a nota do responsável chega ao gate como fonte', () => {
+    const caso = fs.readFileSync(path.join(process.cwd(), 'lib/agent-engine/agent/case-reply-turn.ts'), 'utf8');
+    expect(caso).toMatch(/runAgentTurn\(deps, job, pool, ctx, \{[^}]*notaDaEquipe: casos\.map/);
+    expect(trecho('const horariosDaAgenda = ()', 'marcouNesteTurno,')).toContain(
+      'instantesCitados(input.notaDaEquipe',
+    );
   });
 });

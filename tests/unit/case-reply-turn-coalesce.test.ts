@@ -124,6 +124,12 @@ describe("case_reply_turn — casos pendentes da mesma conversa entram num turno
     expect(abertura).toContain("exame liberado");
     expect(abertura).not.toContain("de outra conversa");
     expect(abertura).toContain("numa única resposta");
+    // A nota dos casos do turno vai ao gate de horário como fonte: o encaixe que a equipe
+    // combinou fora da grade pode ser repassado (revisão do porte do #3596).
+    const nota = vi.mocked(runAgentTurn).mock.calls[0]![4]!.notaDaEquipe;
+    expect(nota).toContain("retorno marcado");
+    expect(nota).toContain("exame liberado");
+    expect(nota).not.toContain("de outra conversa");
 
     const busca = chamadas.find((c) => c.sql.includes("select id, payload from job_queue"))!;
     expect(busca.sql).toMatch(/organization_id = \$1/);

@@ -33,6 +33,9 @@ import type * as Repeticao from "@/lib/agent-engine/guardrails/repeticao-na-conv
  * Veto e correção (porte do upstream #3673): tentativa vetada que terminou em texto
  * solto ainda pede a correção; o veto que manda parar (opt-out, conversa com a
  * equipe) e o pulo silencioso da guarda de repetição, não.
+ *
+ * Lembrete do compromisso que o contato tem (revisão do porte do #3596): a leitura da
+ * abertura, no relógio do turno, chega ao gate de horário e ao bloco do prompt.
  */
 
 const container = process.env.TEST_DB_CONTAINER;
@@ -250,6 +253,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   enviados = [];
+  // Antes de `contacts`: a FK do compromisso para o contato é RESTRICT.
+  await pool.query("delete from calendar_appointments where organization_id = $1", [ORG]);
   await pool.query("delete from send_ledger where organization_id = $1", [ORG]);
   await pool.query("delete from agent_inbox_items where organization_id = $1", [ORG]);
   await pool.query("delete from messages where organization_id = $1", [ORG]);
@@ -269,6 +274,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  await pool.query("delete from calendar_appointments where organization_id = $1", [ORG]);
   await pool.query("delete from job_queue where organization_id = $1", [ORG]);
   await pool.query("delete from event_log where organization_id = $1", [ORG]);
   await pool.end();
@@ -346,6 +352,34 @@ describe("o turno de resposta que terminou sem mensagem ao cliente", () => {
       "nada foi marcado nesta resposta",
     );
     expect(prompts[0]).not.toContain("nada foi marcado nesta resposta");
+  });
+
+  it("⭐ lembrete dos compromissos do contato — um que terminou há pouco e um futuro — sai sem veto", async () => {
+    // A leitura da abertura (porte do #3596) cobre 24h para trás e até 50 linhas, no RELÓGIO
+    // DO TURNO; o bloco do prompt mostra só o que não terminou. Sem ela no gate, o
+    // `doContato` fica vazio e o lembrete leva `agenda_confirmou_sem_marcar`. O relógio do
+    // `turno()` é 28/07/2026 15h em São Paulo: um compromisso acabou às 10h, o outro é dia 30.
+    await pool.query(
+      `insert into calendar_appointments (id, organization_id, contact_id, title, starts_at, ends_at, time_zone, status)
+       values ($1,$2,$3,'Consulta que já terminou','2026-07-28T12:00:00Z','2026-07-28T13:00:00Z','America/Sao_Paulo','confirmed'),
+              ($4,$2,$3,'Consulta que ainda vem','2026-07-30T12:00:00Z','2026-07-30T13:00:00Z','America/Sao_Paulo','confirmed')`,
+      [crypto.randomUUID(), ORG, CONTACT, crypto.randomUUID()],
+    );
+    // O que os gatilhos do compromisso enfileiraram não é o turno deste teste.
+    await pool.query(`update job_queue set status = 'done' where organization_id = $1 and status = 'pending'`, [ORG]);
+    const lembrete =
+      "Sua consulta de 28/07 às 9h está confirmada ✅. Sua consulta de 30/07 às 9h também está confirmada.";
+    const { fake, prompts } = modelo([enviar(lembrete), texto("ok")]);
+    await turno(fake, { sessao: SESSION_VETO, conversa: crypto.randomUUID() });
+
+    expect(
+      enviados,
+      "o lembrete dos compromissos que o contato tem foi vetado — a leitura da abertura não chegou ao gate",
+    ).toEqual([lembrete]);
+    expect(prompts[0], "o compromisso futuro não entrou no bloco do prompt").toContain("Consulta que ainda vem");
+    expect(prompts[0], "o compromisso que já terminou entrou no bloco do prompt").not.toContain(
+      "Consulta que já terminou",
+    );
   });
 
   it("cortada e recuperada pela correção: a resposta inteira sai e não há aviso", async () => {

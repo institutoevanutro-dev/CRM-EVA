@@ -9772,6 +9772,12 @@ export const DICIONARIO: Traducoes = {
   "Não enviei: a mensagem usava termos internos do sistema que o cliente não deve ler": {
     es: "No envié: el mensaje usaba términos internos del sistema que el cliente no debe leer",
   },
+  "Não enviei: a mensagem prometia uma nova tentativa ou resposta que não foi programada": {
+    es: "No envié: el mensaje prometía un nuevo intento o una respuesta que no fue programada",
+  },
+  "Não enviei: a mensagem citava horário que a agenda não devolveu ou dizia que estava agendado sem ter marcado": {
+    es: "No envié: el mensaje citaba un horario que la agenda no devolvió o decía que estaba agendado sin haberlo registrado",
+  },
   "A sugestão de retomar contato venceu sem decisão": {
     es: "La sugerencia de retomar contacto venció sin decisión",
   },
