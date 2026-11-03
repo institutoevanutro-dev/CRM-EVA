@@ -334,6 +334,7 @@ Regra no banco: `tests/invariants/comando-cala-o-automatico.test.ts` (6 casos).
 
 | J11.10 | A conversa que o automático ESCALOU aparece na Fila | `status='pending'` sem dono entra na aba e é contada pelo badge | FAIL → PASS |
 | J11.11 | O número da fila é o MESMO para o cliente e para a equipe | `getQueuePosition` (o "você é o 5º" que o cliente ouve) e `getQueuePositions` (o "3º" da tela) contam os mesmos estados | FAIL → PASS |
+| J11.12 | O balão da IA diz QUAL agente respondeu | "IA · <agente>" com o nome gravado no envio; linha antiga diz só "IA"; resposta pronta continua "Resposta pronta", sem nome — `tests/e2e/inbox-rotulo-de-origem.spec.ts` | spec escrita, ainda não rodada |
 
 **O achado que esta jornada abriu, e como ele cresceu.** A primeira rodada
 registrou aqui "a conversa escalada não aparece em aba nenhuma" como pendência de
@@ -2557,6 +2558,7 @@ Contrato da rota, sem banco: `tests/unit/tags-vocabulario-rota.test.ts`.
 | J24.4 | Excluir mostra o aviso de quantas regras continuam escrevendo a etiqueta | **NÃO COBERTO pela tela** — a regra está no invariante (`excluir … NÃO apaga a regra`), o AVISO não foi visto por ninguém |
 | J24.5 | Quem é `viewer`/`agent` não chega à tela | **PASS por leitura de código + invariante** (`viewer é recusado antes de qualquer escrita`). O atalho de platform admin saiu da página e da rota na triagem: `fn_role_at_least` não conhece platform admin, então a tela oferecia três botões que todos voltavam 403 |
 | J24.6 | O painel em espanhol | **CORRIGIDO na triagem, sem prova de tela** — seis chamadas `t()` recebiam template literal com interpolação, que `traduzir()` nunca casa: o diálogo inteiro e os dois toasts saíam em português para quem escolheu espanhol, e o guarda de i18n não vê `TemplateExpression` |
+| J24.7 | O +N das etiquetas na lista diz no title quais ficaram de fora | spec escrita, ainda não rodada — `tests/e2e/inbox-rotulo-de-origem.spec.ts` (o tooltip nativo não abre no toque) |
 ## Lote 12 · G2 — Inbox: painel do contato e leads recentes (PRs #909, #944, #946)
 
 **PENDENTE POR EXECUÇÃO — nenhuma linha desta seção foi provada em tela.** Ela

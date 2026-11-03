@@ -66,6 +66,10 @@ const CONTATO_A = "ce000781-0000-4000-8000-0000000000a1";
 const SESSAO_A = "ce000781-0000-4000-8000-0000000000a2";
 const CONVERSA_A = "ce000781-0000-4000-8000-0000000000a3";
 
+/** Um agente de IA em cada organização (#3665): o nome gravado é só o da casa. */
+const AGENTE_A = "ce000781-0000-4000-8000-0000000000a4";
+const AGENTE_B = "ce000781-0000-4000-8000-0000000000b4";
+
 /** O contexto que `resolveAuthDual` monta no ramo do token (`via: "token"`). */
 function ctxDoTokenDeA(): HandlerCtx {
   return {
@@ -129,6 +133,12 @@ beforeAll(async () => {
     sessao: SESSAO_B,
     conversa: CONVERSA_B,
   });
+  await pool.query(
+    `insert into ai_agents (id, organization_id, name, system_prompt)
+     values ($1, $2, ' Agente da Casa ', 's'), ($3, $4, 'Agente do Vizinho', 's')
+     on conflict (id) do nothing`,
+    [AGENTE_A, ORG_A, AGENTE_B, ORG_B],
+  );
 }, 60_000);
 
 afterAll(async () => {
@@ -186,5 +196,45 @@ describe("a conversa da outra organização", () => {
 
   it("e o banco da vítima continua sem a linha — recusar depois de gravar não conta", async () => {
     expect(await mensagensDa(CONVERSA_B)).toBe(0);
+  });
+});
+
+/**
+ * O NOME DO AGENTE NO BALÃO (#3665) É LIDO COM A MESMA RÉGUA.
+ *
+ * O envio lê `ai_agents.name` para gravar "IA · <nome>" na linha — e este
+ * handler roda com service role, sem RLS (`pgComoSupabase` conecta como
+ * `postgres`, como aqui). Só o filtro por organização impede que um ator com
+ * o id do agente da casa vizinha grave o nome DELA numa conversa daqui. O
+ * desfecho é medido na linha gravada, não no objeto devolvido.
+ * Portado do projeto original (DeskcommCRM, PR #3665 de @webtecnica).
+ */
+describe("o nome do agente gravado na mensagem é o da PRÓPRIA organização (#3665)", () => {
+  async function metadataDaLinha(id: string): Promise<{ nome: string | null; tem: boolean } | undefined> {
+    const { rows } = await pool.query<{ nome: string | null; tem: boolean }>(
+      "select metadata->>'ai_actor_name' as nome, metadata ? 'ai_actor_name' as tem from messages where id = $1",
+      [id],
+    );
+    return rows[0];
+  }
+
+  it("o agente da casa: a linha guarda o nome cadastrado, sem os espaços das pontas", async () => {
+    const msg = await sendMessageHandler(
+      db,
+      { organization_id: ORG_A, actor: { type: "ai_agent", id: AGENTE_A, role: "agent" }, requestId: "req-3665-casa" },
+      texto(CONVERSA_A),
+    );
+    expect((await metadataDaLinha(msg.id))?.nome).toBe("Agente da Casa");
+  });
+
+  it("o id do agente da organização vizinha: a mensagem é gravada, e sem nome nenhum", async () => {
+    const msg = await sendMessageHandler(
+      db,
+      { organization_id: ORG_A, actor: { type: "ai_agent", id: AGENTE_B, role: "agent" }, requestId: "req-3665-vizinho" },
+      texto(CONVERSA_A),
+    );
+    const linha = await metadataDaLinha(msg.id);
+    expect(linha, "a mensagem não foi gravada — o caso mediria o vazio").toBeDefined();
+    expect(linha?.tem).toBe(false);
   });
 });

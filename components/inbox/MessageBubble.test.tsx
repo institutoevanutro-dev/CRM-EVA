@@ -129,6 +129,24 @@ describe("MessageBubble — rótulo de origem", () => {
     expect(screen.getByText("IA")).toBeInTheDocument();
   });
 
+  // Portado do projeto original (DeskcommCRM, PR #3665 de @webtecnica).
+  it("#3649: IA com o nome do agente gravado mostra 'IA · <nome>', com o robô", () => {
+    render(<MessageBubble message={msg({ sent_via: "ai", metadata: { ai_actor_name: " Bia da Locação " } })} />);
+    expect(screen.getByText("IA · Bia da Locação").querySelectorAll("svg")).toHaveLength(1);
+  });
+
+  it("#3649: só `ai_actor_name` vale — apelido em metadata é entrada do cliente e não vira nome", () => {
+    render(<MessageBubble message={msg({ sent_via: "ai", metadata: { agent_name: "Forjado", ai_agent_name: "Forjado" } })} />);
+    expect(screen.getByText("IA")).toBeInTheDocument();
+    expect(screen.queryByText(/Forjado/)).not.toBeInTheDocument();
+  });
+
+  it("resposta pronta com nome gravado continua 'Resposta pronta', sem nome e sem robô", () => {
+    render(<MessageBubble message={msg({ sent_via: "ai", metadata: { resposta_pronta_id: "item-1", ai_actor_name: "Agente X" } })} />);
+    expect(screen.getByText("Resposta pronta").querySelector("svg")).toBeNull();
+    expect(screen.queryByText(/Agente X/)).not.toBeInTheDocument();
+  });
+
   it("mensagem recebida (inbound) não leva rótulo de origem", () => {
     render(
       <MessageBubble message={msg({ sent_via: "external_device", direction: "inbound" })} />,
