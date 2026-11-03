@@ -35,8 +35,22 @@ export const dynamic = "force-dynamic";
  * ajuda ninguém a decidir nada e custa memória do contêiner do self-hoster.
  * Quem passa daqui limpa em levas, e a resposta diz que truncou (`varreu_tudo`)
  * em vez de calar — silêncio aqui leria como "não há mais duplicata".
+ *
+ * O teto só vale porque a leitura é paginada: o PostgREST corta toda resposta
+ * no `max_rows` (1000 em `supabase/config.toml`) SEM erro, e o `.limit(2001)`
+ * de antes devolvia 1.000 linhas com `varreu_tudo: true`.
  */
 const TETO_DE_VARREDURA = 2000;
+
+/**
+ * Tamanho de cada página da varredura: o `max_rows` do PostgREST. Numa
+ * instalação com `max_rows` MENOR, a página vem curta sem ser o fim — o fim é
+ * provado pelo `count` exato ou por página VAZIA (#2561).
+ */
+const TAMANHO_DA_PAGINA = 1000;
+
+const COLUNAS_DO_CONTATO =
+  "id, name, display_name, email, email_normalized, phone_number, is_merged_into, is_anonymized, source_metadata, created_at, last_activity_at";
 
 /** Tamanho da página ao ler identidades do Instagram (o `max-rows` padrão do PostgREST é 1000). */
 const PAGINA_DE_IDENTIDADES = 1000;
@@ -55,22 +69,36 @@ export async function GET(): Promise<Response> {
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("contacts")
-    .select(
-      "id, name, display_name, email, email_normalized, phone_number, is_merged_into, is_anonymized, source_metadata, created_at, last_activity_at",
-    )
-    .eq("organization_id", org.orgId)
-    .is("is_merged_into", null)
-    .eq("is_anonymized", false)
-    .order("created_at", { ascending: true })
-    .limit(TETO_DE_VARREDURA + 1);
-  if (error) {
-    return fail("internal_error", error.message, 500, { requestId });
+
+  // Varredura PAGINADA por `range`, em ordem estável (`created_at`, `id`). O
+  // `+1` além do teto é o que prova que existia mais do que ela alcança.
+  const lidas: Omit<ContatoParaDeduplicar, "do_instagram">[] = [];
+  let totalDeVivos: number | null = null;
+  let acabou = false;
+  for (let pagina = 0; lidas.length <= TETO_DE_VARREDURA && !acabou; pagina++) {
+    const inicio = lidas.length;
+    const pedaco = Math.min(TAMANHO_DA_PAGINA, TETO_DE_VARREDURA + 1 - lidas.length);
+    const { data, error, count } = await supabase
+      .from("contacts")
+      .select(COLUNAS_DO_CONTATO, pagina === 0 ? { count: "exact" } : undefined)
+      .eq("organization_id", org.orgId)
+      .is("is_merged_into", null)
+      .eq("is_anonymized", false)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(inicio, inicio + pedaco - 1);
+    if (error) {
+      return fail("internal_error", error.message, 500, { requestId });
+    }
+    if (pagina === 0) totalDeVivos = count ?? null;
+    const lote = (data ?? []) as unknown as Omit<ContatoParaDeduplicar, "do_instagram">[];
+    lidas.push(...lote);
+    acabou = lote.length === 0 || (totalDeVivos !== null && lidas.length >= totalDeVivos);
   }
 
-  const brutas = (data ?? []).slice(0, TETO_DE_VARREDURA) as unknown as Omit<ContatoParaDeduplicar, "do_instagram">[];
-  const varreuTudo = (data ?? []).length <= TETO_DE_VARREDURA;
+  const brutas = lidas.slice(0, TETO_DE_VARREDURA);
+  const varreuTudo =
+    totalDeVivos !== null ? totalDeVivos <= TETO_DE_VARREDURA : lidas.length <= TETO_DE_VARREDURA;
 
   // Quem tem identidade de Instagram: só org + canal, interseção em memória.
   // Um `.in("contact_id", [...até 2000 UUIDs])` estourava a URL do GET, o
