@@ -17,8 +17,8 @@ faixas como "das 8h às 18h" (e o fim de "14h às 15h"), término previsto,
 eventos, promoções, horário de remédio, resultados e confirmação de pagamento
 não são conferidos. Recusar o horário que o cliente pediu ("às 15h não tenho
 vaga, mas tenho às 16h") passa, e o horário oferecido no lugar continua
-conferido. No repasse da resposta de um caso, o dia e horário que a equipe
-escreveu na nota contam como vindos da agenda.
+conferido. No repasse da resposta de um caso, só a afirmação de que está agendado
+é conferida: o horário que a equipe combinou fora da agenda pode ser repassado.
 
 Quando barra, o assistente refaz a resposta. Se insistir, a resposta sai sem
 horário, ou, depois de uma marcação de verdade, só com o horário marcado. A

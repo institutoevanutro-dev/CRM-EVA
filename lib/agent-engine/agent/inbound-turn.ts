@@ -183,7 +183,7 @@ import {
   type GateContext,
   VETOS_IRREVOGAVEIS,
 } from '../guardrails/before-send';
-import { colherDaFerramenta, instantesCitados, VETOS_DO_HORARIO } from '../guardrails/horario-da-agenda';
+import { colherDaFerramenta, VETOS_DO_HORARIO } from '../guardrails/horario-da-agenda';
 import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
@@ -1786,12 +1786,6 @@ export interface AgentTurnInput {
   conversationId: string;
   /** Id da mensagem que criou o job inbound; não é usado por follow-ups. */
   inboundMessageId?: string;
-  /**
-   * A nota do responsável que o `case_reply_turn` repassa. O dia+horário dela conta como
-   * fonte para o gate de horário (`instantesCitados`): o encaixe que a equipe combinou fora
-   * da grade não está na agenda, e quem o combinou é a fonte.
-   */
-  notaDaEquipe?: string;
   /** monta a abertura APÓS o ritual de leitura (inbound vs. bloco temporal do follow-up). */
   buildOpening: (ritual: {
     previous: LeadCheckpointRow | null;
@@ -3279,20 +3273,18 @@ async function executarTurnoDoAgente(
   let fusoDaAgenda: string | null = compromissosDoTurno.find((c) => c.time_zone)?.time_zone ?? null;
   // `fusoUtilizavel`: um fuso inválido faria o Intl lançar dentro do gate, e o turno
   // falharia; cai no da organização.
-  // A nota do responsável (`case_reply_turn`) entra em `livres`: uma pessoa combinou aquele
-  // horário, e sem isso o encaixe fora da grade nunca chegaria ao cliente.
-  const horariosDaAgenda = (): NonNullable<GateContext['horariosDaAgenda']> => {
-    const fuso = fusoUtilizavel(fusoDaAgenda, fusoDaOrg);
-    return {
-      ativo: agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds),
-      fuso,
-      livres: [...horariosLivresDoTurno, ...instantesCitados(input.notaDaEquipe ?? '', clock(), fuso)],
-      doContato: [...compromissosDoTurno.map((c) => new Date(c.starts_at).toISOString()), ...marcadosNesteTurno],
-      marcouNesteTurno,
-      vetosAnteriores: horarioVetoCount,
-      consultouHorarios: consultouHorariosNesteTurno,
-    };
-  };
+  // `soAfirmacao`: no repasse de um caso só "está agendado" é conferido. O horário que a
+  // equipe combinou (um encaixe fora da grade) não vem da agenda, e a nota dela é a fonte.
+  const horariosDaAgenda = (): NonNullable<GateContext['horariosDaAgenda']> => ({
+    ativo: agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds),
+    fuso: fusoUtilizavel(fusoDaAgenda, fusoDaOrg),
+    livres: [...horariosLivresDoTurno],
+    doContato: [...compromissosDoTurno.map((c) => new Date(c.starts_at).toISOString()), ...marcadosNesteTurno],
+    marcouNesteTurno,
+    vetosAnteriores: horarioVetoCount,
+    consultouHorarios: consultouHorariosNesteTurno,
+    soAfirmacao: job?.kind === 'case_reply_turn',
+  });
   // Lido pelo `casePromiseGate`: true só depois de `schedule_followup` AGENDAR com
   // sucesso neste turno. Libera apenas a promessa de retorno do próprio assistente.
   let followupAgendadoNesteTurno = false;

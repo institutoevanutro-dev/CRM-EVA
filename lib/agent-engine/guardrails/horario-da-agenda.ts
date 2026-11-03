@@ -50,6 +50,11 @@ export interface HorariosDaAgenda {
    * consulta, toda hora datada é conferida; sem ela, só a hora de uma frase de oferta.
    */
   consultouHorarios: boolean;
+  /**
+   * Só a afirmação de marcação é conferida (`case_reply_turn`): o horário que a equipe
+   * combinou — um encaixe fora da grade — não vem da agenda, e quem o combinou é a fonte.
+   */
+  soAfirmacao?: boolean;
 }
 
 /** Os códigos deste gate — o call site conta os vetos dele para escalar o ensino. */
@@ -82,11 +87,9 @@ function semAcento(texto: string): string {
 
 // Hora que não é horário de atendimento: faixa ("das 8h às 18h"; na faixa solta "14h às 15h",
 // só o fim), duração, chegada, jejum, prazo, término, funcionamento, e a hora que a frase diz
-// estar ocupada — também com a recusa DEPOIS dela ("às 15h não tenho vaga, mas tenho às 16h").
-// A recusa em 1ª pessoa só vale com o objeto dela (vaga, horário…) ou fechando a oração: em
-// "tenho 05/11 às 15h, não tenho às 16h" o "não tenho" é das 16h, e as 15h seguem conferidas.
-// E o "não tenho" de ANTES da hora não atravessa vírgula, ";" nem "mas": em "às 15h não tenho
-// vaga, mas tenho às 16h" as 16h são a oferta, e são conferidas.
+// estar ocupada. O "não tenho" de ANTES da hora não atravessa vírgula, ";" nem "mas": em "às
+// 15h não tenho vaga, mas tenho às 16h" as 16h são a oferta, e são conferidas. "Fim da tarde"
+// é período, não término: "só consigo no fim da tarde: 17h30" oferece as 17h30.
 // "Já está reservado" (sem "por outra pessoa") fica de fora de propósito: é também como o
 // modelo afirma uma marcação, e excluir a hora soltaria a afirmação.
 const FAIXA_ABRE = /\b(?:das?|de|entre)\s+$/;
@@ -94,15 +97,34 @@ const FAIXA_CONTINUA = /^\s*(?:as|a|ate|e|-|–)\s*\d/;
 const FAIXA_FECHA = /\b(?:das?|de|entre)\s+\d{1,2}(?:h\d{0,2}|:\d{2})?\s*(?:as|a|ate|e|-|–)\s*$/;
 const FAIXA_SOLTA_FECHA = /\b\d{1,2}(?:h\d{0,2}|:\d{2})\s*(?:as|a|ate|-|–)\s*$/;
 const NAO_E_HORARIO_ANTES =
-  /\b(?:dura|duracao|leva|levam|jejum|cerca de|em media|em torno de|aproximadamente|chegue|chegar|chegada|antes|antecedencia|ate|a partir d[ao]s?|depois d[ao]s?|abre|abrem|abrimos|fecha|fecham|fechamos|funciona|funcionam|funcionamos|termina|terminam|termino(?: previsto)?|fim(?: previsto)?|encerra|acaba|horarios? de (?:atendimento|funcionamento))\b[^0-9\n]{0,12}$|\bnao (?:tenho|temos|ha)\b(?:(?!\bmas\b)[^.!?\n,;]){0,25}$/;
+  /\b(?:dura|duracao|leva|levam|jejum|cerca de|em media|em torno de|aproximadamente|chegue|chegar|chegada|antes|antecedencia|ate|a partir d[ao]s?|depois d[ao]s?|abre|abrem|abrimos|fecha|fecham|fechamos|funciona|funcionam|funcionamos|termina|terminam|termino(?: previsto)?|fim(?!\s+d[aoe]\s+(?:tarde|manha|dia|noite|semana)\b)(?: previsto)?|encerra|acaba|horarios? de (?:atendimento|funcionamento))\b[^0-9\n]{0,12}$|\bnao (?:tenho|temos|ha)\b(?:(?!\bmas\b)[^.!?\n,;]){0,25}$/;
 const NAO_E_HORARIO_DEPOIS = /^\s*(?:de duracao|de jejum|antes\b|de antecedencia)/;
+// Ocupada, como sempre foi: a palavra até 25 caracteres depois da hora, sem outra hora no meio.
 const OCUPADA_DEPOIS =
-  /^(?:(?!\d{1,2}(?:h|:\d))[^.!?\n]){0,25}\b(?:ocupad|indisponive|lotad|preenchid|tomad|cheia|(?:marcad|reservad|agendad)[oa]s? por (?:outr|alguem)|ja foi\b(?=\s*(?:[,;:]|mas\b|$|[^\w\s]))|nao (?:esta |tem |ha )?(?:mais )?(?:disponive|livre|vaga)|nao (?:tenho|temos|tem|ha|consigo|vai dar|da)\b(?=[^.!?\n\d]{0,20}?\b(?:vagas?\b|horarios?\b|disponi|livres?\b|encaix|agenda|mais\b)|\s*(?:[,;:]|mas\b|$|[^\w\s])))/;
-// A oração da hora a OFERECE ("tenho 05/11 às 15h, não tenho mais vagas nesse dia"): o que vem
-// depois fala dos outros horários, e as 15h são conferidas. Vírgula, ";", "(" ou outra hora
-// no meio separam a oferta da hora.
-const OFERTA_DA_HORA =
-  /\b(?:tenho|temos|consigo|ha vagas?|disponive(?:l|is)|livres?|encaix\w*|opc(?:ao|oes))\b(?:(?!\d{1,2}(?:h|:\d))[^,;(])*$/;
+  /^(?:(?!\d{1,2}(?:h|:\d))[^.!?\n]){0,25}\b(?:ocupad|indisponive|lotad|preenchid|nao (?:esta |tem |ha )?(?:mais )?(?:disponive|livre|vaga))/;
+// A recusa em outras palavras só vale COLADA na hora — no meio, só espaço, advérbio ou a data
+// da própria hora: "às 15h do dia 05/11 infelizmente não consigo", "às 15h a agenda está
+// cheia", "às 15h já foi", "às 15h acabou de ser marcado por outra pessoa". Depois de vírgula,
+// ";" ou travessão ela fala dos OUTROS horários ("tenho 9h, 10h e 11h15, não tenho mais
+// horários"; "agendada para 06/11 às 10h — a agenda está cheia"), e a hora segue conferida.
+// Exceção, a recusa mais comum: "para 05/11 às 15h, não tenho vaga" e "para 05/11 às 15h, a
+// agenda está cheia" — depois de vírgula ou ":", sem falar do resto ("mais", "outro", "no
+// resto do dia").
+// ⚠️ `\s` (um caractere) e não `\s+` dentro do `*`: `(?:\s+|…)*` explode em backtracking.
+const COLADA = String.raw`(?:\s|(?:infelizmente|ja|ainda|realmente|tambem)\b|(?:d[eo]|n[ao]|para)\s+(?:dia\s+)?\d{1,2}\/\d{1,2}\b|dia\s+\d{1,2}\/\d{1,2}\b|,\s*infelizmente\s*,)*`;
+const RECUSA_1A = String.raw`nao\s+(?:tenho|temos|tem|ha|consigo|vai\s+dar|da)\b`;
+const OBJETO_DA_RECUSA = String.raw`vagas?\b|horarios?\b|disponi|livres?\b|encaix|agenda`;
+const FECHA_A_ORACAO = String.raw`\s*(?:[,;:]|mas\b|$|[^\w\s])`;
+const AGENDA_CHEIA = String.raw`(?:a\s+)?agenda\s+(?:(?:ja|esta|ta|ficou)\s+){1,2}cheia`;
+const RECUSA_DEPOIS = new RegExp(
+  String.raw`^${COLADA}(?:${RECUSA_1A}(?=[^.!?\n\d]{0,20}?\b(?:${OBJETO_DA_RECUSA}|mais\b)|${FECHA_A_ORACAO})` +
+    String.raw`|${AGENDA_CHEIA}` +
+    String.raw`|(?:acabou\s+de\s+ser|foi|esta|ta|ficou)\s+(?:marcad|reservad|agendad)[oa]s?\s+por\s+(?:outr|alguem)` +
+    String.raw`|(?:foi|esta|ta|ficou)\s+tomad|foi\b(?=${FECHA_A_ORACAO}))` +
+    String.raw`|^${COLADA}[,:]\s*(?:(?:infelizmente|ja)\s*,?\s*)?` +
+    String.raw`(?:${RECUSA_1A}(?![^.!?\n,;]{0,20}\b(?:mais|outr\w*)\b)(?=[^.!?\n\d]{0,20}?\b(?:${OBJETO_DA_RECUSA})|${FECHA_A_ORACAO})` +
+    String.raw`|${AGENDA_CHEIA}(?![^.!?\n,;]{0,25}\b(?:mais|outr\w*|resto|restante|demais|depois)\b))`,
+);
 
 function naoEHorario(corpo: string, pos: number, fim: number): boolean {
   const antes = semAcento(corpo.slice(Math.max(0, pos - 30), pos));
@@ -113,7 +135,8 @@ function naoEHorario(corpo: string, pos: number, fim: number): boolean {
     FAIXA_SOLTA_FECHA.test(antes) ||
     NAO_E_HORARIO_ANTES.test(antes) ||
     NAO_E_HORARIO_DEPOIS.test(depois) ||
-    (OCUPADA_DEPOIS.test(depois) && !OFERTA_DA_HORA.test(semAcento(corpo.slice(fraseEm(corpo, pos).ini, pos))))
+    OCUPADA_DEPOIS.test(depois) ||
+    RECUSA_DEPOIS.test(depois)
   );
 }
 
@@ -157,10 +180,16 @@ function anoLocal(instante: number, fuso: string): { ano: number; mes: number; d
   return { ano: p[0] ?? 1970, mes: p[1] ?? 1, dia: p[2] ?? 1 };
 }
 
-// Frase sem data que nomeia o próprio dia ("sua avaliação de amanhã às 9h"): a hora é daquele
-// dia, não da data DD/MM de outra frase. Nome de dia não é resolvido para data (ponytail em
-// `avaliarHorarios`), então essa hora fica de fora, como "às 9h" numa mensagem sem data.
-const DIA_POR_NOME = /\b(?:hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|domingo)\b/;
+// Nome de dia que dá à hora OUTRO dia que não uma data DD/MM ("amanhã às 9h", "na sexta às
+// 15h", "• Quinta: 9h"): hoje, amanhã e o dia da semana — menos o ordinal ("segunda opção",
+// "quinta sessão") e o rótulo da própria data ("quinta (05/11)", "terça-feira, 03/11", "05/11
+// (sexta)"). Nome de dia não é resolvido para data (ponytail em `avaliarHorarios`): a hora
+// dele fica de fora, como "às 9h" numa mensagem sem data.
+// Lê o corpo como veio (acento e caixa): as posições têm de ser as do `corpo`.
+const NOME_DE_DIA =
+  /(?<![\p{L}\p{N}])(?:hoje|amanh[aã]|(?:segunda|ter[cç]a|quarta|quinta|sexta)s?(?:-feira)?|s[aá]bados?|domingos?)(?![\p{L}\p{N}])(?!\s+(?:op[cç](?:[aã]o|[oõ]es)|sess(?:[aã]o|[oõ]es)|vez(?:es)?|doses?|aplica[cç](?:[aã]o|[oõ]es))(?![\p{L}\p{N}]))/giu;
+const ROTULO_ANTES_DA_DATA = /^[ \t,()\-–:]*(?:dia[ \t]+)?$/i;
+const ROTULO_DEPOIS_DA_DATA = /^[ \t,()\-–:]*$/;
 
 /**
  * Cada horário fica com a data `DD/MM` da PRÓPRIA frase: a de antes dele, ou a de depois
@@ -168,6 +197,10 @@ const DIA_POR_NOME = /\b(?:hoje|amanha|segunda|terca|quarta|quinta|sexta|sabado|
  * antes — a não ser que a de depois não tenha hora própria, e aí valem as duas ("às 10h na
  * quinta, 05/11, e às 14h na sexta, 06/11"). Na frase sem data, a mais próxima antes (a
  * mensagem de agendamento põe a hora na linha de baixo do 📅) ou, sem ela, a de depois.
+ *
+ * A hora que um nome de dia ancora fica de fora — decidido por hora, não por frase: o nome é
+ * a âncora mais perto ANTES dela na frase (sem nenhuma antes, a primeira depois), ou é a mais
+ * perto na mesma oração, sem vírgula no meio ("tenho 05/11 às 10h ou às 15h de amanhã").
  *
  * Neste fork, a hora de faixa, duração, chegada, jejum, prazo, funcionamento e a que a
  * frase diz estar ocupada fica de fora (`naoEHorario`): não é horário de atendimento.
@@ -190,16 +223,37 @@ export function horariosCitados(corpo: string, agora: Date, fuso: string): Horar
   const dentroDeData = (p: number) => datas.some((d) => p >= d.pos && p < d.fim);
   const horas = [...corpo.matchAll(HORA)].filter((h) => !dentroDeData(h.index ?? 0));
   const dm = (d: Data) => `${String(d.dia).padStart(2, '0')}/${String(d.mes).padStart(2, '0')}`;
+  const nomes = [...corpo.matchAll(NOME_DE_DIA)]
+    .map((m) => ({ pos: m.index ?? 0, fim: (m.index ?? 0) + m[0].length, nome: true }))
+    .filter(
+      (n) =>
+        !datas.some(
+          (d) =>
+            (d.pos >= n.fim && ROTULO_ANTES_DA_DATA.test(corpo.slice(n.fim, d.pos))) ||
+            (d.fim <= n.pos && ROTULO_DEPOIS_DA_DATA.test(corpo.slice(d.fim, n.pos))),
+        ),
+    );
 
   const out: HorarioCitado[] = [];
   for (const h of horas) {
     const pos = h.index ?? 0;
-    if (naoEHorario(corpo, pos, pos + h[0].length)) continue;
+    const fimDaHora = pos + h[0].length;
+    if (naoEHorario(corpo, pos, fimDaHora)) continue;
     const hora = Number(h[1]);
     const minuto = Number(h[2] ?? h[3] ?? 0);
     if (hora > 23 || minuto > 59) continue;
     const f = fraseEm(corpo, pos);
     const naFrase = datas.filter((d) => d.pos >= f.ini && d.pos < f.fim);
+    const ancoras = [...naFrase.map((d) => ({ pos: d.pos, fim: d.fim, nome: false })), ...nomes]
+      .filter((a) => a.pos >= f.ini && a.pos < f.fim)
+      .sort((a, b) => a.pos - b.pos);
+    const entre = (a: { pos: number; fim: number }) =>
+      a.pos >= fimDaHora ? corpo.slice(fimDaHora, a.pos) : corpo.slice(a.fim, pos);
+    const daHora = ancoras.filter((a) => a.pos < pos).pop() ?? ancoras.find((a) => a.pos > pos);
+    const naOracao = ancoras
+      .filter((a) => !/[,;:]/.test(entre(a)))
+      .sort((a, b) => entre(a).length - entre(b).length)[0];
+    if (daHora?.nome || naOracao?.nome) continue;
     let alvos: Data[];
     if (naFrase.length > 0) {
       const antes = naFrase.filter((d) => d.pos < pos).pop();
@@ -212,7 +266,6 @@ export function horariosCitados(corpo: string, agora: Date, fuso: string): Horar
         alvos = antes ? [antes] : depois ? [depois] : [];
       }
     } else {
-      if (DIA_POR_NOME.test(semAcento(corpo.slice(f.ini, f.fim)))) continue;
       const alvo = datas.filter((d) => d.pos < pos).pop() ?? datas.find((d) => d.pos > pos);
       alvos = alvo ? [alvo] : [];
     }
@@ -226,15 +279,6 @@ export function horariosCitados(corpo: string, agora: Date, fuso: string): Horar
     });
   }
   return out;
-}
-
-/**
- * Os instantes que um texto de PESSOA cita com data e hora — a nota do responsável no
- * `case_reply_turn` ("consegui encaixe 10/11 às 15h"): o encaixe combinado fora da grade
- * não está na agenda, e quem o combinou é a fonte.
- */
-export function instantesCitados(texto: string, agora: Date, fuso: string): string[] {
-  return horariosCitados(texto, agora, fuso).flatMap((c) => instantesDe(c).map((t) => new Date(t).toISOString()));
 }
 
 const ASSUNTO_DE_AGENDA =
@@ -286,10 +330,22 @@ const AFIRMACOES: ReadonlyArray<{ re: RegExp; sozinho: (participio: string) => b
   { re: /(?<=(?:^|[.!?\n,:;])\W*)(agendad)[oa]s?\b/g, sozinho: () => true },
   // 1ª pessoa: "Marquei sua avaliação para 05/11 às 10h" — e não "Marquei na sua ficha".
   { re: /\b(agend|marqu|reserv|remarqu)ei\b/g, sozinho: () => false },
-  // Remarcação com outras palavras ("foi alterada para", "mudou para", "troca feita" — o
-  // "posso fazer a troca?" que a busca de horários ensina): só com dia e hora no trecho.
+  // Remarcação com outras palavras, só com dia e hora no trecho. A troca é inequívoca ("troca
+  // feita" — o "posso fazer a troca?" que a busca de horários ensina).
   {
-    re: /\b(?:(?:esta|ficou|foi|fica|estao|ficaram|foram)\s+(?:(?:ja|e)\s+){0,2}(trocad|alterad|mudad|transferid)[oa]s?|(troca)\s+(?:foi\s+)?(?:feita|realizada|efetuada)|fiz a (troca)|(mud|pass)ou\s+(?:para|pra))\b/g,
+    re: /\b(?:(?:esta|ficou|foi|fica|estao|ficaram|foram)\s+(?:(?:ja|e)\s+){0,2}(trocad)[oa]s?|(troca)\s+(?:foi\s+)?(?:feita|realizada|efetuada)|fiz a (troca))\b/g,
+    sozinho: () => false,
+    comDiaEHora: true,
+  },
+  // "Mudou/passou para" e "foi alterada/transferida" só com o compromisso DO contato como
+  // sujeito ("sua avaliação mudou para"): "o horário da clínica passou para 8h às 19h" e "a
+  // Dra. Ana mudou para quinta os atendimentos" não são remarcação.
+  {
+    re: new RegExp(
+      String.raw`(?<=\b(?:sua|seu|suas|seus)\s+(?:${ASSUNTO_DE_AGENDA.source}|horarios?\b)(?:\s+[^\s.!?,;]+){0,3}\s+)` +
+        String.raw`(?:(?:esta|ficou|foi|fica|estao|ficaram|foram)\s+(?:(?:ja|e)\s+){0,2}(alterad|mudad|transferid)[oa]s?|(mud|pass)ou\s+(?:para|pra))\b`,
+      'g',
+    ),
     sozinho: () => false,
     comDiaEHora: true,
   },
@@ -299,6 +355,9 @@ const AFIRMACOES: ReadonlyArray<{ re: RegExp; sozinho: (participio: string) => b
 // remarcado!") alcança a frase seguinte, e a sem hora não basta — todo contato que remarca
 // tem compromisso, e a isenção a soltaria.
 const TROCA = /^(?:remarc|remarqu|troc|alter|mud|transfer|pass)/;
+// "Seu retorno passou para o mês que vem; tenho 20/11 às 9h": com oferta depois do verbo, o
+// dia e a hora da frase são da oferta, não da mudança.
+const MUDOU = /^(?:alter|mud|transfer|pass)/;
 
 // `i`: "Dr." e "Dra." com maiúscula — é assim que a oferta nomeia o profissional — não fecham
 // a frase em `horaConferida`, que lê o corpo com a caixa original.
@@ -317,8 +376,9 @@ function fraseEm(b: string, i: number): { ini: number; fim: number } {
 /**
  * A frase da afirmação — e, quando ela fecha a linha (o resto da linha é só emoji ou
  * pontuação: "Agendado! ✅"), as duas linhas não vazias seguintes: o 📅/🕒 da mensagem de
- * agendamento. A linha que oferece horário não é do cartão ("Confirmado! 😊\nPara o retorno,
- * tenho 20/11 às 9h").
+ * agendamento. Não é do cartão a linha que oferece horário ("Confirmado! 😊\nPara o retorno,
+ * tenho 20/11 às 9h"), a que pergunta ("Marcado ✅\nPosso reservar o retorno para 20/11 às
+ * 9h?") nem a de outro assunto ("Confirmado ✅\nRecebemos seu pix hoje às 10h32").
  */
 function alcance(b: string, f: { ini: number; fim: number }): string {
   const frase = b.slice(f.ini, f.fim);
@@ -328,7 +388,8 @@ function alcance(b: string, f: { ini: number; fim: number }): string {
   const cartao: string[] = [];
   for (const linha of resto.slice(restoDaLinha.length).split('\n')) {
     if (linha.trim() === '') continue;
-    if (cartao.length === 2 || OFERTA.test(linha)) break;
+    const fora = OFERTA.test(linha) || linha.trimEnd().endsWith('?') || assuntoDaOracao(linha, 0) === 'outro';
+    if (cartao.length === 2 || fora) break;
     cartao.push(linha);
   }
   return [frase + restoDaLinha, ...cartao].join('\n');
@@ -346,6 +407,7 @@ export function afirmacoes(corpo: string): string[] {
       const frase = b.slice(f.ini, f.fim);
       if (frase.trimEnd().endsWith('?')) continue;
       const participio = m.slice(1).find((g) => g !== undefined) ?? '';
+      if (MUDOU.test(participio) && OFERTA.test(frase.slice(i - f.ini))) continue;
       let trecho = alcance(b, f);
       if (TROCA.test(participio) && !DIA_E_HORA.test(trecho)) {
         const seguinte = alcance(b, fraseEm(b, f.fim));
@@ -441,6 +503,7 @@ export function avaliarHorarios(corpo: string, agora: Date, h: HorariosDaAgenda 
       return { pass: false, code: 'agenda_confirmou_sem_marcar', reason: escalar ? SAIDA_SEM_AFIRMAR : RAZAO_CONFIRMOU };
     }
   }
+  if (h.soAfirmacao) return { pass: true };
 
   const semFonte = horariosCitados(corpo, agora, h.fuso).filter(
     (c) =>

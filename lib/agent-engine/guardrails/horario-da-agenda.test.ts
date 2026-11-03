@@ -9,7 +9,6 @@ import {
   avaliarHorarios,
   colherDaFerramenta,
   horariosCitados,
-  instantesCitados,
   marcouComSucesso,
   RAZAO_CONFIRMOU,
   SAIDA_DEPOIS_DE_MARCAR,
@@ -517,12 +516,71 @@ const REVISAO: Caso[] = [
   caso('OK evento com Dra. maiúsculo (consultou)', 'O evento com a Dra. Ana é dia 20/11 às 19h. Para a consulta, tenho 10/11 às 9h.', { livres: [D10_9], ...C }, 'PASS'),
 ];
 
+// A 2ª rodada da revisão (lote 4a). Os TP e OK falhavam na rodada anterior, no sentido do nome;
+// as linhas "guarda" já passavam e medem o que esta rodada não pode abrir.
+const L9 = APPT9; // 05/11 9h livre
+const S15 = '2026-11-06T18:00:00.000Z'; // sexta 06/11 15h
+const AMANHA15 = '2026-11-03T18:00:00.000Z';
+const RET10 = ['2026-11-20T13:00:00.000Z', '2026-11-27T13:00:00.000Z']; // 20/11 e 27/11 10h
+const RODADA2: Caso[] = [
+  // A recusa colada na hora volta a valer só colada: depois de vírgula ou travessão, "não tenho
+  // mais…" e "a agenda está cheia" falam dos outros horários, e a hora segue conferida.
+  caso('TP lista + ", não tenho mais horários"', 'Para 05/11 tenho 9h, 10h e 11h15, não tenho mais horários depois disso.', { livres: [L9, L10], ...C }, 'VETO horario_sem_fonte'),
+  caso('TP lista + ", não consigo mais nada"', 'Para quinta, 05/11, tenho 9h, 10h ou 11h, não consigo mais nada à tarde.', { livres: [L9, L10], ...C }, 'VETO horario_sem_fonte'),
+  caso('TP recusa + lista com 16h inventada', 'Dia 05/11 às 15h não tenho vaga 😕 Tenho 10h, 11h e 16h, não tenho mais horários nesse dia.', { livres: [L10, L11], ...C }, 'VETO horario_sem_fonte'),
+  caso('TP ", a agenda está cheia no resto do dia" sem consulta', 'Tenho 05/11 às 9h ou às 15h, a agenda está cheia no resto do dia.', { livres: [L9] }, 'VETO horario_sem_fonte'),
+  caso('TP "Só tem" + ", não tenho mais vagas"', 'Só tem 05/11 às 15h, não tenho mais vagas nesse dia.', { ...C }, 'VETO horario_sem_fonte'),
+  caso('TP "Encontrei" + ", não temos mais vagas"', 'Encontrei um horário: 05/11 às 15h, não temos mais vagas nesse dia.', { ...C }, 'VETO horario_sem_fonte'),
+  caso('TP ", não tenho nenhum outro horário"', 'Só tem 05/11 às 15h, não tenho nenhum outro horário.', { ...C }, 'VETO horario_sem_fonte'),
+  caso('TP "no fim da tarde: 17h30" é oferta', 'Para 05/11 só consigo no fim da tarde: 17h30.', { livres: [L10], ...C }, 'VETO horario_sem_fonte'),
+  caso('TP agendei + ", não tenho mais vagas", com outro compromisso', 'Agendei sua avaliação para 06/11 às 10h, não tenho mais vagas nesse dia 😊', { doContato: [APPT9] }, 'VETO agenda_confirmou_sem_marcar'),
+  caso('TP agendada + "— a agenda está cheia", com outro compromisso', 'Sua avaliação está agendada para 06/11 às 10h — a agenda está cheia, então chegue no horário.', { doContato: [APPT9] }, 'VETO agenda_confirmou_sem_marcar'),
+  caso('guarda: ", não tenho vaga" recusa o horário pedido', 'Para o dia 05/11 às 15h, não tenho vaga, mas tenho às 16h.', { livres: [L16], ...C }, 'PASS'),
+  caso('guarda: ", não tenho vaga" não solta a alternativa inventada', 'Para o dia 05/11 às 15h, não tenho vaga, mas tenho às 16h.', { ...C }, 'VETO horario_sem_fonte'),
+  caso('guarda: ", infelizmente, não tenho vaga"', 'Dia 05/11 às 15h, infelizmente, não tenho vaga. Tenho às 16h.', { livres: [L16], ...C }, 'PASS'),
+  caso('guarda: ", a agenda está cheia" recusa o horário pedido', 'Para 05/11 às 15h, a agenda está cheia. Tenho às 16h.', { livres: [L16], ...C }, 'PASS'),
+  caso('guarda: "com fim às 15h" depois de marcar', 'Agendado para 06/11 às 14h, com fim às 15h.', { marcouNesteTurno: true, doContato: [S14], livres: [S10], ...C }, 'PASS'),
+  // As exclusões antigas de ocupado/preenchido/indisponível valem sem a guarda de oferta.
+  caso('OK a opção de 05/11 às 15h já foi preenchida', 'Infelizmente a opção de 05/11 às 15h já foi preenchida. Tenho às 16h.', { livres: [L16], ...C }, 'PASS'),
+  caso('OK o encaixe de 05/11 às 15h não está mais disponível', 'O encaixe de 05/11 às 15h não está mais disponível, mas tenho às 16h.', { livres: [L16], ...C }, 'PASS'),
+  caso('OK "Temos um problema: … já está ocupado"', 'Temos um problema: dia 05/11 às 15h já está ocupado 😕 Mas tenho às 16h.', { livres: [L16], ...C }, 'PASS'),
+  caso('OK "temos às 15h ocupado e às 16h livre"', 'No dia 05/11 temos às 15h ocupado e às 16h livre.', { livres: [L16], ...C }, 'PASS'),
+  caso('OK "tenho a seguinte situação: 15h está ocupado"', 'Consultei aqui e, para 05/11, tenho a seguinte situação: 15h está ocupado e 16h está livre.', { livres: [L16], ...C }, 'PASS'),
+  // A linha que pergunta e a de outro assunto não são o cartão da afirmação.
+  caso('OK Confirmado + pergunta do retorno na linha de baixo', 'Confirmado, Maria! 😊\nAproveitando: quer já deixar o retorno marcado para 20/11 às 9h?', { doContato: [APPT9], livres: [R20[0]!], ...C }, 'PASS'),
+  caso('OK Marcado ✅ + pergunta na linha de baixo', 'Marcado ✅\nPosso reservar também o retorno para 20/11 às 9h?', { doContato: [APPT9], livres: [R20[0]!], ...C }, 'PASS'),
+  caso('OK Confirmado ✅ + pix na linha de baixo', 'Confirmado ✅\nRecebemos seu pix hoje às 10h32.', {}, 'PASS'),
+  caso('guarda: remarcado + "combinado?" na frase seguinte', 'Pronto, remarcado! Te esperamos 06/11 às 10h, combinado?', { doContato: [APPT9] }, 'VETO agenda_confirmou_sem_marcar'),
+  caso('FN aceito: Confirmado ✅ + linha que termina em "?"', 'Confirmado ✅\nTe esperamos 06/11 às 10h, combinado?', { doContato: [APPT9] }, 'PASS'),
+  // "Mudou/passou para" e "foi alterado" só com o compromisso do contato como sujeito.
+  caso('OK horário da clínica foi alterado', 'O horário foi alterado para 8h às 19h a partir de 05/11.', {}, 'PASS'),
+  caso('OK horário da Dra. passou para', 'A Dra. Ana passou a atender às quintas; o horário dela passou para 14h às 18h a partir de 12/11.', { doContato: [APPT9] }, 'PASS'),
+  caso('OK nosso horário passou para', 'Nosso horário passou para segunda a sexta, das 8h às 19h.', {}, 'PASS'),
+  caso('OK a Dra. mudou para quinta', 'A Dra. Ana mudou para quinta os atendimentos da tarde, a partir das 14h.', {}, 'PASS'),
+  caso('OK atendimento de sábado mudou', 'O atendimento de sábado mudou para 9h às 13h a partir de 07/11.', {}, 'PASS'),
+  caso('OK retorno passou + oferta na mesma frase', 'Seu retorno passou para o mês que vem; tenho 20/11 às 9h ou 10h.', { doContato: [APPT9], livres: R20, ...C }, 'PASS'),
+  caso('guarda: seu horário passou para, sem remarcar', 'Seu horário passou para 06/11 às 10h.', { doContato: [APPT9] }, 'VETO agenda_confirmou_sem_marcar'),
+  // Nome de dia, decidido por hora.
+  caso('TP "segunda opção" não é dia', 'Tenho 05/11 às 10h. Se preferir uma segunda opção, tenho às 15h.', { livres: [L10], ...C }, 'VETO horario_sem_fonte'),
+  caso('TP "quinta sessão" não é dia', 'Para 05/11 tenho às 10h.\nPara a quinta sessão do pacote, tenho às 15h.', { livres: [L10], ...C }, 'VETO horario_sem_fonte'),
+  caso('OK amanhã às 9h + retorno, mesma frase com ✅', 'Sua avaliação de amanhã às 9h está confirmada ✅ Para o retorno, tenho 20/11 ou 27/11 às 10h, qual prefere?', { doContato: [AMANHA9], livres: RET10, ...C }, 'PASS'),
+  caso('OK "Amanhã às 9h é sua avaliação, e … tenho" (consultou)', 'Amanhã às 9h é sua avaliação, e para o retorno tenho 20/11 às 10h ou 27/11 às 10h.', { doContato: [AMANHA9], livres: RET10, ...C }, 'PASS'),
+  caso('OK "Amanhã às 9h é sua avaliação, e … tenho" (sem consulta)', 'Amanhã às 9h é sua avaliação, e para o retorno tenho 20/11 às 10h ou 27/11 às 10h.', { doContato: [AMANHA9], livres: RET10 }, 'PASS'),
+  caso('OK "às 15h de amanhã" depois de uma data', 'Tenho 05/11 às 10h ou às 15h de amanhã.', { livres: [L10, AMANHA15], ...C }, 'PASS'),
+  caso('OK "Consigo sexta às 10h" na frase da data', 'Para 05/11 não tenho mais nada 😕 Consigo sexta às 10h, pode ser?', { livres: [S10], ...C }, 'PASS'),
+  caso('guarda: grade por dia da semana (certa)', 'Tenho estas opções para 05/11 e 06/11:\n• Quinta: 9h ou 10h\n• Sexta: 14h ou 15h', { livres: [L9, L10, S14, S15], ...C }, 'PASS'),
+  caso('FN aceito: grade por dia da semana (inventada)', 'Tenho estas opções para 05/11 e 06/11:\n• Quinta: 9h ou 10h\n• Sexta: 14h ou 15h', { livres: [L11], ...C }, 'PASS'),
+  caso('guarda: inventada antes de "na sexta"', 'Tenho 05/11 às 11h ou na sexta às 15h.', { livres: [L10, S15], ...C }, 'VETO horario_sem_fonte'),
+];
+
 describe('o corpus medido', () => {
   it('as tabelas têm o tamanho medido — linha apagada não passa calada', () => {
     // 121 frases de clínica, 26 das críticas e 13 de turno que consultou. 18 delas dependem
     // da forma com o particípio abrindo a frase ("Confirmado: dia/hora", porte do #3673).
-    // E 68 da revisão do porte (lote 4a).
-    expect([CLINICA.length, CRITICAS.length, CONSULTOU.length, REVISAO.length]).toEqual([121, 26, 13, 68]);
+    // E 68 da revisão do porte (lote 4a), mais 42 da 2ª rodada.
+    expect([CLINICA.length, CRITICAS.length, CONSULTOU.length, REVISAO.length, RODADA2.length]).toEqual([
+      121, 26, 13, 68, 42,
+    ]);
   });
 
   it.each(CLINICA)('clínica — $nome → $esperado', ({ corpo, estado, esperado }) => {
@@ -541,6 +599,10 @@ describe('o corpus medido', () => {
     expect(veredito(corpo, estado)).toBe(esperado);
   });
 
+  it.each(RODADA2)('revisão, 2ª rodada — $nome → $esperado', ({ corpo, estado, esperado }) => {
+    expect(veredito(corpo, estado)).toBe(esperado);
+  });
+
   it('hora antes da data: cada hora fica com a data da oração dela, e a ambígua leva as duas no rótulo', () => {
     const c = horariosCitados('Tenho às 9h ou às 10h na quinta, 05/11, e às 14h na sexta, 06/11.', AGORA_CLINICA, FUSO);
     expect(c.map((x) => x.rotulo)).toEqual(['05/11 9h', '05/11 10h', '05/11 ou 06/11 14h']);
@@ -553,18 +615,28 @@ describe('o corpus medido', () => {
   });
 });
 
-describe('a nota do responsável (case_reply_turn) é fonte do horário', () => {
-  // O encaixe que a equipe combinou fora da grade: a agenda nunca o devolve.
-  const NOTA = 'consegui encaixe com a Dra. Ana 10/11 às 15h, oferece pra ela';
+describe('case_reply_turn: só a afirmação de marcação é conferida', () => {
+  // O encaixe que a equipe combinou fora da grade: a agenda nunca o devolve, e a nota dela pode
+  // escrevê-lo de qualquer jeito ("na terça às 15h", "dia 10", "amanhã 15h", "das 15h às 16h").
   const REPASSE = 'Boa notícia, Maria! Conseguimos um encaixe para você dia 10/11 às 15h com a Dra. Ana 😊 Posso confirmar?';
+  const REPASSE_TERCA =
+    'Boa notícia, Maria! Conseguimos um encaixe para você na terça, 10/11, às 15h com a Dra. Ana 😊 Posso confirmar?';
+  const CASO = { soAfirmacao: true };
 
-  it('o repasse sem a nota é vetado; com os horários da nota, sai', () => {
-    const daNota = instantesCitados(NOTA, AGORA_CLINICA, FUSO);
-    expect(daNota).toEqual(['2026-11-10T18:00:00.000Z']);
+  it('o repasse do encaixe sai, com ou sem consulta à grade do dia', () => {
+    // Fora do repasse de um caso, o mesmo texto é horário sem fonte.
     expect(veredito(REPASSE, {})).toBe('VETO horario_sem_fonte');
-    expect(veredito(REPASSE, { livres: daNota })).toBe('PASS');
+    expect(veredito(REPASSE, CASO)).toBe('PASS');
+    expect(veredito(REPASSE_TERCA, CASO)).toBe('PASS');
     // Depois de consultar a grade do dia (9h e 10h), o encaixe continua valendo.
-    expect(veredito(REPASSE, { livres: [D10_9, ...daNota], ...C })).toBe('PASS');
+    expect(veredito(REPASSE, { ...CASO, livres: [D10_9], ...C })).toBe('PASS');
+  });
+
+  it('afirmar a marcação que ninguém gravou continua barrado', () => {
+    const AFIRMA = 'Pronto, Maria! Seu encaixe está agendado para 10/11 às 15h com a Dra. Ana ✅';
+    expect(veredito(AFIRMA, CASO)).toBe('VETO agenda_confirmou_sem_marcar');
+    // A equipe marcou de verdade: o compromisso já é do contato.
+    expect(veredito(AFIRMA, { ...CASO, doContato: ['2026-11-10T18:00:00.000Z'] })).toBe('PASS');
   });
 });
 
@@ -726,11 +798,7 @@ describe('fiação no turno', () => {
     );
   });
 
-  it('case_reply_turn: a nota do responsável chega ao gate como fonte', () => {
-    const caso = fs.readFileSync(path.join(process.cwd(), 'lib/agent-engine/agent/case-reply-turn.ts'), 'utf8');
-    expect(caso).toMatch(/runAgentTurn\(deps, job, pool, ctx, \{[^}]*notaDaEquipe: casos\.map/);
-    expect(trecho('const horariosDaAgenda = ()', 'marcouNesteTurno,')).toContain(
-      'instantesCitados(input.notaDaEquipe',
-    );
+  it('case_reply_turn: o gate só confere a afirmação de marcação', () => {
+    expect(trecho('const horariosDaAgenda = ()', '});')).toContain("soAfirmacao: job?.kind === 'case_reply_turn',");
   });
 });
