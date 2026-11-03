@@ -5714,6 +5714,16 @@ export const DICIONARIO: Traducoes = {
   "Enviar anexo": { es: "Enviar adjunto" },
   "Legenda (opcional)": { es: "Descripción (opcional)" },
   Legenda: { es: "Descripción" },
+  // Arquivo arrastado para a caixa (porte do original #3713).
+  "Solte o arquivo para anexar": { es: "Suelta el archivo para adjuntarlo" },
+  "Solte um arquivo por vez.": { es: "Suelta un archivo a la vez." },
+  "Não consegui ler esse arquivo. Salve no computador e arraste de novo, ou use o +.": {
+    es: "No pude leer ese archivo. Guárdalo en la computadora y arrástralo de nuevo, o usa el +.",
+  },
+  "Arquivo de áudio não vai na resposta. Grave pelo microfone ou anexe na nota interna.": {
+    es: "El archivo de audio no va en la respuesta. Graba con el micrófono o adjúntalo en la nota interna.",
+  },
+  "Para: {nome}": { es: "Para: {nome}" },
   "Gravar áudio": { es: "Grabar audio" },
   "Cancelar gravação": { es: "Cancelar grabación" },
   "Enviar áudio": { es: "Enviar audio" },
@@ -6591,7 +6601,6 @@ export const DICIONARIO: Traducoes = {
   "mesmo nome no Instagram e no WhatsApp": {
     es: "mismo nombre en Instagram y en WhatsApp",
   },
-  "Manter este cadastro": { es: "Mantener esta ficha" },
   "Este fica": { es: "Esta se queda" },
   "Será absorvido por quem fica": { es: "Será absorbida por la que se queda" },
   "Conversas, mensagens, negócios e histórico passam para quem fica. O cadastro antigo não é apagado — vira registro de fusão. Não há como desfazer.": {
@@ -6609,6 +6618,68 @@ export const DICIONARIO: Traducoes = {
   "Contatos juntados. {n} registro(s) continuaram no cadastro antigo — veja a auditoria.": {
     es: "Contactos juntados. {n} registro(s) siguieron en la ficha antigua — revisa la auditoría.",
   },
+  // ── Parecidos, comparação e "Juntar com outra ficha" (porte do #3640) ──
+  "nome parecido": { es: "nombre parecido" },
+  "Parecidos — confira": { es: "Parecidos — revisa" },
+  "Fichas com nome parecido. Confira os dados lado a lado antes de juntar: pode ser outra pessoa com nome parecido, como alguém da mesma família.": {
+    es: "Fichas con nombre parecido. Revisa los datos lado a lado antes de juntar: puede ser otra persona con un nombre parecido, como alguien de la misma familia.",
+  },
+  "Não são a mesma pessoa": { es: "No son la misma persona" },
+  "Sugestão dispensada.": { es: "Sugerencia descartada." },
+  "Só gestor pode dispensar.": { es: "Solo un gestor puede descartar." },
+  "Comparar": { es: "Comparar" },
+  "igual nas duas": { es: "igual en las dos" },
+  "Não foi possível carregar as fichas.": { es: "No se pudieron cargar las fichas." },
+  "Origem da ficha": { es: "Origen de la ficha" },
+  "Criada em": { es: "Creada el" },
+  "Negócios": { es: "Negocios" },
+  "Cadastrado": { es: "Registrado" },
+  "Cadastrado (CPFs diferentes)": { es: "Registrado (CPF distintos)" },
+  "Vinculada": { es: "Vinculada" },
+  "IA neste contato": { es: "IA en este contacto" },
+  "Com a equipe (IA pausada)": { es: "Con el equipo (IA en pausa)" },
+  "{nome} pediu para não receber mensagens. Quem fica também deixa de receber, inclusive lembretes de consulta.": {
+    es: "{nome} pidió no recibir mensajes. La que se queda también deja de recibirlos, incluso los recordatorios de cita.",
+  },
+  "{nome} está como Sempre atendimento humano. Quem fica passa a ter a mesma marca.": {
+    es: "{nome} está como Siempre atención humana. La que se queda pasa a tener la misma marca.",
+  },
+  "{nome} está com a IA pausada. Quem fica passa a ser atendido só pela equipe até alguém devolver ao automático.": {
+    es: "{nome} tiene la IA en pausa. La que se queda pasa a ser atendida solo por el equipo hasta que alguien la devuelva al automático.",
+  },
+  "{nome} está oculta do Inbox. Quem fica continua no Inbox, e a IA pode responder.": {
+    es: "{nome} está oculta del Inbox. La que se queda sigue en el Inbox, y la IA puede responder.",
+  },
+  "O número {tel} não passa para quem fica: a ficha guarda um telefone só. Se chegar mensagem desse número, pode nascer uma ficha nova. Se é o número que a pessoa usa, troque o telefone depois de juntar.": {
+    es: "El número {tel} no pasa a la que se queda: la ficha guarda un solo teléfono. Si llega un mensaje de ese número, puede nacer una ficha nueva. Si es el número que la persona usa, cambia el teléfono después de juntar.",
+  },
+  "As duas fichas têm CPF, e são CPFs diferentes: confira se não são duas pessoas. O CPF de {nome} não passa para quem fica.": {
+    es: "Las dos fichas tienen CPF, y son CPF distintos: revisa que no sean dos personas. El CPF de {nome} no pasa a la que se queda.",
+  },
+  "O CPF de {nome} não passa para quem fica.": { es: "El CPF de {nome} no pasa a la que se queda." },
+  "O endereço de {nome} não passa para quem fica.": { es: "La dirección de {nome} no pasa a la que se queda." },
+  "As duas fichas estão ligadas a pacientes diferentes do prontuário. Não dá para juntar.": {
+    es: "Las dos fichas están vinculadas a pacientes distintos de la historia clínica. No se pueden juntar.",
+  },
+  "A ficha ligada ao prontuário tem de ser a que fica.": {
+    es: "La ficha vinculada a la historia clínica tiene que ser la que se queda.",
+  },
+  "Quem ficou passou a não receber mensagens: o outro cadastro tinha pedido para parar.": {
+    es: "La que se quedó dejó de recibir mensajes: la otra ficha había pedido parar.",
+  },
+  "A pausa da IA do outro cadastro não passou para quem ficou. Pause a IA na ficha de quem ficou.": {
+    es: "La pausa de la IA de la otra ficha no pasó a la que se quedó. Pausa la IA en la ficha de la que se quedó.",
+  },
+  "Juntar com outra ficha": { es: "Juntar con otra ficha" },
+  "Escolha a ficha que vai ser absorvida. Confira os dois cadastros antes de juntar.": {
+    es: "Elige la ficha que será absorbida. Revisa las dos fichas antes de juntar.",
+  },
+  "Digite um nome ou telefone para achar a outra ficha.": {
+    es: "Escribe un nombre o teléfono para encontrar la otra ficha.",
+  },
+  "Nenhuma ficha encontrada.": { es: "No se encontró ninguna ficha." },
+  "Voltar à busca": { es: "Volver a la búsqueda" },
+  "Não foi possível buscar agora.": { es: "No se pudo buscar ahora." },
 
   // ─── app/api/v1/contacts/merge/route.ts (DESFECHOS que chegam à tela via showApiError) ───
   "Seleção inválida: escolha um contato principal e ao menos um a ser absorvido.": {
@@ -6624,6 +6695,21 @@ export const DICIONARIO: Traducoes = {
   "Um dos contatos selecionados não está disponível — ele pode ter sido anonimizado ou já mesclado em outro.":
     {
       es: "Uno de los contactos seleccionados no está disponible — puede haber sido anonimizado o ya fusionado en otro.",
+    },
+  "Não foi possível conferir as fichas antes de juntar.": {
+    es: "No se pudieron revisar las fichas antes de juntarlas.",
+  },
+  // app/api/v1/contacts/duplicates/dismiss/route.ts ("Não são a mesma pessoa")
+  "Um dos contatos não está disponível — ele pode ter sido anonimizado ou já mesclado em outro.": {
+    es: "Uno de los contactos no está disponible — puede haber sido anonimizado o ya fusionado en otro.",
+  },
+  "Mesmo telefone ou mesmo e-mail não se dispensa: junte as fichas.": {
+    es: "Mismo teléfono o mismo correo no se descarta: junta las fichas.",
+  },
+  "Não foi possível dispensar a sugestão agora.": { es: "No se pudo descartar la sugerencia ahora." },
+  "A ficha ligada ao prontuário tem de ser a que fica. Se as duas estão ligadas, são pacientes diferentes no prontuário e não se juntam.":
+    {
+      es: "La ficha vinculada a la historia clínica tiene que ser la que se queda. Si las dos están vinculadas, son pacientes distintos en la historia clínica y no se juntan.",
     },
   "Organização ativa não resolvida.": { es: "No se resolvió la organización activa." },
   "Mostrando os duplicados entre os contatos mais antigos. Junte estes e reabra para ver os próximos.": {

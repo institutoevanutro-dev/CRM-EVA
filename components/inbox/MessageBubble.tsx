@@ -246,6 +246,13 @@ export const MessageBubble = memo(function MessageBubble({
     }
     return null;
   })();
+  // #3649 (portado): o nome do agente vem GRAVADO na linha pelo envio, que
+  // descarta o que o chamador mandar nessa chave. Só `ai_actor_name`: outro
+  // apelido em metadata é entrada de quem chamou a API. Só no rótulo "IA": a
+  // "Resposta pronta" é texto da clínica, não do modelo. O nome sai como
+  // cadastrado, sem t() (#1046).
+  const gravado = message.metadata?.ai_actor_name;
+  const nomeDoAgente = senderLabel === "IA" && typeof gravado === "string" ? gravado.trim() : "";
 
   async function reenviar(confirmado: boolean) {
     if (!onReenviar || ocupado) return;
@@ -394,6 +401,7 @@ export const MessageBubble = memo(function MessageBubble({
             {/* O NOME de quem respondeu, ao lado do papel: "Atendente" sozinho
                 não dizia quem da equipe falou com o paciente. */}
             {senderLabel === "Atendente" && nomeDoAutor ? ` · ${nomeDoAutor}` : null}
+            {nomeDoAgente ? ` · ${nomeDoAgente}` : null}
           </div>
         )}
 

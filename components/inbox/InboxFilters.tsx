@@ -33,6 +33,7 @@ import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
 import { useConversationTagVocabulary } from "@/hooks/inbox/useConversationTags";
 import { useConversationCounts } from "@/hooks/inbox/useConversationCounts";
+import { useDepoisDeMontar } from "@/hooks/ui/useDepoisDeMontar";
 import { roleAtLeast, type Role, type VisibilityMode } from "@/lib/auth/types";
 import { SeletorDeAtendente } from "@/components/inbox/SeletorDeAtendente";
 
@@ -208,6 +209,15 @@ export function InboxFilters({ value, onChange }: Props) {
     () => marcadoresEscolhidos(typeof value.tag === "string" ? [value.tag] : (value.tag ?? [])),
     [value.tag],
   );
+  // #3736 — a contagem das abas e o seletor de número NÃO entram no HTML do
+  // servidor nem no primeiro render da hidratação: os dois vêm de react-query e,
+  // quando a resposta chegava no meio da hidratação, o nó aparecia num render que
+  // o React comparava com um HTML sem ele (React #418, `isText=false`).
+  // `depoisDeMontar` é `false` no servidor E no snapshot de servidor do cliente,
+  // então o primeiro render do cliente é idêntico ao HTML por construção; os dois
+  // entram na re-renderização seguinte. Ver `hooks/ui/useDepoisDeMontar.ts`.
+  // Portado do projeto original (DeskcommCRM, PR #3832 de @webtecnica).
+  const depoisDeMontar = useDepoisDeMontar();
   // Os MESMOS filtros que a lista aplicou. Badge que conta o que a aba não mostra
   // manda o atendente procurar trabalho que não existe — a regra já estava escrita
   // na rota; faltava alcançar os filtros ao lado da aba.
@@ -251,8 +261,9 @@ export function InboxFilters({ value, onChange }: Props) {
     value.channel_session_id != null &&
     channels != null &&
     !channels.some((c) => c.id === value.channel_session_id);
-  // Alternador só aparece com 2+ números — com um só não há o que alternar.
-  const showChannelSwitch = (channels?.length ?? 0) >= 2 || filtroForaDaLista;
+  // Alternador só aparece com 2+ números — com um só não há o que alternar. E só
+  // depois de montar: a lista de canais também chega por react-query (#3736).
+  const showChannelSwitch = depoisDeMontar && ((channels?.length ?? 0) >= 2 || filtroForaDaLista);
   // O MESMO tratamento, agora para a etiqueta. Sem ele, o seletor inteiro some
   // com o filtro AINDA APLICADO — a lista fica num subconjunto, às vezes vazio,
   // e nada na tela diz que há filtro nem oferece como tirá-lo.
@@ -642,7 +653,7 @@ export function InboxFilters({ value, onChange }: Props) {
                 className={CLASSE_DA_ABA}
               >
                 {t(meta.label)}
-                {typeof count === "number" && count > 0 && <Contagem n={count} />}
+                {depoisDeMontar && typeof count === "number" && count > 0 && <Contagem n={count} />}
               </TabsTrigger>
             );
           })}
@@ -666,7 +677,7 @@ export function InboxFilters({ value, onChange }: Props) {
                   {abaSecundariaAtiva
                     ? t(INBOX_TABS.find((x) => x.value === value.tab)!.label)
                     : t("Mais")}
-                  {abaSecundariaAtiva && typeof countFor[value.tab] === "number" && countFor[value.tab]! > 0 && (
+                  {depoisDeMontar && abaSecundariaAtiva && typeof countFor[value.tab] === "number" && countFor[value.tab]! > 0 && (
                     <Contagem n={countFor[value.tab]!} />
                   )}
                   <CaretDown size={11} aria-hidden />

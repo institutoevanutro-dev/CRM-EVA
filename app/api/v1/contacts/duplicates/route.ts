@@ -10,15 +10,31 @@
  * é comparação de igualdade, e é por isso que a regra vive em TypeScript
  * testável em vez de virar SQL que ninguém relê.
  *
- * `viewer` pode LISTAR (é leitura de contato, que ele já enxerga na tabela);
- * quem funde é `manager`, e esse gate está na rota de POST /contacts/merge.
+ * `viewer` pode LISTAR os grupos fortes (é leitura de contato, que ele já
+ * enxerga na tabela); quem funde é `manager`, e esse gate está na rota de
+ * POST /contacts/merge.
+ *
+ * Os pares por NOME (`nome_parecido`, porte do #3640) vêm depois dos fortes,
+ * com o mesmo formato, e só para `manager`+: é sugestão para conferir, não
+ * prova, e quem decide juntar ou dispensar é o gestor. As dispensas ("Não são a
+ * mesma pessoa") são lidas pela SESSÃO, sob a policy de gestor de
+ * `merge_queue`. Se essa leitura falhar, a rota falha: mostrar a lista sem as
+ * dispensas faria um par já dispensado voltar sem aviso.
+ *
+ * A primeira abertura deixa `contact.listed` na trilha (doutrina A8); a recarga
+ * marcada pelo cliente (`?atualizacao=1`) não.
  */
 import { randomUUID } from "node:crypto";
 
 import { ok, fail } from "@/lib/api/wrappers";
+import { auditarLeitura } from "@/lib/audit/leitura";
+import { ehAberturaDeLeitura } from "@/lib/audit/releitura";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { roleAtLeast } from "@/lib/auth/types";
+import { lerParesDispensados } from "@/lib/contacts/dispensar-par";
 import {
   encontrarContatosDuplicados,
+  encontrarParecidosPorNome,
   principalSugerido,
   type ContatoParaDeduplicar,
 } from "@/lib/contacts/duplicados";
@@ -35,13 +51,27 @@ export const dynamic = "force-dynamic";
  * ajuda ninguém a decidir nada e custa memória do contêiner do self-hoster.
  * Quem passa daqui limpa em levas, e a resposta diz que truncou (`varreu_tudo`)
  * em vez de calar — silêncio aqui leria como "não há mais duplicata".
+ *
+ * O teto só vale porque a leitura é paginada: o PostgREST corta toda resposta
+ * no `max_rows` (1000 em `supabase/config.toml`) SEM erro, e o `.limit(2001)`
+ * de antes devolvia 1.000 linhas com `varreu_tudo: true`.
  */
 const TETO_DE_VARREDURA = 2000;
+
+/**
+ * Tamanho de cada página da varredura: o `max_rows` do PostgREST. Numa
+ * instalação com `max_rows` MENOR, a página vem curta sem ser o fim — o fim é
+ * provado pelo `count` exato ou por página VAZIA (#2561).
+ */
+const TAMANHO_DA_PAGINA = 1000;
+
+const COLUNAS_DO_CONTATO =
+  "id, name, display_name, email, email_normalized, phone_number, is_merged_into, is_anonymized, source_metadata, created_at, last_activity_at";
 
 /** Tamanho da página ao ler identidades do Instagram (o `max-rows` padrão do PostgREST é 1000). */
 const PAGINA_DE_IDENTIDADES = 1000;
 
-export async function GET(): Promise<Response> {
+export async function GET(req: Request): Promise<Response> {
   const requestId = randomUUID();
 
   const user = await loadAuthUser();
@@ -55,22 +85,36 @@ export async function GET(): Promise<Response> {
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("contacts")
-    .select(
-      "id, name, display_name, email, email_normalized, phone_number, is_merged_into, is_anonymized, source_metadata, created_at, last_activity_at",
-    )
-    .eq("organization_id", org.orgId)
-    .is("is_merged_into", null)
-    .eq("is_anonymized", false)
-    .order("created_at", { ascending: true })
-    .limit(TETO_DE_VARREDURA + 1);
-  if (error) {
-    return fail("internal_error", error.message, 500, { requestId });
+
+  // Varredura PAGINADA por `range`, em ordem estável (`created_at`, `id`). O
+  // `+1` além do teto é o que prova que existia mais do que ela alcança.
+  const lidas: Omit<ContatoParaDeduplicar, "do_instagram">[] = [];
+  let totalDeVivos: number | null = null;
+  let acabou = false;
+  for (let pagina = 0; lidas.length <= TETO_DE_VARREDURA && !acabou; pagina++) {
+    const inicio = lidas.length;
+    const pedaco = Math.min(TAMANHO_DA_PAGINA, TETO_DE_VARREDURA + 1 - lidas.length);
+    const { data, error, count } = await supabase
+      .from("contacts")
+      .select(COLUNAS_DO_CONTATO, pagina === 0 ? { count: "exact" } : undefined)
+      .eq("organization_id", org.orgId)
+      .is("is_merged_into", null)
+      .eq("is_anonymized", false)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(inicio, inicio + pedaco - 1);
+    if (error) {
+      return fail("internal_error", error.message, 500, { requestId });
+    }
+    if (pagina === 0) totalDeVivos = count ?? null;
+    const lote = (data ?? []) as unknown as Omit<ContatoParaDeduplicar, "do_instagram">[];
+    lidas.push(...lote);
+    acabou = lote.length === 0 || (totalDeVivos !== null && lidas.length >= totalDeVivos);
   }
 
-  const brutas = (data ?? []).slice(0, TETO_DE_VARREDURA) as unknown as Omit<ContatoParaDeduplicar, "do_instagram">[];
-  const varreuTudo = (data ?? []).length <= TETO_DE_VARREDURA;
+  const brutas = lidas.slice(0, TETO_DE_VARREDURA);
+  const varreuTudo =
+    totalDeVivos !== null ? totalDeVivos <= TETO_DE_VARREDURA : lidas.length <= TETO_DE_VARREDURA;
 
   // Quem tem identidade de Instagram: só org + canal, interseção em memória.
   // Um `.in("contact_id", [...até 2000 UUIDs])` estourava a URL do GET, o
@@ -101,6 +145,29 @@ export async function GET(): Promise<Response> {
     do_instagram: doInstagram.has(c.id),
   }));
   const grupos = encontrarContatosDuplicados(linhas);
+
+  if (roleAtLeast(org.role, "manager")) {
+    let dispensados: Set<string>;
+    try {
+      dispensados = await lerParesDispensados(supabase, org.orgId);
+    } catch {
+      // Sem o detalhe do banco na resposta: ele não é para quem opera a tela.
+      return fail("internal_error", "Não foi possível ler as dispensas de duplicados.", 500, { requestId });
+    }
+    grupos.push(...encontrarParecidosPorNome(linhas, { dispensados }));
+  }
+
+  // Só a abertura e só quando há o que mostrar: ids, nunca nome nem telefone.
+  if (grupos.length > 0 && ehAberturaDeLeitura(new URL(req.url))) {
+    auditarLeitura({
+      action: "contact.listed",
+      actorUserId: user.id,
+      organizationId: org.orgId,
+      resourceType: "contact",
+      requestId,
+      metadata: { recurso: "duplicados", ids: grupos.flatMap((g) => g.contatos.map((c) => c.id)) },
+    });
+  }
 
   return ok(
     grupos.map((grupo) => ({

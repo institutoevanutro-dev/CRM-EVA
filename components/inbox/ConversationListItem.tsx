@@ -321,7 +321,7 @@ export function ConversationListItem({
               <ChipDeEtiqueta key={t} tag={t} className="h-4 px-1.5 text-[10px]" />
             ))}
             {overflow > 0 && (
-              <span className="text-[10px] text-text-muted">+{overflow}</span>
+              <span className="text-[10px] text-text-muted" title={tags.slice(visibleTags.length).join(", ")}>+{overflow}</span>
             )}
             {viaInstagram && (
               <Badge

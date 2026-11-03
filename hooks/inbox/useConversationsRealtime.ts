@@ -1,9 +1,10 @@
 "use client";
-import { hashKey, useInfiniteQuery } from "@tanstack/react-query";
+import { hashKey, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { useInvalidacaoAgrupada } from "@/hooks/realtime/useInvalidacaoAgrupada";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
 import { useRefetchDeSeguranca } from "@/hooks/realtime/useRefetchDeSeguranca";
+import { aplicarAtualizacaoNaLista } from "@/lib/inbox/atualizacao-da-lista";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import {
@@ -211,8 +212,37 @@ export function useConversationsRealtime(
         : undefined,
   });
 
+  /**
+   * O EVENTO DE UMA CONVERSA NÃO DECLARA A LISTA INTEIRA VELHA (#2366).
+   *
+   * `aplicarAtualizacaoNaLista` resolve o `UPDATE` de uma conversa que está na
+   * tela mesclando a linha no lugar, sem rede e sem estado de carregamento. Vai
+   * para a recarga agrupada, como antes, tudo o que o evento não responde:
+   * INSERT/DELETE, conversa fora da lista, a entrega sintética do canal que
+   * voltou (`{ tipo: "reassinado" }`), busca da lista em voo, busca/etiqueta/
+   * Ocultos, mudança de ordem, de contato, de canal ou de silêncio, linha de
+   * contato com a equipe ou descadastrado, e a pausa curta perto do fim na Fila.
+   *
+   * O `try` é a rede da mescla: `useRealtimeChannel` chama `onChange` sem
+   * proteção, e um erro aqui perderia o evento inteiro. Com ele o evento cai na
+   * recarga e o erro vai para `reportError` (console e o Sentry do navegador,
+   * que escuta os erros globais).
+   *
+   * Portado do projeto original (DeskcommCRM, PR #3806 de @webtecnica), adaptado.
+   */
+  const qc = useQueryClient();
   const invalidar = useInvalidacaoAgrupada(600);
-  const onChange = useCallback(() => invalidar(["conversations"]), [invalidar]);
+  const onChange = useCallback(
+    (payload: unknown) => {
+      try {
+        if (aplicarAtualizacaoNaLista(qc, queryKey, filters, payload)) return;
+      } catch (erro) {
+        globalThis.reportError?.(erro);
+      }
+      invalidar(["conversations"]);
+    },
+    [qc, queryKey, filters, invalidar],
+  );
 
   // G4-01 (visibility_mode): a subscription postgres_changes HERDA a RLS de
   // SELECT de `conversations` — o Supabase Realtime avalia as policies do usuário

@@ -3,20 +3,29 @@ import { useEffect, useMemo, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { FileText } from "@/lib/ui/icons";
 import { formatBytes } from "@/components/inbox/media/media-utils";
 
 interface Props {
   file: File | null;
+  /** A quem o anexo vai: "Para: Fulana" ou "Nota interna · só o time vê". */
+  para?: string | null;
   sending: boolean;
   onCancel: () => void;
   onSend: (caption: string) => void;
 }
 
 /** Preview antes do envio (padrão WhatsApp): thumb ou card + legenda. */
-export function AttachmentPreviewDialog({ file, sending, onCancel, onSend }: Props) {
+export function AttachmentPreviewDialog({ file, para, sending, onCancel, onSend }: Props) {
   const t = useT();
   const [caption, setCaption] = useState("");
   useEffect(() => setCaption(""), [file]);
@@ -35,6 +44,7 @@ export function AttachmentPreviewDialog({ file, sending, onCancel, onSend }: Pro
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{t("Enviar anexo")}</DialogTitle>
+          {para && <DialogDescription>{para}</DialogDescription>}
         </DialogHeader>
         <div className="flex items-center justify-center rounded-lg bg-muted/40 p-3">
           {isImage && objectUrl && (

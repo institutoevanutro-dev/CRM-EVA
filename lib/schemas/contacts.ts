@@ -218,3 +218,20 @@ export const contactsMergeSchema = z
     path: ["secondary_contact_ids"],
   });
 export type ContactsMergeInput = z.infer<typeof contactsMergeSchema>;
+
+/**
+ * POST /api/v1/contacts/duplicates/dismiss — "Não são a mesma pessoa" (porte do #3640).
+ *
+ * Exatamente DOIS ids, distintos sem distinguir caixa. A organização não vem
+ * daqui: a rota a lê da sessão, e um `organization_id` no corpo é descartado.
+ * O `?.` existe porque o `refine` roda mesmo quando o `length(2)` já falhou.
+ */
+export const contactsDismissDuplicateSchema = z
+  .object({
+    contact_ids: z.array(z.string().uuid()).length(2),
+  })
+  .refine((v) => v.contact_ids[0]?.toLowerCase() !== v.contact_ids[1]?.toLowerCase(), {
+    message: "Os dois contatos precisam ser diferentes.",
+    path: ["contact_ids"],
+  });
+export type ContactsDismissDuplicateInput = z.infer<typeof contactsDismissDuplicateSchema>;

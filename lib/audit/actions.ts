@@ -853,6 +853,11 @@ export const AUDIT_ACTIONS = [
   "bonus.stories_lancados",
   /** O dono ou o platform admin assumiu a aprovação de quem saiu da equipe. Metadata: só o UUID anterior. */
   "bonus.aprovador_assumido",
+  /**
+   * "Não são a mesma pessoa" (porte do #3640): o par sugerido pelo nome saiu da
+   * lista de Duplicados. A trilha guarda só os dois ids, nunca nome nem telefone.
+   */
+  "contact.duplicate_dismissed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

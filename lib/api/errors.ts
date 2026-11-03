@@ -92,6 +92,7 @@ export const ApiErrorCodes = {
   conversao_indisponivel: "conversao_indisponivel",
   invalid_state_transition: "invalid_state_transition",
   invalid_owner: "invalid_owner", // novo dono não é membro ativo agent+ da org (bulk assign, G3-04)
+  not_dismissable: "not_dismissable", // POST /contacts/duplicates/dismiss: par de mesmo telefone ou e-mail não se dispensa — junta-se (porte do #3640)
   trigger_kind_not_implemented: "trigger_kind_not_implemented", // publish de followup-flow com kind sem motor de enrollment (stage_change/conversation_end)
 
   // 415 — tipo de mídia

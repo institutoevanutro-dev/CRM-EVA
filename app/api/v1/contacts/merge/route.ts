@@ -16,6 +16,22 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * função, ela reconfere o papel na org e a atividade da timeline sai com
  * `performed_by_user_id` preenchido. Trocar por service role apagaria as três
  * coisas de uma vez.
+ *
+ * ─── Duas regras do fork em volta da função (porte do #3640) ────────────────
+ * Esta rota é a porta única das três telas que juntam fichas (grupo forte,
+ * "Parecidos — confira" e "Juntar com outra ficha"), e por isso as duas moram
+ * aqui, sem migration:
+ *
+ *  1. **A ficha ligada ao prontuário nunca é a absorvida** (409). O gatilho
+ *     `trg_prontuario_desvincular_contato_indisponivel` apaga o vínculo da
+ *     lápide, e o prontuário passaria a receber 404 do paciente. Duas fichas
+ *     ligadas são dois pacientes do prontuário: não se juntam.
+ *  2. **A junção nunca solta uma trava da IA.** `fn_mesclar_contatos` herda o
+ *     bloqueio (0319), mas não `force_human` nem `ai_opt_out`: sem o update
+ *     abaixo, a IA voltaria a responder quem estava com a equipe ou marcado
+ *     "Sempre atendimento humano". O update roda depois da RPC, pela sessão, e
+ *     só APERTA. Se falhar, a fusão já aconteceu: a resposta diz
+ *     `ia_nao_herdada` e a tela avisa, em vez de um 500 sobre um fato consumado.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
@@ -24,6 +40,7 @@ import { ApiError } from "@/lib/api/types";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { logger } from "@/lib/logger";
 import { contactsMergeSchema, validateRequest } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
 
@@ -78,6 +95,14 @@ interface ResultadoDaFusao {
   bloqueio_herdado?: boolean;
 }
 
+type TravaDaIa = "ai_opt_out" | "force_human";
+
+interface TravasDaFicha {
+  id: string;
+  force_human: boolean | null;
+  ai_opt_out: boolean | null;
+}
+
 export async function POST(req: NextRequest): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
@@ -102,10 +127,39 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const supabase = await createClient();
+  const principal = input.primary_contact_id;
+  const secundarios = input.secondary_contact_ids;
+
+  // Conferência ANTES da RPC, pela sessão e ESTRITA: um erro aqui não vira
+  // "sem vínculo" nem "sem trava", vira 500 sem fundir nada.
+  const [travas, vinculos] = await Promise.all([
+    supabase
+      .from("contacts")
+      .select("id, force_human, ai_opt_out")
+      .eq("organization_id", org.orgId)
+      .in("id", [principal, ...secundarios]),
+    supabase
+      .from("prontuario_contact_links")
+      .select("contact_id")
+      .eq("organization_id", org.orgId)
+      .in("contact_id", secundarios),
+  ]);
+  if (travas.error || vinculos.error) {
+    return fail("internal_error", "Não foi possível conferir as fichas antes de juntar.", 500, { requestId });
+  }
+  if ((vinculos.data ?? []).length > 0) {
+    return fail(
+      "state_conflict",
+      "A ficha ligada ao prontuário tem de ser a que fica. Se as duas estão ligadas, são pacientes diferentes no prontuário e não se juntam.",
+      409,
+      { requestId },
+    );
+  }
+
   const { data, error } = await supabase.rpc("fn_mesclar_contatos", {
     p_organization_id: org.orgId,
-    p_contato_principal: input.primary_contact_id,
-    p_contatos_secundarios: input.secondary_contact_ids,
+    p_contato_principal: principal,
+    p_contatos_secundarios: secundarios,
   });
 
   if (error) {
@@ -126,6 +180,39 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const resultado = data as unknown as ResultadoDaFusao;
+
+  // A trava da IA acompanha a pessoa, como o bloqueio: só aperta, nunca solta.
+  // `ai_opt_out` leva `force_human` junto (o mesmo par da rota always-human).
+  const linhas = (travas.data ?? []) as TravasDaFicha[];
+  const doPrincipal = linhas.find((c) => c.id === principal);
+  const absorvidas = linhas.filter((c) => c.id !== principal);
+  const travaAHerdar: TravaDaIa | null =
+    absorvidas.some((c) => c.ai_opt_out) && !doPrincipal?.ai_opt_out
+      ? "ai_opt_out"
+      : absorvidas.some((c) => c.force_human) && !doPrincipal?.force_human
+        ? "force_human"
+        : null;
+  let iaHerdada: TravaDaIa | undefined;
+  let iaNaoHerdada = false;
+  if (travaAHerdar) {
+    const { error: erroDaTrava } = await supabase
+      .from("contacts")
+      .update(travaAHerdar === "ai_opt_out" ? { ai_opt_out: true, force_human: true } : { force_human: true })
+      .eq("organization_id", org.orgId)
+      .eq("id", principal);
+    if (erroDaTrava) {
+      iaNaoHerdada = true;
+      logger.error("[contacts.merge] a trava da IA não passou para quem ficou", {
+        requestId,
+        organizationId: org.orgId,
+        contactId: principal,
+        trava: travaAHerdar,
+        detail: erroDaTrava.message,
+      });
+    } else {
+      iaHerdada = travaAHerdar;
+    }
+  }
 
   // A auditoria é o rastro que EXISTE SEMPRE. A timeline do passo 7 da função
   // só tem onde escrever quando o vencedor tem negócio no funil
@@ -149,8 +236,18 @@ export async function POST(req: NextRequest): Promise<Response> {
       // Um contato passar a bloqueado é mutação que precisa de rastro: quem ler a
       // auditoria tem de achar POR QUE aquela ficha não recebe mais mensagem.
       ...(resultado.bloqueio_herdado ? { block_inherited: true } : {}),
+      // Idem para a IA: quem ler a trilha acha por que a IA parou nesta ficha.
+      ...(iaHerdada ? { ai_lock_inherited: iaHerdada } : {}),
+      ...(iaNaoHerdada ? { ai_lock_inherit_failed: true } : {}),
     },
   });
 
-  return ok(resultado, { requestId });
+  return ok(
+    {
+      ...resultado,
+      ...(iaHerdada ? { ia_herdada: iaHerdada } : {}),
+      ...(iaNaoHerdada ? { ia_nao_herdada: true } : {}),
+    },
+    { requestId },
+  );
 }

@@ -48,6 +48,14 @@ import { StaleServiceBoundaryError, parseServiceBoundary, assertCurrentServiceBo
  * atendimento humano depois da última mensagem do contato também barra a
  * próxima (`encerradaPorHumanoNesteSilencio`).
  *
+ * Resposta a mensagem automática não é lead frio (#3729 do original): quem só
+ * respondeu com emoji a uma mensagem que a clínica mandou por conta própria —
+ * regra de automação, lembrete, campanha, texto fixo de fluxo — sem nada com
+ * conteúdo nas 48 h antes dela, não é inscrito (`skipped_resposta_a_automacao`).
+ * A pergunta é a última antes do insert, só para quem iria a ele, e falha
+ * ABERTA: erro de leitura vira log e a varredura segue como antes. Régua e
+ * marcas de autoria em `resposta-a-automacao.ts`.
+ *
  * agent_id: cada pointer é gateado por `resolveAgentForAutomaticTrigger`, que
  * devolve o agente publicado que ARMA o pointer (menor uuid se >1) — esse
  * agent_id é PINADO no enrollment (persona + exibição na fila). `null` = gate-out.
@@ -69,6 +77,8 @@ import { flowGraphSchema } from "./graph-schema";
 import { triggerConfigSchema } from "./api-schemas";
 import { resolveAgentForAutomaticTrigger, type FollowupGateDb } from "./agent-followup-gate";
 import { contatosQueORetornoSegura } from "./retorno-segura-o-fluxo";
+import { contatosQueSoResponderamAAutomacao, type CandidatoDoSilencio } from "./resposta-a-automacao";
+import { logger } from "@/lib/logger";
 
 /**
  * Status que ocupam a vaga do índice único `idx_followup_enrollments_one_live`
@@ -137,6 +147,13 @@ export interface SilenceSweepDb {
    */
   loadContatosComRetornoVivo(orgId: string): Promise<Set<string>>;
   /**
+   * Dos contatos que iriam ao insert, os que só responderam a uma mensagem
+   * automática nossa, sem nada com conteúdo (ver `resposta-a-automacao.ts`).
+   * Recebe os MESMOS `ContatoEmSilencio` que a varredura mediu. Opcional: sem o
+   * método ninguém é barrado, o comportamento de antes. Pode lançar.
+   */
+  loadContatosQueSoResponderamAAutomacao?(orgId: string, contatos: ContatoEmSilencio[]): Promise<Set<string>>;
+  /**
    * Dentre `contactIds`, quais têm um enrollment TERMINAL (completed,
    * cancelled ou dead) deste pointer CONCLUÍDO depois de `cutoffIso` — ainda
    * em cooldown, não podem ser reinscritos agora. Enrollment VIVO fica de fora
@@ -187,6 +204,11 @@ export interface SilenceSweepSummary {
   skipped_cooldown: number;
   /** Silenciosos de fora porque um retorno ainda os segura (agendado ou recém-saído, #2907). */
   skipped_pending_return: number;
+  /**
+   * Só responderam a uma automática nossa (#3729 do original). Não audita
+   * sozinho: a exclusão se repete a cada tick e não é mutação.
+   */
+  skipped_resposta_a_automacao: number;
 }
 
 export interface SilenceSweepDeps {
@@ -206,6 +228,7 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     skipped_same_episode: 0,
     skipped_cooldown: 0,
     skipped_pending_return: 0,
+    skipped_resposta_a_automacao: 0,
   };
 
   const pointers = await db.loadActiveSilencePointers();
@@ -289,6 +312,27 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     const nextEvalAt = clock().toISOString();
     const comInscricaoViva = await db.loadContatosComInscricaoViva(pointer.organization_id, contactIds);
     const comRetorno = await db.loadContatosComRetornoVivo(pointer.organization_id);
+    // Resposta a automática: pergunta só por quem iria ao insert. Cooldown, vivo
+    // e retorno já decidiram os outros, cada pergunta lê mensagens a cada minuto,
+    // e a auditoria do cron segue disparando pelos mesmos contadores.
+    const vaoAoInsert = new Set(contactIds.filter((id) => !comInscricaoViva.has(id) && !comRetorno.has(id)));
+    let soReagiram = new Set<string>();
+    if (db.loadContatosQueSoResponderamAAutomacao && vaoAoInsert.size > 0) {
+      try {
+        soReagiram = await db.loadContatosQueSoResponderamAAutomacao(
+          pointer.organization_id,
+          contatos.filter((c) => vaoAoInsert.has(c.contact_id)),
+        );
+      } catch (err) {
+        // Falha ABERTA: sem a guarda é o comportamento de antes. Lançar
+        // derrubaria a varredura de todos os ponteiros, e o cron só loga.
+        logger.error("[followup.silence-sweep] resposta_a_automacao falhou; segue sem a guarda", {
+          organization_id: pointer.organization_id,
+          pointer_id: pointer.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
 
     for (const contactId of contactIds) {
       // O mesmo contador do 23505: quem já está vivo é `skipped_existing`,
@@ -299,6 +343,10 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
       }
       if (comRetorno.has(contactId)) {
         summary.skipped_pending_return++;
+        continue;
+      }
+      if (soReagiram.has(contactId)) {
+        summary.skipped_resposta_a_automacao++;
         continue;
       }
       const { inserted } = await db.insertEnrollment({
@@ -373,6 +421,13 @@ const TAMANHO_DA_PAGINA = 500;
 
 /** Lote do `in(contact_id, …)`: a lista vai na URL do PostgREST. */
 const LOTE_DE_CONTATOS = 100;
+
+/**
+ * Decisões da resposta a automática por (organização, conversa, inbound vencedor).
+ * ponytail: memória do processo, teto de 5_000 chaves; some no restart e cada
+ * contato calado é recalculado uma vez (uma rajada curta de leituras).
+ */
+const DECISOES_DA_RESPOSTA_A_AUTOMACAO = new Map<string, boolean>();
 
 /** Production adapter: `SilenceSweepDb` sobre o client service-role real. */
 export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSweepDb {
@@ -613,6 +668,18 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
 
     loadContatosComRetornoVivo(orgId) {
       return contatosQueORetornoSegura(admin, orgId);
+    },
+
+    loadContatosQueSoResponderamAAutomacao(orgId, contatos) {
+      // A conversa do inbound vencedor (`origins`) e o instante dele
+      // (`ultima_entrada_em`) nasceram na MESMA iteração de `loadSilentContacts`.
+      const candidatos: CandidatoDoSilencio[] = [];
+      for (const c of contatos) {
+        const boundary = origins.get(`${orgId}:${c.contact_id}`);
+        if (!boundary) continue;
+        candidatos.push({ contactId: c.contact_id, conversationId: boundary.conversation_id, inboundAt: c.ultima_entrada_em });
+      }
+      return contatosQueSoResponderamAAutomacao(admin, orgId, candidatos, DECISOES_DA_RESPOSTA_A_AUTOMACAO);
     },
 
     async loadTriggerNodeId(orgId, versionId) {

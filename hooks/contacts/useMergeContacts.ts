@@ -12,6 +12,12 @@ export interface ResultadoDaFusao {
   /** O que ficou na lápide por colisão de índice único de runtime. */
   nao_repontado: Record<string, number>;
   atividades_emitidas: number;
+  /** Quem ficou passou a bloqueado: um dos juntados tinha pedido para parar (migration 0319). */
+  bloqueio_herdado?: boolean;
+  /** A trava da IA que quem ficou herdou de um dos juntados. */
+  ia_herdada?: "ai_opt_out" | "force_human";
+  /** A trava da IA de um dos juntados NÃO passou para quem ficou (o update falhou depois da fusão). */
+  ia_nao_herdada?: boolean;
 }
 
 export function useMergeContacts() {

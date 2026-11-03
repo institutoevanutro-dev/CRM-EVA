@@ -105,6 +105,26 @@ describe("Composer · resposta rápida com imagens da biblioteca", () => {
     expect(campo.value).toBe("Oi Ana, veja!");
     expect(send).not.toHaveBeenCalled();
   });
+
+  // Porte do original #3713: a prévia é da conversa em que a resposta foi
+  // escolhida. Trocar de conversa com ela aberta a descarta, em vez de o Enviar
+  // mandar as imagens para o paciente que acabou de abrir.
+  it("trocar de conversa com a prévia aberta a descarta, sem enviar", () => {
+    const qc = new QueryClient();
+    const ui = (conversationId: string) => (
+      <QueryClientProvider client={qc}>
+        <Composer conversationId={conversationId} contact={{ name: "Ana Souza", display_name: null }} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(ui("conv-1"));
+    fireEvent.change(screen.getByLabelText(/mensagem/i), { target: { value: "/cat" } });
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Catálogo"));
+    expect(screen.getByTestId("imagens-da-resposta")).toBeInTheDocument();
+
+    rerender(ui("conv-2"));
+    expect(screen.queryByTestId("imagens-da-resposta")).toBeNull();
+    expect(send).not.toHaveBeenCalled();
+  });
 });
 
 describe("Composer · falha que não é recusa do item", () => {
