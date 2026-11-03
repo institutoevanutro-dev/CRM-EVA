@@ -56,14 +56,18 @@ export interface AlvoDoTurno {
  *
  * "Visível" é o que o turno pode LER, não só o que já foi gravado:
  *
- *  - Mídia ainda sendo transcrita ou descrita não entra. O turno a lê como
- *    "[áudio]"; contá-la como vista calaria o turno que o drain cria quando a
- *    transcrição fica pronta, e a pergunta do áudio ficaria sem resposta. A régua
- *    é a do drain: derivável, com arquivo, sem estado final e mais nova que o
- *    teto de espera (passado o teto, o drain segue sem o texto, e o turno também).
+ *  - Mídia ainda sendo transcrita ou descrita não entra — e a anotação PARA ANTES
+ *    da mais antiga delas. O turno a lê como "[áudio]"; contá-la como vista
+ *    calaria o turno que o drain cria quando a transcrição fica pronta, e a
+ *    pergunta do áudio ficaria sem resposta. A anotação é UM carimbo, lido como
+ *    "vi tudo até aqui": se cobrisse o texto que chegou DEPOIS do áudio, cobriria
+ *    o áudio junto, e o turno desse texto seria calado. A régua é a do drain:
+ *    derivável, com arquivo, sem estado final e mais nova que o teto de espera
+ *    (passado o teto, o drain segue sem o texto, e o turno também).
  *    No `inbound_turn` o handler a chama DEPOIS da espera da mídia
  *    (`espera-da-midia.ts`): a que virou texto durante a espera entra na
- *    promessa, e a que segue pendente e mais nova que o teto fica de fora.
+ *    promessa, e a que segue pendente e mais nova que o teto fica de fora — com
+ *    o que veio depois dela.
  *
  *  - Retentativa de um job que JÁ enviou (`send_ledger` aceito, na fila ou em
  *    voo) não reescreve a anotação: o ledger devolve "já enviado" e nada novo
@@ -77,11 +81,15 @@ export async function anotarUltimaInboundVista(db: Queryable, alvo: AlvoDoTurno)
           'ultima_inbound_vista_em',
           (select max(m.created_at) from messages m
             where m.organization_id = $1 and m.conversation_id = $2 and m.direction = 'inbound'
-              and not (m.type = any($4::text[])
-                       and m.media_url is not null
-                       and coalesce(m.media_derived_status, '') <> all($5::text[])
-                       and m.created_at > now() - ($6 * interval '1 millisecond')
-                       and ${sqlMidiaVaiSerLida('m')})))
+              and m.created_at < coalesce(
+                (select min(p.created_at) from messages p
+                  where p.organization_id = $1 and p.conversation_id = $2 and p.direction = 'inbound'
+                    and p.type = any($4::text[])
+                    and p.media_url is not null
+                    and coalesce(p.media_derived_status, '') <> all($5::text[])
+                    and p.created_at > now() - ($6 * interval '1 millisecond')
+                    and ${sqlMidiaVaiSerLida('p')}),
+                'infinity')))
       where organization_id = $1 and id = $3
         and not exists (
           select 1 from send_ledger s

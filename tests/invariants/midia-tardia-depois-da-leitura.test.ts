@@ -27,7 +27,9 @@ import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
  *  3. TETO DO TURNO — a espera estourou o teto com o áudio ainda sem texto, e a
  *     pergunta já tinha mais de 120 s: sem `esperaDaMidiaNoTeto`, o teto da régua
  *     de resposta obsoleta deixaria sair a resposta que leu o áudio como
- *     `[audio]`, e o job do áudio responderia outra vez.
+ *     `[audio]`, e o job do áudio responderia outra vez. Com um texto DEPOIS do
+ *     áudio, a anotação não pode passar por cima dele. Os CONTROLES (a), (b) e
+ *     (c) prendem as três condições da trava.
  *
  * A régua `respostaFicouObsoleta` do fork só descarta quando a mensagem nova tem
  * turno próprio CONFERIDO (job pendente ou pedido de despacho na fila): os casos
@@ -164,12 +166,16 @@ const USO = {
   outputTokens: { total: 1, text: 1, reasoning: 0 },
 };
 
-/** Modelo fake: 1ª chamada pede `send_message`; depois encerra. */
-function modelo() {
+/**
+ * Modelo fake: 1ª chamada pede `send_message`; depois encerra. `onPrimeiraChamada`
+ * roda enquanto o "modelo pensa" — é a mensagem que chega durante o turno.
+ */
+function modelo(onPrimeiraChamada?: () => Promise<void>) {
   let chamadas = 0;
   return async () => {
     chamadas += 1;
     if (chamadas === 1) {
+      if (onPrimeiraChamada !== undefined) await onPrimeiraChamada();
       return {
         content: [
           {
@@ -208,6 +214,9 @@ async function rodarJob(
   opcoes: {
     antesDaAnotacao?: () => Promise<void>;
     aoDormir?: () => Promise<void>;
+    /** `RESPOSTA_OBSOLETA_TETO_MS` do operador (default: o de produção). */
+    tetoMs?: number;
+    onPrimeiraChamada?: () => Promise<void>;
   } = {},
 ): Promise<void> {
   const [claimed] = await m.queue.claimJobs(pool, { workerId: "midia-tardia", maxConcurrency: 1 });
@@ -221,7 +230,7 @@ async function rodarJob(
       notesIndexMaxTokens: 500,
       maxSteps: 12,
       queuedRetryDelayMs: 1000,
-      respostaObsoletaTetoMs: TETO,
+      respostaObsoletaTetoMs: opcoes.tetoMs ?? TETO,
       breaker: {
         exactFailureWarn: 2,
         exactFailureBlock: 5,
@@ -232,7 +241,7 @@ async function rodarJob(
       },
     },
     log: m.createLogger(),
-    registry: m.createFakeRegistry(modelo() as never),
+    registry: m.createFakeRegistry(modelo(opcoes.onPrimeiraChamada) as never),
     channel: () =>
       ({
         channel: "captura",
@@ -469,5 +478,75 @@ describe("a mídia que chega depois de o turno ser enfileirado", () => {
     expect(await turnoSeguinteCalado(), "o job do áudio foi calado — ninguém responderia a ele").toBe(
       false,
     );
+  });
+
+  it("TETO DO TURNO, TEXTO DEPOIS DO ÁUDIO: a anotação não passa por cima do áudio pendente", async () => {
+    // A mesma cena, e o cliente escreve "?" DEPOIS do áudio, antes da anotação.
+    // A anotação é UM carimbo ("vi tudo até aqui"): se cobrisse o "?", cobriria
+    // o áudio junto. A resposta que leu o áudio como [audio] sairia, o pedido do
+    // áudio é superado pelo do "?" no drain, o turno do "?" seria calado pela
+    // anotação, e ninguém responderia à transcrição.
+    const pergunta = await inbound(PERGUNTA, haSegundos(125));
+    const audioId = await audio(haSegundos(5));
+    await pedidoDeDespacho(audioId);
+    await pedidoDeDespacho(await inbound("?", haSegundos(3)));
+    const job = await jobDoTurno(pergunta);
+
+    await rodarJob(job);
+
+    expect(
+      enviados,
+      "saiu a resposta que leu o áudio como [audio] — e o turno do texto seguinte seria calado",
+    ).toBe(0);
+    const anotacao = await anotacaoDoJob(job);
+    expect(anotacao, "o turno não anotou o que viu").not.toBeNull();
+    // É esta desigualdade que deixa o turno do "?" ler a transcrição: um
+    // carimbo depois do áudio cala esse turno por `ultimaInboundJaRespondida`.
+    expect(
+      anotacao!.getTime(),
+      "a anotação passou por cima do áudio que o turno leu como [audio]",
+    ).toBeLessThan((await chegadaDe(audioId)).getTime());
+  });
+
+  // CONTROLES de `esperaDaMidiaNoTeto`: cada um derruba uma condição da trava
+  // (cláusula c da régua, o teto 0 do operador, `recheques > 0`) e espera o
+  // envio — sem eles, qualquer das três pode sumir com os gates verdes.
+
+  it("CONTROLE (a): TETO DO TURNO sem pedido de despacho do áudio — envia, ninguém responderia depois", async () => {
+    const pergunta = await inbound(PERGUNTA, haSegundos(125));
+    await audio(haSegundos(3));
+    const job = await jobDoTurno(pergunta);
+
+    await rodarJob(job);
+
+    expect(enviados, "descartou a resposta sem turno que responda depois — silêncio").toBe(1);
+  });
+
+  it("CONTROLE (b): TETO DO TURNO com a régua desligada pelo operador (teto 0) — envia", async () => {
+    const pergunta = await inbound(PERGUNTA, haSegundos(125));
+    const audioId = await audio(haSegundos(3));
+    await pedidoDeDespacho(audioId);
+    const job = await jobDoTurno(pergunta);
+
+    await rodarJob(job, { tetoMs: 0 });
+
+    expect(enviados, "a trava religou a régua que o operador desligou").toBe(1);
+  });
+
+  it("CONTROLE (c): mídia travada desde a chegada (recheques = 0) não liga a trava — envia", async () => {
+    // A espera sai na primeira checagem, sem esperar: a pergunta não envelheceu
+    // NA ESPERA, e o teto de 120 s da régua continua valendo. Sem `recheques > 0`,
+    // o cliente que escreve durante cada turno teria toda resposta descartada.
+    await audio(haSegundos(600));
+    const pergunta = await inbound(PERGUNTA, haSegundos(125));
+    const job = await jobDoTurno(pergunta);
+
+    await rodarJob(job, {
+      onPrimeiraChamada: async () => {
+        await pedidoDeDespacho(await inbound("alô?", new Date().toISOString()));
+      },
+    });
+
+    expect(enviados, "a mídia travada desligou o teto da régua de resposta obsoleta").toBe(1);
   });
 });
