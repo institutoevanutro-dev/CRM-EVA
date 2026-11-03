@@ -1262,6 +1262,11 @@ export interface InboundTurnKnobs {
    * `respostaFicouObsoleta`. Ausente = desligada (testes que não a exercitam).
    */
   respostaObsoletaTetoMs?: number;
+  /**
+   * Modo da conferência de horário da agenda (HORARIO_DA_AGENDA_MODO). Ausente =
+   * 'observar', o padrão do env: o veredito vai ao trace e nada é barrado.
+   */
+  horarioDaAgendaModo?: 'observar' | 'barrar';
   /** circuit breaker de tools por run (F2-15) — env TOOL_BREAKER_* */
   breaker: ToolBreakerThresholds;
   /**
@@ -3275,8 +3280,18 @@ async function executarTurnoDoAgente(
   // falharia; cai no da organização.
   // `soAfirmacao`: no repasse de um caso só "está agendado" é conferido. O horário que a
   // equipe combinou (um encaixe fora da grade) não vem da agenda, e a nota dela é a fonte.
+  //
+  // O ÚNICO ponto que arma o gate (envio, mídia e prévia passam por aqui). Só 'barrar'
+  // (HORARIO_DA_AGENDA_MODO) arma: em 'observar', o padrão, o gate fica desarmado — sem
+  // veto, sem linha na timeline, sem escalada, sem correção de turno mudo, sem impedimento
+  // na prévia — e só registra no trace o que barraria. Quem não tem agenda fica de fora.
+  const modoDoHorario =
+    agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds)
+      ? (deps.knobs.horarioDaAgendaModo ?? 'observar')
+      : null;
   const horariosDaAgenda = (): NonNullable<GateContext['horariosDaAgenda']> => ({
-    ativo: agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds),
+    ativo: modoDoHorario === 'barrar',
+    observar: modoDoHorario === 'observar',
     fuso: fusoUtilizavel(fusoDaAgenda, fusoDaOrg),
     livres: [...horariosLivresDoTurno],
     doContato: [...compromissosDoTurno.map((c) => new Date(c.starts_at).toISOString()), ...marcadosNesteTurno],

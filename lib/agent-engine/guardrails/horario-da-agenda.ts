@@ -35,6 +35,11 @@
 export interface HorariosDaAgenda {
   /** Arma o gate. Falso/ausente = no-op. */
   ativo: boolean;
+  /**
+   * Desarmado e observando (HORARIO_DA_AGENDA_MODO=observar): o veredito é calculado como se
+   * estivesse armado e só vai ao trace. Nunca barra. Ignorado quando `ativo`.
+   */
+  observar?: boolean;
   /** Fuso em que o texto do cliente fala (o `fuso_da_regra` da agenda). */
   fuso: string;
   /** Instantes ISO da `horarios[]` que as tools de agenda devolveram NESTE turno. */

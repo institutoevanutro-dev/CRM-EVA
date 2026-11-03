@@ -19,7 +19,8 @@ import { assertMeetingDeliveryPg, type MeetingDeliveryContext } from '@/lib/agen
  * (`docs/doctrine/separacao-fala-e-operacao.md`); (6.9) agenda_stall — promessa de checar
  * a agenda sem ter chamado a ferramenta; (6.93) horario_da_agenda — dia+horário escrito ao
  * cliente só sai se a agenda o devolveu neste turno, e "está agendado" só depois de a
- * marcação gravar (porte do #3596); (7) disclosure
+ * marcação gravar (porte do #3596; só com HORARIO_DA_AGENDA_MODO=barrar — no padrão,
+ * 'observar', ele só registra no trace o que barraria); (7) disclosure
  * (F4-05). A ordem é código-constante DE PROPÓSITO, não config de
  * runtime: "stop primeiro" é invariante de segurança (regra dura nº 2) e mudar a ordem sem
  * bumpar a versão quebra o CI — deixá-la mutável em disco seria um footgun.
@@ -341,7 +342,10 @@ export type GateVerdict =
   // `skipped: 'not_applicable'` (invariante 4 de `docs/doctrine/restricao-de-canal.md`): a
   // restrição não existe NESTE canal. Passa, mas o trace registra que não se aplicava — um
   // `pass` silencioso apagaria a diferença entre "não regrediu" e "provo que não regrediu".
-  | { pass: true; waitMs?: number; amendBody?: string; skipped?: 'not_applicable' }
+  //
+  // `observado` (só o `horarioDaAgendaGate` em modo observar): o gate PASSA, e o trace leva o
+  // código que ele teria vetado como `observado:<código>` — medir antes de barrar.
+  | { pass: true; waitMs?: number; amendBody?: string; skipped?: 'not_applicable'; observado?: string }
   | {
       pass: false;
       code: string;
@@ -833,11 +837,20 @@ export const agendaStallGate: Gate = {
  * em `horario-da-agenda.ts`; aqui só a ligação com a cadeia. Posição 6.93: logo depois do
  * `agendaStallGate` (a família da agenda fica junta) e antes do `disclosureGate` — precisa
  * ver o texto do MODELO, antes de o disclosure emendar o corpo.
+ *
+ * Desarmado e observando (HORARIO_DA_AGENDA_MODO=observar, o padrão): o veredito é o mesmo
+ * de armado, mas só vai ao trace (`observado:<código>`, que `before_send_traces` guarda) —
+ * a mensagem sai.
  */
 export const horarioDaAgendaGate: Gate = {
   name: 'horario_da_agenda',
   evaluate: (ctx) => {
-    const v = avaliarHorarios(ctx.body, ctx.now, ctx.horariosDaAgenda);
+    const h = ctx.horariosDaAgenda;
+    if (h !== undefined && !h.ativo && h.observar === true) {
+      const v = avaliarHorarios(ctx.body, ctx.now, { ...h, ativo: true });
+      return v.pass ? { pass: true } : { pass: true, observado: v.code };
+    }
+    const v = avaliarHorarios(ctx.body, ctx.now, h);
     return v.pass ? { pass: true } : { pass: false, code: v.code, reason: v.reason };
   },
 };
@@ -1002,7 +1015,9 @@ const spinningGate: Gate = {
  * v9 (porte do #3596) = insere `horarioDaAgendaGate` entre `agenda_stall` e `disclosure`:
  * dia+horário escrito ao cliente só sai se a agenda o devolveu neste turno, e "está
  * agendado" só depois de a marcação gravar. Nasce DESARMADO (ver
- * `GateContext.horariosDaAgenda`): só o agente com ferramenta de agenda e a prévia o armam.
+ * `GateContext.horariosDaAgenda`): só o agente com ferramenta de agenda e a prévia o armam,
+ * e só com HORARIO_DA_AGENDA_MODO=barrar; no padrão (observar) ele só registra no trace o
+ * que barraria.
  */
 export const BEFORE_SEND_CHAIN_VERSION = 9;
 
@@ -1221,7 +1236,9 @@ export function evaluateBeforeSend(
       trace.push(
         verdict.skipped !== undefined
           ? { gate: gate.name, verdict: 'skipped', code: verdict.skipped }
-          : { gate: gate.name, verdict: 'pass' },
+          : verdict.observado !== undefined
+            ? { gate: gate.name, verdict: 'pass', code: `observado:${verdict.observado}` }
+            : { gate: gate.name, verdict: 'pass' },
       );
       if (verdict.waitMs !== undefined && verdict.waitMs > throttleWaitMs)
         throttleWaitMs = verdict.waitMs;

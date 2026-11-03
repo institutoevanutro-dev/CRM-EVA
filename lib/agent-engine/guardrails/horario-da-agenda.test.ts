@@ -3,6 +3,9 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { turnKnobsFromEnv } from '../agent/turn-knobs';
+import { loadEnv } from '../env';
+import { evaluateBeforeSend, horarioDaAgendaGate, type GateContext } from './before-send';
 import { detectHumanPromise, detectUnscheduledFollowUpPromise } from './human-promise';
 import {
   afirmaQueMarcou,
@@ -131,6 +134,57 @@ describe('avaliarHorarios', () => {
   it('desarmado não faz nada', () => {
     expect(avaliarHorarios(THALES, AGORA, undefined).pass).toBe(true);
     expect(avaliarHorarios(THALES, AGORA, base({ ativo: false })).pass).toBe(true);
+  });
+});
+
+describe('modo observar (HORARIO_DA_AGENDA_MODO): calcula, registra no trace e não barra', () => {
+  const THALES = 'As próximas datas disponíveis para teleconsulta são: 📅 Terça, 03/11: 9h, 9h15, 10h, 11h';
+  const LORENZO = 'Ótimo, Lorenzo! Sua teleconsulta está agendada: 📅 terça-feira, 03/11 🕒 11:00';
+  const LIVRES_0311 = ['2026-11-03T14:00:00.000Z'];
+  // Só o gate de horário: o resto da cadeia precisa de banco e de canal.
+  const cadeia = (body: string, h: HorariosDaAgenda) =>
+    evaluateBeforeSend({ body, now: AGORA, horariosDaAgenda: h } as unknown as GateContext, [horarioDaAgendaGate]);
+  const observando = base({ ativo: false, observar: true, livres: LIVRES_0311 });
+  const CASOS = [
+    ['horario_sem_fonte', THALES],
+    ['agenda_confirmou_sem_marcar', LORENZO],
+  ] as const;
+
+  it.each(CASOS)('%s: a mensagem passa, sem veto, e o trace guarda observado:<código>', (code, body) => {
+    const r = cadeia(body, observando);
+    expect(r.veto).toBeNull();
+    expect(r.body).toBe(body);
+    expect(r.trace).toEqual([{ gate: 'horario_da_agenda', verdict: 'pass', code: `observado:${code}` }]);
+  });
+
+  it.each(CASOS)('barrar (%s): o mesmo texto é vetado como antes', (code, body) => {
+    const r = cadeia(body, base({ livres: LIVRES_0311 }));
+    expect(r.veto?.code).toBe(code);
+    expect(r.trace).toEqual([{ gate: 'horario_da_agenda', verdict: 'veto', code }]);
+  });
+
+  it('o que passaria armado não ganha código; armado, `observar` não afrouxa; sem agenda, nada', () => {
+    expect(cadeia('📅 Terça, 03/11: 11h', observando).trace).toEqual([{ gate: 'horario_da_agenda', verdict: 'pass' }]);
+    expect(cadeia(THALES, base({ observar: true, livres: LIVRES_0311 })).veto?.code).toBe('horario_sem_fonte');
+    expect(cadeia(THALES, base({ ativo: false, livres: LIVRES_0311 })).trace).toEqual([
+      { gate: 'horario_da_agenda', verdict: 'pass' },
+    ]);
+  });
+
+  it('o env: observar é o padrão (vazio também), barrar liga, grafia errada derruba o boot; o turno recebe o modo', () => {
+    const env = {
+      SUPABASE_DB_URL: 'postgres://u:p@localhost:5432/db',
+      NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321',
+      SUPABASE_SERVICE_ROLE_KEY: 'x',
+    };
+    const modo = (v?: string) =>
+      turnKnobsFromEnv(
+        loadEnv({ ...env, ...(v === undefined ? {} : { HORARIO_DA_AGENDA_MODO: v }) } as unknown as NodeJS.ProcessEnv),
+      ).horarioDaAgendaModo;
+    expect(modo()).toBe('observar');
+    expect(modo('')).toBe('observar');
+    expect(modo('barrar')).toBe('barrar');
+    expect(() => modo('barra')).toThrow(/HORARIO_DA_AGENDA_MODO/);
   });
 });
 
@@ -800,5 +854,15 @@ describe('fiação no turno', () => {
 
   it('case_reply_turn: o gate só confere a afirmação de marcação', () => {
     expect(trecho('const horariosDaAgenda = ()', '});')).toContain("soAfirmacao: job?.kind === 'case_reply_turn',");
+  });
+
+  it('o modo arma num ponto só: barrar arma, observar (o padrão) só registra, e só quem tem agenda', () => {
+    const arma = trecho('const modoDoHorario =', 'fuso: fusoUtilizavel(');
+    expect(arma).toContain('agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds)');
+    expect(arma).toContain("(deps.knobs.horarioDaAgendaModo ?? 'observar')");
+    expect(arma).toContain("ativo: modoDoHorario === 'barrar',");
+    expect(arma).toContain("observar: modoDoHorario === 'observar',");
+    // A prévia herda o mesmo armamento: só os vetos anteriores são dela.
+    expect(trecho('const previewTools =', 'const tools = wrapToolsWithBreaker(')).not.toMatch(/\b(?:ativo|observar):/);
   });
 });

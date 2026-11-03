@@ -180,13 +180,15 @@ export const CONFERENCIAS_DE_SAIDA: readonly ConferenciaDeSaida[] = [
     nome: "horario_da_agenda",
     rotulo: "Só oferecer horário que a agenda devolveu",
     oQueProtege:
-      'Barra o "está agendado" sem marcação gravada nesta resposta e o horário oferecido que a ' +
-      "agenda não devolveu. Lembrar o horário que o cliente já tem continua livre. O assistente " +
-      "refaz; se insistir, responde sem citar horário.",
+      'Confere o "está agendado" sem marcação gravada nesta resposta e o horário oferecido que a ' +
+      "agenda não devolveu. Lembrar o horário que o cliente já tem continua livre. Quando barra, o " +
+      "assistente refaz; se insistir, cita só o horário marcado ou o que o cliente já tem, ou nenhum.",
     escolha: null,
+    // O modo é do servidor (HORARIO_DA_AGENDA_MODO), e a tela não o lê: o texto vale nos dois.
     porQueNaoSeDesliga:
-      "Horário inventado vira consulta marcada em cima de outra, e confirmação sem marcação vira " +
-      "cliente esperando um horário que não existe. Regra fixa, sem custo.",
+      "Enquanto a instalação não liga o bloqueio, ela fica em observação: anota o que barraria e " +
+      "deixa a mensagem sair. Horário inventado vira consulta marcada em cima de outra, e " +
+      "confirmação sem marcação vira cliente esperando um horário que não existe.",
     camada: null,
   },
   {

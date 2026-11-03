@@ -27,8 +27,9 @@ import type * as Repeticao from "@/lib/agent-engine/guardrails/repeticao-na-conv
  * o silêncio deliberado, não.
  *
  * Veto do gate de horário (porte do upstream #3596): numa sessão com agente que tem
- * ferramenta de agenda, "está agendada" sem marcação volta ao modelo como ensino
- * dentro do mesmo turno, e a resposta reescrita sai pela cadeia.
+ * ferramenta de agenda e o modo 'barrar', "está agendada" sem marcação volta ao modelo
+ * como ensino dentro do mesmo turno, e a resposta reescrita sai pela cadeia. No modo
+ * 'observar' (o padrão) a mesma mensagem sai, e o trace guarda o que o gate barraria.
  *
  * Veto e correção (porte do upstream #3673): tentativa vetada que terminou em texto
  * solto ainda pede a correção; o veto que manda parar (opt-out, conversa com a
@@ -109,6 +110,18 @@ async function avisosDaConversa(): Promise<Array<{ kind: string; title: string }
   return rows;
 }
 
+/** As linhas do gate de horário em `before_send_traces` (gate, veredito e código; nunca o corpo). */
+async function linhasDoHorario(): Promise<Array<{ vetoed_gate: string | null; linha: unknown }>> {
+  const { rows } = await pool.query<{ vetoed_gate: string | null; linha: unknown }>(
+    `select t.vetoed_gate, e as linha
+       from before_send_traces t cross join lateral jsonb_array_elements(t.trace) e
+      where t.organization_id = $1 and e->>'gate' = 'horario_da_agenda'
+      order by t.created_at`,
+    [ORG],
+  );
+  return rows;
+}
+
 /** Roteiro por chamada; guarda o prompt de cada uma para conferir a correção. */
 function modelo(roteiro: Resposta[]) {
   const prompts: string[] = [];
@@ -122,7 +135,7 @@ function modelo(roteiro: Resposta[]) {
 /**
  * Um turno de entrada. Com `conversa`, a conversa é criada na `sessao` indicada — é
  * assim que o turno roda com o agente publicado nela. `repeticao` troca os knobs da
- * guarda de repetição.
+ * guarda de repetição; `horario`, o modo do gate de horário (ausente = 'observar').
  */
 async function turno(
   fake: ReturnType<typeof modelo>["fake"],
@@ -130,7 +143,13 @@ async function turno(
     sessao = SESSION,
     conversa = CONV,
     repeticao,
-  }: { sessao?: string; conversa?: string; repeticao?: typeof Repeticao.REPETICAO_PADRAO } = {},
+    horario,
+  }: {
+    sessao?: string;
+    conversa?: string;
+    repeticao?: typeof Repeticao.REPETICAO_PADRAO;
+    horario?: "observar" | "barrar";
+  } = {},
 ): Promise<void> {
   if (conversa !== CONV) {
     await pool.query(
@@ -170,6 +189,7 @@ async function turno(
       maxSteps: 12,
       queuedRetryDelayMs: 1000,
       ...(repeticao !== undefined ? { repeticao } : {}),
+      ...(horario !== undefined ? { horarioDaAgendaModo: horario } : {}),
       breaker: {
         exactFailureWarn: 2,
         exactFailureBlock: 5,
@@ -342,7 +362,7 @@ describe("o turno de resposta que terminou sem mensagem ao cliente", () => {
       enviar("Sua consulta está agendada para 05/11 às 10h."),
       enviar("Posso agendar sua consulta para 05/11 às 10h?"),
     ]);
-    await turno(fake, { sessao: SESSION_VETO, conversa: crypto.randomUUID() });
+    await turno(fake, { sessao: SESSION_VETO, conversa: crypto.randomUUID(), horario: "barrar" });
 
     expect(
       enviados,
@@ -352,6 +372,25 @@ describe("o turno de resposta que terminou sem mensagem ao cliente", () => {
       "nada foi marcado nesta resposta",
     );
     expect(prompts[0]).not.toContain("nada foi marcado nesta resposta");
+  });
+
+  it.each([
+    ["agenda_confirmou_sem_marcar", "Sua consulta está agendada para 05/11 às 10h."],
+    ["horario_sem_fonte", "Tenho 05/11 às 10h ou 11h. Qual prefere?"],
+  ])("⭐ modo observar (o padrão), %s: a mensagem sai, nada é vetado e o trace guarda o que barraria", async (code, body) => {
+    // HORARIO_DA_AGENDA_MODO ausente = 'observar'. O mesmo texto que o modo barrar veta (caso
+    // acima) sai na 1ª chamada: sem ensino, sem correção do turno mudo, sem veto no trace —
+    // só a linha `observado:<código>`, que é o que se mede antes de ligar o bloqueio.
+    const { fake, prompts } = modelo([enviar(body), texto("ok")]);
+    await turno(fake, { sessao: SESSION_VETO, conversa: crypto.randomUUID() });
+
+    expect(enviados, "o modo observar segurou a mensagem").toEqual([body]);
+    // turno (envio + encerramento) + fechamento = 3: nenhum ensino nem correção.
+    expect(prompts).toHaveLength(3);
+    expect(prompts.some((p) => p.includes(MARCA_DA_CORRECAO))).toBe(false);
+    expect(await linhasDoHorario()).toEqual([
+      { vetoed_gate: null, linha: { gate: "horario_da_agenda", verdict: "pass", code: `observado:${code}` } },
+    ]);
   });
 
   it("⭐ lembrete dos compromissos do contato — um que terminou há pouco e um futuro — sai sem veto", async () => {
@@ -370,7 +409,8 @@ describe("o turno de resposta que terminou sem mensagem ao cliente", () => {
     const lembrete =
       "Sua consulta de 28/07 às 9h está confirmada ✅. Sua consulta de 30/07 às 9h também está confirmada.";
     const { fake, prompts } = modelo([enviar(lembrete), texto("ok")]);
-    await turno(fake, { sessao: SESSION_VETO, conversa: crypto.randomUUID() });
+    // Armado: em 'observar' o lembrete sairia de qualquer jeito, e o caso não mediria nada.
+    await turno(fake, { sessao: SESSION_VETO, conversa: crypto.randomUUID(), horario: "barrar" });
 
     expect(
       enviados,

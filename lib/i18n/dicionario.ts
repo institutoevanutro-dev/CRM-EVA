@@ -10134,11 +10134,11 @@ export const DICIONARIO: Traducoes = {
   "Só oferecer horário que a agenda devolveu": {
     es: "Solo ofrecer horarios que la agenda devolvió",
   },
-  "Barra o \"está agendado\" sem marcação gravada nesta resposta e o horário oferecido que a agenda não devolveu. Lembrar o horário que o cliente já tem continua livre. O assistente refaz; se insistir, responde sem citar horário.": {
-    es: "Bloquea el \"está agendado\" sin una cita registrada en esta respuesta y el horario ofrecido que la agenda no devolvió. Recordar el horario que el cliente ya tiene sigue permitido. El asistente rehace la respuesta; si insiste, responde sin citar horarios.",
+  "Confere o \"está agendado\" sem marcação gravada nesta resposta e o horário oferecido que a agenda não devolveu. Lembrar o horário que o cliente já tem continua livre. Quando barra, o assistente refaz; se insistir, cita só o horário marcado ou o que o cliente já tem, ou nenhum.": {
+    es: "Revisa el \"está agendado\" sin una cita registrada en esta respuesta y el horario ofrecido que la agenda no devolvió. Recordar el horario que el cliente ya tiene sigue permitido. Cuando bloquea, el asistente rehace la respuesta; si insiste, cita solo el horario agendado o el que el cliente ya tiene, o ninguno.",
   },
-  "Horário inventado vira consulta marcada em cima de outra, e confirmação sem marcação vira cliente esperando um horário que não existe. Regra fixa, sem custo.": {
-    es: "Un horario inventado se convierte en una cita encima de otra, y una confirmación sin cita registrada deja al cliente esperando un horario que no existe. Regla fija, sin costo.",
+  "Enquanto a instalação não liga o bloqueio, ela fica em observação: anota o que barraria e deixa a mensagem sair. Horário inventado vira consulta marcada em cima de outra, e confirmação sem marcação vira cliente esperando um horário que não existe.": {
+    es: "Mientras la instalación no active el bloqueo, queda en observación: anota lo que bloquearía y deja salir el mensaje. Un horario inventado se convierte en una cita encima de otra, y una confirmación sin cita registrada deja al cliente esperando un horario que no existe.",
   },
   "Se a pessoa respondeu STOP, SAIR ou pediu para não receber mais, nada é enviado a ela.": {
     es: "Si la persona respondió STOP, SALIR o pidió no recibir más, no se le envía nada.",
