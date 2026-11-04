@@ -398,6 +398,48 @@ async function assinaturaDoEnvio(supabase: SB, ctx: HandlerCtx): Promise<string 
   }
 }
 
+/**
+ * Formato de `ai_agents.id`. Envio de sistema põe TEXTO FIXO no `id` do ator
+ * ('agent-engine', 'agent-engine:meet-delivery', 'handoff-orchestrator'):
+ * isso não é agente, e nem se consulta.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * O nome do agente de IA que envia, para o balão mostrar "IA · <nome>" (#3649).
+ * O balão não faz join: o nome viaja GRAVADO na linha, como `ai_actor_id`.
+ * `agent_id` vence `id`: o runtime nativo põe o RUN no `id` e o agente em
+ * `agent_id`; o motor do turno põe o agente no `id`. O filtro por organização
+ * não é redundância: este handler também roda com service role.
+ * Nunca lança: na dúvida, o balão diz só "IA".
+ * Portado do projeto original (DeskcommCRM, PR #3665 de @webtecnica).
+ */
+async function nomeDoAgenteDoEnvio(supabase: SB, ctx: HandlerCtx): Promise<string | null> {
+  if (ctx.actor.type !== "ai_agent") return null;
+  const id = ctx.actor.agent_id ?? ctx.actor.id;
+  if (!UUID.test(id)) return null;
+  try {
+    const { data, error } = await supabase
+      .from("ai_agents")
+      .select("name")
+      .eq("organization_id", ctx.organization_id)
+      .eq("id", id)
+      .maybeSingle();
+    // Só o erro DEVOLVIDO avisa; o lançado cai calado no catch (dublês de
+    // teste lançam ao ver tabela que não conhecem).
+    if (error) {
+      logger.warn("[messages.send] nome do agente não lido", {
+        organization_id: ctx.organization_id,
+        error: error.message,
+      });
+    }
+    const nome = (data as { name?: unknown } | null)?.name;
+    return typeof nome === "string" && nome.trim() ? nome.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function sendMessageHandler(
   supabase: SB,
   ctx: HandlerCtx,
@@ -617,7 +659,12 @@ export async function sendMessageHandler(
   // Assinatura do emissor (opt-in por organização, desligada por padrão). Entra
   // SÓ no texto que vai ao canal; `messages.body` guarda o que foi escrito.
   // Portado do projeto original (DeskcommCRM, PR #2079 de @webtecnica).
-  const assinatura = await assinaturaDoEnvio(supabase, ctx);
+  // O nome do agente (#3665) é lido JUNTO, em paralelo, e vai só para a
+  // metadata da linha: nunca entra no texto do canal.
+  const [assinatura, nomeDoAgente] = await Promise.all([
+    assinaturaDoEnvio(supabase, ctx),
+    nomeDoAgenteDoEnvio(supabase, ctx),
+  ]);
   const corpoDoCanal = (texto: string | null): string | null => aplicarAssinatura(assinatura, texto) ?? null;
 
   if (input.type === "contact") {
@@ -753,6 +800,12 @@ export async function sendMessageHandler(
     idDaCitadaNoCanal = typeof original === "string" ? original : citada.external_id;
   }
 
+  // `ai_actor_name` é escrito SÓ aqui (#3649). O do chamador é descartado:
+  // `metadata` é entrada da API, e o balão mostra o nome como verdade. A chave
+  // só existe quando um agente foi resolvido; quem diz se a IA falou continua
+  // sendo `ai_actor_id` (`ehFalaDaIa`, lib/ai/handoff/aviso-ao-lead.ts).
+  const { ai_actor_name: _doChamador, ...metadataDoChamador }: Record<string, unknown> =
+    input.metadata ?? {};
   const insertRow = {
     ...(ctx.internalMessageId ? { id: ctx.internalMessageId } : {}),
     organization_id: c.organization_id,
@@ -775,8 +828,9 @@ export async function sendMessageHandler(
     sent_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
     sent_at: now,
     metadata: {
-      ...(input.metadata ?? {}),
+      ...metadataDoChamador,
       ...(ctx.actor.type === "ai_agent" ? { ai_actor_id: ctx.actor.id } : {}),
+      ...(nomeDoAgente ? { ai_actor_name: nomeDoAgente } : {}),
       ...(midiaDaBiblioteca ? { media_variant: midiaDaBiblioteca.variante.key } : {}),
     },
   };

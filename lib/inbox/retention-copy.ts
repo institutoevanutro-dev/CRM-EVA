@@ -110,6 +110,20 @@ export function retentionCopy(
           "A primeira mensagem a um contato novo precisa se apresentar como assistente virtual. O assistente foi orientado a corrigir antes de enviar.",
         ),
       );
+    case "horario_sem_fonte":
+      return make(
+        "quality",
+        t(
+          "A resposta citava um horário que a agenda não devolveu. O assistente foi orientado a consultar a agenda antes de enviar.",
+        ),
+      );
+    case "agenda_confirmou_sem_marcar":
+      return make(
+        "quality",
+        t(
+          "A resposta dizia que o horário estava agendado, mas nenhuma marcação foi gravada. O assistente foi orientado a corrigir antes de enviar.",
+        ),
+      );
     default:
       return make(
         "protection",

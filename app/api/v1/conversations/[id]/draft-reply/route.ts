@@ -60,6 +60,8 @@ export async function POST(_req: NextRequest, ctx: Ctx) {
       conversationId,
       contactId,
       channelId,
+      // Uma pessoa clicou: se o agente calaria, a prévia pede o texto uma vez (#3557).
+      pedidoHumano: true,
     });
     void audit({
       action: "ai_reply.generated",

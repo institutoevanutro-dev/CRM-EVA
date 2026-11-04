@@ -70,6 +70,12 @@ const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.SUPABASE_SERVICE_R
 const PREFIXO = "Rotulo de Origem E2E";
 const NOME_DO_CONTATO = `${PREFIXO} ${Date.now()}`;
 
+/**
+ * O nome do agente que o envio grava na linha (#3665, portado do original).
+ * Inventado, e LONGO de propósito: é ele que dá sentido à medida em 375 px.
+ */
+const NOME_DO_AGENTE = "Agente E2E · Harmonizacao Facial e Corporal Avancada";
+
 let creds: Creds;
 let conversaId = "";
 
@@ -138,6 +144,8 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
         display_name: NOME_DO_CONTATO,
         // E.164 com o `+`: `contacts_phone_e164_format` exige `^\+\d{8,15}$`.
         phone_number: `+55119${String(Date.now()).slice(-8)}`,
+        // Quatro etiquetas: a lista mostra duas e o "+2" diz no title as outras.
+        tags: ["e2e-vip", "e2e-quente", "e2e-retorno", "e2e-boleto"],
       })
       .select("id")
       .single();
@@ -159,7 +167,7 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
     if (erroConversa) throw new Error(`conversations: ${erroConversa.message}`);
     conversaId = (conversa as { id: string }).id;
 
-    // As CINCO linhas, com os valores que os emissores REAIS gravam — cada um
+    // As linhas, com os valores que os emissores REAIS gravam — cada um
     // com o arquivo que o carimba, para ninguém precisar acreditar nesta lista:
     //
     //   inbound  + external_device — o CLIENTE escreveu (lib/waha/ingest.ts:622)
@@ -167,6 +175,9 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
     //                                do CRM (lib/waha/ingest.ts:850)
     //   outbound + ai              — o agente respondeu
     //                                (workers/ai-response-worker.ts:1068)
+    //   outbound + ai (com nome)   — o agente respondeu, com o nome dele gravado
+    //                                na linha (app/api/v1/messages/_handler.ts,
+    //                                `insertRow.metadata`: `ai_actor_name`)
     //   outbound + user (eu)       — o agente que faz o login digitou no CRM
     //                                (app/api/v1/messages/_handler.ts:529, que
     //                                grava `sent_by_user_id` junto)
@@ -175,7 +186,7 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
     //
     // ⚠️ AS DUAS ÚLTIMAS TÊM O MESMO `sent_via`. Também não é descuido: a
     // coluna registra que *um humano digitou no CRM*, nunca QUAL — quem separa
-    // é `sent_by_user_id` contra o id de quem está lendo. Sem a quinta linha,
+    // é `sent_by_user_id` contra o id de quem está lendo. Sem a linha do colega,
     // um componente que dissesse "Você" em toda mensagem de `sent_via='user'`
     // passaria neste spec, e numa org com dois atendentes cada um leria o
     // atendimento do outro como seu.
@@ -206,8 +217,11 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
       { ...base, direction: "outbound", status: "sent", sent_via: "user", sent_by_user_id: creds.users.manager!.id, body: "RESPOSTA DIGITADA PELO COLEGA", sent_at: new Date(t0 + 4000).toISOString() },
       // A RESPOSTA PRONTA: o motor envia com `sent_via='ai'` e carimba
       // `metadata.resposta_pronta_id` (lib/agent-engine/agent/resposta-pronta.ts).
-      // Mesmo `sent_via` da linha do agente — quem separa é a metadata.
-      { ...base, direction: "outbound", status: "sent", sent_via: "ai", body: "RESPOSTA PRONTA CADASTRADA", metadata: { resposta_pronta_id: "0306eeee-0000-4000-8000-000000000001" }, sent_at: new Date(t0 + 5000).toISOString() },
+      // Mesmo `sent_via` da linha do agente — quem separa é a metadata. O envio
+      // grava o nome do agente nela também (#3665), e o balão não o mostra.
+      { ...base, direction: "outbound", status: "sent", sent_via: "ai", body: "RESPOSTA PRONTA CADASTRADA", metadata: { resposta_pronta_id: "0306eeee-0000-4000-8000-000000000001", ai_actor_name: NOME_DO_AGENTE }, sent_at: new Date(t0 + 5000).toISOString() },
+      // O AGENTE COM NOME (#3665): a linha que o envio grava hoje.
+      { ...base, direction: "outbound", status: "sent", sent_via: "ai", body: "RESPOSTA DO AGENTE NOMEADO", metadata: { ai_actor_id: "0306eeee-0000-4000-8000-000000000002", ai_actor_name: NOME_DO_AGENTE }, sent_at: new Date(t0 + 6000).toISOString() },
     ];
     // Uma a uma, e não em lote: no insert em LOTE o PostgREST une as chaves de
     // todas as linhas e manda NULL onde a linha não a tem — então uma linha que
@@ -264,6 +278,7 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
       ["RESPOSTA DIGITADA POR MIM", "Você"],
       ["RESPOSTA DIGITADA PELO COLEGA", "Atendente"],
       ["RESPOSTA PRONTA CADASTRADA", "Resposta pronta"],
+      ["RESPOSTA DO AGENTE NOMEADO", `IA · ${NOME_DO_AGENTE}`],
     ];
 
     for (const [corpo, rotulo] of esperado) {
@@ -296,6 +311,18 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
       "a resposta pronta não pode levar o rótulo 'IA'",
     ).toHaveCount(0);
 
+    // O NOME DO AGENTE (#3665) só aparece onde foi gravado, e só no rótulo "IA".
+    // A linha antiga não tem nome, e o balão não pode inventar um; a resposta
+    // pronta tem o nome gravado e continua dizendo só "Resposta pronta".
+    await expect(
+      balaoCom("RESPOSTA DO AGENTE"),
+      "a linha sem nome gravado tem de dizer só 'IA'",
+    ).not.toContainText("·");
+    await expect(
+      balaoCom("RESPOSTA PRONTA CADASTRADA"),
+      "a resposta pronta é texto da clínica: não leva o nome do agente",
+    ).not.toContainText("Agente E2E");
+
     // O CONTROLE NEGATIVO, e ele é o que separa "rotula certo" de "rotula
     // tudo": a mensagem RECEBIDA não leva rótulo de origem nenhum. Sem ele,
     // um componente que carimbasse "Celular" em toda bolha passaria nos
@@ -309,5 +336,36 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
     }
 
     await captura(page, "conversa-com-rotulos-de-origem");
+
+    // NO CELULAR (375 px), o nome longo quebra dentro do balão em vez de
+    // empurrá-lo para fora da tela. Medido por ferramenta, não a olho.
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.reload();
+    await expect(page.locator("text=PERGUNTA DO CLIENTE").first()).toBeVisible({ timeout: 60_000 });
+    const nomeado = balaoCom("RESPOSTA DO AGENTE NOMEADO");
+    await expect(nomeado).toBeVisible({ timeout: 30_000 });
+    const medida = await nomeado.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      direita: el.getBoundingClientRect().right,
+    }));
+    expect(medida.scrollWidth, "o nome do agente vazou do balão").toBeLessThanOrEqual(medida.clientWidth);
+    expect(medida.direita, "o balão passou da largura da tela").toBeLessThanOrEqual(375);
+    await captura(page, "conversa-375-nome-do-agente");
+  });
+
+  test("o +N das etiquetas diz no title quais ficaram de fora", async ({ page }) => {
+    // Como GERENTE e na aba "Todas" pela URL: para `agent` a aba "Todas" some
+    // conforme a visibilidade da organização, e a aba padrão ("Fila") depende
+    // de haver agente no ar. O title é a dica nativa do navegador; ao toque
+    // ela não abre, e o contador continua à vista.
+    await login(page, creds.users.manager!.email, creds.password);
+    await page.goto("/app/inbox?filter=all");
+    await page.getByLabel("Buscar conversas", { exact: true }).fill(NOME_DO_CONTATO);
+    const contador = page
+      .locator(`button[data-conversation-id="${conversaId}"]`)
+      .getByText("+2", { exact: true });
+    await expect(contador).toHaveAttribute("title", "e2e-retorno, e2e-boleto", { timeout: 30_000 });
+    await captura(page, "lista-mais-n-com-title");
   });
 });

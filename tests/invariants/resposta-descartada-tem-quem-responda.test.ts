@@ -60,6 +60,10 @@ type Modules = {
 let m: Modules;
 
 let enviados = 0;
+// O que cada chamada ao modelo recebeu: o turno descartado não pode ganhar a correção
+// do turno mudo, que desde o #3673 não é mais calada pela tentativa de envio.
+let prompts: string[] = [];
+const MARCA_DA_CORRECAO = "Este turno terminou SEM nenhuma mensagem ao cliente";
 
 // A régua compara com `now()`, então os instantes são relativos ao relógio real.
 const haSegundos = (s: number): string => new Date(Date.now() - s * 1000).toISOString();
@@ -145,7 +149,8 @@ type Chegada = {
 
 function modelo(chegada: Chegada | null) {
   let chamadas = 0;
-  return async () => {
+  return async (opts: { prompt?: unknown }) => {
+    prompts.push(JSON.stringify(opts.prompt));
     chamadas += 1;
     if (chamadas === 1) {
       if (chegada !== null) {
@@ -295,6 +300,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   enviados = 0;
+  prompts = [];
   await pool.query("delete from send_ledger where organization_id = $1", [ORG]);
   // Ritmo e cópia de envio são contados por número, fora das tabelas acima: os
   // envios dos casos anteriores (a mesma frase do modelo fake) acionariam o
@@ -330,6 +336,12 @@ describe("a resposta descartada tem quem responda depois", () => {
   it("descartada a resposta, a pergunta ganha o próprio turno e o cliente recebe uma resposta só", async () => {
     await turnoDuranteOQualAPerguntaChega({});
     expect(enviados).toBe(0);
+    // O descarte é decisão: nenhuma correção do turno mudo por cima dele (#3673).
+    expect(prompts.length).toBeGreaterThan(0);
+    expect(
+      prompts.some((p) => p.includes(MARCA_DA_CORRECAO)),
+      "o turno descartado como obsoleto pediu a correção do turno mudo",
+    ).toBe(false);
 
     // A pergunta chegou com o turno anterior RODANDO: a coalescência só pega
     // carona em job pendente, então ela tem job próprio, atrás daquele.
@@ -401,6 +413,7 @@ describe("a resposta descartada tem quem responda depois", () => {
     // desatualizada pôde ficar para trás.
     expect(await jobsDaPergunta()).toEqual([{ id: expect.any(String), status: "pending" }]);
     expect(enviados).toBe(0);
+    expect(prompts.some((p) => p.includes(MARCA_DA_CORRECAO))).toBe(false);
   });
 });
 

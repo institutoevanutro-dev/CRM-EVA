@@ -64,6 +64,7 @@ describe("a resposta cortada no teto de tokens não sai", () => {
 
 const MUDO = {
   tentativasDeEnvio: 0,
+  vetoIrrevogavel: false,
   enviadas: 0,
   turnoDescartado: false,
   passouParaAEquipe: false,
@@ -90,8 +91,17 @@ describe("o turno mudo por corte vira aviso; o silêncio deliberado, não", () =
     ["o turno foi descartado como obsoleto", { turnoDescartado: true }],
     ["a conversa foi passada à equipe", { passouParaAEquipe: true }],
     ["o teto de envio do número barrou", { capDeEnvio: true }],
+    // Ex.: a equipe assumiu durante a correção e o envio dela levou `conversa_com_humano`.
+    // O silêncio é a decisão, com a resposta cortada ou não.
+    ["a cadeia vetou com um código que manda parar", { vetoIrrevogavel: true, correcaoCortada: true }],
   ])("cortado, mas com razão para o silêncio — %s: não avisa", (_razao, mudanca) => {
     expect(turnoMudoPorCorte({ ...MUDO, saidaCortada: true, ...mudanca })).toBe(false);
+  });
+
+  it("⭐ tentou, levou veto e a CORREÇÃO foi cortada: avisa", () => {
+    // Desde o #3673 a correção roda também depois de um veto de ensino. Se ELA é cortada,
+    // era a última chance e o cliente ficou sem resposta — o original não avisava este caso.
+    expect(turnoMudoPorCorte({ ...MUDO, tentativasDeEnvio: 1, correcaoCortada: true })).toBe(true);
   });
 });
 

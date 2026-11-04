@@ -531,6 +531,9 @@ create table public.merge_queue (
 
   candidates        uuid[] not null,        -- array de contacts.id, len ≥ 2
   reason            text not null,          -- 'identity_ambiguous' | 'manual_request' | 'cross_source_collision'
+                                            -- | 'nao_sao_a_mesma': a dispensa de um par sugerido pelo NOME
+                                            --   ("Não são a mesma pessoa"), gravada com status 'discarded'
+                                            --   por lib/contacts/dispensar-par.ts (porte do #3640).
   trigger_payload   jsonb not null default '{}'::jsonb,  -- snapshot do input que gerou ambiguidade
 
   status            text not null default 'pending',  -- pending | resolved | discarded

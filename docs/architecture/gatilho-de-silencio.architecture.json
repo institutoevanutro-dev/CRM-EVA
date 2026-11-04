@@ -20,7 +20,8 @@
     { "id": "rotas-fluxo", "lane": "api", "col": 0, "type": "service", "label": "publish / disable / PATCH de followup-flows" },
     { "id": "cron", "lane": "api", "col": 1, "type": "service", "label": "cron followup-flow-worker e relógio (1×/min) — audita só com efeito" },
     { "id": "gate", "lane": "motor", "col": 1, "type": "service", "label": "resolveAgentForAutomaticTrigger — agente publicado que arma o ponteiro" },
-    { "id": "varredura", "lane": "motor", "col": 2, "type": "service", "label": "runSilenceSweep — vigência, episódio, vivo em outro fluxo, insert" },
+    { "id": "varredura", "lane": "motor", "col": 2, "type": "service", "label": "runSilenceSweep — vigência, episódio, vivo em outro fluxo, resposta a automática, insert" },
+    { "id": "resposta-a-automacao", "lane": "motor", "col": 3, "type": "service", "label": "contatosQueSoResponderamAAutomacao — só emoji a mensagem automática nossa (48 h)" },
     { "id": "ponteiros", "lane": "dados", "col": 0, "type": "database", "label": "followup_flow_pointers.active_since + trg_followup_ponteiro_marca_vigencia" },
     { "id": "conversas", "lane": "dados", "col": 1, "type": "database", "label": "conversations + messages inbound carimbadas (keyset por id, até a página vazia)" },
     { "id": "inscricoes", "lane": "dados", "col": 2, "type": "database", "label": "followup_enrollments — idx_one_live e idx_pointer_contact_cooldown (0411 do original)" }
@@ -33,6 +34,8 @@
     { "id": "varredura-le-ponteiro", "from": "varredura", "to": "ponteiros", "label": "lê active_since: silêncio anterior não conta" },
     { "id": "varredura-le-conversas", "from": "varredura", "to": "conversas", "label": "sent_at mede o limiar e a vigência; created_at mede o episódio; anonimizado fora" },
     { "id": "varredura-le-inscricoes", "from": "varredura", "to": "inscricoes", "label": "maior started_at deste ponteiro (qualquer status) e vivos da org" },
+    { "id": "varredura-resposta-a-automacao", "from": "varredura", "to": "resposta-a-automacao", "label": "só emoji a automática e nada com conteúdo nas 48 h antes: não inscreve; leitura falhou = segue sem a guarda" },
+    { "id": "resposta-a-automacao-le-conversas", "from": "resposta-a-automacao", "to": "conversas", "label": "última saída entregue antes da resposta (marcas de autoria) + entradas da conversa" },
     { "id": "varredura-insere", "from": "varredura", "to": "inscricoes", "label": "uma por episódio; 23505 cobre a corrida" },
     { "id": "inscricoes-fila", "from": "inscricoes", "to": "fila", "label": "a pessoa vê a sequência uma vez por silêncio" }
   ]

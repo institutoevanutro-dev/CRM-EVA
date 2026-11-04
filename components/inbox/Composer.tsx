@@ -7,8 +7,10 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
+  type DragEvent,
   type KeyboardEvent,
 } from "react";
+import { toast } from "sonner";
 import { DotsThree, PaperPlaneTilt } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
@@ -38,6 +40,7 @@ import { X } from "lucide-react";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
 import { useUploadMedia, type DestinoDoUpload } from "@/hooks/inbox/useUploadMedia";
 import { imagemDoClipboard } from "@/lib/inbox/clipboard-image";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import {
   interpolateTemplate,
   motivoDoCuringaLiteral,
@@ -109,6 +112,11 @@ interface Props {
   currentContactId?: string | null;
 }
 
+/** O arraste traz ARQUIVO? `types` lista o que vem, nunca o conteúdo; texto e link seguem com o navegador (porte do original #3713). */
+function trazArquivo(dt: DataTransfer | null | undefined): boolean {
+  return Array.from(dt?.types ?? []).includes("Files");
+}
+
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   {
     conversationId,
@@ -128,6 +136,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const t = useT();
   const [text, setText] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  // O realce do arquivo arrastado (porte do original #3713). `dragenter` e
+  // `dragleave` disparam também nos filhos, e um booleano solto faria o realce
+  // piscar: o contador segura até o ponteiro sair de fato. Ref porque não desenha.
+  const [arrastandoArquivo, setArrastandoArquivo] = useState(false);
+  const arrasteEmCurso = useRef(0);
   /**
    * A resposta rápida com imagens da Biblioteca de mídia escolhida, à espera da
    * prévia (portado do original, DeskcommCRM PR #2704). O texto vira legenda.
@@ -144,6 +157,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
    * MENSAGEM e iria para o cliente.
    */
   const [pendingEm, setPendingEm] = useState<"reply" | "note">("reply");
+  // A prévia é da conversa em que o anexo foi escolhido. Trocar de conversa com ela
+  // aberta (J/K com o foco num botão ou no vídeo da prévia) a descarta, em vez de o
+  // Enviar subir o arquivo para o paciente que acabou de abrir.
+  const [conversaDoAnexo, setConversaDoAnexo] = useState(conversationId);
+  if (conversaDoAnexo !== conversationId) {
+    setConversaDoAnexo(conversationId);
+    setPendingFile(null);
+    setRespostaComImagens(null);
+  }
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [menuDismissed, setMenuDismissed] = useState(false);
   const [mode, setMode] = useState<"reply" | "note">("reply");
@@ -187,6 +209,24 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   useEffect(() => {
     respondendoAgora.current = respondendo?.id ?? null;
   }, [respondendo?.id]);
+  // Arquivo solto FORA da caixa (no fio, no cabeçalho, no fundo escuro da prévia
+  // aberta) não troca o atendimento pelo arquivo na aba. Só quando ninguém tratou
+  // antes: o React despacha abaixo da `window`, então o `preventDefault` da caixa já
+  // aparece aqui e ela segue dona do drop dela. Zona de soltar nova nesta tela:
+  // chame `preventDefault` nela, senão esta guarda cancela o padrão dela.
+  useEffect(() => {
+    const barrar = (e: globalThis.DragEvent) => {
+      if (e.defaultPrevented || !trazArquivo(e.dataTransfer)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "none";
+    };
+    window.addEventListener("dragover", barrar);
+    window.addEventListener("drop", barrar);
+    return () => {
+      window.removeEventListener("dragover", barrar);
+      window.removeEventListener("drop", barrar);
+    };
+  }, []);
   const send = useSendMessage();
   const upload = useUploadMedia();
   const createNote = useCreateNote();
@@ -226,6 +266,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   // o ENVIO é barrado, só em resposta (a nota interna não sai para o cliente).
   const motivoCuringa = mode === "reply" ? motivoDoCuringaLiteral(text, contact ?? {}) : null;
   const envioBarrado = respostaBarrada || !!motivoCuringa;
+  // O que o drop aceita: a MESMA guarda do Ctrl+V (onPaste) e do "+" (disabled do AttachMenu).
+  const aceitaArquivoArrastado = !respostaBarrada && !pendingFile;
 
   /** Escolhe o arquivo e MARCA o modo da escolha (ver `pendingEm`). */
   function escolherArquivo(file: File) {
@@ -434,6 +476,55 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     escolherArquivo(imagem);
   }
 
+  /**
+   * ARRASTAR UM ARQUIVO PARA A CAIXA (porte do original #3713) cai no MESMO
+   * `escolherArquivo` do "+" e do Ctrl+V: abre a mesma prévia, e nada sobe antes
+   * do Enviar dela. Nenhum upload mora aqui.
+   */
+  function onDragOver(e: DragEvent<HTMLDivElement>) {
+    if (!trazArquivo(e.dataTransfer)) return;
+    e.preventDefault(); // senão o navegador abre o arquivo na aba — vale até travado
+    e.dataTransfer.dropEffect = aceitaArquivoArrastado ? "copy" : "none";
+  }
+  function onDragEnter(e: DragEvent<HTMLDivElement>) {
+    if (!trazArquivo(e.dataTransfer) || !aceitaArquivoArrastado) return;
+    e.preventDefault();
+    arrasteEmCurso.current += 1;
+    setArrastandoArquivo(true);
+  }
+  function onDragLeave(e: DragEvent<HTMLDivElement>) {
+    // sem checar types: há navegador que entrega vazio na saída
+    e.preventDefault();
+    arrasteEmCurso.current = Math.max(0, arrasteEmCurso.current - 1);
+    if (arrasteEmCurso.current === 0) setArrastandoArquivo(false);
+  }
+  function onDrop(e: DragEvent<HTMLDivElement>) {
+    if (!trazArquivo(e.dataTransfer)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    arrasteEmCurso.current = 0;
+    setArrastandoArquivo(false);
+    if (!aceitaArquivoArrastado) return;
+    const arquivos = Array.from(e.dataTransfer.files);
+    // ponytail: um arquivo por vez (o fork não tem a fila do #2526); portar a fila se a recepção pedir vários.
+    if (arquivos.length > 1) {
+      toast.warning(t("Solte um arquivo por vez."));
+      return;
+    }
+    const arquivo = arquivos[0];
+    // Diz trazer arquivo e não entrega (Fotos do Mac, imagem de outro site), ou 0 byte: a régua do Ctrl+V.
+    if (!arquivo || arquivo.size <= 0) {
+      toast.warning(t("Não consegui ler esse arquivo. Salve no computador e arraste de novo, ou use o +."));
+      return;
+    }
+    // Áudio na RESPOSTA sai como mensagem de voz e a legenda não chega ao cliente; o "+" nunca ofereceu áudio. Na nota ele entra.
+    if (mode === "reply" && arquivo.type.startsWith("audio/")) {
+      toast.warning(t("Arquivo de áudio não vai na resposta. Grave pelo microfone ou anexe na nota interna."));
+      return;
+    }
+    escolherArquivo(arquivo);
+  }
+
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Escape" && menuOpen) {
       setMenuDismissed(true);
@@ -494,11 +585,26 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     <>
       <div
         {...ferramentas.zonaProps}
+        data-testid="composer"
+        onDragEnter={onDragEnter}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
         className={cn(
           "relative border-t border-border bg-bg px-3 py-2.5",
           mode === "note" && "border-warning/40 bg-warning-bg",
         )}
       >
+        {/* O realce do arraste. `pointer-events-none` é obrigatório: com eventos, a
+            camada engoliria o `dragleave` dos filhos e o contador nunca fecharia. */}
+        {arrastandoArquivo && (
+          <div
+            data-testid="arraste-de-arquivo"
+            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-sm border-2 border-dashed border-primary bg-primary/10 px-3 text-center text-xs font-medium text-primary"
+          >
+            {t("Solte o arquivo para anexar")}
+          </div>
+        )}
         <TemplateMenu
           open={menuOpen}
           query={slash.query}
@@ -772,6 +878,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       </div>
       <AttachmentPreviewDialog
         file={pendingFile}
+        para={
+          pendingEm === "note"
+            ? t("Nota interna · só o time vê")
+            : t("Para: {nome}").replace("{nome}", () => rotuloDoContato(contact ?? null, t))
+        }
         sending={upload.isPending || send.isPending || createNote.isPending}
         onCancel={() => setPendingFile(null)}
         onSend={async (caption) => {

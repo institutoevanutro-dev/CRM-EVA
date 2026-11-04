@@ -176,6 +176,50 @@ test.describe("Inbox: as abas perguntam quem manda", () => {
     expect(medida.transborda, "a faixa de abas transborda a coluna").toBe(false);
   });
 
+  /**
+   * A CONTAGEM DAS ABAS ENTRA DEPOIS DA HIDRATAÇÃO — e continua entrando (#3736).
+   *
+   * Portado do projeto original (DeskcommCRM, PR #3832 de @webtecnica), adaptado:
+   * o original não tinha prova pela tela.
+   *
+   * `InboxFilters` só desenha a pílula da contagem e o seletor de número depois
+   * de montar (`useDepoisDeMontar`): o HTML do servidor e o primeiro render do
+   * cliente saem sem eles, idênticos por construção. O risco do conserto é o
+   * contrário do defeito — a contagem sumir para sempre —, e é isso que este caso
+   * mede pela tela: em três cargas, a aba Fila termina com o número no nome
+   * acessível (o `beforeEach` semeia uma conversa esperando gente).
+   *
+   * O #418 em si é uma corrida rara (0,55% das cargas, medida no original), que
+   * três cargas não pegam: a prova determinística é
+   * `tests/unit/hidratacao-do-badge-das-abas.test.tsx`, com HTML do servidor e
+   * `hydrateRoot` de verdade. Aqui os erros de hidratação vão para o LOG; a
+   * asserção sobre eles só entra depois de ~10 rodadas limpas contra a main sem
+   * o conserto, para um aviso de hidratação alheio a esta tela não reprovar o
+   * gate.
+   */
+  test("a contagem da Fila aparece depois de carregar, nas três cargas", async ({ page }) => {
+    const errosDeHidratacao: string[] = [];
+    const ehHidratacao = (texto: string) => /#418|hydrat/i.test(texto);
+    page.on("pageerror", (e) => {
+      if (ehHidratacao(e.message)) errosDeHidratacao.push(`pageerror: ${e.message}`.slice(0, 300));
+    });
+    page.on("console", (m) => {
+      if (m.type() === "error" && ehHidratacao(m.text())) {
+        errosDeHidratacao.push(`console: ${m.text()}`.slice(0, 300));
+      }
+    });
+
+    await loginComoAdmin(page, lerCreds());
+    for (let carga = 1; carga <= 3; carga += 1) {
+      await page.goto("/app/inbox");
+      await expect(
+        page.getByRole("tab", { name: /Fila\s*\d+/ }).first(),
+        `carga ${carga}: a aba Fila terminou sem a contagem`,
+      ).toBeVisible({ timeout: 30_000 });
+    }
+    console.info("[inbox-abas] erros de hidratação nas 3 cargas:", JSON.stringify(errosDeHidratacao));
+  });
+
   test("Fila mostra só quem espera uma PESSOA; Automático mostra o que o robô conduz", async ({
     page,
   }) => {

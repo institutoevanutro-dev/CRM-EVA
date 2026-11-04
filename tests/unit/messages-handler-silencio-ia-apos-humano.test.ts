@@ -18,6 +18,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { sendMessageHandler } from '@/app/api/v1/messages/_handler';
 import type { HandlerCtx } from '@/lib/api/handlers/types';
+import { logger } from '@/lib/logger';
 import type { SendMessageInput } from '@/lib/schemas';
 
 import { getAction } from "@/lib/automation/actions";
@@ -63,8 +64,19 @@ function conversationRow(botSilencedUntil: string | null): Row {
   };
 }
 
-/** Captura o patch do UPDATE em `conversations` — é isso que os casos verificam. */
-function makeSupabase(botSilencedUntil: string | null, snapshot?: () => Record<string, unknown>, orgSettings: Record<string, unknown> = {}) {
+/**
+ * Captura o patch do UPDATE em `conversations` — é isso que os casos verificam.
+ *
+ * `agentes` (#3649): `nomes` por id de `ai_agents`, respondidos só quando a
+ * leitura filtra a organização certa; `quebrado` faz a leitura lançar ou
+ * devolver erro; `leituras` recebe cada leitura feita (colunas e filtros).
+ */
+function makeSupabase(
+  botSilencedUntil: string | null,
+  snapshot?: () => Record<string, unknown>,
+  orgSettings: Record<string, unknown> = {},
+  agentes: { nomes?: Record<string, string>; quebrado?: 'lanca' | 'erro'; leituras?: Row[] } = {},
+) {
   const patches: Row[] = [];
   const mensagensInseridas: Row[] = [];
   const client = {
@@ -145,6 +157,31 @@ function makeSupabase(botSilencedUntil: string | null, snapshot?: () => Record<s
           maybeSingle: async () => ({ data: { ai_opt_out: false }, error: null }),
         };
         return { update: () => cadeiaContacts, select: () => leituraContacts };
+      }
+      if (table === 'ai_agents') {
+        if (agentes.quebrado === 'lanca') throw new Error('fake_supabase: ai_agents fora do ar');
+        const leitura: Row = {};
+        agentes.leituras?.push(leitura);
+        // Encadeável sem limite: cada `eq` fica registrado, e é o registro que
+        // os casos conferem (a organização tem de estar no filtro).
+        const cadeiaAgentes: Record<string, unknown> = {
+          select: (cols: string) => {
+            leitura.cols = cols;
+            return cadeiaAgentes;
+          },
+          eq: (col: string, v: unknown) => {
+            leitura[col] = v;
+            return cadeiaAgentes;
+          },
+          maybeSingle: async () => {
+            if (agentes.quebrado === 'erro') {
+              return { data: null, error: { code: '42703', message: 'column does not exist' } };
+            }
+            const nome = leitura.organization_id === ORG ? agentes.nomes?.[String(leitura.id)] : undefined;
+            return { data: nome === undefined ? null : { name: nome }, error: null };
+          },
+        };
+        return cadeiaAgentes;
       }
       throw new Error(`fake_supabase: tabela inesperada '${table}'`);
     },
@@ -400,9 +437,12 @@ describe('sendMessageHandler — assinatura do emissor (opt-in)', () => {
 
   it('ligada + IA: assina com o nome configurado da IA', async () => {
     wahaConfigured();
-    const { supabase } = makeSupabase(null, undefined, LIGADA);
+    // #3649: com o nome do agente lido e gravado na linha, o texto que o
+    // paciente recebe continua EXATAMENTE o mesmo.
+    const { supabase, mensagensInseridas } = makeSupabase(null, undefined, LIGADA, { nomes: { [AGENT_RUN]: 'Bia' } });
     await sendMessageHandler(supabase, IA, input);
     expect(corpoEnviado()).toBe('*Assistente Eva*\noi');
+    expect((mensagensInseridas[0]?.metadata as Record<string, unknown> | undefined)?.ai_actor_name).toBe('Bia');
   });
 
   it('ligada + automação (webhook_source): não assina', async () => {
@@ -417,5 +457,99 @@ describe('sendMessageHandler — assinatura do emissor (opt-in)', () => {
     const { supabase } = makeSupabase(null, undefined, LIGADA);
     await sendMessageHandler(supabase, HUMANO, input);
     expect(corpoEnviado()).toBe('oi');
+  });
+});
+
+/**
+ * O NOME DO AGENTE GRAVADO NA LINHA (#3649).
+ * Portado do projeto original (DeskcommCRM, PR #3665 de @webtecnica).
+ *
+ * O balão mostra "IA · <nome>" a partir de `metadata.ai_actor_name`, que só o
+ * envio escreve. Preso aqui: QUEM é lido (`agent_id ?? id`, com a organização
+ * no filtro), quem NUNCA é lido (ator que não é agente, id de sistema), que o
+ * nome mandado pelo chamador não chega à linha, e que o envio não cai quando a
+ * leitura falha.
+ */
+describe('#3649 · nome do agente gravado na linha (porte do original)', () => {
+  const AGENTE = '77777777-7777-4777-8777-777777777777';
+  const RUN = '88888888-8888-4888-8888-888888888888';
+  const boundary = { organization_id: ORG, contact_id: CONTACT, conversation_id: CONV, service_revision: 1, demanda_id: null, demanda_revision: null };
+  const comoAgente = (actor: HandlerCtx['actor']): HandlerCtx => ({ organization_id: ORG, actor, requestId: 'req-3649', serviceBoundary: boundary });
+  const metadataDa = (linhas: Row[]) => linhas[0]?.metadata as Record<string, unknown> | undefined;
+  const saiuPeloCanal = () =>
+    (fetch as unknown as { mock: { calls: Array<[unknown]> } }).mock.calls.some(([url]) => String(url).includes('/api/sendText'));
+  const forjado = { ...input, metadata: { ai_actor_name: 'Forjado' } } as SendMessageInput;
+
+  it('(a) motor do turno: lê o agente do `id`, com a organização no filtro, e grava o nome sem espaços', async () => {
+    wahaConfigured();
+    const leituras: Row[] = [];
+    const { supabase, mensagensInseridas } = makeSupabase(null, undefined, {}, { nomes: { [AGENTE]: ' Bia da Locação ' }, leituras });
+    await sendMessageHandler(supabase, comoAgente({ type: 'ai_agent', id: AGENTE, role: 'agent' }), input);
+    expect(metadataDa(mensagensInseridas)?.ai_actor_name).toBe('Bia da Locação');
+    expect(leituras).toEqual([{ cols: 'name', organization_id: ORG, id: AGENTE }]);
+  });
+
+  it('(b) runtime nativo: o RUN no `id` e o agente em `agent_id` — vale o `agent_id`', async () => {
+    wahaConfigured();
+    const leituras: Row[] = [];
+    const { supabase, mensagensInseridas } = makeSupabase(null, undefined, {}, { nomes: { [AGENTE]: ' Bia da Locação ' }, leituras });
+    await sendMessageHandler(supabase, comoAgente({ type: 'ai_agent', id: RUN, agent_id: AGENTE, role: 'ai_operator' }), input);
+    expect(metadataDa(mensagensInseridas)).toMatchObject({ ai_actor_id: RUN, ai_actor_name: 'Bia da Locação' });
+    expect(leituras.map((l) => l.id)).toEqual([AGENTE]);
+  });
+
+  it.each([
+    ['api_token', { type: 'api_token', id: 'tok-1' }],
+    ['webhook_source', { type: 'webhook_source', id: 'regra-1' }],
+    ['user', { type: 'user', id: USER }],
+  ] as const)('(c) %s mandando `ai_actor_name` na metadata: a chave não chega à linha, e nada é lido', async (_tipo, actor) => {
+    wahaConfigured();
+    const leituras: Row[] = [];
+    const { supabase, mensagensInseridas } = makeSupabase(null, undefined, {}, { nomes: { [AGENTE]: 'Bia' }, leituras });
+    await sendMessageHandler(supabase, { organization_id: ORG, actor, requestId: 'req-3649-forjado' }, forjado);
+    expect(mensagensInseridas).toHaveLength(1);
+    expect(metadataDa(mensagensInseridas)).not.toHaveProperty('ai_actor_name');
+    expect(leituras).toHaveLength(0);
+  });
+
+  it('(c) ai_agent cujo id não é agente desta organização (o run de um token MCP): o nome forjado também não chega', async () => {
+    wahaConfigured();
+    const leituras: Row[] = [];
+    const { supabase, mensagensInseridas } = makeSupabase(null, undefined, {}, { nomes: { [AGENTE]: 'Bia' }, leituras });
+    await sendMessageHandler(supabase, comoAgente({ type: 'ai_agent', id: RUN, role: 'agent' }), forjado);
+    expect(leituras.map((l) => l.id)).toEqual([RUN]);
+    expect(metadataDa(mensagensInseridas)).not.toHaveProperty('ai_actor_name');
+  });
+
+  it.each(['agent-engine', 'agent-engine:meet-delivery', 'handoff-orchestrator'])(
+    '(d) id de sistema %s: nem se consulta, a chave não existe, e a mensagem sai',
+    async (id) => {
+      wahaConfigured();
+      const leituras: Row[] = [];
+      const { supabase, mensagensInseridas } = makeSupabase(null, undefined, {}, { nomes: { [id]: 'Nunca' }, leituras });
+      await sendMessageHandler(supabase, comoAgente({ type: 'ai_agent', id, role: 'manager' }), input);
+      expect(leituras).toHaveLength(0);
+      expect(mensagensInseridas).toHaveLength(1);
+      expect(metadataDa(mensagensInseridas)).not.toHaveProperty('ai_actor_name');
+      expect(metadataDa(mensagensInseridas)?.ai_actor_id).toBe(id);
+    },
+  );
+
+  it.each([
+    ['lanca', 0],
+    ['erro', 1],
+  ] as const)('(e) leitura do nome que %s: a mensagem é gravada e sai pelo canal, sem a chave', async (quebrado, avisos) => {
+    wahaConfigured();
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    try {
+      const { supabase, mensagensInseridas } = makeSupabase(null, undefined, {}, { nomes: { [AGENTE]: 'Bia' }, quebrado });
+      await sendMessageHandler(supabase, comoAgente({ type: 'ai_agent', id: AGENTE, role: 'agent' }), input);
+      expect(mensagensInseridas).toHaveLength(1);
+      expect(metadataDa(mensagensInseridas)).not.toHaveProperty('ai_actor_name');
+      expect(saiuPeloCanal()).toBe(true);
+      expect(warn.mock.calls.filter(([msg]) => msg === '[messages.send] nome do agente não lido')).toHaveLength(avisos);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

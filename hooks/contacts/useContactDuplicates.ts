@@ -1,6 +1,7 @@
 "use client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
+import { marcarReleitura } from "@/lib/audit/releitura";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { MotivoDeDuplicidade } from "@/lib/contacts/duplicados";
 
@@ -30,15 +31,21 @@ interface DuplicatesResponse {
  * A varredura só roda quando alguém abre a tela (`enabled`), e não fica
  * revalidando em foco: é uma leitura de toda a base de contatos vivos, cara o
  * bastante para não valer a pena repetir sozinha atrás de um diálogo fechado.
+ *
+ * A recarga depois de juntar ou dispensar sai marcada (`?atualizacao=1`): é a
+ * mesma lista na tela, e não abre outra linha `contact.listed` na trilha.
  */
 export function useContactDuplicates(enabled: boolean) {
+  const qc = useQueryClient();
+  const queryKey = ["contacts", "duplicates"] as const;
   return useQuery({
-    queryKey: ["contacts", "duplicates"],
+    queryKey,
     enabled,
     refetchOnWindowFocus: false,
     queryFn: async () => {
+      const qs = marcarReleitura(new URLSearchParams(), qc.getQueryData(queryKey) !== undefined).toString();
       try {
-        return await apiClient.get<DuplicatesResponse>("/api/v1/contacts/duplicates");
+        return await apiClient.get<DuplicatesResponse>(`/api/v1/contacts/duplicates${qs ? `?${qs}` : ""}`);
       } catch (err) {
         showApiError(err);
         throw err;

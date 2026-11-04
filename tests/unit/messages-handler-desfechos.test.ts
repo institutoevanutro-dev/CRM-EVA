@@ -647,3 +647,63 @@ describe('sendMessageHandler — token de servidor (api_token) no ponto de uso',
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * AUTORIA GRAVADA NA LINHA — o contrato que a varredura de silêncio
+ * (`lib/followup/resposta-a-automacao.ts`) e `ehFalaDaIa` leem. Neste fork
+ * `sent_via` não separa IA de automação (todo ator que não é pessoa sai `'ai'`):
+ * quem separa é `metadata.ai_actor_id`, gravado só para o ator `ai_agent`. Se
+ * ele sumir, a resposta do agente passa a contar como mensagem automática e o
+ * follow-up de quem conversou com a IA é calado; se aparecer para automação,
+ * o "❤️" ao parabéns volta a virar lead frio.
+ */
+describe('sendMessageHandler — autoria gravada na linha', () => {
+  const AGENTE = { type: 'ai_agent', id: 'agente-1', role: 'agent' } as const;
+  const metadataDa = (msg: unknown) => (msg as { metadata: Record<string, unknown> }).metadata;
+
+  it('ai_agent grava metadata.ai_actor_id com o id do ator', async () => {
+    wahaConfigured(false);
+    vi.stubGlobal('fetch', vi.fn());
+
+    const msg = await sendMessageHandler(makeSupabase(conversationRow()), { ...ctx, actor: AGENTE }, textInput());
+
+    expect(metadataDa(msg).ai_actor_id).toBe('agente-1');
+  });
+
+  it('webhook_source (regra de automação, campanha, lembrete) não grava ai_actor_id', async () => {
+    wahaConfigured(false);
+    vi.stubGlobal('fetch', vi.fn());
+
+    const msg = await sendMessageHandler(
+      makeSupabase(conversationRow()),
+      { ...ctx, actor: { type: 'webhook_source', id: 'regra-1' } },
+      textInput(),
+    );
+
+    expect(metadataDa(msg)).not.toHaveProperty('ai_actor_id');
+  });
+
+  it('api_token (chave de integração) não grava ai_actor_id', async () => {
+    wahaConfigured(false);
+    vi.stubGlobal('fetch', vi.fn());
+    const token = deriveActor(['mcp:write'], '88888888-8888-4888-8888-888888888888');
+
+    const msg = await sendMessageHandler(makeSupabase(conversationRow()), { ...ctx, actor: token }, textInput());
+
+    expect(token.type, 'o caso perdeu o alvo: o ator já não é api_token').toBe('api_token');
+    expect(metadataDa(msg)).not.toHaveProperty('ai_actor_id');
+  });
+
+  it('ai_agent com a marca do texto fixo do fluxo guarda a marca ao lado do ai_actor_id', async () => {
+    wahaConfigured(false);
+    vi.stubGlobal('fetch', vi.fn());
+
+    const msg = await sendMessageHandler(
+      makeSupabase(conversationRow()),
+      { ...ctx, actor: AGENTE },
+      textInput({ metadata: { texto_fixo_do_fluxo: 'true' } }),
+    );
+
+    expect(metadataDa(msg)).toMatchObject({ texto_fixo_do_fluxo: 'true', ai_actor_id: 'agente-1' });
+  });
+});

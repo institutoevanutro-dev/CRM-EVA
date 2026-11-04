@@ -27,6 +27,9 @@ const LEITURAS: Array<[arquivo: string, metodo: string, acao: string]> = [
   ["app/api/v1/prontuario/contacts/route.ts", "GET", "prontuario.contact_read"],
   ["app/api/v1/prontuario/contacts/[id]/route.ts", "GET", "prontuario.contact_read"],
   ["app/api/v1/bonus/meu/route.ts", "GET", "contact.listed"],
+  // Duplicados e a comparação lado a lado (porte do #3640).
+  ["app/api/v1/contacts/duplicates/route.ts", "GET", "contact.listed"],
+  ["app/api/v1/contacts/compare/route.ts", "GET", "contact.viewed"],
 ];
 
 /** Mutações que não deixavam linha (B6). */

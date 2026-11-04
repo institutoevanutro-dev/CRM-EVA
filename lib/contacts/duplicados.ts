@@ -24,6 +24,13 @@
  * simplesmente não existe e a duplicata exata é possível. Procurar por ela custa
  * seis linhas e é a única coisa que enxerga esse clone.
  *
+ * ─── Nome parecido: sugestão, não igualdade (porte do #3640) ────────────────
+ * Tudo acima é IGUALDADE (o mesmo número, o mesmo e-mail). `nome_parecido` não
+ * é: o nome sugere, não prova — pode ser outra pessoa com nome parecido, como
+ * alguém da mesma família. Por isso `encontrarParecidosPorNome` entrega pares
+ * separados dos grupos fortes, só para gestor, e a tela os mostra em
+ * "Parecidos — confira", com a comparação lado a lado antes de qualquer ação.
+ *
  * ─── Vocabulário ────────────────────────────────────────────────────────────
  * Contato é contato em todo nicho — não passa pelo `vocabulary` do funil, que
  * renomeia lead/deal/won/lost. Nada aqui conhece "Paciente", "Cliente" ou etapa.
@@ -31,12 +38,13 @@
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 
-/** Por que estes dois registros caíram no mesmo grupo. */
+/** Por que estes dois registros caíram no mesmo grupo. `nome_parecido` é o único que não é igualdade. */
 export type MotivoDeDuplicidade =
   | "telefone"
   | "email"
   | "telefone_em_conflito"
-  | "mesmo_nome_instagram_whatsapp";
+  | "mesmo_nome_instagram_whatsapp"
+  | "nome_parecido";
 
 /**
  * O recorte de `contacts` que a detecção precisa. Deliberadamente menor que
@@ -73,8 +81,11 @@ export function chaveDeTelefone(valor: string | null | undefined): string {
   return canonico.replace(/\D/g, "");
 }
 
-/** Chave de agrupamento por e-mail, para o clone sem índice único. */
-export function chaveDeEmail(contato: ContatoParaDeduplicar): string {
+/**
+ * Chave de agrupamento por e-mail, para o clone sem índice único. O tipo é o
+ * recorte mínimo: a dispensa (`dispensar-par.ts`) lê só estes campos do SQL.
+ */
+export function chaveDeEmail(contato: Pick<ContatoParaDeduplicar, "email" | "email_normalized">): string {
   const bruto = contato.email_normalized ?? contato.email;
   return (bruto ?? "").trim().toLowerCase();
 }
@@ -97,7 +108,7 @@ export function chaveDeNome(nome: string | null): string | null {
 }
 
 /** O telefone que a ingestão parkou por já pertencer a outro contato vivo. */
-export function telefoneEmConflito(contato: ContatoParaDeduplicar): string {
+export function telefoneEmConflito(contato: Pick<ContatoParaDeduplicar, "source_metadata">): string {
   const valor = contato.source_metadata?.["telefone_em_conflito"];
   return typeof valor === "string" ? chaveDeTelefone(valor) : "";
 }
@@ -244,4 +255,160 @@ export function principalSugerido(grupo: GrupoDeDuplicados): string {
     return a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
   });
   return ordenado[0]!.id;
+}
+
+/*
+ * ─── Nome parecido (porte do #3640) ─────────────────────────────────────────
+ *
+ * O nome sozinho junta gente diferente: o sobrenome comum casa com meia base.
+ * A régua é de RARIDADE — só conta a palavra que aparece em poucas fichas — e
+ * cada ficha só se compara com as fichas das palavras raras dela, então não há
+ * laço O(n²) sobre a base. Endereço, site e rede não geram sugestão.
+ */
+
+/** Rara = aparece em até 3 fichas varridas. Base maior dá menos pares, nunca mais. */
+export const TETO_DA_PALAVRA_RARA = 3;
+
+/** Palavras de ligação e títulos: não distinguem uma pessoa de outra. */
+const PALAVRAS_DE_LIGACAO = new Set(["de", "da", "do", "das", "dos", "e", "em", "a", "o", "dr", "dra"]);
+
+/** O nome inteiro contido no outro só vale com este tamanho mínimo, em letras. */
+const LETRAS_MINIMAS_DO_NOME_CONTIDO = 6;
+
+/**
+ * As palavras que comparam dois nomes: minúsculas, sem acento, sem pontuação,
+ * sem palavra de ligação, sem repetição e sem palavra de uma letra — uma
+ * inicial ("Fernanda B. Tavares") seria rara sem distinguir ninguém.
+ */
+export function palavrasDoNome(nome: string): string[] {
+  const normal = nome.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
+  const vistas = new Set<string>();
+  for (const palavra of normal.split(/[^\p{L}\p{N}]+/u)) {
+    if (palavra.length < 2 || PALAVRAS_DE_LIGACAO.has(palavra)) continue;
+    vistas.add(palavra);
+  }
+  return [...vistas];
+}
+
+/**
+ * A chave de um PAR: os dois ids em ordem crescente, unidos por `:`. A-B e B-A
+ * são o mesmo par — a mesma forma em que a dispensa grava
+ * `merge_queue.candidates`.
+ */
+export function parDeContatos(a: string, b: string): string {
+  return a < b ? `${a}:${b}` : `${b}:${a}`;
+}
+
+/**
+ * Os dois já estão ligados por motivo FORTE (mesmo telefone, mesmo e-mail, ou o
+ * telefone em conflito de um apontando para o outro). Par assim não é sugestão
+ * de nome e não se dispensa: junta-se.
+ */
+export function ligadosPorMotivoForte(
+  a: Pick<ContatoParaDeduplicar, "phone_number" | "email" | "email_normalized" | "source_metadata">,
+  b: Pick<ContatoParaDeduplicar, "phone_number" | "email" | "email_normalized" | "source_metadata">,
+): boolean {
+  const telefoneA = chaveDeTelefone(a.phone_number);
+  const telefoneB = chaveDeTelefone(b.phone_number);
+  if (telefoneA && telefoneA === telefoneB) return true;
+  const emailA = chaveDeEmail(a);
+  if (emailA && emailA === chaveDeEmail(b)) return true;
+  const conflitoA = telefoneEmConflito(a);
+  if (conflitoA && conflitoA === telefoneB) return true;
+  const conflitoB = telefoneEmConflito(b);
+  return Boolean(conflitoB && conflitoB === telefoneA);
+}
+
+/**
+ * Pares de fichas que parecem a mesma pessoa pelo NOME. Cada par é uma
+ * sugestão separada (não é union-find: A~B e B~C são duas decisões). Quem já
+ * está no mesmo grupo forte fica de fora — ele já aparece lá.
+ *
+ * Um par entra quando:
+ *  (a) os dois nomes dividem DUAS OU MAIS palavras raras; ou
+ *  (b) um nome inteiro está dentro do outro (igual conta), e o nome contido tem
+ *      2 palavras ou mais, 6 letras ou mais e ao menos uma palavra rara. A
+ *      busca é pela palavra rara: quem contém o nome contém essa palavra, então
+ *      só as fichas dela (no máximo 3) são comparadas. Isso corta o nome de uma
+ *      palavra só e o nome composto comum ("Ana Paula" dentro de "Ana Paula X").
+ *
+ * O nome é o de `nomeDoContato` (`name`, depois `display_name`), que já pula
+ * identificador técnico (`…@lid`, `Contato 123`, só dígitos). `dispensados` são
+ * as chaves de `parDeContatos` que alguém tirou da lista.
+ */
+export function encontrarParecidosPorNome(
+  contatos: ContatoParaDeduplicar[],
+  opcoes: { dispensados?: ReadonlySet<string> } = {},
+): GrupoDeDuplicados[] {
+  const vivos = contatos.filter(elegivelParaMesclagem);
+  const dispensados = opcoes.dispensados ?? new Set<string>();
+  const porId = new Map(vivos.map((c) => [c.id, c] as const));
+
+  const grupoForteDe = new Map<string, string>();
+  for (const grupo of encontrarContatosDuplicados(vivos)) {
+    for (const contato of grupo.contatos) grupoForteDe.set(contato.id, grupo.chave);
+  }
+
+  // `push` e não `[...lista, id]`: copiar a lista de uma palavra comum a cada
+  // ficha seria O(n²) só na cópia.
+  const palavrasDe = new Map<string, string[]>();
+  const fichasDaPalavra = new Map<string, string[]>();
+  for (const contato of vivos) {
+    const palavras = palavrasDoNome(nomeDoContato(contato) ?? "");
+    palavrasDe.set(contato.id, palavras);
+    for (const palavra of palavras) {
+      const lista = fichasDaPalavra.get(palavra);
+      if (lista) lista.push(contato.id);
+      else fichasDaPalavra.set(palavra, [contato.id]);
+    }
+  }
+  const ehRara = (palavra: string) => (fichasDaPalavra.get(palavra)?.length ?? 0) <= TETO_DA_PALAVRA_RARA;
+
+  const pares = new Map<string, [string, string]>();
+  const registrar = (x: string, y: string) => {
+    if (x !== y) pares.set(parDeContatos(x, y), x < y ? [x, y] : [y, x]);
+  };
+
+  // (a) Conta quantas palavras raras cada par divide.
+  const rarasEmComum = new Map<string, number>();
+  for (const ids of fichasDaPalavra.values()) {
+    if (ids.length > TETO_DA_PALAVRA_RARA) continue;
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const chave = parDeContatos(ids[i]!, ids[j]!);
+        const n = (rarasEmComum.get(chave) ?? 0) + 1;
+        rarasEmComum.set(chave, n);
+        if (n === 2) registrar(ids[i]!, ids[j]!);
+      }
+    }
+  }
+
+  // (b) Nome inteiro contido, procurado só entre as fichas da palavra rara.
+  for (const contato of vivos) {
+    const palavras = palavrasDe.get(contato.id) ?? [];
+    if (palavras.length < 2 || palavras.join("").length < LETRAS_MINIMAS_DO_NOME_CONTIDO) continue;
+    const rara = palavras.find(ehRara);
+    if (!rara) continue;
+    // Espaço nas pontas: " ana paula " não casa dentro de " joana paula ".
+    const contido = ` ${palavras.join(" ")} `;
+    for (const outroId of fichasDaPalavra.get(rara) ?? []) {
+      if (outroId === contato.id) continue;
+      if (` ${(palavrasDe.get(outroId) ?? []).join(" ")} `.includes(contido)) registrar(contato.id, outroId);
+    }
+  }
+
+  const grupos: GrupoDeDuplicados[] = [];
+  for (const [chavePar, [a, b]] of pares) {
+    const forteA = grupoForteDe.get(a);
+    if (forteA !== undefined && forteA === grupoForteDe.get(b)) continue;
+    if (dispensados.has(chavePar)) continue;
+    const ca = porId.get(a);
+    const cb = porId.get(b);
+    if (!ca || !cb) continue;
+    const ordenados = [ca, cb].sort(
+      (p, q) => p.created_at.localeCompare(q.created_at) || p.id.localeCompare(q.id),
+    );
+    grupos.push({ chave: `nome:${chavePar}`, motivos: ["nome_parecido"], contatos: ordenados });
+  }
+  return grupos.sort((p, q) => p.chave.localeCompare(q.chave));
 }

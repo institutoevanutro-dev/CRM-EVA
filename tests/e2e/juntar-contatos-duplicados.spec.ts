@@ -37,6 +37,7 @@
  *   pnpm exec playwright test tests/e2e/juntar-contatos-duplicados.spec.ts
  */
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -81,9 +82,27 @@ const TELEFONE_13 = `+55319${LOCAL_8}`; // 55 + 31 + 9 + 8 = 13
 const NOME_PRINCIPAL = `Duplicado Fica ${SUFIXO}`;
 const NOME_ABSORVIDO = `Duplicado Absorvido ${SUFIXO}`;
 
+/*
+ * O PAR PARECIDO (porte do #3640): dois nomes que dividem palavras raras, sem
+ * telefone nem e-mail em comum. Não entra no grupo forte; aparece em
+ * "Parecidos — confira", só para gestor. A limpeza acha a fixture pelo nome
+ * exato. A ficha B é ligada ao prontuário no `beforeAll`: é ela que tem de ficar.
+ */
+const NOME_SORRISO_A = "Clínica Exemplo Sorriso";
+const NOME_SORRISO_B = "Exemplo Sorriso Clínica Dental";
+// Telefones diferentes, para o par NÃO cair no grupo forte de "mesmo telefone".
+const TELEFONE_SORRISO_A = `+5531${`7${SUFIXO}`}`; // 55 + 31 + 8 = 12
+const TELEFONE_SORRISO_B = `+5531${`6${SUFIXO}`}`; // 55 + 31 + 8 = 12
+
 let idPrincipal = "";
 let idAbsorvido = "";
+let idSorrisoA = "";
+let idSorrisoB = "";
 let sessaoId = "";
+// Uma sessão de canal a mais: as duas conversas do par parecido não podem
+// dividir a sessão, senão a fusão deixa uma na lápide. Aqui o caminho é o
+// limpo: as duas conversas passam para quem fica.
+let sessaoB = "";
 
 async function login(page: Page, email: string, senha: string): Promise<void> {
   await page.goto("/login");
@@ -152,13 +171,13 @@ async function criarContato(nome: string, telefone: string): Promise<string> {
 }
 
 /** Uma conversa com N mensagens, para o histórico ter o que atravessar a fusão. */
-async function criarConversaCom(contatoId: string, quantas: number): Promise<string> {
+async function criarConversaCom(contatoId: string, quantas: number, sessao: string = sessaoId): Promise<string> {
   const { data, error } = await admin
     .from("conversations")
     .insert({
       organization_id: creds.org_id,
       contact_id: contatoId,
-      channel_session_id: sessaoId,
+      channel_session_id: sessao,
       status: "open",
     })
     .select("id")
@@ -169,7 +188,7 @@ async function criarConversaCom(contatoId: string, quantas: number): Promise<str
     const { error: erroMsg } = await admin.from("messages").insert({
       organization_id: creds.org_id,
       conversation_id: conversaId,
-      channel_session_id: sessaoId,
+      channel_session_id: sessao,
       contact_id: contatoId,
       direction: "inbound",
       type: "text",
@@ -198,20 +217,40 @@ async function limparFixtures(): Promise<void> {
     .select("id")
     .eq("organization_id", creds.org_id)
     .like("display_name", "Duplicado %");
-  const ids = ((data ?? []) as { id: string }[]).map((c) => c.id);
-  if (ids.length === 0) return;
+  // O par parecido não tem o prefixo: acha-se pelo nome exato.
+  const { data: parecidos } = await admin
+    .from("contacts")
+    .select("id")
+    .eq("organization_id", creds.org_id)
+    .in("display_name", [NOME_SORRISO_A, NOME_SORRISO_B]);
+  const ids = [...new Set([...(data ?? []), ...(parecidos ?? [])].map((c) => (c as { id: string }).id))];
 
-  const { data: conversas } = await admin.from("conversations").select("id").in("contact_id", ids);
-  const idsConversa = ((conversas ?? []) as { id: string }[]).map((c) => c.id);
-  if (idsConversa.length > 0) {
-    await admin.from("messages").delete().in("conversation_id", idsConversa);
-    await admin.from("conversations").delete().in("id", idsConversa);
+  if (ids.length > 0) {
+    // Dispensas do teste "Não são a mesma pessoa": sem apagá-las, a próxima
+    // rodada veria um par "já dispensado" com ids que não existem mais.
+    await admin.from("merge_queue").delete().eq("organization_id", creds.org_id).overlaps("candidates", ids);
+
+    const { data: conversas } = await admin.from("conversations").select("id").in("contact_id", ids);
+    const idsConversa = ((conversas ?? []) as { id: string }[]).map((c) => c.id);
+    if (idsConversa.length > 0) {
+      await admin.from("messages").delete().in("conversation_id", idsConversa);
+      await admin.from("conversations").delete().in("id", idsConversa);
+    }
+    await admin.from("messages").delete().in("contact_id", ids);
+    // A lápide aponta para o vencedor; apagar o vencedor primeiro esbarraria na
+    // FK. Zerar o ponteiro antes desfaz a ordem de dependência. O vínculo com o
+    // prontuário da ficha B sai em cascata com ela.
+    await admin.from("contacts").update({ is_merged_into: null }).in("id", ids);
+    await admin.from("contacts").delete().in("id", ids);
   }
-  await admin.from("messages").delete().in("contact_id", ids);
-  // A lápide aponta para o vencedor; apagar o vencedor primeiro esbarraria na
-  // FK. Zerar o ponteiro antes desfaz a ordem de dependência.
-  await admin.from("contacts").update({ is_merged_into: null }).in("id", ids);
-  await admin.from("contacts").delete().in("id", ids);
+
+  // A segunda sessão do par parecido, inclusive as de rodadas mortas. Depois das
+  // conversas: a FK de `conversations` e `messages` para a sessão é RESTRICT.
+  await admin
+    .from("channel_sessions")
+    .delete()
+    .eq("organization_id", creds.org_id)
+    .like("waha_session_name", "e2e-merge-%-b");
 }
 
 test.describe("Contatos duplicados — juntar pela tela", () => {
@@ -247,10 +286,35 @@ test.describe("Contatos duplicados — juntar pela tela", () => {
       sessaoId = (data as { id: string }).id;
     }
 
+    const { data: sessaoDoB, error: erroSessaoB } = await admin
+      .from("channel_sessions")
+      .insert({
+        organization_id: creds.org_id,
+        waha_session_name: `e2e-merge-${SUFIXO}-b`,
+        webhook_secret_encrypted: "e2e",
+      })
+      .select("id")
+      .single();
+    if (erroSessaoB) throw new Error(`channel_sessions B: ${erroSessaoB.message}`);
+    sessaoB = (sessaoDoB as { id: string }).id;
+
     idPrincipal = await criarContato(NOME_PRINCIPAL, TELEFONE_13);
     idAbsorvido = await criarContato(NOME_ABSORVIDO, TELEFONE_12);
     await criarConversaCom(idPrincipal, 2);
     await criarConversaCom(idAbsorvido, 3);
+
+    // O par parecido: nomes que dividem palavras raras, telefones diferentes,
+    // uma conversa em cada sessão. B é a ficha ligada ao prontuário.
+    idSorrisoA = await criarContato(NOME_SORRISO_A, TELEFONE_SORRISO_A);
+    idSorrisoB = await criarContato(NOME_SORRISO_B, TELEFONE_SORRISO_B);
+    await criarConversaCom(idSorrisoA, 1, sessaoId);
+    await criarConversaCom(idSorrisoB, 1, sessaoB);
+    const { error: erroVinculo } = await admin.from("prontuario_contact_links").insert({
+      organization_id: creds.org_id,
+      source_patient_id: randomUUID(),
+      contact_id: idSorrisoB,
+    });
+    if (erroVinculo) throw new Error(`prontuario_contact_links: ${erroVinculo.message}`);
 
     // `last_activity_at` decide o `principal_sugerido`. Deixar o vencedor com a
     // atividade mais recente torna a sugestão determinística — o spec ainda
@@ -408,6 +472,10 @@ test.describe("Contatos duplicados — juntar pela tela", () => {
     const grupo = grupoDoRun(page, dialogo);
     const juntar = grupo.getByRole("button", { name: /^juntar$/i });
 
+    // "Parecidos — confira" é só de gestor: o servidor nem manda a seção. A lista
+    // já carregou (o grupo do run está na tela), então zero aqui mede ausência.
+    await expect(dialogo.getByTestId("parecidos-confira")).toHaveCount(0);
+
     // Duas saídas aceitáveis, e o spec mede QUAL delas: ou o controle não é
     // oferecido a quem não pode, ou ele é oferecido e recusa com um 403 legível.
     //
@@ -440,6 +508,125 @@ test.describe("Contatos duplicados — juntar pela tela", () => {
       (data as { is_merged_into: string | null }).is_merged_into,
       "a recusa não pode ter mesclado nada",
     ).toBeNull();
+  });
+
+  test("'Não são a mesma pessoa' tira o par de Parecidos, e ele não volta ao reabrir", async ({ page }) => {
+    // Roda ANTES do teste de juntar pela ficha, que precisa do par vivo. Ao fim,
+    // a dispensa é apagada para não vazar.
+    await login(page, creds.users.manager!.email, creds.password);
+    await page.goto("/app/contacts");
+    await page.getByRole("button", { name: /duplicados/i }).click();
+    const dialogo = page.getByRole("dialog");
+    const secao = dialogo.getByTestId("parecidos-confira");
+    await expect(secao).toBeVisible({ timeout: 20_000 });
+    await expect(secao.getByText("Parecidos — confira")).toBeVisible();
+    const par = secao.getByTestId("par-parecido").filter({ hasText: NOME_SORRISO_A });
+    await expect(par).toHaveCount(1);
+    await expect(par.getByText(NOME_SORRISO_B, { exact: true })).toBeVisible();
+
+    // A comparação é sob demanda, e as ações só aparecem depois dela.
+    await expect(par.getByRole("button", { name: "Não são a mesma pessoa" })).toHaveCount(0);
+    await par.getByRole("button", { name: "Comparar" }).click();
+    await expect(par.getByTestId("comparacao-de-fichas")).toBeVisible({ timeout: 20_000 });
+    await captura(page, "07-parecido-comparado");
+
+    await par.getByRole("button", { name: "Não são a mesma pessoa" }).click();
+    await expect(page.getByText("Sugestão dispensada.")).toBeVisible({ timeout: 10_000 });
+    await expect(dialogo.getByTestId("par-parecido").filter({ hasText: NOME_SORRISO_A })).toHaveCount(0, {
+      timeout: 20_000,
+    });
+
+    // No banco: a dispensa é UMA linha, descartada, com o par.
+    const { data: filas } = await admin
+      .from("merge_queue")
+      .select("status, reason")
+      .eq("organization_id", creds.org_id)
+      .overlaps("candidates", [idSorrisoA, idSorrisoB]);
+    expect(filas ?? []).toHaveLength(1);
+    expect((filas ?? [])[0]).toMatchObject({ status: "discarded", reason: "nao_sao_a_mesma" });
+
+    // Recarrega a PÁGINA e reabre esperando o GET: sem cache, a lista vem do
+    // servidor, e o par fora prova que a dispensa ficou gravada. A espera vem
+    // antes do clique, e o grupo do run na tela prova que a lista carregou —
+    // conferir "nenhum par" com a lista ainda carregando não mediria nada.
+    await page.reload();
+    const listaRelida = page.waitForResponse(
+      (r) => r.url().includes("/api/v1/contacts/duplicates") && r.request().method() === "GET",
+      { timeout: 30_000 },
+    );
+    await page.getByRole("button", { name: /duplicados/i }).click();
+    expect((await listaRelida).ok()).toBe(true);
+    await expect(dialogo.getByText(NOME_PRINCIPAL, { exact: false })).toBeVisible({ timeout: 20_000 });
+    await expect(dialogo.getByTestId("par-parecido").filter({ hasText: NOME_SORRISO_A })).toHaveCount(0);
+    await captura(page, "08-parecido-dispensado");
+
+    // Limpa a dispensa: o teste seguinte precisa do par.
+    await admin
+      .from("merge_queue")
+      .delete()
+      .eq("organization_id", creds.org_id)
+      .overlaps("candidates", [idSorrisoA, idSorrisoB]);
+  });
+
+  test("juntar com outra ficha: a ficha ligada ao prontuário fica, e as duas conversas vão para ela", async ({
+    page,
+  }) => {
+    expect(await contarPor("conversations", "contact_id", idSorrisoA), "fixture: A tem 1 conversa").toBe(1);
+    expect(await contarPor("conversations", "contact_id", idSorrisoB), "fixture: B tem 1 conversa").toBe(1);
+
+    // A ficha de A: "Juntar com outra ficha", busca "Sorriso", compara com B.
+    await login(page, creds.users.manager!.email, creds.password);
+    await page.goto(`/app/contacts/${idSorrisoA}`);
+    await page.getByTestId("juntar-com-outra-ficha").click();
+    const dialogoDeJuntar = page.getByRole("dialog");
+    await dialogoDeJuntar.getByPlaceholder(/nome ou telefone/i).fill("Sorriso");
+    const candidato = dialogoDeJuntar.locator("li").filter({ hasText: NOME_SORRISO_B });
+    await expect(candidato).toBeVisible({ timeout: 20_000 });
+    await candidato.getByRole("button", { name: /comparar/i }).click();
+    const comparacao = dialogoDeJuntar.getByTestId("comparacao-de-fichas");
+    await expect(comparacao).toBeVisible({ timeout: 20_000 });
+
+    // "Este fica" começa em B, a ligada ao prontuário, mesmo partindo da ficha de A.
+    const radioDeA = comparacao.locator("label").filter({ hasText: NOME_SORRISO_A }).locator('input[type="radio"]');
+    const radioDeB = comparacao.locator("label").filter({ hasText: NOME_SORRISO_B }).locator('input[type="radio"]');
+    await expect(radioDeB).toBeChecked();
+    await expect(radioDeA).not.toBeChecked();
+    await captura(page, "09-comparacao-na-ficha");
+
+    // Escolher A para ficar desabilita "Juntar" e diz por quê; voltar para B libera.
+    const juntar = dialogoDeJuntar.getByRole("button", { name: /^juntar$/i });
+    await radioDeA.check();
+    await expect(juntar).toBeDisabled();
+    await expect(dialogoDeJuntar.getByText("A ficha ligada ao prontuário tem de ser a que fica.")).toBeVisible();
+    await radioDeB.check();
+    await expect(juntar).toBeEnabled();
+
+    // Confirmação nomeada, com o aviso do telefone que não passa.
+    await juntar.click();
+    const confirmacao = page.getByRole("alertdialog");
+    await expect(confirmacao).toBeVisible({ timeout: 10_000 });
+    await expect(confirmacao.getByText(NOME_SORRISO_A, { exact: false }).first()).toBeVisible();
+    await expect(confirmacao.getByText(NOME_SORRISO_B, { exact: false }).first()).toBeVisible();
+    await expect(confirmacao.getByText(/n[ãa]o h[áa] como desfazer/i)).toBeVisible();
+    await expect(confirmacao.getByTestId("avisos-da-juncao")).toContainText("não passa para quem fica");
+    await captura(page, "10-confirmacao-na-ficha");
+    const resposta = page.waitForResponse(
+      (r) => r.url().includes("/api/v1/contacts/merge") && r.request().method() === "POST",
+    );
+    await confirmacao.getByRole("button", { name: /juntar contatos/i }).click();
+    expect((await resposta).status(), "gestor pode juntar pela ficha").toBe(200);
+
+    // No BANCO: as duas conversas ficaram com B; A virou lápide de B; o vínculo
+    // de B com o prontuário continua.
+    expect(await contarPor("conversations", "contact_id", idSorrisoB), "as duas conversas ficaram com B").toBe(2);
+    expect(await contarPor("conversations", "contact_id", idSorrisoA), "A não guarda conversa").toBe(0);
+    const { data: lapide } = await admin.from("contacts").select("is_merged_into").eq("id", idSorrisoA).single();
+    expect((lapide as { is_merged_into: string | null }).is_merged_into).toBe(idSorrisoB);
+    expect(await contarPor("prontuario_contact_links", "contact_id", idSorrisoB), "B segue ligada").toBe(1);
+
+    // A ficha aberta foi a absorvida: a tela vai para a que ficou.
+    await page.waitForURL(new RegExp(`/app/contacts/${idSorrisoB}`), { timeout: 20_000 });
+    await captura(page, "11-depois-da-juntada-pela-ficha");
   });
 
   test("juntar de verdade: as mensagens das duas pontas ficam com quem ficou, e o que não coube é anunciado", async ({

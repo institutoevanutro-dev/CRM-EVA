@@ -30,6 +30,7 @@ import { interpolateTemplate, variaveisDesconhecidas } from "@/lib/inbox/templat
 import { trocarSaudacao, usaSaudacao } from "@/lib/campanhas/renderizador";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
+import { MARCA_DO_TEXTO_FIXO_DO_FLUXO } from "@/lib/followup/resposta-a-automacao";
 
 function ponteSupabase(admin: SupabaseClient): TurnBridgeAdminClient {
   const base = createSupabaseAdminClient(admin);
@@ -270,7 +271,7 @@ export async function enviarTextoFixoPendente(
         const m=await sendMessageHandler(
           admin,
           {organization_id:job.organization_id,actor:{type:"webhook_source",id:enrollmentId},serviceBoundary:boundary,proactiveContext,origemDoEnvio:"followup",internalMessageId:messageId,requestId:key},
-          {conversation_id:conversationId,type:"text",body:texto,metadata:{idempotency_key:key}},
+          {conversation_id:conversationId,type:"text",body:texto,metadata:{idempotency_key:key,[MARCA_DO_TEXTO_FIXO_DO_FLUXO]:"true"}},
         );
         erroDoServidor=(m as { error_code?: string | null }).error_code ?? null;
         return m;

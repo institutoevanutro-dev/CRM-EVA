@@ -70,6 +70,15 @@ describe("a consulta dos compromissos", () => {
     await compromissosDoContato(q, ORG, CONTATO, AGORA);
     expect(chamadas[0]!.params[3]).toBe(MAXIMO_DE_COMPROMISSOS_NO_BLOCO + 1);
   });
+
+  it("o turno pode pedir mais linhas — o gate de horário lê até 50 (porte do #3596)", async () => {
+    // O bloco segue com o teto padrão (caso acima); só a leitura do turno pede mais, para
+    // o gate reconhecer o compromisso que o contato já tem.
+    const { q, chamadas } = db();
+    await compromissosDoContato(q, ORG, CONTATO, AGORA, 50);
+    expect(chamadas[0]!.params[3]).toBe(50);
+    expect(chamadas[0]!.sql).toContain("limit $4");
+  });
 });
 
 describe("o bloco em texto", () => {

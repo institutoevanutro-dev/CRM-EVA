@@ -188,6 +188,15 @@ describe("vetoReason", () => {
     expect(vetoReason("budget", "exhausted")).toContain("orçamento");
   });
 
+  it("o gate de horário da agenda (porte do #3596) não aparece como código cru na timeline", () => {
+    for (const code of ["horario_sem_fonte", "agenda_confirmou_sem_marcar"]) {
+      const motivo = vetoReason("horario_da_agenda", code);
+      expect(motivo).toContain("agenda");
+      expect(motivo).not.toContain("horario_da_agenda");
+      expect(motivo).not.toContain(code);
+    }
+  });
+
   it("gate desconhecido não vira linha vazia — mostra a regra e o código", () => {
     expect(vetoReason("gate_novo", "cod_x")).toBe(
       'Não enviei: bloqueado pela regra "gate_novo" (cod_x)',

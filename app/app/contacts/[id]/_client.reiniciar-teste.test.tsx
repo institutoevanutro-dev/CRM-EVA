@@ -37,6 +37,8 @@ vi.mock("@/components/contacts/CanaisDoContato", () => ({ CanaisDoContato: () =>
 vi.mock("@/components/contacts/CpfDoContato", () => ({ CpfDoContato: () => null }));
 vi.mock("@/components/voice/DialButton", () => ({ DialButton: () => null }));
 vi.mock("@/components/contacts/FinanceiroDoContato", () => ({ FinanceiroDoContato: () => null }));
+// "Juntar com outra ficha" (porte do #3640) usa o roteador e o react-query; aqui ele não é o assunto.
+vi.mock("@/components/contacts/JuntarComOutraFicha", () => ({ JuntarComOutraFicha: () => null }));
 
 describe("botão Reiniciar teste", () => {
   beforeEach(() => mutate.mockClear());

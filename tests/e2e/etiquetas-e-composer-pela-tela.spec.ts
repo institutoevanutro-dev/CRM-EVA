@@ -12,7 +12,13 @@
  *     (#2784); depois, excluir OUTRA etiqueta em Configurações › Etiquetas tira
  *     só ela: a primeira continua no contato, na conversa e com a cor (#2901);
  *  3. no celular (390 px) a barra de ações da conversa é uma fileira só, que
- *     rola, e não várias fileiras empilhadas (#2810).
+ *     rola, e não várias fileiras empilhadas (#2810);
+ *  4. arrastar um arquivo para a caixa abre a MESMA prévia do "+", dizendo para
+ *     quem vai; na nota interna ele vira anexo da nota e nenhuma mensagem; solto
+ *     fora da caixa (fio, fundo da prévia) é recusado; a conversa encerrada não
+ *     aceita (#3713, adicionado em 03/11). É o ÚLTIMO teste porque encerra a
+ *     conversa. Eventos sintéticos: o gesto real do Finder para o Safari fica
+ *     para a conferência manual.
  *
  * Gestor (`manager`) e não `admin`: o admin do seed tem fator TOTP e a rota do
  * vocabulário exige MFA provado de quem tem fator. O gestor não tem fator, e é
@@ -27,7 +33,7 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type JSHandle, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
@@ -77,6 +83,15 @@ async function limpar(): Promise<void> {
     .like("phone_number", `${PREFIXO_FONE}%`);
   const ids = ((data as Array<{ id: string }> | null) ?? []).map((c) => c.id);
   if (ids.length > 0) {
+    // O anexo da nota (teste 4) mora no bucket `internal-media`, que não cai em
+    // cascata com a conversa: sai antes dela, também depois de um vermelho.
+    const { data: conversas } = await admin.from("conversations").select("id").in("contact_id", ids);
+    for (const { id } of (conversas as Array<{ id: string }> | null) ?? []) {
+      const pasta = `${creds.org_id}/${id}`;
+      const { data: objetos } = await admin.storage.from("internal-media").list(pasta);
+      const caminhos = (objetos ?? []).map((o) => `${pasta}/${o.name}`);
+      if (caminhos.length > 0) await admin.storage.from("internal-media").remove(caminhos);
+    }
     await admin.from("messages").delete().in("contact_id", ids);
     await admin.from("conversations").delete().in("contact_id", ids);
     await admin.from("contacts").delete().in("id", ids);
@@ -107,6 +122,52 @@ async function vocabulario(): Promise<Array<{ tag: string; cor?: string }>> {
   >;
   return tags.map((e) => (typeof e === "string" ? { tag: e } : e));
 }
+
+async function mensagensDaConversa(): Promise<number> {
+  const { count, error } = await admin
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("conversation_id", conversaId);
+  if (error) throw new Error(`messages: ${error.message}`);
+  return count ?? 0;
+}
+
+async function anexosDeNota(): Promise<number> {
+  const { data, error } = await admin
+    .from("conversation_notes")
+    .select("id")
+    .eq("conversation_id", conversaId)
+    .like("media_storage_path", `${creds.org_id}/${conversaId}/%`);
+  if (error) throw new Error(`conversation_notes: ${error.message}`);
+  return (data ?? []).length;
+}
+
+/** Um arraste com UM arquivo, montado na página; o Playwright o entrega vivo ao evento. */
+function arrasteCom(page: Page, nome: string, tipo: string): Promise<JSHandle<DataTransfer>> {
+  return page.evaluateHandle(
+    ([n, t]) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([`conteudo ficticio de ${n}`], n, { type: t }));
+      return dt;
+    },
+    [nome, tipo] as const,
+  );
+}
+
+/**
+ * Um dragover de ARQUIVO no elemento, medido pelo próprio evento (roda NA
+ * página). O `dropEffect` parte de "copy": voltar "none" prova que alguém o
+ * escreveu — a guarda da janela ou a caixa travada.
+ */
+const dragoverDeArquivo = (el: Element | null): { prevented: boolean; dropEffect: string } => {
+  if (!el) throw new Error("nenhum elemento no alvo do arraste");
+  const dt = new DataTransfer();
+  dt.items.add(new File(["x"], "perdido-ficticio.pdf", { type: "application/pdf" }));
+  dt.dropEffect = "copy";
+  const ev = new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt });
+  el.dispatchEvent(ev);
+  return { prevented: ev.defaultPrevented, dropEffect: dt.dropEffect };
+};
 
 test.describe("Etiquetas e compositor (portes de 15/10)", () => {
   test.describe.configure({ mode: "serial", timeout: 180_000 });
@@ -262,5 +323,95 @@ test.describe("Etiquetas e compositor (portes de 15/10)", () => {
     expect(medida.fileiras, "a barra voltou a empilhar fileiras").toBe(1);
     expect(medida.cabeNaTela, "a barra vazou da largura da tela").toBe(true);
     await captura(page, "barra-de-acoes-no-celular");
+  });
+
+  // ÚLTIMO de propósito: termina encerrando a conversa.
+  test("arrastar arquivo para a caixa abre a prévia do +; fora da caixa e com a conversa encerrada, nada", async ({
+    page,
+  }) => {
+    await login(page, creds.users.manager!.email);
+    await page.goto(`/app/inbox/${conversaId}`);
+    const doPaciente = page.getByText("MENSAGEM DO PACIENTE 1510").first();
+    await expect(doPaciente).toBeVisible({ timeout: 60_000 });
+
+    const caixa = page.getByTestId("composer");
+    const realce = page.getByTestId("arraste-de-arquivo");
+    const previa = page.getByRole("dialog");
+    const mensagensAntes = await mensagensDaConversa();
+
+    // Por cima da caixa, o realce acende do tamanho dela.
+    const pdf = await arrasteCom(page, "exame-ficticio.pdf", "application/pdf");
+    await caixa.dispatchEvent("dragenter", { dataTransfer: pdf });
+    await caixa.dispatchEvent("dragover", { dataTransfer: pdf });
+    await expect(realce).toBeVisible();
+    const [r, c] = await Promise.all([realce.boundingBox(), caixa.boundingBox()]);
+    for (const k of ["x", "y", "width", "height"] as const) {
+      expect(Math.abs(r![k] - c![k]), `o realce não cobre a caixa (${k})`).toBeLessThanOrEqual(1);
+    }
+    await captura(page, "arrastar-arquivo-realce");
+
+    // Por cima do fio da conversa: recusado, e a aba não vira o arquivo.
+    expect(await doPaciente.evaluate(dragoverDeArquivo)).toEqual({ prevented: true, dropEffect: "none" });
+
+    // Soltar na caixa abre a MESMA prévia do "+", dizendo para quem vai.
+    await caixa.dispatchEvent("drop", { dataTransfer: pdf });
+    await expect(previa.getByText("Enviar anexo")).toBeVisible();
+    await expect(previa.getByText("exame-ficticio.pdf")).toBeVisible();
+    await expect(previa).toHaveAccessibleDescription(/^Para: /);
+    expect((await previa.boundingBox())?.height ?? 0, "prévia de altura zero").toBeGreaterThan(100);
+    await expect(realce).toHaveCount(0);
+    await captura(page, "arrastar-arquivo-previa");
+
+    // Com a prévia aberta, o fundo escuro dela também recusa.
+    const fundo = await page.evaluateHandle(() => document.elementFromPoint(5, 5));
+    expect(await fundo.evaluate(dragoverDeArquivo)).toEqual({ prevented: true, dropEffect: "none" });
+
+    await previa.getByRole("button", { name: "Cancelar", exact: true }).click();
+    await expect(previa).toHaveCount(0);
+    expect(await mensagensDaConversa(), "cancelar criou mensagem").toBe(mensagensAntes);
+
+    // Em Nota interna, o arquivo vira anexo da nota e nada vai ao paciente.
+    await page.getByRole("button", { name: "Opções de resposta" }).click();
+    await page.getByRole("button", { name: "Nota interna", exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Mensagem", exact: true })).toHaveAttribute(
+      "placeholder",
+      /nota/i,
+    );
+    const txt = await arrasteCom(page, "anotacao-ficticia.txt", "text/plain");
+    await caixa.dispatchEvent("dragenter", { dataTransfer: txt });
+    await caixa.dispatchEvent("dragover", { dataTransfer: txt });
+    await caixa.dispatchEvent("drop", { dataTransfer: txt });
+    // Só dentro da prévia: depois do envio, o card da nota repete a frase no fio.
+    await expect(previa.getByText("Nota interna · só o time vê")).toBeVisible();
+    await previa.getByRole("button", { name: "Enviar", exact: true }).click();
+    await expect(previa).toHaveCount(0, { timeout: 15_000 });
+    await expect.poll(anexosDeNota, { timeout: 15_000 }).toBe(1);
+    expect(await mensagensDaConversa(), "a nota virou mensagem").toBe(mensagensAntes);
+
+    // O realce no tema escuro (evidência).
+    await page.evaluate(() => localStorage.setItem("deskcomm-theme", "dark"));
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.reload();
+    await expect(doPaciente).toBeVisible({ timeout: 60_000 });
+    const noEscuro = await arrasteCom(page, "exame-ficticio.pdf", "application/pdf");
+    await caixa.dispatchEvent("dragenter", { dataTransfer: noEscuro });
+    await caixa.dispatchEvent("dragover", { dataTransfer: noEscuro });
+    await expect(realce).toBeVisible();
+    await captura(page, "arrastar-arquivo-realce-escuro");
+
+    // Conversa encerrada: a caixa recusa (cursor "proibido"), sem realce nem prévia.
+    const fechada = await page.request.patch(`/api/v1/conversations/${conversaId}`, {
+      data: { status: "closed" },
+    });
+    expect(fechada.ok(), await fechada.text()).toBe(true);
+    await page.reload();
+    await expect(doPaciente).toBeVisible({ timeout: 60_000 });
+    expect(await caixa.evaluate(dragoverDeArquivo)).toEqual({ prevented: true, dropEffect: "none" });
+    const recusado = await arrasteCom(page, "exame-ficticio.pdf", "application/pdf");
+    await caixa.dispatchEvent("dragenter", { dataTransfer: recusado });
+    await caixa.dispatchEvent("dragover", { dataTransfer: recusado });
+    await caixa.dispatchEvent("drop", { dataTransfer: recusado });
+    await expect(realce).toHaveCount(0);
+    await expect(previa).toHaveCount(0);
   });
 });

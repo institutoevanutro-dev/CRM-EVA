@@ -35,6 +35,9 @@ vi.mock('@/lib/agent-engine/agent/turno-ja-respondido', () => ({
   anotarUltimaInboundVista: vi.fn(async () => {}),
   respostaFicouObsoleta: vi.fn(async () => false),
 }));
+// A espera da mídia pendente também fica fora — tem invariante próprio contra o
+// banco (tests/invariants/midia-tardia-depois-da-leitura.test.ts).
+vi.mock('@/lib/agent-engine/edge/crm/midia-derivavel', () => ({ midiaDerivavelPendente: vi.fn(async () => null) }));
 vi.mock('@/lib/agent-engine/pacing/store', () => ({ loadChannelKnobs: vi.fn(async () => ({ knobs: {} })) }));
 vi.mock('@/lib/agent-engine/pacing/engine', () => ({ janelaDeEnvioAberta: () => true, proximaAberturaDaJanela: vi.fn() }));
 vi.mock('@/lib/agent-engine/pacing/aviso-de-janela', () => ({

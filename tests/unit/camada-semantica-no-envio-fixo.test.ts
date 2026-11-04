@@ -248,6 +248,14 @@ describe("origem do envio: o turno de follow-up marca o que manda", () => {
     const arg = runBeforeSend.mock.calls[0]?.[0] as { send?: (b: string) => Promise<unknown> } | undefined;
     expect(arg?.send, "runBeforeSend não foi chamado — instrumento morto").toBeTypeOf("function");
     await arg?.send?.("oi, tudo bem?");
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({ origemDoEnvio: "followup", body: "oi, tudo bem?" }));
+    // A marca do texto fixo do fluxo sai pelo MESMO channel.send que serve o
+    // passo do fluxo, a re-entrada e o modelo de reserva (#3729 do original).
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origemDoEnvio: "followup",
+        body: "oi, tudo bem?",
+        metadata: { texto_fixo_do_fluxo: "true" },
+      }),
+    );
   });
 });

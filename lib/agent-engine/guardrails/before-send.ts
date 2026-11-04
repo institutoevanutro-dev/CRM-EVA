@@ -8,13 +8,19 @@ import { assertMeetingDeliveryPg, type MeetingDeliveryContext } from '@/lib/agen
  * como erro instrutivo (o modelo a vê no turno seguinte); só se TODOS passarem a
  * mensagem alcança o `ChannelAdapter` (e, por baixo, o sink idempotente F2-06).
  *
- * Ordem FINAL v6 (DECLARATIVA + VERSIONADA — `BEFORE_SEND_GATES`/`BEFORE_SEND_CHAIN_VERSION`,
- * F4-08/F4-09): (1) stop/opt-out — irrevogável; (2) lgpd — anonimização/base legal de
+ * Ordem FINAL (DECLARATIVA + VERSIONADA — `BEFORE_SEND_GATES`/`BEFORE_SEND_CHAIN_VERSION`,
+ * F4-08/F4-09; a versão vigente é a da constante, não a deste texto): (1) stop/opt-out —
+ * irrevogável; (2) lgpd — anonimização/base legal de
  * prospecção (F4-09); (3) anti-ban (janela/throttle/warm-up/caps — F2-11); (3.5) janela de
  * atendimento; (4) spinning (F2-12); (5) promise determinística (F4-01); (6) promise
  * semântica (F4-02); (6.5) case promise — anti-alucinação de casos humanos (spec 15 §10.2,
- * Wave 4); (6.7) internal_vocabulary — vazamento de vocabulário interno ao cliente
- * (`docs/doctrine/separacao-fala-e-operacao.md`); (7) disclosure
+ * Wave 4); (6.6) unscheduled_followup — promessa de nova tentativa sem execução
+ * programada; (6.7) internal_vocabulary — vazamento de vocabulário interno ao cliente
+ * (`docs/doctrine/separacao-fala-e-operacao.md`); (6.9) agenda_stall — promessa de checar
+ * a agenda sem ter chamado a ferramenta; (6.93) horario_da_agenda — dia+horário escrito ao
+ * cliente só sai se a agenda o devolveu neste turno, e "está agendado" só depois de a
+ * marcação gravar (porte do #3596; só com HORARIO_DA_AGENDA_MODO=barrar — no padrão,
+ * 'observar', ele só registra no trace o que barraria); (7) disclosure
  * (F4-05). A ordem é código-constante DE PROPÓSITO, não config de
  * runtime: "stop primeiro" é invariante de segurança (regra dura nº 2) e mudar a ordem sem
  * bumpar a versão quebra o CI — deixá-la mutável em disco seria um footgun.
@@ -79,6 +85,7 @@ import type { ChannelProvider } from '@/lib/channels/capabilities';
 // A régua de contato interno (#2353 do original) na forma SQL: o `stop` é um
 // caminho de envio que não passa pelo gate de elegibilidade.
 import { sqlContatoInterno } from '@/lib/contacts/tags-internas';
+import { avaliarHorarios, type HorariosDaAgenda } from './horario-da-agenda';
 
 /** O que os gates enxergam — carregado UMA vez sob o lock, por tentativa de envio. */
 export interface GateContext {
@@ -302,6 +309,12 @@ export interface GateContext {
     presencaConfirmadaNoTurno?: boolean;
   };
   /**
+   * Arma o `horarioDaAgendaGate`: o que as tools de agenda DEVOLVERAM neste turno (não só
+   * se foram chamadas) e os compromissos que o contato já tem. Ausente = no-op, a mesma
+   * direção segura do `agenda`. Ver `horario-da-agenda.ts`.
+   */
+  horariosDaAgenda?: HorariosDaAgenda;
+  /**
    * Retorno marcado pelo próprio assistente, para o `casePromiseGate`. Ausente = nenhum
    * alívio: o gate exige caso como sempre, e o veto não cita follow-up.
    *
@@ -329,7 +342,10 @@ export type GateVerdict =
   // `skipped: 'not_applicable'` (invariante 4 de `docs/doctrine/restricao-de-canal.md`): a
   // restrição não existe NESTE canal. Passa, mas o trace registra que não se aplicava — um
   // `pass` silencioso apagaria a diferença entre "não regrediu" e "provo que não regrediu".
-  | { pass: true; waitMs?: number; amendBody?: string; skipped?: 'not_applicable' }
+  //
+  // `observado` (só o `horarioDaAgendaGate` em modo observar): o gate PASSA, e o trace leva o
+  // código que ele teria vetado como `observado:<código>` — medir antes de barrar.
+  | { pass: true; waitMs?: number; amendBody?: string; skipped?: 'not_applicable'; observado?: string }
   | {
       pass: false;
       code: string;
@@ -342,6 +358,29 @@ export interface Gate {
   readonly name: string;
   evaluate(ctx: GateContext): GateVerdict;
 }
+
+/**
+ * Os códigos de veto que mandam PARAR, não reescrever: o gate `stop` (regra dura nº 2) e o
+ * `lgpd`. Reescrever o texto não muda o veredito deles, e o `reason` de cada um diz "encerre o
+ * turno sem tentar de novo". Quem decide se vale pedir outra tentativa ao modelo (a correção do
+ * turno mudo, `turno-mudo.ts`) consulta esta lista — e não a da cadeia inteira, porque os vetos
+ * de ENSINO (agenda_stall, promessa…) são exatamente os que uma nova tentativa conserta.
+ * Também a janela de envio que fechou no meio do turno (`outside_window`, do pacing): a nova
+ * tentativa cai no mesmo veto. `messaging_window_closed` fica FORA de propósito: o `reason`
+ * dele oferece o `send_template` como saída, e a correção pode usá-la.
+ *
+ * Os nomes são os que ESTE fork emite (porte do #3673): `conversa_com_humano`, não o
+ * `atendimento_com_humano` do original — com o nome de lá, a pessoa que assume no meio do
+ * turno receberia por cima uma correção com ferramentas de escrita.
+ */
+export const VETOS_IRREVOGAVEIS: ReadonlySet<string> = new Set([
+  'contato_bloqueado',
+  'contato_interno',
+  'conversa_com_humano',
+  'lgpd_anonymized',
+  'lgpd_missing_legal_basis',
+  'outside_window',
+]);
 
 /** Gate 1 — STOP/opt-out/força-humano: veto IRREVOGÁVEL (regra dura nº 2), 1ª linha. */
 const stopGate: Gate = {
@@ -744,6 +783,10 @@ export function nomesDasFerramentas(nomes: readonly string[]): string {
  * veta de novo (sem fail-safe de N tentativas como o de vocabulário interno: aqui NÃO existe
  * versão aceitável do texto vetado, só a alternativa de chamar a ferramenta).
  *
+ * A forma com o particípio ABRINDO a frase ("Confirmado: manicure dia 29/10 às 9h") não mora
+ * aqui: quem a julga é o `horarioDaAgendaGate`, que conhece os compromissos do contato e roda
+ * também no turno que consultou a agenda (porte do #3673; o original a pôs neste gate).
+ *
  * Posição 6.9 de `BEFORE_SEND_GATES`: DEPOIS do `internalVocabularyGate` e ANTES do
  * `disclosureGate` (que pode emendar o corpo — este gate precisa ver o texto do MODELO).
  */
@@ -785,6 +828,30 @@ export const agendaStallGate: Gate = {
             'promessa sem checar.';
       })(),
     };
+  },
+};
+
+/**
+ * Gate de HORÁRIO SEM FONTE (porte do #3596) — todo dia+horário escrito ao cliente veio
+ * da agenda neste turno, e "está agendada" só sai depois de a marcação gravar. Regra pura
+ * em `horario-da-agenda.ts`; aqui só a ligação com a cadeia. Posição 6.93: logo depois do
+ * `agendaStallGate` (a família da agenda fica junta) e antes do `disclosureGate` — precisa
+ * ver o texto do MODELO, antes de o disclosure emendar o corpo.
+ *
+ * Desarmado e observando (HORARIO_DA_AGENDA_MODO=observar, o padrão): o veredito é o mesmo
+ * de armado, mas só vai ao trace (`observado:<código>`, que `before_send_traces` guarda) —
+ * a mensagem sai.
+ */
+export const horarioDaAgendaGate: Gate = {
+  name: 'horario_da_agenda',
+  evaluate: (ctx) => {
+    const h = ctx.horariosDaAgenda;
+    if (h !== undefined && !h.ativo && h.observar === true) {
+      const v = avaliarHorarios(ctx.body, ctx.now, { ...h, ativo: true });
+      return v.pass ? { pass: true } : { pass: true, observado: v.code };
+    }
+    const v = avaliarHorarios(ctx.body, ctx.now, h);
+    return v.pass ? { pass: true } : { pass: false, code: v.code, reason: v.reason };
   },
 };
 
@@ -945,8 +1012,14 @@ const spinningGate: Gate = {
  * já existia fora desse caso — muda o TRACE e passa a medir/impedir a promessa vazia.
  * v8 = insere `unscheduledFollowUpGate` depois de `casePromiseGate`: uma falha atual não
  * vira promessa de nova tentativa sem execução programada. Só agente e prévia o armam.
+ * v9 (porte do #3596) = insere `horarioDaAgendaGate` entre `agenda_stall` e `disclosure`:
+ * dia+horário escrito ao cliente só sai se a agenda o devolveu neste turno, e "está
+ * agendado" só depois de a marcação gravar. Nasce DESARMADO (ver
+ * `GateContext.horariosDaAgenda`): só o agente com ferramenta de agenda e a prévia o armam,
+ * e só com HORARIO_DA_AGENDA_MODO=barrar; no padrão (observar) ele só registra no trace o
+ * que barraria.
  */
-export const BEFORE_SEND_CHAIN_VERSION = 8;
+export const BEFORE_SEND_CHAIN_VERSION = 9;
 
 /**
  * Ordem FINAL da cadeia (F4-08/F4-09; edge-contract §before_send / blueprint órgão 5) — DADO
@@ -959,10 +1032,14 @@ export const BEFORE_SEND_CHAIN_VERSION = 8;
  *   (5) promise — validação determinística de preço/desconto/parcelamento (F4-01);
  *   (6) semantic_promise — promessa em texto livre que a regex não pega (F4-02);
  *   (6.5) case_promise — anti-alucinação de casos humanos (spec 15 §10.2, Wave 4);
+ *   (6.6) unscheduled_followup — promessa de nova tentativa sem execução programada;
  *   (6.7) internal_vocabulary — vazamento de vocabulário interno ao cliente (doutrina
  *         `separacao-fala-e-operacao.md`); antes do disclosure porque ele pode emendar o corpo;
  *   (6.9) agenda_stall — "vou verificar/confirmar horário" sem ter chamado a ferramenta de
  *         agenda neste turno; antes do disclosure pelo mesmo motivo do internal_vocabulary;
+ *   (6.93) horario_da_agenda — dia+horário citado que a agenda não devolveu neste turno, ou
+ *         "está agendado" sem a marcação ter gravado (porte do #3596); antes do disclosure
+ *         pelo mesmo motivo;
  *   (8) disclosure — 1ª mensagem se apresenta como assistente virtual (F4-05).
  * (O anti-jailbreak F4-04 é INBOUND advisório, não gate de before_send — não entra aqui.)
  */
@@ -978,6 +1055,7 @@ export const BEFORE_SEND_GATES: readonly Gate[] = [
   unscheduledFollowUpGate,
   internalVocabularyGate,
   agendaStallGate,
+  horarioDaAgendaGate,
   disclosureGate,
 ];
 
@@ -1117,6 +1195,8 @@ export interface RunBeforeSendArgs {
    * no-op (retrocompatível com todo caller que não conhece agenda, ex.: `followup-turn.ts`).
    */
   agenda?: GateContext['agenda'];
+  /** Ver `GateContext.horariosDaAgenda`. Ausente = gate no-op. */
+  horariosDaAgenda?: GateContext['horariosDaAgenda'];
   /** Ver `GateContext.followup`. Ausente = o `casePromiseGate` não alivia nada. */
   followup?: GateContext['followup'];
   /**
@@ -1156,7 +1236,9 @@ export function evaluateBeforeSend(
       trace.push(
         verdict.skipped !== undefined
           ? { gate: gate.name, verdict: 'skipped', code: verdict.skipped }
-          : { gate: gate.name, verdict: 'pass' },
+          : verdict.observado !== undefined
+            ? { gate: gate.name, verdict: 'pass', code: `observado:${verdict.observado}` }
+            : { gate: gate.name, verdict: 'pass' },
       );
       if (verdict.waitMs !== undefined && verdict.waitMs > throttleWaitMs)
         throttleWaitMs = verdict.waitMs;
@@ -1368,6 +1450,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       unscheduledFollowUpEnforced: args.enforceUnscheduledFollowUp ?? false,
       internalVocabularyEnforced: args.enforceInternalVocabulary ?? false,
       ...(args.agenda !== undefined ? { agenda: args.agenda } : {}),
+      ...(args.horariosDaAgenda !== undefined ? { horariosDaAgenda: args.horariosDaAgenda } : {}),
       ...(args.followup !== undefined ? { followup: args.followup } : {}),
     };
 

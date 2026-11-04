@@ -139,6 +139,10 @@ const envSchema = z.object({
   // enquanto a mensagem mais antiga sem resposta tiver menos que isto. 0 = desliga.
   // Ver `respostaFicouObsoleta` (agent/turno-ja-respondido.ts).
   RESPOSTA_OBSOLETA_TETO_MS: z.coerce.number().int().min(0).default(120_000),
+  // Conferência de horário da agenda (`guardrails/horario-da-agenda.ts`): 'observar'
+  // calcula o veredito e só o registra no trace (`observado:<código>`), sem barrar;
+  // 'barrar' veta e ensina. Lido pelo worker e pela prévia (`turnKnobsFromEnv`).
+  HORARIO_DA_AGENDA_MODO: z.enum(['observar', 'barrar']).default('observar'),
   // Circuito de saúde do número — ritmo do ticker (block/response rate por número).
   NUMBER_HEALTH_INTERVAL_MS: z.coerce.number().int().positive().default(300_000),
   // Cron persistente por contato — knobs, nunca constantes.

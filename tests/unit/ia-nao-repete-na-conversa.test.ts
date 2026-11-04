@@ -189,8 +189,12 @@ describe("fiação — onde a guarda vale e onde não vale", () => {
     expect(corpo).toMatch(/openCase\([\s\S]*CASO_DE_REPETICAO[\s\S]*source: 'guardrail_autofallback'/);
     // Depois que a guarda agiu, nenhum outro send_message do turno sai.
     expect(corpo.indexOf("if (repeticaoEncerrouOTurno)")).toBeLessThan(corpo.indexOf("formatarParaWhatsApp("));
-    // Conta como tentativa: o turno mudo não pede correção a quem decidiu calar.
+    // Conta como tentativa, mas desde o #3673 a tentativa não cala a correção do turno
+    // mudo: é a marca do descarte que diz que a guarda decidiu calar.
     expect(corpo.indexOf("tentativasDeEnvio += 1")).toBeLessThan(guarda);
+    expect(corpo).toMatch(
+      /respostaDescartadaNoTurno = true;\s*return \{ ok: true, status: 'nao_enviada_repetida', message: MENSAGEM_DE_REPETICAO \}/,
+    );
   });
 
   it("mídia e template não passam pela guarda", () => {
