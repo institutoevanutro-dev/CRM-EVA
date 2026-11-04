@@ -40,7 +40,10 @@ São conclusões de leitura de código.
 | `/api/v1/cron/*` (9 rotas) | `Bearer INTERNAL_CRON_SECRET\|INTERNAL_SECRET`, **fail-closed** | ❌ |
 | `/api/internal/*` | `x-internal-secret` ou `Bearer INTERNAL_SECRET`, comparação em tempo constante | ❌ |
 | `/api/mcp` | `Bearer tok_...` validado contra `api_tokens` (hash SHA256) | ❌ |
+| `/api/v1/prontuario/*` | Bearer de `api_tokens` (hash SHA-256) com escopo exato por rota (`prontuario:contacts:*`, `prontuario:media:read`) | ✅ por chave (as rotas de mídia: 60/min) |
 | `/account-suspended`, `/403`, `/404`, `/500`, `/503`, `/admin/forbidden` | — | ❌ |
+
+Lista viva (esta tabela é um retrato; a fonte é o arquivo): `grep -nE '^\s*/\^' lib/auth/public-paths.ts`
 
 **Leitura:** a autenticação de cada superfície está bem construída — HMAC com
 `timingSafeEqual` em 6 módulos distintos, crons fail-closed, bearer só via header

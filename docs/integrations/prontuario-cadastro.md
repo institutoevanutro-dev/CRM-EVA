@@ -58,3 +58,5 @@ As rotas legadas de escrita continuam emitindo `prontuario.contact_created/updat
 `tests/invariants/prontuario-demographics.test.ts` mede as RPCs no PostgreSQL com a cifra real, preservação, repetição e isolamento. `app/api/v1/prontuario/contacts/write.test.ts` mede validação/auth na borda. Referência: https://supabase.com/docs/guides/database/functions (search_path e grants explícitos).
 
 Os testes de `app/api/v1/prontuario/contacts/[id]/demographics.test.ts` cobrem escopos, filtros de tenant/atividade, CPF ausente, erro de decifra, auditoria sem valores e snapshots concorrentes; os testes de agenda e escrita legada continuam rodando. `ApiTokensClient.test.tsx` confirma a seleção explícita da permissão sensível.
+
+O irmão desta integração, que leva ao Prontuário o PDF ou a foto que o paciente mandou pelo WhatsApp (escopo `prontuario:media:read`), está em [prontuario-exames.md](prontuario-exames.md).
