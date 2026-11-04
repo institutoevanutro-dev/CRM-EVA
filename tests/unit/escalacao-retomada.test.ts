@@ -15,6 +15,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { audit } from "@/lib/audit";
+import { fimDoDiaSeguinte } from "@/lib/escalacao/pausa-por-resposta-humana";
 import { devolverAtendimentoAoAgente, type OrigemDaRetomada } from "@/lib/escalacao/retomada";
 import type { Actor } from "@/lib/api/handlers/types";
 
@@ -228,6 +229,23 @@ describe("devolver o atendimento ao agente", () => {
       assignee_kind: "ai",
       status: "ai_handling",
     });
+  });
+
+  it("'Devolver ao automático' religa NA HORA, mesmo com a pausa até o fim do dia seguinte em vigor", async () => {
+    // Equipe falou às 17:11 de 03/11 com o modo ligado: pausa até 05/11 00:00 local.
+    // Às 19:47 a IA está calada; o botão é o único caminho para ela voltar antes.
+    const ate = fimDoDiaSeguinte(new Date("2026-11-03T20:11:00Z"), "America/Sao_Paulo").toISOString();
+    expect(ate).toBe("2026-11-05T03:00:00.000Z");
+    const cap = novaCaptura();
+    const r = await retomar(
+      cenarioComAtendimentoHumano({
+        conversa: conversaPassadaAHumano({ assigned_to_user_id: null, assignee_kind: "ai", status: "open", bot_silenced_until: ate }),
+      }),
+      cap,
+    );
+    expect(r.ok).toBe(true);
+    expect(cap.updates.find((u) => u.tabela === "conversations")?.valores).toMatchObject({ bot_silenced_until: null });
+    expect(cap.updates).toContainEqual({ tabela: "contacts", valores: { force_human: false } });
   });
 
   it("solta o dono humano pela regra que já existe, em vez de escrever a coluna na mão", async () => {

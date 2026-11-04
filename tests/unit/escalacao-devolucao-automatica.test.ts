@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   avaliarDevolucao,
+  esperaDaEquipeMs,
   numerosComQuemAtenda,
   lerPrazoDeDevolucaoMinutos,
   selecionarVencidas,
@@ -231,5 +232,59 @@ describe("numerosComQuemAtenda — o portão do drain, com a lista de números d
       numerosComQuemAtenda([publicado], [roteador], [{ agent_id: AG, channel_session_id: OUTRA }]).get(ORG)?.has(SESSAO) ??
         false,
     ).toBe(false);
+  });
+});
+
+describe("modo 'fim do dia seguinte' — a linha do tempo de 03/11 (Instituto)", () => {
+  // "Assumir" às 17:05:04, atendente "Já te respondo" pelo celular às 17:11,
+  // prazo de devolução de 15 min. Sem o modo, o cron soltou a conversa às
+  // 17:30:01 e a IA voltou à qualificação no "Ok" das 19:47.
+  const SP = "America/Sao_Paulo";
+  const caso = conversa({
+    assigned_at: "2026-11-03T20:05:04Z",
+    last_handoff_at: "2026-11-03T20:05:04Z",
+    last_outbound_at: "2026-11-03T20:11:00Z",
+    status_changed_at: "2026-11-03T20:05:04Z",
+  });
+  const sel = (agora: string, ligado = true) => ({
+    prazoPorOrg: new Map([[ORG, 15]]),
+    sessoesComAgente: new Map([[ORG, new Set([SESSAO])]]),
+    agoraMs: Date.parse(agora),
+    ...(ligado ? { fusoDoFimDoDiaSeguinte: new Map([[ORG, SP]]) } : {}),
+  });
+
+  it("sem o modo é o defeito medido: às 17:30 devolve", () => {
+    expect(avaliarDevolucao(caso, sel("2026-11-03T20:30:01Z", false))).toEqual({ devolver: true, minutos: 15 });
+  });
+
+  it("ligado: às 17:30 e no 'Ok' das 19:47 a conversa segue com a equipe", () => {
+    for (const agora of ["2026-11-03T20:30:01Z", "2026-11-03T22:47:00Z", "2026-11-05T02:59:00Z"]) {
+      expect(avaliarDevolucao(caso, sel(agora)), agora).toEqual({
+        devolver: false,
+        motivo: "equipe_falou_aguarda_fim_do_dia_seguinte",
+      });
+    }
+  });
+
+  it("ligado: no fim do dia seguinte (05/11 00:00 local) devolve", () => {
+    expect(esperaDaEquipeMs(caso, SP)).toBe(Date.parse("2026-11-05T03:00:00Z"));
+    expect(avaliarDevolucao(caso, sel("2026-11-05T03:00:00Z"))).toEqual({ devolver: true, minutos: 15 });
+  });
+
+  it("ligado, mas a equipe não escreveu depois do handoff: 15 min, como sempre", () => {
+    const calada = { ...caso, last_outbound_at: "2026-11-03T20:00:00Z" };
+    expect(esperaDaEquipeMs(calada, SP)).toBeNull();
+    expect(avaliarDevolucao(calada, sel("2026-11-03T20:20:05Z"))).toEqual({ devolver: true, minutos: 15 });
+  });
+
+  it("ligado, dono atribuído com pausa finita em vigor (fala pelo celular): segura até a pausa vencer", () => {
+    const comPausa = {
+      ...caso,
+      bot_silenced_until: "2026-11-05T03:00:00.000Z",
+      assigned_to_user_id: "u",
+      // O escritor do celular regrava `last_handoff_at` um instante DEPOIS da saída.
+      last_handoff_at: "2026-11-03T20:11:00.300Z",
+    };
+    expect(avaliarDevolucao(comPausa, sel("2026-11-04T12:00:00Z"))).toMatchObject({ devolver: false });
   });
 });

@@ -23,6 +23,12 @@
  * (padrão 4 h) nem a que é só despedida (figurinha, reação, "obrigada"): a
  * primeira rodada em produção (4.30.0) retomou 12 conversas, 10 despedidas.
  *
+ * COM `settings.atendimento.ia_volta_apos_equipe = "fim_do_dia_seguinte"`
+ * (desligado por padrão): a equipe que falou segura a conversa até o fim do dia
+ * seguinte. A primeira passada não devolve antes disso (`esperaDaEquipeMs`), e
+ * a segunda não retoma: abre um aviso na Central (kind `other`, um por
+ * mensagem pendente) para alguém responder ou clicar "Devolver ao automático".
+ *
  * A cada 5 minutos: o prazo mínimo é 5 min, e cinco minutos de atraso sobre o
  * prazo escolhido não mudam nada para quem espera há uma hora.
  *
@@ -51,7 +57,13 @@ import {
   type NumeroDeclarado,
   type RoteadorAtivo,
 } from "@/lib/escalacao/devolucao-automatica";
-import { lerClienteSemRespostaMaxHoras, lerClienteSemRespostaMin } from "@/lib/escalacao/pausa-por-resposta-humana";
+import {
+  lerClienteSemRespostaMaxHoras,
+  lerClienteSemRespostaMin,
+  lerIaVoltaAposEquipe,
+} from "@/lib/escalacao/pausa-por-resposta-humana";
+import { partesNoFuso } from "@/lib/agenda/fuso";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { devolverAtendimentoAoAgente, type RetomadaResultado } from "@/lib/escalacao/retomada";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -77,6 +89,8 @@ export interface RetomadaNaPausaResultado {
   organizacoes: number;
   examinadas: number;
   retomadas: number;
+  /** Com `ia_volta_apos_equipe` ligado: avisos abertos na Central em vez de retomar. */
+  avisos: number;
   /** Selecionadas cuja última mensagem era só despedida (figurinha, "obrigada"): ficaram na pausa. */
   despedidas: number;
   falhas: number;
@@ -93,18 +107,29 @@ function recusaBenigna(r: Extract<RetomadaResultado, { ok: false }>): boolean {
   return (r.erro === "assignment_conflict" && r.detalhe === undefined) || r.erro === "contato_sempre_humano";
 }
 
-async function prazosPorOrganizacao(admin: SupabaseClient): Promise<Map<string, number>> {
+type LinhaDaOrganizacao = { id: string; settings: unknown; timezone?: string | null };
+
+/** `atendimento.ia_volta_apos_equipe` ligado nesta linha → o fuso dela. */
+function anotarFimDoDiaSeguinte(row: LinhaDaOrganizacao, fusos: Map<string, string>): void {
+  if (lerIaVoltaAposEquipe(row.settings) !== null) fusos.set(row.id, fusoUtilizavel(row.timezone));
+}
+
+async function prazosPorOrganizacao(
+  admin: SupabaseClient,
+): Promise<{ prazos: Map<string, number>; fusos: Map<string, string> }> {
   const { data, error } = await admin
     .from("organizations")
-    .select("id, settings")
+    .select("id, settings, timezone")
     .not("settings->routing->handoff_return_after_minutes", "is", null);
   if (error) throw new Error(`organizations: ${error.message}`);
   const prazos = new Map<string, number>();
-  for (const row of (data ?? []) as Array<{ id: string; settings: unknown }>) {
+  const fusos = new Map<string, string>();
+  for (const row of (data ?? []) as LinhaDaOrganizacao[]) {
     const minutos = lerPrazoDeDevolucaoMinutos(row.settings);
     if (minutos !== null) prazos.set(row.id, minutos);
+    anotarFimDoDiaSeguinte(row, fusos);
   }
-  return prazos;
+  return { prazos, fusos };
 }
 
 async function sessoesComAgente(
@@ -170,7 +195,7 @@ export async function devolverHandoffsVencidos(
   requestId: string,
   agora: Date = new Date(),
 ): Promise<DevolucaoResultado> {
-  const prazoPorOrg = await prazosPorOrganizacao(admin);
+  const { prazos: prazoPorOrg, fusos: fusoDoFimDoDiaSeguinte } = await prazosPorOrganizacao(admin);
   if (prazoPorOrg.size === 0) return { organizacoes: 0, examinadas: 0, devolvidas: 0, falhas: 0 };
   const orgIds = [...prazoPorOrg.keys()];
 
@@ -188,6 +213,7 @@ export async function devolverHandoffsVencidos(
 
   const vencidas = selecionarVencidas(conversas, {
     prazoPorOrg,
+    fusoDoFimDoDiaSeguinte,
     sessoesComAgente: await sessoesComAgente(admin, orgIds),
     agoraMs: agora.getTime(),
   });
@@ -219,21 +245,91 @@ export async function devolverHandoffsVencidos(
 
 async function esperasPorOrganizacao(
   admin: SupabaseClient,
-): Promise<{ esperas: Map<string, number>; maxHoras: Map<string, number> }> {
+): Promise<{ esperas: Map<string, number>; maxHoras: Map<string, number>; fusos: Map<string, string> }> {
   const { data, error } = await admin
     .from("organizations")
-    .select("id, settings")
+    .select("id, settings, timezone")
     .not("settings->atendimento->pausa_cliente_sem_resposta_min", "is", null);
   if (error) throw new Error(`organizations: ${error.message}`);
   const esperas = new Map<string, number>();
   const maxHoras = new Map<string, number>();
-  for (const row of (data ?? []) as Array<{ id: string; settings: unknown }>) {
+  const fusos = new Map<string, string>();
+  for (const row of (data ?? []) as LinhaDaOrganizacao[]) {
     const minutos = lerClienteSemRespostaMin(row.settings);
     if (minutos === null) continue;
     esperas.set(row.id, minutos);
     maxHoras.set(row.id, lerClienteSemRespostaMaxHoras(row.settings));
+    anotarFimDoDiaSeguinte(row, fusos);
   }
-  return { esperas, maxHoras };
+  return { esperas, maxHoras, fusos };
+}
+
+/** Título fixo: é também a chave de deduplicação do aviso. */
+export const TITULO_DO_AVISO_DE_CLIENTE_SEM_RESPOSTA = "Cliente escreveu e ninguém da equipe respondeu";
+
+/**
+ * Com `atendimento.ia_volta_apos_equipe` ligado, a conversa em que o cliente
+ * escreveu durante a pausa NÃO volta à IA: vira aviso na Central. Um por
+ * mensagem pendente: já existe aviso desta conversa criado depois da última
+ * saída → não abre outro. Devolve se abriu.
+ */
+async function avisarClienteSemResposta(
+  admin: SupabaseClient,
+  conversa: ConversaEmPausa,
+  fuso: string,
+  minutos: number,
+  requestId: string,
+): Promise<"aberto" | "ja_avisado" | "falhou"> {
+  let jaExiste = admin
+    .from("agent_inbox_items")
+    .select("id")
+    .eq("organization_id", conversa.organization_id)
+    .eq("kind", "other")
+    .eq("ref_kind", "conversation")
+    .eq("ref_id", conversa.id)
+    .eq("title", TITULO_DO_AVISO_DE_CLIENTE_SEM_RESPOSTA);
+  if (conversa.last_outbound_at) jaExiste = jaExiste.gt("created_at", conversa.last_outbound_at);
+  const { data: existentes, error: lerErr } = await jaExiste.limit(1);
+  if (lerErr) {
+    logger.error("[handoff-devolucao] leitura do aviso falhou", {
+      conversation_id: conversa.id,
+      organization_id: conversa.organization_id,
+      detalhe: lerErr.message,
+      requestId,
+    });
+    return "falhou";
+  }
+  if ((existentes ?? []).length > 0) return "ja_avisado";
+
+  // Texto GRAVADO no aviso (não é interface): dia e hora no fuso da organização.
+  const dois = (v: number) => String(v).padStart(2, "0");
+  const ate =
+    conversa.bot_silenced_until && conversa.bot_silenced_until !== "infinity"
+      ? partesNoFuso(new Date(conversa.bot_silenced_until), fuso)
+      : null;
+  const volta = ate ? `${dois(ate.dia)}/${dois(ate.mes)} às ${dois(ate.hora)}:${dois(ate.minuto)}` : null;
+  const { error } = await admin.from("agent_inbox_items").insert({
+    organization_id: conversa.organization_id,
+    kind: "other",
+    severity: "warn",
+    title: TITULO_DO_AVISO_DE_CLIENTE_SEM_RESPOSTA,
+    body:
+      `O cliente espera há mais de ${minutos} minutos. A IA está fora desta conversa porque a equipe já falou` +
+      (volta ? ` e só volta sozinha em ${volta}.` : ".") +
+      ` Responda o cliente ou use "Devolver ao automático" na conversa.`,
+    ref_kind: "conversation",
+    ref_id: conversa.id,
+  });
+  if (error) {
+    logger.error("[handoff-devolucao] aviso de cliente sem resposta falhou", {
+      conversation_id: conversa.id,
+      organization_id: conversa.organization_id,
+      detalhe: error.message,
+      requestId,
+    });
+    return "falhou";
+  }
+  return "aberto";
 }
 
 /** A segunda passada: o cliente que escreveu durante a pausa e ficou sem resposta. */
@@ -242,8 +338,10 @@ export async function retomarClientesSemRespostaNaPausa(
   requestId: string,
   agora: Date = new Date(),
 ): Promise<RetomadaNaPausaResultado> {
-  const { esperas: esperaPorOrg, maxHoras: maxHorasPorOrg } = await esperasPorOrganizacao(admin);
-  if (esperaPorOrg.size === 0) return { organizacoes: 0, examinadas: 0, retomadas: 0, despedidas: 0, falhas: 0 };
+  const { esperas: esperaPorOrg, maxHoras: maxHorasPorOrg, fusos } = await esperasPorOrganizacao(admin);
+  if (esperaPorOrg.size === 0) {
+    return { organizacoes: 0, examinadas: 0, retomadas: 0, avisos: 0, despedidas: 0, falhas: 0 };
+  }
   const orgIds = [...esperaPorOrg.keys()];
 
   // Só a pausa FINITA e vigente, sem dono humano; a regra pura confere o resto.
@@ -266,14 +364,16 @@ export async function retomarClientesSemRespostaNaPausa(
     maxHorasPorOrg,
     sessoesComAgente: await sessoesComAgente(admin, orgIds),
     agoraMs: agora.getTime(),
+    avisarEmVezDeRetomar: new Set(fusos.keys()),
   };
   // Primeiro o filtro sem consulta; só quem passou tem a última mensagem lida.
   const selecionadas = selecionarClientesSemResposta(conversas, selecao);
 
   let retomadas = 0;
+  let avisos = 0;
   let despedidas = 0;
   let falhas = 0;
-  for (const { conversa, minutos } of selecionadas) {
+  for (const { conversa, minutos, avisar } of selecionadas) {
     // As mensagens do cliente depois da última saída, a mais nova primeiro (a
     // mesma ordem do anti-backlog do drain, que só aceita o despacho da
     // última). Lidas ANTES de decidir: se TODAS forem despedida ("obrigada",
@@ -305,8 +405,23 @@ export async function retomarClientesSemRespostaNaPausa(
       });
       continue;
     }
-    if (!avaliarRetomadaPorClienteSemResposta(conversa, selecao, pendentes).retomar) {
+    const decisao = avaliarRetomadaPorClienteSemResposta(conversa, selecao, pendentes);
+    if (!decisao.retomar && !decisao.avisar) {
       despedidas++;
+      continue;
+    }
+    // A equipe já falou e a organização ligou o "fim do dia seguinte": a IA
+    // não volta antes disso. Quem esperava resposta vira aviso, não retomada.
+    if (avisar) {
+      const r = await avisarClienteSemResposta(
+        admin,
+        conversa,
+        fusos.get(conversa.organization_id) ?? fusoUtilizavel(null),
+        minutos,
+        requestId,
+      );
+      if (r === "aberto") avisos++;
+      else if (r === "falhou") falhas++;
       continue;
     }
 
@@ -357,7 +472,7 @@ export async function retomarClientesSemRespostaNaPausa(
     });
   }
 
-  return { organizacoes: esperaPorOrg.size, examinadas: conversas.length, retomadas, despedidas, falhas };
+  return { organizacoes: esperaPorOrg.size, examinadas: conversas.length, retomadas, avisos, despedidas, falhas };
 }
 
 async function handle(req: NextRequest): Promise<Response> {
@@ -386,7 +501,13 @@ async function handle(req: NextRequest): Promise<Response> {
 
   // Cada devolução já audita por conversa (`ai.reactivated_by_agent`). A linha
   // da rodada diz que foi o prazo — e só existe quando houve efeito.
-  if (resultado.devolvidas > 0 || resultado.falhas > 0 || naPausa.retomadas > 0 || naPausa.falhas > 0) {
+  if (
+    resultado.devolvidas > 0 ||
+    resultado.falhas > 0 ||
+    naPausa.retomadas > 0 ||
+    naPausa.avisos > 0 ||
+    naPausa.falhas > 0
+  ) {
     void audit({
       action: "conversation.handoff_auto_return_run",
       organizationId: null,

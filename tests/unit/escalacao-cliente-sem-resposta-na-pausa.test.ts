@@ -134,7 +134,23 @@ describe("avaliarRetomadaPorClienteSemResposta", () => {
   it("selecionar devolve só as que retomam, com os minutos da organização", () => {
     const sim = conversa();
     const nao = conversa({ id: "x", last_outbound_at: min(1) });
-    expect(selecionarClientesSemResposta([sim, nao], sel())).toEqual([{ conversa: sim, minutos: 15 }]);
+    expect(selecionarClientesSemResposta([sim, nao], sel())).toEqual([{ conversa: sim, minutos: 15, avisar: false }]);
+  });
+
+  it("modo 'fim do dia seguinte' ligado: a equipe falou, então NÃO retoma; vira aviso", () => {
+    const ligado = sel({ avisarEmVezDeRetomar: new Set([ORG]) });
+    expect(avaliarRetomadaPorClienteSemResposta(conversa(), ligado)).toEqual({
+      retomar: false,
+      motivo: "equipe_falou",
+      avisar: true,
+      minutos: 15,
+    });
+    expect(selecionarClientesSemResposta([conversa()], ligado)).toEqual([{ conversa: conversa(), minutos: 15, avisar: true }]);
+    // Despedida segue sem aviso: "obrigada" não pede resposta de ninguém.
+    expect(motivo(conversa(), ligado)).toBe("equipe_falou");
+    expect(avaliarRetomadaPorClienteSemResposta(conversa(), ligado, [{ type: "text", body: "obrigada!" }])).toMatchObject({
+      motivo: "so_despedida",
+    });
   });
 });
 
