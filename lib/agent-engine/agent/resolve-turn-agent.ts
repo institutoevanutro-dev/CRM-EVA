@@ -79,7 +79,8 @@
  *      uma delas, confiança ≥ 0,9 e contato sem nada na agenda, sai
  *      `so_equipe` com config null: a IA não escreve nada e o turno de entrada
  *      passa a conversa à equipe com aviso. A mensagem que ABRE a conversa e se
- *      declara robô ou pede escolha de menu dá o mesmo desfecho sem modelo.
+ *      declara robô, ou é menu de robô (instrução de escolha E duas opções
+ *      numeradas), dá o mesmo desfecho sem modelo.
  *      Abaixo do corte, a intenção fixa vale como "nenhuma".
  *
  * Robustez: qualquer erro inesperado no branch do router (DB fora do ar,
@@ -107,7 +108,7 @@ import {
 import { classifyIntent, type IntentVerdict } from './intent-classifier';
 import { ehAssuntoFixoSoDaEquipe } from './assuntos-so-da-equipe';
 import { SEM_ATENDIMENTOS_NA_AGENDA, buildFatosDoContato } from './fatos-do-contato';
-import { ehMensagemDeRobo, temInstrucaoDeMenu } from './human-handoff';
+import { ehMenuDeRoboComOpcoes, ehMensagemDeRobo } from './human-handoff';
 import { historicoRecente, renderHistoricoRecente } from './historico-recente';
 import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-context';
 
@@ -457,7 +458,8 @@ export async function resolveTurnAgent(
     ]);
 
     // Regra 9, sem modelo: a mensagem que ABRE a conversa se declara robô ou
-    // pede escolha de menu ("digite o número da opção").
+    // é menu de robô (instrução de escolha + duas opções numeradas). Só a
+    // instrução é gente citando menu, e cala paciente.
     const soEquipe = (intentName: string, confidence: number): TurnAgentResolution => {
       deps.log.info('turno_so_da_equipe', { routerId: router.id, intentName, confidence });
       return { config: null, routerId: router.id, intentName, confidence, outcome: 'so_equipe', ...doRoteador };
@@ -466,7 +468,7 @@ export async function resolveTurnAgent(
       router.soEquipe === true &&
       input.semSaida === true &&
       semNadaNaAgenda(fatos) &&
-      (ehMensagemDeRobo(input.signal) || temInstrucaoDeMenu(input.signal))
+      (ehMensagemDeRobo(input.signal) || ehMenuDeRoboComOpcoes(input.signal))
     ) {
       return soEquipe('mensagem_automatica', 1);
     }

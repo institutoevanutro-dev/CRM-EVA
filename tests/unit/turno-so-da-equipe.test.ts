@@ -53,15 +53,15 @@ const roteador = (soEquipe: boolean) => ({
   members: [{ agentId: 'agent-recepcao', intentName: 'recepcao', intentDescription: 'geral', examples: [] }],
 });
 
-/** Banco: a última mensagem do contato, conversa sem saída nossa, agenda vazia. */
-function pool(texto: string) {
+/** Banco: a última mensagem do contato, agenda vazia; `semSaida` = a mensagem abre a conversa. */
+function pool(texto: string, semSaida = false) {
   return {
     query: vi.fn(async (sql: string) => {
       if (/select body,type,media_url/.test(sql)) {
         return { rows: [{ body: texto, type: 'text', media_url: null, media_storage_path: null, media_derived_text: null }] };
       }
       if (/as equipe_falou/.test(sql)) {
-        return { rows: [{ active_ai_agent_id: null, active_intent: null, active_agent_set_at: null, equipe_falou: false, sem_saida: false }] };
+        return { rows: [{ active_ai_agent_id: null, active_intent: null, active_agent_set_at: null, equipe_falou: false, sem_saida: semSaida }] };
       }
       return { rows: [] };
     }),
@@ -102,5 +102,34 @@ describe('turno de entrada com config.so_equipe', () => {
     ).rejects.toThrow();
     expect(mocks.perform).not.toHaveBeenCalled();
     expect(mocks.byId).toHaveBeenCalled();
+  });
+});
+
+/**
+ * B1 da revisão adversarial: a 1ª mensagem que só CITA a instrução de um menu
+ * é paciente, não robô. Antes, `temInstrucaoDeMenu` sozinha calava estas frases
+ * (abertura da conversa, sem agenda) sem chamar modelo nenhum.
+ */
+describe('1ª mensagem com instrução de menu mas sem opções numeradas é paciente', () => {
+  it.each([
+    'qual a opção desejada pra quem tem testa marcada?',
+    'escolha a opção mais em conta pra mim, quero agendar',
+    'Não sei qual opção desejada marcar no site',
+    'no site diz digite o número do cartão',
+  ])('%s → segue para o atendimento, sem aviso de negócio/robô', async (texto) => {
+    mocks.router.mockResolvedValue(roteador(true));
+    mocks.classify.mockResolvedValue({ intentName: 'recepcao', confidence: 0.9 });
+    await expect(createInboundTurnHandler(deps)(job as never, pool(texto, true) as never, { workerId: 'w' })).rejects.toThrow();
+    expect(mocks.perform).not.toHaveBeenCalled();
+    expect(mocks.classify).toHaveBeenCalled();
+    expect(mocks.byId).toHaveBeenCalled();
+  });
+
+  it('controle: menu de robô de verdade (instrução + opções) na abertura → equipe, sem classificar', async () => {
+    mocks.router.mockResolvedValue(roteador(true));
+    const menu = 'Bem-vindo à Loja Fictícia!\n1 - Pedidos\n2 - Trocas\nDigite o número da opção desejada';
+    await createInboundTurnHandler(deps)(job as never, pool(menu, true) as never, { workerId: 'w' });
+    expect(mocks.perform).toHaveBeenCalledOnce();
+    expect(mocks.classify).not.toHaveBeenCalled();
   });
 });
