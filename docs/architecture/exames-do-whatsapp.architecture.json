@@ -1,0 +1,267 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Exames do WhatsApp no Prontuário",
+    "subtitle": "A recepção envia o PDF ou a foto; o Prontuário busca de volta com chave só de leitura",
+    "output": "exames-do-whatsapp.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "operacao",
+      "label": "Operação"
+    },
+    {
+      "id": "crm",
+      "label": "CRM"
+    },
+    {
+      "id": "prontuario",
+      "label": "Prontuário"
+    }
+  ],
+  "mainPath": [
+    "balao",
+    "envio",
+    "cliente",
+    "recepcao",
+    "leitura",
+    "midias"
+  ],
+  "nodes": [
+    {
+      "id": "balao",
+      "lane": "operacao",
+      "col": 1,
+      "type": "frontend",
+      "label": "Inbox: botão Enviar ao prontuário, selo com quem e quando, erro no balão"
+    },
+    {
+      "id": "chaves",
+      "lane": "operacao",
+      "col": 2,
+      "type": "frontend",
+      "label": "Configurações › Chaves de integração: escopo prontuario:media:read"
+    },
+    {
+      "id": "env",
+      "lane": "operacao",
+      "col": 3,
+      "type": "frontend",
+      "label": "Arquivo .env da VPS: PRONTUARIO_URL, PRONTUARIO_EXAMES_SEGREDO, PRONTUARIO_ORGANIZATION_ID"
+    },
+    {
+      "id": "envio",
+      "lane": "crm",
+      "col": 1,
+      "type": "backend",
+      "label": "POST /api/v1/messages/{id}/prontuario (agent+, suporte nunca)"
+    },
+    {
+      "id": "cliente",
+      "lane": "crm",
+      "col": 2,
+      "type": "backend",
+      "label": "lib/integrations/prontuario/cliente.ts: três estados, 1 nova tentativa, teto de resposta"
+    },
+    {
+      "id": "midias",
+      "lane": "crm",
+      "col": 3,
+      "type": "database",
+      "label": "messages + bucket whatsapp-media (lib/prontuario/midias.ts)"
+    },
+    {
+      "id": "leitura",
+      "lane": "crm",
+      "col": 4,
+      "type": "backend",
+      "label": "GET /api/v1/prontuario/contacts/{id}/midias e /api/v1/prontuario/midias/{id}"
+    },
+    {
+      "id": "registro",
+      "lane": "crm",
+      "col": 2,
+      "type": "database",
+      "label": "prontuario_exames_enviados (migration 0402, só service_role)"
+    },
+    {
+      "id": "anonimizacao",
+      "lane": "crm",
+      "col": 3,
+      "type": "backend",
+      "label": "Gatilho da 0402: anonimizar apaga o registro"
+    },
+    {
+      "id": "export_lgpd",
+      "lane": "crm",
+      "col": 4,
+      "type": "backend",
+      "label": "Exportação ao titular: arquivos enviados ao prontuário, sem exam_id"
+    },
+    {
+      "id": "realtime",
+      "lane": "crm",
+      "col": 1,
+      "type": "backend",
+      "label": "UPDATE em messages.updated_at pelo Realtime da conversa"
+    },
+    {
+      "id": "lista_msgs",
+      "lane": "crm",
+      "col": 2,
+      "type": "backend",
+      "label": "GET /api/v1/conversations/{id}/messages junta o selo"
+    },
+    {
+      "id": "auditoria",
+      "lane": "crm",
+      "col": 5,
+      "type": "database",
+      "label": "api_audit_log: exam_sent, exam_send_failed, media_listed, media_downloaded"
+    },
+    {
+      "id": "recepcao",
+      "lane": "prontuario",
+      "col": 2,
+      "type": "external",
+      "label": "POST /api/integracoes/crm/exames do Prontuário"
+    },
+    {
+      "id": "exames",
+      "lane": "prontuario",
+      "col": 3,
+      "type": "external",
+      "label": "patient_exams + arquivo (Novo, conferir)"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "balao",
+      "to": "envio",
+      "label": "clique; 45 s de prazo; erro fica no balão"
+    },
+    {
+      "id": "e2",
+      "from": "lista_msgs",
+      "to": "balao",
+      "label": "selo: ja_existia, enviado_em, enviado_por_user_id"
+    },
+    {
+      "id": "e3",
+      "from": "realtime",
+      "to": "balao",
+      "label": "o colega relê a página e vê o selo"
+    },
+    {
+      "id": "e4",
+      "from": "env",
+      "to": "cliente",
+      "label": "três estados: desligada, inválida, ligada"
+    },
+    {
+      "id": "e5",
+      "from": "env",
+      "to": "balao",
+      "label": "exames_ao_prontuario acende o botão"
+    },
+    {
+      "id": "e6",
+      "from": "envio",
+      "to": "midias",
+      "label": "mesma regra da lista (60 dias, PDF/JPEG/PNG até 10 MiB)"
+    },
+    {
+      "id": "e7",
+      "from": "envio",
+      "to": "cliente",
+      "label": "contact_id, message_id do banco, enviado_por"
+    },
+    {
+      "id": "e8",
+      "from": "cliente",
+      "to": "recepcao",
+      "label": "Bearer + Idempotency-Key = message_id"
+    },
+    {
+      "id": "e9",
+      "from": "recepcao",
+      "to": "leitura",
+      "label": "lista dias=60 e baixa o arquivo com a chave"
+    },
+    {
+      "id": "e10",
+      "from": "chaves",
+      "to": "leitura",
+      "label": "escopo exato prontuario:media:read"
+    },
+    {
+      "id": "e11",
+      "from": "chaves",
+      "to": "recepcao",
+      "label": "a chave vai ao .env do Prontuário"
+    },
+    {
+      "id": "e12",
+      "from": "leitura",
+      "to": "midias",
+      "label": "organização do token; mesmo 404 para não elegível"
+    },
+    {
+      "id": "e13",
+      "from": "leitura",
+      "to": "auditoria",
+      "label": "leitura: ids, quantidade, mime, tamanho; nunca nome nem conteúdo"
+    },
+    {
+      "id": "e14",
+      "from": "recepcao",
+      "to": "exames",
+      "label": "exam_id e ja_existia"
+    },
+    {
+      "id": "e15",
+      "from": "envio",
+      "to": "registro",
+      "label": "grava só o sucesso; 23505 devolve o existente"
+    },
+    {
+      "id": "e16",
+      "from": "envio",
+      "to": "auditoria",
+      "label": "exam_sent sem exam_id; exam_send_failed com o código"
+    },
+    {
+      "id": "e17",
+      "from": "envio",
+      "to": "realtime",
+      "label": "toca messages.updated_at"
+    },
+    {
+      "id": "e18",
+      "from": "registro",
+      "to": "lista_msgs",
+      "label": "uma consulta por página com anexo"
+    },
+    {
+      "id": "e19",
+      "from": "anonimizacao",
+      "to": "registro",
+      "label": "apaga as linhas do titular"
+    },
+    {
+      "id": "e20",
+      "from": "registro",
+      "to": "export_lgpd",
+      "label": "entrega ao titular"
+    },
+    {
+      "id": "e21",
+      "from": "auditoria",
+      "to": "export_lgpd",
+      "label": "trilha do titular por metadata.contact_id"
+    }
+  ]
+}

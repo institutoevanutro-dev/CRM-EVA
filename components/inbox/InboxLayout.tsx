@@ -525,6 +525,14 @@ export function InboxLayout({
   // reusa o caminho de envio do Inbox. Quem não responde não encaminha.
   const encaminhar = useEncaminharMensagem();
   const podeEncaminhar = usePermission("inbox.reply");
+  // Exames do WhatsApp → Prontuário: agent+ da clínica (suporte nunca), com a
+  // integração acesa nesta organização, em conversa 1:1 do WhatsApp.
+  const podeEnviarAoProntuario =
+    podeEncaminhar &&
+    !user?.support &&
+    activeOrg?.exames_ao_prontuario === true &&
+    selectedConversation?.channel === "whatsapp" &&
+    !selectedConversation?.is_group;
   // As conversas já carregadas são o universo de destinos, sem busca nova.
   const conversasDaLista = useMemo(() => listQ.data?.pages.flatMap((p) => p.data) ?? [], [listQ.data]);
 
@@ -1072,6 +1080,7 @@ export function InboxLayout({
                 conversationId={selectedConversation.id}
                 onResponder={setRespondendo}
                 onEncaminhar={podeEncaminhar ? setEncaminhando : undefined}
+                podeEnviarAoProntuario={podeEnviarAoProntuario}
                 searchTerm={buscaAberta && busca ? busca.termo : ""}
                 aparencia={aparencia}
               />

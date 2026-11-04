@@ -64,6 +64,10 @@ export const ApiErrorCodes = {
   // (índice uniq_contacts_org_phone). O corpo traz `details.contact_id` para a
   // tela oferecer o contato existente em vez de só mostrar que deu erro.
   contact_exists: "contact_exists",
+  // POST /api/v1/contacts/merge cuja ficha que FICA está ligada ao prontuário,
+  // sem `confirmar_ficha_do_prontuario: true`: as mensagens (e os exames) da
+  // outra ficha passariam a ser deste paciente. A tela mostra o aviso e a caixa.
+  prontuario_confirmar_juncao: "prontuario_confirmar_juncao",
   duplicate_external_id: "duplicate_external_id",
   event_gone: "event_gone", // resend de run cujo event_log original foi apagado (on delete set null)
   no_actions_to_resend: "no_actions_to_resend", // resend de regra que não tem mais nenhuma ação de webhook — reenviar nada não é sucesso
@@ -195,6 +199,24 @@ export const ApiErrorCodes = {
   campanha_agenda_invalida: "campanha_agenda_invalida", // 422: data no passado
   campanha_conteudo_invalido: "campanha_conteudo_invalido", // 422: texto vazio ou variável que não existe
   campanha_base_legal_invalida: "campanha_base_legal_invalida", // 422: interesse legítimo sem referência da LIA
+
+  // ─── Exames do WhatsApp → Prontuário ───
+  // 409: a mídia ainda não foi guardada pelo CRM (o worker de persistência não terminou).
+  midia_ainda_nao_disponivel: "midia_ainda_nao_disponivel",
+  // Desfechos do botão "Enviar ao prontuário" (POST /api/v1/messages/{id}/prontuario).
+  // Nunca 429/503 ao navegador: o apiClient repetiria o POST sozinho.
+  paciente_nao_vinculado: "paciente_nao_vinculado", // 409
+  vinculo_nao_confirmado: "vinculo_nao_confirmado", // 409: o Prontuário ainda não confirmou o vínculo
+  midia_em_outro_paciente: "midia_em_outro_paciente", // 409: o arquivo já está no prontuário de outro paciente
+  contato_com_varios_pacientes: "contato_com_varios_pacientes", // 409
+  midia_nao_encontrada: "midia_nao_encontrada", // 422
+  formato_nao_aceito: "formato_nao_aceito", // 422
+  grande_demais: "grande_demais", // 422: acima de 10 MiB
+  fora_do_prontuario: "fora_do_prontuario", // 422: não é PDF/foto recebida pelo WhatsApp nos últimos 60 dias
+  prontuario_desligado: "prontuario_desligado", // 409: a integração não está ligada nesta organização
+  prontuario_configuracao: "prontuario_configuracao", // 502: configuração inválida aqui ou lá
+  prontuario_indisponivel: "prontuario_indisponivel", // 502
+  prontuario_sem_acesso_ao_crm: "prontuario_sem_acesso_ao_crm", // 502: o Prontuário não conseguiu ler o arquivo no CRM
 
   // 500 / upstream
   internal_error: "internal_error",

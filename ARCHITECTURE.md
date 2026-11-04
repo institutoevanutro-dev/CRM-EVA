@@ -77,6 +77,7 @@ pelos 10 endpoints em `app/api/v1/cron/`. Contrato: [`docs/specs/07-spec-events-
 | **Sentry** | erros + performance, `beforeSend` higieniza PII | `sentry.*.config.ts`, `instrumentation*.ts` | opcional |
 | **Resend** | e-mail transacional (convite de time) | `lib/email/` | opcional — o convite cai em copy-to-clipboard |
 | **MCP** | CRM exposto como tools para agentes | `app/api/mcp/`, `lib/mcp/` | — |
+| **Prontuário** (opcional, `PRONTUARIO_*`) | envio de exame do WhatsApp; leitura de mídia por chave `prontuario:media:read` | `lib/integrations/prontuario/cliente.ts`, `app/api/v1/prontuario/` | botão some |
 
 ## Hardening
 

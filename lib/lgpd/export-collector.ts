@@ -499,6 +499,12 @@ export interface ExportPayload {
   /** Comentários do titular em posts da organização. Opcional como `reply_drafts`. */
   instagram_comments?: InstagramCommentRow[];
   /**
+   * Arquivos do WhatsApp que a equipe enviou ao prontuário (migration 0402).
+   * A anonimização APAGA estas linhas; o acesso as entrega. Sem `exam_id`: ele
+   * aponta para o paciente no outro sistema. Opcional como `reply_drafts`.
+   */
+  exames_enviados_ao_prontuario?: Array<{ message_id: string; ja_existia: boolean; enviado_em: string }>;
+  /**
    * Casos, linha do tempo do caso, demandas e avisos da Central (migration 0317).
    *
    * Entram porque a 0317 os pôs na cascata de anonimização, e o que se apaga a
@@ -1118,6 +1124,43 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // Arquivos enviados ao prontuário (migration 0402). O gatilho da 0402 apaga
+  // estas linhas ao anonimizar; o acesso as entrega, sem `exam_id`.
+  let exames_enviados_ao_prontuario: NonNullable<ExportPayload["exames_enviados_ao_prontuario"]> = [];
+  if (contactId) {
+    // Duas consultas simples em vez de filtro embutido (messages!inner): só
+    // mensagem recebida com arquivo do titular pode ter ido ao prontuário.
+    const midias = await admin
+      .from("messages")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .eq("direction", "inbound")
+      .in("type", ["image", "document"])
+      .limit(5000);
+    const ids = ((midias.data ?? []) as { id: string }[]).map((m) => m.id);
+    const { data, error } = midias.error
+      ? { data: null, error: midias.error }
+      : ids.length === 0
+        ? { data: [], error: null }
+        : await admin
+            .from("prontuario_exames_enviados")
+            .select("message_id, ja_existia, created_at")
+            .eq("organization_id", organizationId)
+            .in("message_id", ids)
+            .order("created_at", { ascending: false })
+            .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] prontuario exams load failed", { request_id: requestId, error: error.message });
+    } else if (data) {
+      exames_enviados_ao_prontuario = (data as { message_id: string; ja_existia: boolean; created_at: string }[]).map((e) => ({
+        message_id: e.message_id,
+        ja_existia: e.ja_existia,
+        enviado_em: e.created_at,
+      }));
+    }
+  }
+
   // Chamadas de voz — `contact_id` direto em `voice_calls` (migration 0232).
   //
   // O que existe aqui é o REGISTRO da ligação, nunca o áudio: gravação está
@@ -1611,6 +1654,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     appointments,
     tasks,
     bonus_calls,
+    exames_enviados_ao_prontuario,
     webhook_captures,
     audit_log_extract,
     reply_drafts,

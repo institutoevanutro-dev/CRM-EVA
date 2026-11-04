@@ -18,6 +18,7 @@ vi.mock("@/hooks/inbox/useClaimConversation", () => ({ useClaimConversation: () 
 vi.mock("@/hooks/inbox/useDeleteNote", () => ({ useDeleteNote: () => ({ mutate: vi.fn() }) }));
 vi.mock("@/hooks/inbox/useAlterarMensagem", () => ({ useAlterarMensagem: () => ({ editar: {}, apagar: {}, ocultar: {}, restaurar: {}, reenviar: { mutateAsync: vi.fn() } }) }));
 vi.mock("@/hooks/inbox/useAssignableMembers", () => ({ useAssignableMembers: () => ({ data: [] }) }));
+vi.mock("@/hooks/inbox/useEnviarAoProntuario", () => ({ useEnviarAoProntuario: () => ({ enviar: vi.fn(), emVoo: new Set(), ultimoErro: new Map() }) }));
 vi.mock("@/hooks/ai/useDebugToggle", () => ({ useDebugToggle: () => ({ enabled: false }) }));
 vi.mock("@/hooks/auth/AuthProvider", () => ({ useActiveOrg: () => ({ role: "agent" }), useUser: () => ({ id: "u-1" }) }));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));

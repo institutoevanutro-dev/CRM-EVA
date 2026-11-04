@@ -18,6 +18,7 @@ import { useDeleteNote } from "@/hooks/inbox/useDeleteNote";
 import { useAlterarMensagem } from "@/hooks/inbox/useAlterarMensagem";
 import { useDebugToggle } from "@/hooks/ai/useDebugToggle";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
+import { useEnviarAoProntuario } from "@/hooks/inbox/useEnviarAoProntuario";
 import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
 import { ROLE_RANK } from "@/lib/auth/types";
 import type { Message, Note } from "@/lib/types/messaging";
@@ -32,6 +33,8 @@ interface Props {
   onEncaminhar?: (m: Message) => void;
   /** Fundo e balões que a pessoa escolheu (ver `lib/inbox/aparencia-da-conversa.ts`). */
   aparencia?: AparenciaDaConversa;
+  /** Mostra o botão "Enviar ao prontuário" (quem decide é o `InboxLayout`). */
+  podeEnviarAoProntuario?: boolean;
 }
 
 /** Onda 5.2: union de item do thread — mensagem real ou nota interna (nunca vai ao cliente). */
@@ -57,7 +60,14 @@ function dayLabel(d: Date, t: (texto: string) => string = (texto) => texto, loca
   return format(d, "dd/MM/yyyy", { locale: locale });
 }
 
-export function ChatThread({ conversationId, onResponder, onEncaminhar, searchTerm = "", aparencia = APARENCIA_PADRAO }: Props) {
+export function ChatThread({
+  conversationId,
+  onResponder,
+  onEncaminhar,
+  searchTerm = "",
+  aparencia = APARENCIA_PADRAO,
+  podeEnviarAoProntuario = false,
+}: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const q = useMessagesRealtime(conversationId);
@@ -72,6 +82,7 @@ export function ChatThread({ conversationId, onResponder, onEncaminhar, searchTe
     () => new Map((equipe ?? []).map((m) => [m.user_id, m.full_name ?? null])),
     [equipe],
   );
+  const envioAoProntuario = useEnviarAoProntuario(conversationId);
   const deleteNote = useDeleteNote(conversationId ?? "");
   const canManage = activeOrg != null && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
   // Reenviar é envio: a rota exige `agent`, e quem só lê não ganha um botão que ela recusa.
@@ -331,6 +342,10 @@ export function ChatThread({ conversationId, onResponder, onEncaminhar, searchTe
                   nomeDoAutor={item.data.sent_by_user_id ? (nomePorUsuario.get(item.data.sent_by_user_id) ?? null) : null}
                   onReenviar={podeEnviar && item.data.direction === "outbound" ? reenviarMensagem : undefined}
                   podeReenviarDeOutros={canManage}
+                  onEnviarAoProntuario={podeEnviarAoProntuario ? envioAoProntuario.enviar : undefined}
+                  enviandoAoProntuario={envioAoProntuario.emVoo.has(item.data.id)}
+                  erroAoProntuario={envioAoProntuario.ultimoErro.get(item.data.id) ?? null}
+                  quemEnviouAoProntuario={nomePorUsuario.get(item.data.prontuario_exame?.enviado_por_user_id ?? "") ?? null}
                 />
               ),
             )}

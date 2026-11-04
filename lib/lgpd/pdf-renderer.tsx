@@ -296,6 +296,21 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
           </View>
         ) : null}
 
+        {/* Arquivos do WhatsApp que a equipe enviou ao prontuário (migration 0402). */}
+        {data.exames_enviados_ao_prontuario?.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Arquivos enviados ao prontuário</Text>
+            {data.exames_enviados_ao_prontuario.map((e) => (
+              <View key={e.message_id} style={styles.itemBlock}>
+                <Text style={styles.small}>
+                  Mensagem {e.message_id} · {fmtDate(e.enviado_em)}
+                  {e.ja_existia ? " · já estava no prontuário" : ""}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         {/* Consents */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Consentimentos</Text>

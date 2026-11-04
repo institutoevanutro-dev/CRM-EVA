@@ -143,6 +143,12 @@ META_GRAPH_BASE_URL=http://127.0.0.1:47813
 # o grava cifrado em \`platform_meta_app\`, e é com ele que se assina o HMAC do
 # webhook. Valor de teste, não é segredo.
 E2E_META_APP_SECRET=e2e-app-secret-0123456789abcdef
+# Envio de exame ao Prontuário LIGADO só na organização da spec
+# \`tests/e2e/inbox-enviar-exame-ao-prontuario.spec.ts\`, que sobe o Prontuário
+# falso nesta porta fixa (47814). Valores de teste, nenhum é segredo.
+PRONTUARIO_URL=http://127.0.0.1:47814
+PRONTUARIO_EXAMES_SEGREDO=e2e-segredo-ficticio-do-prontuario-0123456789
+PRONTUARIO_ORGANIZATION_ID=e7a1e2e0-0000-4000-8000-0000000000e2
 # Login pela Conta EvaLink LIGADO na suíte, contra a Conta falsa que o
 # playwright.config.ts sobe nesta porta fixa (tests/helpers/conta-falsa-servidor.ts).
 # Os usuários do seed não estão ligados à Conta, então continuam entrando por

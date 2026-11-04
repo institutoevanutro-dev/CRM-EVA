@@ -202,6 +202,7 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 | J5.20 | Atendente **inicia uma conversa pelo Inbox** com um telefone novo | botão "Iniciar conversa" no topo da lista; telefone vira E.164, conversa abre ASSUMIDA por quem iniciou e a primeira mensagem sai como UMA linha de saída pelo envio de sempre · **PASS** (mesma spec, 2026-10-15). **Não provado pela tela**: contato existente achado pela busca, conversa reaberta com outro dono (cobertos em `tests/unit/painel-iniciar-conversa-no-inbox.test.tsx`); entrega real pelo WAHA |
 | J5.21 | Admin cria pela tela a chave só do Financeiro | em Chaves de integração escolhe `financeiro:contatos` por 365 dias; a chave passa da régua de escopo da rota do Financeiro, recebe 403 em `/api/v1/contacts` e 401 depois de revogada pela tela · `tests/e2e/rbac-roles.spec.ts`. O e2e não liga a integração, então a rota para na organização (`forbidden`); a régua completa está em `app/api/v1/integrations/financeiro/contacts/[id]/route.test.ts` e a prova de que a chave não abre MCP nem outra rota em `tests/unit/escopo-financeiro-contatos-nao-abre-outra-porta.test.ts` |
 | J5.22 | Atendente **arrasta um arquivo para a caixa de mensagem** (porte do original #3713, 2026-11-03) | abre a MESMA prévia do "+", com a linha "Para: …" (ou "Nota interna · só o time vê"); em Nota interna o anexo fica na nota e nenhuma mensagem vai ao paciente; vários arquivos, arquivo ilegível ou de 0 byte e áudio na resposta são recusados com aviso; conversa encerrada recusa (sem realce, sem prévia, `dropEffect: "none"`); arquivo solto fora da caixa (fio, fundo da prévia aberta) não navega, medido como `prevented` + `dropEffect: "none"`; trocar de conversa descarta a prévia · `tests/unit/composer-arrastar-arquivo.test.tsx` (20 casos; sabotagens da guarda da janela, da troca de conversa, da paridade com a trava do "+" e do contador do realce ficaram vermelhas) + `tests/unit/composer-resposta-rapida-com-imagens.test.tsx` (a prévia de imagens também é descartada na troca) + `tests/e2e/etiquetas-e-composer-pela-tela.spec.ts`, 4º teste, com eventos sintéticos no Chromium: **spec escrita, ainda não rodada** (roda no `e2e` do CI). **Não provado pela tela**: o gesto real do sistema (Finder → Safari), o cursor "proibido" de verdade, Esc no meio do arraste, a navegação real num drop perdido, drop no iPad (Fotos/Arquivos → Safari) e foto HEIC original — ficam para a conferência do André |
+| J5.23 | Recepção **envia ao Prontuário o PDF ou a foto que o paciente mandou** (2026-11-04) | botão "Enviar ao prontuário" embaixo da mídia, selo "No prontuário" com quem e quando, erro escrito no balão · ver **J42** |
 
 ## J6 — Webhooks: receber, automatizar, provar `[P0]`
 
@@ -2929,3 +2930,33 @@ Rodada local: stack próprio (Postgres da imagem Supabase 17, GoTrue, PostgREST 
 - **Safari de verdade:** o diálogo "Registrar ligação" e o `<input type="month">` das metas não foram abertos no Safari nesta rodada. Fica para depois do deploy.
 - **O cron às 7h de verdade** não foi esperado: a fila foi montada pela função que ele chama, no dia de hoje.
 - **O envio pela conversa com o ritmo mínimo** (`lib/bonus/ritmo.ts`) não foi dirigido pela tela; está nos testes de unidade da rota de mensagens.
+
+
+## J42 — Enviar ao Prontuário o exame que chegou pelo WhatsApp `[P1]` (2026-11-04)
+
+A recepção abre a conversa do paciente e, numa mensagem recebida nos últimos 60 dias com PDF, JPG ou PNG de até 10 MB, clica "Enviar ao prontuário". O CRM chama o Prontuário, que busca a lista e o arquivo de volta no CRM com a chave `prontuario:media:read`; a mensagem ganha o selo "No prontuário" com quem enviou e quando. Spec: `tests/e2e/inbox-enviar-exame-ao-prontuario.spec.ts` (no CI, parte 6), com um **Prontuário falso de verdade** (receptor HTTP na porta 47814) que valida cada item da lista com as regras do Prontuário e confere o SHA-256 do arquivo baixado. Organização própria da spec, com a integração ligada só nela; nomes fictícios. Evidência em `.superpowers/evidence/exames-whatsapp/`.
+
+**Spec escrita, ainda não rodada localmente** (roda no `e2e` do CI): o stack local do Supabase deste repositório não estava de pé na sessão que a escreveu. Os casos abaixo dizem o que a spec prova quando rodar; trocar para `PROVADO NA TELA` só depois do primeiro verde.
+
+| Caso | O que a pessoa faz | Resultado esperado |
+|---|---|---|
+| J42.0 `[P1]` | O admin cria pela tela a chave só `prontuario:media:read` | A chave sai uma vez, com o rótulo do Prontuário |
+| J42.1 `[P1]` | A recepcionista abre a conversa | PDF e JPEG com o botão; HEIC com "Peça ao paciente um PDF ou foto comum"; PDF que não chegou com "O arquivo não chegou inteiro ao CRM…"; PDF enviado pela clínica sem nada |
+| J42.2 `[P1]` | Clica no PDF | "Enviando…" com `aria-busy`, depois o selo com "por {nome} · {data}" visível (12 px); o falso recebeu 1 pedido com o nome, listou com `dias=60`, validou os itens e baixou bytes idênticos; recarregar mantém o selo |
+| J42.3 `[P1]` | Repete o POST pela sessão | 200 sem pedido novo ao Prontuário |
+| J42.4 `[P1]` | Envia de contato não vinculado, de segredo recusado e de vínculo não confirmado | Toast e a MESMA frase embaixo do botão, ainda visível depois de 5 s; sem selo |
+| J42.5 `[P1]` | Envia quando o Prontuário oscila (503 `crm_indisponivel` na 1ª) | Selo; o falso recebeu 2 pedidos com a mesma `Idempotency-Key` |
+| J42.6 `[P1]` | Envia o exame que o clínico já trouxe | "já estava lá · conferido por {nome} · {data}", nunca "por {nome}" |
+| J42.7 `[P1]` | A recepcionista envia com o admin olhando a mesma conversa | O selo aparece para o admin em menos de 10 s, sem recarregar |
+| J42.8 `[P1]` | Quem só lê abre a conversa | Vê o selo e nenhum botão |
+| J42.9 `[P1]` | O admin abre a auditoria | `prontuario.exam_sent` e `prontuario.exam_send_failed`; a lista de mensagens não tem `exam_id` |
+| J42.10 `[P1]` | Chave de outra organização pede a lista e o arquivo | `{data: []}` e o mesmo 404 de um id aleatório |
+| J42.11 `[P0]` | Instalação sem a integração (a organização do seed) | PDF recebido sem botão nem dica |
+| J42.12 `[P1]` | Medidas | Botão ≥ 44 px a 390×844 e ≥ 36 px a 1366×768, sem rolagem horizontal, claro e escuro |
+
+**O que esta jornada NÃO tem:**
+
+- **Prontuário real:** o falso imita o contrato e as regras de `itemDoCrm`; a integração de verdade só se prova na ativação (runbook em `docs/integrations/prontuario-exames.md`).
+- **Safari de verdade:** botão, selo e erro no balão não foram abertos no Safari.
+- **Configuração pela metade** (estado inválido): coberta nos testes da rota e do cliente, não pela tela — trocar variável no meio da spec exigiria outro `next start`.
+- **Mídia que fica pendente para sempre:** sem botão e sem aviso; só a que o worker marcou como falha ganha a dica.

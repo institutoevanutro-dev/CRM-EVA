@@ -268,6 +268,7 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "gravado pela rota pública e consumido pelo ingest, ambos com o admin client " +
       "filtrando organization_id; ninguém lê pela sessão.",
   },
+  { tabela: "prontuario_exames_enviados", razao: "tests/invariants/exames-do-whatsapp-no-prontuario.test.ts — deny-all: ninguém lê nem grava pela sessão; o servidor usa o admin client filtrando organization_id da sessão" },
   { tabela: "bonus_programas", razao: "tests/invariants/bonus-da-equipe.test.ts — \"programa: só o aprovador lê\": o aprovador lê, o admin participante e o admin de outra organização leem 0, e sessão nenhuma escreve (nem o aprovador)" },
   { tabela: "bonus_fila_itens", razao: "tests/invariants/bonus-da-equipe.test.ts — \"fila: cada um lê a sua; o aprovador lê todas\": a pessoa A não vê o item da B, o admin de outra organização lê 0, e a pessoa não registra ligação pela REST" },
   { tabela: "bonus_stories_dia", razao: "tests/invariants/bonus-da-equipe.test.ts — \"stories: a organização lê, ninguém escreve pela sessão\": participante lê, outra organização lê 0, e o aprovador não escreve pela sessão" },

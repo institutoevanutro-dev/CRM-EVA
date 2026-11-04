@@ -50,6 +50,8 @@ const SCOPES: { id: string; label: string }[] = [
   { id: "prontuario:contacts:read", label: "Prontuário: pesquisar cadastro de contatos" },
   { id: "prontuario:contacts:demographics:read", label: "Prontuário: importar CPF e endereço do CRM (requer leitura de contatos)" },
   { id: "prontuario:contacts:write", label: "Prontuário: criar e atualizar cadastro de contatos" },
+  // Só as duas rotas de mídia do Prontuário aceitam: não abre MCP nem conversas.
+  { id: "prontuario:media:read", label: "Prontuário: baixar PDF e fotos que o paciente mandou pelo WhatsApp" },
   { id: "agenda:read", label: "Prontuário: ler compromissos da agenda" },
   { id: "agenda:reschedule", label: "Prontuário: remarcar compromissos da agenda" },
   // Só "Realizado": não registra falta, não remarca, não cancela (migration 0401).

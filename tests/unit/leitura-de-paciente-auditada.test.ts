@@ -26,6 +26,8 @@ const LEITURAS: Array<[arquivo: string, metodo: string, acao: string]> = [
   ["app/api/v1/lgpd/requests/[id]/preview/route.ts", "GET", "lgpd.request_previewed"],
   ["app/api/v1/prontuario/contacts/route.ts", "GET", "prontuario.contact_read"],
   ["app/api/v1/prontuario/contacts/[id]/route.ts", "GET", "prontuario.contact_read"],
+  ["app/api/v1/prontuario/contacts/[id]/midias/route.ts", "GET", "prontuario.media_listed"],
+  ["app/api/v1/prontuario/midias/[id]/route.ts", "GET", "prontuario.media_downloaded"],
   ["app/api/v1/bonus/meu/route.ts", "GET", "contact.listed"],
   // Duplicados e a comparação lado a lado (porte do #3640).
   ["app/api/v1/contacts/duplicates/route.ts", "GET", "contact.listed"],
@@ -36,6 +38,8 @@ const LEITURAS: Array<[arquivo: string, metodo: string, acao: string]> = [
 const MUTACOES: Array<[arquivo: string, metodo: string, acao: string]> = [
   ["app/api/v1/conversations/[id]/media/route.ts", "POST", "conversation.media_uploaded"],
   ["app/api/v1/audit/export/route.ts", "GET", "audit.exported"],
+  ["app/api/v1/messages/[id]/prontuario/route.ts", "POST", "prontuario.exam_sent"],
+  ["app/api/v1/messages/[id]/prontuario/route.ts", "POST", "prontuario.exam_send_failed"],
 ];
 
 function corpoDoMetodo(arquivo: string, metodo: string): string {

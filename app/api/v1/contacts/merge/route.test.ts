@@ -111,13 +111,13 @@ function fakeSupabase(o: Opcoes) {
   return { rpc, leituras, updates };
 }
 
-async function juntar(): Promise<Response> {
+async function juntar(extra: Record<string, unknown> = {}): Promise<Response> {
   const { POST } = await import("./route");
   return POST(
     new NextRequest("http://localhost/api/v1/contacts/merge", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ primary_contact_id: FICA, secondary_contact_ids: [SAI] }),
+      body: JSON.stringify({ primary_contact_id: FICA, secondary_contact_ids: [SAI], ...extra }),
     }),
   );
 }
@@ -242,18 +242,66 @@ describe("POST /contacts/merge: a ficha ligada ao prontuário fica", () => {
     expect(audit).not.toHaveBeenCalled();
   });
 
-  it("(5) só quem fica está ligado: a RPC roda, e a conferência pergunta só pelas absorvidas", async () => {
+  it("(5) só quem fica está ligado e NÃO confirmou: 409 prontuario_confirmar_juncao, sem RPC", async () => {
+    // Sabotagem: conferir o vínculo só das absorvidas (como antes) deixa a RPC
+    // rodar e os exames da outra ficha caírem no prontuário do paciente.
     const { rpc, leituras } = fakeSupabase({ fichas: [livre(FICA), livre(SAI)], vinculadas: [FICA] });
+
+    const res = await juntar();
+    const json = (await res.json()) as { error: { code: string; message: string } };
+
+    expect(res.status).toBe(409);
+    expect(json.error.code).toBe("prontuario_confirmar_juncao");
+    expect(json.error.message).toContain("Junte só se forem a mesma pessoa.");
+    expect(rpc).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+    // A conferência pergunta pelas duas pontas, pela organização da sessão.
+    const doProntuario = leituras.find((l) => l.tabela === "prontuario_contact_links")!;
+    expect(doProntuario.filtros).toEqual([
+      ["organization_id", ORG],
+      ["contact_id", [FICA, SAI]],
+    ]);
+  });
+
+  it("(5b) só quem fica está ligado e confirmou: a RPC roda e a auditoria registra a confirmação", async () => {
+    // Sabotagem: tirar `prontuario_merge_confirmed` do audit apaga o rastro de quem confirmou.
+    const { rpc } = fakeSupabase({ fichas: [livre(FICA), livre(SAI)], vinculadas: [FICA] });
+
+    const res = await juntar({ confirmar_ficha_do_prontuario: true });
+
+    expect(res.status).toBe(200);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(metadataDoAudit()).toMatchObject({ prontuario_merge_confirmed: true });
+  });
+
+  it("(5c) nenhuma ligada: junta sem pedir confirmação e sem marcar a auditoria", async () => {
+    const { rpc } = fakeSupabase({ fichas: [livre(FICA), livre(SAI)] });
 
     const res = await juntar();
 
     expect(res.status).toBe(200);
     expect(rpc).toHaveBeenCalledTimes(1);
-    const doProntuario = leituras.find((l) => l.tabela === "prontuario_contact_links")!;
-    expect(doProntuario.filtros).toEqual([
-      ["organization_id", ORG],
-      ["contact_id", [SAI]],
-    ]);
+    expect(metadataDoAudit()).not.toHaveProperty("prontuario_merge_confirmed");
+  });
+
+  it("(5d) a absorvida ligada continua 409 state_conflict MESMO com a confirmação", async () => {
+    const { rpc } = fakeSupabase({ fichas: [livre(FICA), livre(SAI)], vinculadas: [FICA, SAI] });
+
+    const res = await juntar({ confirmar_ficha_do_prontuario: true });
+    const json = (await res.json()) as { error: { code: string } };
+
+    expect(res.status).toBe(409);
+    expect(json.error.code).toBe("state_conflict");
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("(5e) a confirmação só aceita true", async () => {
+    const { rpc } = fakeSupabase({ fichas: [livre(FICA), livre(SAI)], vinculadas: [FICA] });
+
+    const res = await juntar({ confirmar_ficha_do_prontuario: "sim" });
+
+    expect(res.status).toBe(422);
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it("(6) erro ao ler as travas ou o vínculo: 500 e nada é fundido", async () => {

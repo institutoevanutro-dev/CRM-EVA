@@ -208,6 +208,13 @@ export const contactsMergeSchema = z
   .object({
     primary_contact_id: z.string().uuid(),
     secondary_contact_ids: z.array(z.string().uuid()).min(1).max(20),
+    /**
+     * Quem fica está ligado a um paciente do prontuário e quem opera confirmou
+     * que as fichas são a mesma pessoa. Sem ele, a rota recusa com 409
+     * `prontuario_confirmar_juncao`: as mensagens (e os exames) da absorvida
+     * passariam a aparecer no prontuário desse paciente.
+     */
+    confirmar_ficha_do_prontuario: z.literal(true).optional(),
   })
   .refine((v) => !v.secondary_contact_ids.includes(v.primary_contact_id), {
     message: "O contato principal não pode estar entre os que serão absorvidos.",

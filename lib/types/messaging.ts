@@ -126,6 +126,18 @@ export interface Message {
    * do `MSG_COLS` (otimistas, fixtures) não o trazem.
    */
   updated_at?: string;
+  /**
+   * O exame desta mensagem já foi ao Prontuário (migration 0402). Só a lista
+   * de mensagens da conversa o junta; nunca leva `exam_id`.
+   */
+  prontuario_exame?: SeloDoProntuario;
+}
+
+/** Selo "No prontuário": quem e quando (e se o exame já estava lá). */
+export interface SeloDoProntuario {
+  ja_existia: boolean;
+  enviado_em: string;
+  enviado_por_user_id: string | null;
 }
 
 /** Nota interna de conversa (Onda 5.2) — nunca vai ao cliente, tabela separada de messages. */

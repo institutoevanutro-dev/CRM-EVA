@@ -37,6 +37,62 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  // Exames do WhatsApp → Prontuário (migration 0402). "Prontuário" = "Historia clínica".
+  "Prontuário: baixar PDF e fotos que o paciente mandou pelo WhatsApp": {
+    es: "Historia clínica: descargar PDF y fotos que el paciente envió por WhatsApp",
+  },
+  "Este contato ainda não está ligado a um paciente no Prontuário.": {
+    es: "Este contacto todavía no está vinculado a un paciente en la historia clínica.",
+  },
+  "Este arquivo já está no prontuário de outro paciente. Confira o vínculo com o CRM.": {
+    es: "Este archivo ya está en la historia clínica de otro paciente. Revise el vínculo con el CRM.",
+  },
+  "Este contato ainda não está confirmado no Prontuário. Peça para confirmar o vínculo lá.": {
+    es: "Este contacto aún no está confirmado en la historia clínica. Pida que confirmen el vínculo allí.",
+  },
+  "Este contato está ligado a mais de um paciente no Prontuário; corrija o vínculo lá.": {
+    es: "Este contacto está vinculado a más de un paciente en la historia clínica; corrija el vínculo allí.",
+  },
+  "O Prontuário não encontrou este arquivo na conversa. Se ele acabou de chegar, tente em instantes.": {
+    es: "La historia clínica no encontró este archivo en la conversación. Si acaba de llegar, intente en unos instantes.",
+  },
+  "O arquivo ainda está chegando. Tente em instantes.": { es: "El archivo todavía está llegando. Intente en unos instantes." },
+  "O Prontuário aceita só PDF, JPG ou PNG. Peça ao paciente um PDF ou foto comum.": {
+    es: "La historia clínica solo acepta PDF, JPG o PNG. Pida al paciente un PDF o una foto común.",
+  },
+  "O arquivo passa de 10 MB, o limite do Prontuário.": { es: "El archivo supera los 10 MB, el límite de la historia clínica." },
+  "A integração com o Prontuário não está configurada. Avise o administrador.": {
+    es: "La integración con la historia clínica no está configurada. Avise al administrador.",
+  },
+  "O Prontuário não respondeu. Tente de novo em instantes.": { es: "La historia clínica no respondió. Intente de nuevo en unos instantes." },
+  "O Prontuário recebeu muitos envios agora. Tente em um minuto.": {
+    es: "La historia clínica recibió muchos envíos ahora. Intente en un minuto.",
+  },
+  "O Prontuário não conseguiu buscar o arquivo no CRM. Tente de novo em instantes.": {
+    es: "La historia clínica no pudo obtener el archivo del CRM. Intente de nuevo en unos instantes.",
+  },
+  "Este arquivo não pode ir ao prontuário: só PDF ou foto de até 10 MB recebidos pelo WhatsApp nos últimos 60 dias.": {
+    es: "Este archivo no puede ir a la historia clínica: solo PDF o foto de hasta 10 MB recibidos por WhatsApp en los últimos 60 días.",
+  },
+  "O envio ao prontuário não está ligado nesta organização.": { es: "El envío a la historia clínica no está activado en esta organización." },
+  "O envio ao prontuário é só da equipe da clínica.": { es: "El envío a la historia clínica es solo del equipo de la clínica." },
+  "Mensagem indisponível.": { es: "Mensaje no disponible." },
+  "Não foi possível enviar agora.": { es: "No fue posible enviar ahora." },
+  "Enviar ao prontuário": { es: "Enviar a la historia clínica" },
+  "Enviando ao prontuário…": { es: "Enviando a la historia clínica…" },
+  "No prontuário": { es: "En la historia clínica" },
+  "por {nome} · {data}": { es: "por {nome} · {data}" },
+  "já estava lá · conferido por {nome} · {data}": { es: "ya estaba allí · confirmado por {nome} · {data}" },
+  "Enviado ao prontuário por {nome} em {data}": { es: "Enviado a la historia clínica por {nome} el {data}" },
+  "Enviado ao prontuário em {data}": { es: "Enviado a la historia clínica el {data}" },
+  "Já estava no prontuário (conferido por {nome} em {data})": { es: "Ya estaba en la historia clínica (confirmado por {nome} el {data})" },
+  "Peça ao paciente um PDF ou foto comum": { es: "Pida al paciente un PDF o una foto común" },
+  "Arquivo maior que 10 MB: peça ao paciente um arquivo menor": { es: "Archivo de más de 10 MB: pida al paciente un archivo más pequeño" },
+  "O arquivo não chegou inteiro ao CRM. Peça ao paciente para enviar de novo.": {
+    es: "El archivo no llegó completo al CRM. Pida al paciente que lo envíe de nuevo.",
+  },
+  "Exame enviado ao prontuário.": { es: "Examen enviado a la historia clínica." },
+  "Este exame já estava no prontuário.": { es: "Este examen ya estaba en la historia clínica." },
   // O fio do Inbox acompanha a última mensagem (porte do original #3209).
   "Mensagens da conversa": { es: "Mensajes de la conversación" },
   "Novas mensagens · Ir para o fim": { es: "Mensajes nuevos · Ir al final" },
@@ -6664,6 +6720,11 @@ export const DICIONARIO: Traducoes = {
   "A ficha ligada ao prontuário tem de ser a que fica.": {
     es: "La ficha vinculada a la historia clínica tiene que ser la que se queda.",
   },
+  "Esta ficha está ligada a um paciente no Prontuário. As mensagens e os exames da outra ficha passam a ser deste paciente. Junte só se forem a mesma pessoa.":
+    {
+      es: "Esta ficha está vinculada a un paciente en la historia clínica. Los mensajes y los exámenes de la otra ficha pasan a ser de este paciente. Júntelas solo si son la misma persona.",
+    },
+  "São a mesma pessoa": { es: "Son la misma persona" },
   "Quem ficou passou a não receber mensagens: o outro cadastro tinha pedido para parar.": {
     es: "La que se quedó dejó de recibir mensajes: la otra ficha había pedido parar.",
   },

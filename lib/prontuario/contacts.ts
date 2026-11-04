@@ -68,7 +68,7 @@ export function structuredAddressForProntuario(fields: Record<string, unknown> |
   return text === fields?.endereco ? address : null;
 }
 
-export async function authorizeProntuario(req: Request, scope: "prontuario:contacts:read" | "prontuario:contacts:write", requestId: string) {
+export async function authorizeProntuario(req: Request, scope: "prontuario:contacts:read" | "prontuario:contacts:write" | "prontuario:media:read", requestId: string) {
   try {
     const auth = await validateBearerToken(req.headers.get("authorization"));
     ensureScope(auth.scopes, scope);

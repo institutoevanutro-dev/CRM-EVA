@@ -7,6 +7,8 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/api\/v1\/prontuario\/contacts$/,
   /^\/api\/v1\/prontuario\/contacts\/link$/,
   /^\/api\/v1\/prontuario\/contacts\/[0-9a-f-]+$/i,
+  /^\/api\/v1\/prontuario\/contacts\/[0-9a-f-]+\/midias$/i,
+  /^\/api\/v1\/prontuario\/midias\/[0-9a-f-]+$/i,
   // Credencial de leitura validada dentro da rota; não dispensa auth de subrotas.
   /^\/api\/v1\/integrations\/financeiro\/contacts\/[0-9a-f-]+$/i,
   /^\/api\/v1\/integrations\/marketing\/report$/,

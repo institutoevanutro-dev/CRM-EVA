@@ -21,6 +21,15 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/api/v1/integrations/financeiro/contacts/11111111-1111-4111-8111-111111111111")).toBe(true);
     expect(isPublicPath("/api/v1/integrations/financeiro")).toBe(false);
   });
+  it("as duas rotas de mídia do Prontuário atravessam o proxy (Bearer na rota), sem sub-path de carona", () => {
+    const U = "11111111-1111-4111-8111-111111111111";
+    expect(isPublicPath(`/api/v1/prontuario/contacts/${U}/midias`)).toBe(true);
+    expect(isPublicPath(`/api/v1/prontuario/midias/${U}`)).toBe(true);
+    expect(isPublicPath("/api/v1/prontuario/midias")).toBe(false);
+    expect(isPublicPath(`/api/v1/prontuario/midias/${U}/extra`)).toBe(false);
+    expect(isPublicPath(`/api/v1/prontuario/contacts/${U}/midias/extra`)).toBe(false);
+    expect(isPublicPath(`/api/v1/prontuario/contacts/${U}/outra`)).toBe(false);
+  });
   it("libera o heartbeat do agente do host (bearer, sem cookie)", () => {
     expect(isPublicPath("/api/v1/system/agent")).toBe(true);
   });

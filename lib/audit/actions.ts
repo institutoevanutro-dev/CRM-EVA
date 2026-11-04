@@ -858,6 +858,16 @@ export const AUDIT_ACTIONS = [
    * lista de Duplicados. A trilha guarda só os dois ids, nunca nome nem telefone.
    */
   "contact.duplicate_dismissed",
+  // Exames do WhatsApp → Prontuário. LEITURA pela chave de mídia do Prontuário
+  // (lib/audit/leitura.ts): a lista (ids, quantidade, dias) e o arquivo (mime,
+  // tamanho, contato). Nunca nome do arquivo nem conteúdo.
+  "prontuario.media_listed",
+  "prontuario.media_downloaded",
+  // O botão "Enviar ao prontuário": o envio confirmado (metadata: contact_id,
+  // ja_existia) e TODA tentativa sem sucesso (contact_id, codigo, status e
+  // código do Prontuário, tentativas). Nunca exam_id, nome nem conteúdo.
+  "prontuario.exam_sent",
+  "prontuario.exam_send_failed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
