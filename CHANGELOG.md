@@ -8,6 +8,36 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.47.0] — 2026-11-04
+
+### Adicionado
+
+- **Chave do Prontuário só para o funil** Novo escopo de chave `prontuario:funil` (Configurações › Chaves de API): abre só as cinco ferramentas que o Prontuário usa para alimentar o funil (listar funis e etapas, criar e atualizar o lead, mover de etapa). Assim a chave de remarcação do Prontuário deixa de precisar de `mcp:read` e `mcp:write`, que abrem o CRM inteiro. Chaves existentes não mudam.
+
+## [4.46.1] — 2026-11-04
+
+### Alterado
+
+- **O menu pede a tela só quando alguém vai para ela** Cada item visível do menu lateral fazia o servidor montar aquela tela de antemão (conferir a sessão, carregar quem está logado e rodar as consultas da casca do sistema) a cada carga de página e depois de cada atualização, e esses pedidos disputavam o servidor com a tela que a pessoa de fato clicou. Agora o menu pede a tela só quando o ponteiro chega ao item, num toque ou no foco pelo teclado, uma vez por destino. Nada muda no que a tela mostra; muda quanto ela pede antes de alguém pedir.
+
+  Portado do projeto original (DeskcommCRM, PR #3613 de @webtecnica).
+
+### Corrigido
+
+- **O limite de tentativas do código de verificação em duas etapas vale também na troca de senha** Errar o código de seis dígitos da verificação em duas etapas três vezes seguidas pausa novas tentativas por um minuto, e quinze erros no mesmo dia pausam até as 21h (horário de Brasília), quando a contagem do dia zera. Antes, a tela de entrada contava os erros só num cookie do navegador, que dava para contornar, e a troca de senha não tinha limite nenhum. Agora as duas telas contam juntas, no servidor, por usuário e autenticador, e todo erro fica na trilha de auditoria, inclusive o da troca de senha, dizendo qual pausa fechou. Quem cai na pausa do dia vê nas duas telas que ela vai até as 21h, e não uma contagem de um minuto que se repete. Para não esperar, a pessoa usa um código de recuperação em "Perdi acesso ao autenticador", ou quem administra o servidor remove o autenticador dela com `bash hostgator-setup-kit/reset-mfa.sh email-da-pessoa`. O código de recuperação sempre leva à tela de entrada, que agora avisa que o autenticador foi removido: quem estava entrando entra de novo (com a senha ou, onde houver, pelo EvaLink); quem estava trocando a senha pede um novo link em "Esqueci minha senha", como a tela de troca de senha também diz. O link aberto antes pode seguir pedindo o código do autenticador apagado, e o novo troca a senha sem código. O autenticador cadastrado de novo começa a contagem do zero. Nenhuma configuração muda.
+
+  Portado do projeto original (DeskcommCRM, PR #3853 de @thinhnx128).
+
+- **O worker procura acontecimento travado no máximo uma vez por minuto** O worker procurava acontecimento travado no meio do processamento (parado há mais de 10 minutos) em toda passada, numa consulta que não tinha como achar nada novo. Agora ele procura assim que sobe e depois no máximo uma vez por minuto. O ritmo com que ele pega acontecimentos novos não muda: o espaçamento das passadas sem movimento, que o original também trouxe, ficou de fora para não atrasar a primeira resposta depois de um silêncio. O cron de 1 minuto (`event-log-drain`, no serviço `scheduler`) continua fazendo a mesma procura. Ajuste opcional, com padrão, que não precisa ir para o `.env`: `EVENT_LOG_DRAIN_STALE_SWEEP_MS` (60000).
+
+  Portado do projeto original (DeskcommCRM, PR #3701 de @webtecnica, a partir da medição de @DPalmercs na issue #3693; só a parte da procura por travados).
+
+- **O vigia das sessões do WhatsApp deixa de pedir ao banco uma atualização que não muda nada** A cada rodada, o vigia que confere as sessões do WhatsApp mandava ao banco um pedido de atualização mesmo quando a sessão já estava com o status certo, e o banco não mudava nada. Agora o pedido só sai quando o status mudou de fato. A religação automática de sessão parada continua igual.
+
+  Portado do projeto original (DeskcommCRM, PR #3706 de @webtecnica, issue #3695).
+
+  Nada precisa ser feito na instalação.
+
 ## [4.46.0] — 2026-11-03
 
 ### Adicionado
@@ -8740,7 +8770,9 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.46.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.47.0...HEAD
+[4.47.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.46.1...v4.47.0
+[4.46.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.46.0...v4.46.1
 [4.46.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.45.0...v4.46.0
 [4.45.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.44.1...v4.45.0
 [4.44.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.44.0...v4.44.1

@@ -123,6 +123,13 @@ const envSchema = z.object({
   // `event-log-drain` (1×/min) — ver o cabeçalho de lib/event-log/drain-loop.ts.
   EVENT_LOG_DRAIN_INTERVAL_MS: z.coerce.number().int().positive().default(2_000),
   EVENT_LOG_DRAIN_IDLE_INTERVAL_MS: z.coerce.number().int().positive().default(10_000),
+  // De quanto em quanto tempo, no MÁXIMO, o laço do event_log procura evento
+  // preso em `processing` (antes: em toda passada). A busca acha linhas 10 min
+  // atrasadas. O recuo ocioso do mesmo PR do original (DeskcommCRM #3701) NÃO
+  // foi portado: atrasaria o primeiro evento depois de um silêncio, e a mídia
+  // do áudio que a resposta da IA espera passa por este laço. 1 = procurar em
+  // toda passada (o comportamento anterior).
+  EVENT_LOG_DRAIN_STALE_SWEEP_MS: z.coerce.number().int().positive().default(60_000),
   EVENT_LOG_DRAIN_BATCH_SIZE: z.coerce.number().int().positive().default(50),
   // Coalescência de rajada inbound: mensagens do MESMO contato dentro desta
   // janela viram UM job (responder em rajada é gatilho de ban). 0 = sem debounce.

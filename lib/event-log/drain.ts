@@ -135,9 +135,23 @@ export async function avisarEventoMorto(
 
 export async function drainEventLog(
   admin: SupabaseClient,
-  opts: { limit?: number } = {},
+  opts: {
+    limit?: number;
+    /**
+     * `false` = esta passada NÃO procura evento preso em `processing`.
+     *
+     * Só o laço do worker passa `false`: ele procura na primeira passada e
+     * depois no máximo 1×/min (`drain-loop.ts`). A busca acha linhas 10 min
+     * atrasadas (`PROCESSING_STALE_MS`), e repeti-la em toda passada era
+     * consulta sem chance de achar nada novo. O default é `true`: o cron
+     * `event-log-drain`, o relógio e qualquer chamador que não pense no assunto
+     * seguem procurando em toda passada.
+     */
+    varrerPresos?: boolean;
+  } = {},
 ): Promise<DrainSummary> {
   const limit = opts.limit ?? 50;
+  const varrerPresos = opts.varrerPresos ?? true;
   const summary: DrainSummary = {
     scanned: 0,
     done: 0,
@@ -174,16 +188,18 @@ export async function drainEventLog(
   // `trg_event_log_touch` (BEFORE UPDATE) o reescreve em toda atualização, então
   // a linha carrega o instante do CLAIM enquanto o handler não volta.
   const limiteDePresos = new Date(Date.now() - PROCESSING_STALE_MS).toISOString();
-  const { data: presos } = await admin
-    .from("event_log")
-    .select("id, organization_id, event_type, attempts")
-    .eq("status", "processing")
-    .lt("updated_at", limiteDePresos)
-    // Só os tipos que ESTE dreno processa, como na seleção de baixo. O
-    // `ai_agent.dispatch_requested` é do dreno do agent-engine, que já soma 1 em
-    // `attempts` no claim e tem reaper próprio: varrido aqui também, uma
-    // interrupção contaria duas tentativas e morreria com o aviso errado.
-    .in("event_type", handledTypes);
+  const { data: presos } = varrerPresos
+    ? await admin
+        .from("event_log")
+        .select("id, organization_id, event_type, attempts")
+        .eq("status", "processing")
+        .lt("updated_at", limiteDePresos)
+        // Só os tipos que ESTE dreno processa, como na seleção de baixo. O
+        // `ai_agent.dispatch_requested` é do dreno do agent-engine, que já soma 1 em
+        // `attempts` no claim e tem reaper próprio: varrido aqui também, uma
+        // interrupção contaria duas tentativas e morreria com o aviso errado.
+        .in("event_type", handledTypes)
+    : { data: [] };
 
   // ─── E A VOLTA CONTA COMO TENTATIVA ────────────────────────────────────────
   //

@@ -52,6 +52,13 @@ export interface EventLogDrainKnobs {
   intervalMs: number;
   /** Espera entre ticks ociosos — o event_log costuma estar vazio. */
   idleIntervalMs: number;
+  /**
+   * Intervalo MÍNIMO entre duas procuras por evento preso em `processing` — ou
+   * seja, no máximo uma procura por este intervalo. A procura acha linhas 10
+   * min atrasadas (`PROCESSING_STALE_MS`): fazê-la em toda passada era
+   * consulta sem chance de achar nada novo. O primeiro tick sempre procura.
+   */
+  staleSweepMs: number;
   /** Teto de eventos por tick. */
   batchSize: number;
 }
@@ -59,7 +66,10 @@ export interface EventLogDrainKnobs {
 // Assinatura escrita à mão em vez de `typeof import(...)`: a regra
 // `consistent-type-imports` proíbe a anotação `import()`. A atribuição em
 // `carregarDepsDoLaco` é o que mantém as duas honestas — divergiu, o typecheck acusa.
-type DrainFn = (admin: SupabaseClient, opts?: { limit?: number }) => Promise<DrainSummary>;
+type DrainFn = (
+  admin: SupabaseClient,
+  opts?: { limit?: number; varrerPresos?: boolean },
+) => Promise<DrainSummary>;
 
 interface Deps {
   drainEventLog: DrainFn;
@@ -183,13 +193,31 @@ export async function runEventLogDrainLoop(
   const deps = await carregarDepsDoLaco(log);
   if (!deps) return;
 
+  // -Infinity: o PRIMEIRO tick sempre procura preso — o worker recém-subido
+  // recolhe na hora o evento que a queda anterior deixou em `processing`.
+  let ultimaVarreduraMs = Number.NEGATIVE_INFINITY;
+
   while (!signal.aborted) {
     // Tick que EXPLODE não pode acelerar o laço: sem resumo, vale a espera
     // ociosa. Um banco fora do ar lançaria a cada iteração, e o ritmo rápido
     // transformaria a indisponibilidade numa tempestade de tentativas.
     let espera = knobs.idleIntervalMs;
     try {
-      const resumo = await deps.drainEventLog(deps.admin, { limit: knobs.batchSize });
+      // No máximo uma procura por preso a cada `staleSweepMs`. O RITMO do laço
+      // não muda: o recuo ocioso que veio no mesmo PR do original (DeskcommCRM
+      // #3701) ficou de fora, porque atrasaria o primeiro evento depois de um
+      // silêncio. A marca vem antes da chamada: um tick que lança não faz o
+      // seguinte procurar de novo.
+      // ponytail: relógio de parede; um ajuste do relógio para trás adia a
+      // próxima procura pelo tamanho do ajuste (o cron segue procurando a cada
+      // minuto). `performance.now()` resolve, se um dia importar.
+      const agora = Date.now();
+      const varrerPresos = agora - ultimaVarreduraMs >= knobs.staleSweepMs;
+      if (varrerPresos) ultimaVarreduraMs = agora;
+      const resumo = await deps.drainEventLog(deps.admin, {
+        limit: knobs.batchSize,
+        varrerPresos,
+      });
       espera = proximaEspera(resumo, knobs);
       if (resumo.done + resumo.retried + resumo.failed + resumo.dead > 0) {
         log.info('event-log drain: tick', { ...resumo });

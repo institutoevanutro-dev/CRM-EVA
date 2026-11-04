@@ -6,7 +6,7 @@
  * sem mock do limitador. O que se mocka é só o `headers()` do Next, para
  * escolher o IP de cada tentativa.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { headers } from "next/headers";
 
@@ -128,5 +128,67 @@ describe("sem IP identificável — o balde global que era um DoS", () => {
 
     // Barra na terceira: o IP FOI reconhecido, senão nenhuma seria barrada.
     expect(veredito).toEqual([false, false, true]);
+  });
+});
+
+describe("mfaBloqueadoPorFalhas & registrarFalhaDeMfa", () => {
+  // Relógio parado no meio do minuto e do dia UTC: com o de verdade, uma virada
+  // de minuto entre a primeira falha e a última consulta levava a contagem para
+  // outra chave. Só `Date`: os temporizadores seguem reais, e um Redis fora do
+  // ar continua caindo para a memória sem ninguém esperar relógio falso.
+  beforeEach(() => {
+    vi.resetModules();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-03T12:00:30Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const FATOR = "fator-1";
+
+  it("barra após 3 falhas de TOTP na mesma conta mesmo sem cookie e trocando de IP", async () => {
+    const { mfaBloqueadoPorFalhas, registrarFalhaDeMfa } = await import("./rate-limit");
+    // Usuário sempre novo: contra um Redis de pé, um fixo começaria cada rodada
+    // com as falhas da anterior, e a sexta rodada do dia já nasceria no teto.
+    const userId = crypto.randomUUID();
+
+    for (let i = 0; i < 3; i++) {
+      comIp(`198.51.100.${50 + i}`);
+      expect(await mfaBloqueadoPorFalhas(userId, FATOR)).toBe(null);
+      expect(await registrarFalhaDeMfa(userId, FATOR)).toBe(i < 2 ? null : "minuto");
+    }
+
+    comIp("198.51.100.99");
+    expect(await mfaBloqueadoPorFalhas(userId, FATOR)).toBe("minuto");
+  });
+
+  it("15 falhas no mesmo dia trancam, mesmo com a janela curta folgada", async () => {
+    // A janela curta vai folgada para que só o teto diário (o padrão) decida.
+    const { mfaBloqueadoPorFalhas, registrarFalhaDeMfa } = await import("./rate-limit");
+    vi.mocked(headers).mockResolvedValue({ get: () => null } as never);
+    const userId = crypto.randomUUID();
+    const folgada = { ip: 1_000, id: 1_000, windowSec: 60 };
+
+    for (let i = 0; i < 14; i++) await registrarFalhaDeMfa(userId, FATOR, folgada);
+    expect(await mfaBloqueadoPorFalhas(userId, FATOR, folgada)).toBe(null);
+
+    expect(await registrarFalhaDeMfa(userId, FATOR, folgada)).toBe("dia");
+    expect(await mfaBloqueadoPorFalhas(userId, FATOR, folgada)).toBe("dia");
+  });
+
+  it("um autenticador novo começa do zero; o trancado segue trancado", async () => {
+    // Quem cai no teto do dia sai pelo código de recuperação (ou pelo
+    // `reset-mfa.sh`), que apaga o autenticador, e cadastra outro. Contando só
+    // por usuário, o código CERTO do novo seguia barrado até as 21h.
+    const { mfaBloqueadoPorFalhas, registrarFalhaDeMfa } = await import("./rate-limit");
+    vi.mocked(headers).mockResolvedValue({ get: () => null } as never);
+    const userId = crypto.randomUUID();
+    const folgada = { ip: 1_000, id: 1_000, windowSec: 60 };
+
+    for (let i = 0; i < 15; i++) await registrarFalhaDeMfa(userId, "fator-velho", folgada);
+
+    expect(await mfaBloqueadoPorFalhas(userId, "fator-velho", folgada)).toBe("dia");
+    expect(await mfaBloqueadoPorFalhas(userId, "fator-novo", folgada)).toBe(null);
   });
 });
