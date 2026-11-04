@@ -12,6 +12,7 @@
  * setado (nem o 'infinity' do handoff permanente, que `isLeadInHandoff` também
  * lê — ver `lib/ai/handoff/orchestrator.ts` e `human-handoff.ts:performHumanHandoff`).
  */
+import { fimDoDiaSeguinte } from '@/lib/escalacao/pausa-por-resposta-humana';
 import { createServer } from 'node:http';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -302,6 +303,15 @@ describe('sendMessageHandler — a janela é o ajuste da organização (o mesmo 
       await sendMessageHandler(supabase, ctx, input);
       expect(patches[patches.length - 1]!.bot_silenced_until, vigente).toBeUndefined();
     }
+  });
+
+  it("modo 'fim do dia seguinte' ligado → resposta pela tela silencia até a meia-noite local de D+2", async () => {
+    wahaConfigured();
+    const ligado = { atendimento: { ia_volta_apos_equipe: 'fim_do_dia_seguinte', pausa_ia_resposta_humana_min: 120 } };
+    const { supabase, patches } = makeSupabase(new Date(Date.now() + 30 * MIN).toISOString(), undefined, ligado);
+    const esperado = fimDoDiaSeguinte(new Date(), 'America/Sao_Paulo').toISOString();
+    await sendMessageHandler(supabase, ctx, input);
+    expect(patches[patches.length - 1]!.bot_silenced_until).toBe(esperado);
   });
 
   it('ajuste inválido no banco → padrão de 5 min, e o envio não cai', async () => {

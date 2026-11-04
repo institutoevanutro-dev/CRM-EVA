@@ -120,35 +120,6 @@ export function settingsComClienteSemResposta(settings: unknown, minutos: number
   return settingsComAtendimento(settings, "pausa_cliente_sem_resposta_min", minutos);
 }
 
-/**
- * A pausa da organização, em milissegundos. Uma consulta por chave primária;
- * qualquer falha (erro, linha ausente, exceção) devolve o padrão. O chamador já
- * resolveu `organizationId` de fonte confiável.
- *
- * `aoFalhar` é como a falha deixa rastro: quem chama do servidor passa o
- * `logger.warn`. O logger não é importado aqui porque a tela importa este
- * módulo. Recebe só o detalhe técnico do erro, nunca dado de cliente.
- */
-export async function carregarPausaPorRespostaHumanaMs(
-  supabase: SupabaseClient,
-  organizationId: string,
-  aoFalhar?: (detalhe: string) => void,
-): Promise<number> {
-  let settings: unknown = null;
-  try {
-    const { data, error } = await supabase
-      .from("organizations")
-      .select("settings")
-      .eq("id", organizationId)
-      .maybeSingle();
-    if (error) aoFalhar?.(String(error.message ?? "erro").slice(0, 160));
-    settings = (data as { settings?: unknown } | null)?.settings;
-  } catch (err) {
-    aoFalhar?.(err instanceof Error ? err.message.slice(0, 160) : "erro");
-  }
-  return lerPausaPorRespostaHumanaMin(settings) * 60 * 1000;
-}
-
 // ─── A IA só volta no fim do dia seguinte depois que a equipe fala ───────────
 //
 // `organizations.settings.atendimento.ia_volta_apos_equipe`. Com o valor
@@ -201,7 +172,12 @@ export function prazoDaPausa(settings: unknown, fuso: string | null | undefined,
 /**
  * Até quando a IA fica fora depois que uma pessoa responde agora. Os DOIS
  * escritores (tela e celular) chamam esta. Uma consulta por chave primária;
- * qualquer falha cai no padrão em minutos, como `carregarPausaPorRespostaHumanaMs`.
+ * qualquer falha (erro, linha ausente, exceção) cai no padrão em minutos. O
+ * chamador já resolveu `organizationId` de fonte confiável.
+ *
+ * `aoFalhar` é como a falha deixa rastro: quem chama do servidor passa o
+ * `logger.warn`. O logger não é importado aqui porque a tela importa este
+ * módulo. Recebe só o detalhe técnico do erro, nunca dado de cliente.
  */
 export async function carregarPrazoDaPausa(
   supabase: SupabaseClient,

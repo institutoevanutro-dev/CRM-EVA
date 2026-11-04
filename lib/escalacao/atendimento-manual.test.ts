@@ -175,7 +175,7 @@ describe("pausarIaPorAtendimentoManual — cada fala humana RENOVA o prazo", () 
  * falha), `conversations` devolve o silêncio em vigor e registra o UPDATE.
  */
 function adminComAjuste(
-  ajuste: { settings?: unknown; falha?: "erro" | "excecao" },
+  ajuste: { settings?: unknown; timezone?: string; falha?: "erro" | "excecao" },
   silencedUntil: string | null = null,
 ) {
   const updates: Array<Record<string, unknown>> = [];
@@ -193,7 +193,7 @@ function adminComAjuste(
     maybeSingle: () => {
       if (ajuste.falha === "excecao") return Promise.reject(new Error("rede caiu"));
       if (ajuste.falha === "erro") return Promise.resolve({ data: null, error: { message: "timeout" } });
-      return Promise.resolve({ data: { settings: ajuste.settings }, error: null });
+      return Promise.resolve({ data: { settings: ajuste.settings, timezone: ajuste.timezone ?? null }, error: null });
     },
   };
   return { admin: { from: (t: string) => (t === "organizations" ? org : conv) } as never, updates };
@@ -268,6 +268,24 @@ describe("pausarIaPorAtendimentoManual — o prazo é o AJUSTE da organização"
     const { admin, updates } = adminComAjuste(ajuste);
     expect(await pausarIaPorAtendimentoManual(admin, { organizationId: ORG, conversationId: CONV, agora: T0 })).toBe(true);
     expect(silenciadaAte(updates[0]!).getTime()).toBe(T0.getTime() + 5 * MIN);
+  });
+});
+
+describe("pausarIaPorAtendimentoManual — modo 'fim do dia seguinte' ligado", () => {
+  const LIGADO = { atendimento: { ia_volta_apos_equipe: "fim_do_dia_seguinte", pausa_ia_resposta_humana_min: 120 } };
+
+  it("equipe responde pelo celular às 17:11 (BRT): a IA fica fora até 05/11 00:00 local, não 2 h", async () => {
+    const { admin, updates } = adminComAjuste({ settings: LIGADO, timezone: "America/Sao_Paulo" });
+    const agora = new Date("2026-11-03T20:11:00Z");
+    expect(await pausarIaPorAtendimentoManual(admin, { organizationId: ORG, conversationId: CONV, agora })).toBe(true);
+    expect(silenciadaAte(updates[0]!).toISOString()).toBe("2026-11-05T03:00:00.000Z");
+  });
+
+  it("nova fala no dia seguinte renova até o fim do dia seguinte A ELA", async () => {
+    const { admin, updates } = adminComAjuste({ settings: LIGADO, timezone: "America/Sao_Paulo" }, "2026-11-05T03:00:00.000Z");
+    const agora = new Date("2026-11-04T13:00:00Z");
+    expect(await pausarIaPorAtendimentoManual(admin, { organizationId: ORG, conversationId: CONV, agora })).toBe(true);
+    expect(silenciadaAte(updates[0]!).toISOString()).toBe("2026-11-06T03:00:00.000Z");
   });
 });
 

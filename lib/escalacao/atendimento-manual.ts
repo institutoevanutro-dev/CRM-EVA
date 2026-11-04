@@ -90,11 +90,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
 import { normalizarInstante } from "@/lib/ai/elegibilidade/gate";
-import { PAUSA_PADRAO_MIN, carregarPausaPorRespostaHumanaMs } from "./pausa-por-resposta-humana";
+import { PAUSA_PADRAO_MIN, carregarPrazoDaPausa } from "./pausa-por-resposta-humana";
 
 /**
  * O PADRÃO da pausa, para quem não escolheu outro valor na tela. O prazo em
- * vigor é o da organização (`carregarPausaPorRespostaHumanaMs`).
+ * vigor é o da organização (`carregarPrazoDaPausa`): minutos, ou o fim do
+ * dia seguinte quando `atendimento.ia_volta_apos_equipe` está ligado.
  */
 export const PRAZO_DO_SILENCIO_MS = PAUSA_PADRAO_MIN * 60 * 1000;
 
@@ -128,8 +129,8 @@ export async function pausarIaPorAtendimentoManual(
   try {
     // As duas leituras em paralelo: o ajuste não acrescenta ida e volta em série
     // ao caminho da ingestão, e a dele nunca falha (cai no padrão).
-    const [prazoMs, { data: atual, error: readErr }] = await Promise.all([
-      carregarPausaPorRespostaHumanaMs(admin, input.organizationId, (detail) =>
+    const [proposto, { data: atual, error: readErr }] = await Promise.all([
+      carregarPrazoDaPausa(admin, input.organizationId, agora, (detail) =>
         logger.warn("[atendimento-manual] ajuste da pausa ilegível — usando o padrão", {
           organization_id: input.organizationId,
           detail,
@@ -142,7 +143,6 @@ export async function pausarIaPorAtendimentoManual(
         .eq("id", input.conversationId)
         .maybeSingle(),
     ]);
-    const proposto = new Date(agora.getTime() + prazoMs);
 
     if (readErr) {
       logger.warn("[atendimento-manual] leitura da conversa falhou — IA não pausada", {

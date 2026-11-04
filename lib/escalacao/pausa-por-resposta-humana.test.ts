@@ -4,7 +4,6 @@ import {
   PAUSA_MAXIMA_MIN,
   PAUSA_MINIMA_MIN,
   PAUSA_PADRAO_MIN,
-  carregarPausaPorRespostaHumanaMs,
   carregarPrazoDaPausa,
   fimDoDiaSeguinte,
   lerIaVoltaAposEquipe,
@@ -71,7 +70,10 @@ describe("settingsComPausaPorRespostaHumana", () => {
   });
 });
 
-describe("carregarPausaPorRespostaHumanaMs", () => {
+describe("carregarPrazoDaPausa (modo em minutos)", () => {
+  const T0 = new Date("2026-11-03T20:11:00Z");
+  const carregarPausaPorRespostaHumanaMs = async (s: never, o: string, f?: (d: string) => void) =>
+    (await carregarPrazoDaPausa(s, o, T0, f)).getTime() - T0.getTime();
   const stub = (resposta: () => Promise<unknown>) => {
     const filtros: Array<[string, unknown]> = [];
     const q = {
