@@ -5,6 +5,11 @@ import {
   PAUSA_MINIMA_MIN,
   PAUSA_PADRAO_MIN,
   carregarPausaPorRespostaHumanaMs,
+  carregarPrazoDaPausa,
+  fimDoDiaSeguinte,
+  lerIaVoltaAposEquipe,
+  prazoDaPausa,
+  settingsComIaVoltaAposEquipe,
   lerPausaPorRespostaHumanaMin,
   settingsComPausaPorRespostaHumana,
 } from "./pausa-por-resposta-humana";
@@ -98,5 +103,61 @@ describe("carregarPausaPorRespostaHumanaMs", () => {
     await carregarPausaPorRespostaHumanaMs(stub(async () => { throw new Error("rede"); }).supabase, "o", avisar);
     await carregarPausaPorRespostaHumanaMs(stub(async () => ({ data: { settings: {} }, error: null })).supabase, "o", avisar);
     expect(avisos).toEqual(["timeout", "rede"]);
+  });
+});
+
+describe("IA volta no fim do dia seguinte depois que a equipe fala", () => {
+  const SP = "America/Sao_Paulo";
+  const ligado = { atendimento: { ia_volta_apos_equipe: "fim_do_dia_seguinte", pausa_ia_resposta_humana_min: 120 } };
+
+  it("fala às 17:11 de 03/11 (BRT) → meia-noite de 05/11 local", () => {
+    expect(fimDoDiaSeguinte(new Date("2026-11-03T20:11:00Z"), SP).toISOString()).toBe("2026-11-05T03:00:00.000Z");
+  });
+
+  it("23:59 local ainda é o dia D: vai a D+2 00:00, não D+3", () => {
+    expect(fimDoDiaSeguinte(new Date("2026-11-04T02:59:00Z"), SP).toISOString()).toBe("2026-11-05T03:00:00.000Z");
+  });
+
+  it("vira o mês: 30/11 → 02/12 00:00", () => {
+    expect(fimDoDiaSeguinte(new Date("2026-11-30T15:00:00Z"), SP).toISOString()).toBe("2026-12-02T03:00:00.000Z");
+  });
+
+  it("respeita o fuso da organização (Manaus, UTC-4) e cai no padrão com fuso torto", () => {
+    expect(fimDoDiaSeguinte(new Date("2026-11-03T20:11:00Z"), "America/Manaus").toISOString()).toBe("2026-11-05T04:00:00.000Z");
+    expect(fimDoDiaSeguinte(new Date("2026-11-03T20:11:00Z"), "São Paulo").toISOString()).toBe("2026-11-05T03:00:00.000Z");
+  });
+
+  it.each([null, {}, { atendimento: {} }, { atendimento: { ia_volta_apos_equipe: "sim" } }, { atendimento: { ia_volta_apos_equipe: true } }])(
+    "chave ausente ou torta (%j) = desligado",
+    (settings) => {
+      expect(lerIaVoltaAposEquipe(settings)).toBeNull();
+      expect(prazoDaPausa(settings, SP, new Date("2026-11-03T20:11:00Z")).toISOString()).toBe("2026-11-03T20:16:00.000Z");
+    },
+  );
+
+  it("ligado: o prazo é o fim do dia seguinte, não agora + minutos", () => {
+    expect(lerIaVoltaAposEquipe(ligado)).toBe("fim_do_dia_seguinte");
+    expect(prazoDaPausa(ligado, SP, new Date("2026-11-03T20:11:00Z")).toISOString()).toBe("2026-11-05T03:00:00.000Z");
+  });
+
+  it("settingsComIaVoltaAposEquipe troca só a chave; null desliga", () => {
+    const antes = { routing: { x: 1 }, atendimento: { pausa_ia_resposta_humana_min: 120 } };
+    const depois = settingsComIaVoltaAposEquipe(antes, "fim_do_dia_seguinte");
+    expect(depois).toEqual({ routing: { x: 1 }, atendimento: { pausa_ia_resposta_humana_min: 120, ia_volta_apos_equipe: "fim_do_dia_seguinte" } });
+    expect(lerIaVoltaAposEquipe(settingsComIaVoltaAposEquipe(depois, null))).toBeNull();
+  });
+
+  it("carregarPrazoDaPausa lê settings e fuso da organização; falha cai no padrão em minutos", async () => {
+    const q = (resposta: unknown) => {
+      const o = { select: () => o, eq: () => o, maybeSingle: async () => resposta };
+      return { from: () => o } as never;
+    };
+    const agora = new Date("2026-11-03T20:11:00Z");
+    expect((await carregarPrazoDaPausa(q({ data: { settings: ligado, timezone: SP }, error: null }), "o", agora)).toISOString())
+      .toBe("2026-11-05T03:00:00.000Z");
+    const avisos: string[] = [];
+    expect((await carregarPrazoDaPausa(q({ data: null, error: { message: "x" } }), "o", agora, (d) => void avisos.push(d))).toISOString())
+      .toBe("2026-11-03T20:16:00.000Z");
+    expect(avisos).toEqual(["x"]);
   });
 });
