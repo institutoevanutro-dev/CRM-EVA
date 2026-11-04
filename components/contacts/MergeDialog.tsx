@@ -62,7 +62,12 @@ import { ConfirmarJuncao, avisarResultadoDaJuncao } from "@/components/contacts/
 import { ApiError } from "@/lib/api/types";
 import { roleAtLeast } from "@/lib/auth/types";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
-import { avisosDaJuncao, motivoQueImpedeAJuncao, quemFicaPorPadrao } from "@/lib/contacts/juncao";
+import {
+  avisosDaJuncao,
+  motivoQueImpedeAJuncao,
+  pedeConfirmacaoDoProntuario,
+  quemFicaPorPadrao,
+} from "@/lib/contacts/juncao";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import {
   useContactDuplicates,
@@ -97,6 +102,10 @@ function GrupoDeDuplicados({
   const merge = useMergeContacts();
   const [principal, setPrincipal] = useState(grupo.principal_sugerido);
   const [confirmando, setConfirmando] = useState(false);
+  // O grupo forte não sabe do vínculo com o prontuário: quem diz é o 409 da
+  // rota, e vale para AQUELE principal (trocar o rádio não herda a caixa).
+  const [principalNoProntuario, setPrincipalNoProntuario] = useState<string | null>(null);
+  const ficaNoProntuario = principalNoProntuario === principal;
 
   const secundarios = grupo.contatos.map((c) => c.id).filter((id) => id !== principal);
   const contatoPrincipal = grupo.contatos.find((c) => c.id === principal);
@@ -106,17 +115,23 @@ function GrupoDeDuplicados({
     .map((c) => rotuloDoContato(c, t))
     .join(", ");
 
-  async function juntar() {
+  async function juntar(mesmaPessoa: boolean) {
     setConfirmando(false);
     try {
       const res = await merge.mutateAsync({
         primary_contact_id: principal,
         secondary_contact_ids: secundarios,
+        ...(mesmaPessoa ? { confirmar_ficha_do_prontuario: true as const } : {}),
       });
       avisarResultadoDaJuncao(res.data, t);
       onFundido();
-    } catch {
-      /* showApiError já falou no toast */
+    } catch (err) {
+      // Quem fica está no prontuário: reabre a confirmação, agora com a caixa.
+      if (pedeConfirmacaoDoProntuario(err)) {
+        setPrincipalNoProntuario(principal);
+        setConfirmando(true);
+      }
+      /* o resto, showApiError já falou no toast */
     }
   }
 
@@ -182,7 +197,8 @@ function GrupoDeDuplicados({
         nomeDeQuemFica={nomeDeQuemFica}
         nomesAbsorvidos={nomesAbsorvidos}
         pendente={merge.isPending}
-        onConfirmar={() => void juntar()}
+        onConfirmar={(mesma) => void juntar(mesma)}
+        ficaNoProntuario={ficaNoProntuario}
       />
     </div>
   );
@@ -210,6 +226,7 @@ function GrupoParecido({
   const [comparando, setComparando] = useState(false);
   const [escolhido, setEscolhido] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  const [principalNoProntuario, setPrincipalNoProntuario] = useState<string | null>(null);
 
   const ids: [string, string] = [grupo.contatos[0]?.id ?? "", grupo.contatos[1]?.id ?? ""];
   const comparacao = useCompararFichas(comparando ? ids : null);
@@ -221,17 +238,27 @@ function GrupoParecido({
   const sai = fichas.find((f) => f.id === secundario);
   const impede = fica && sai ? motivoQueImpedeAJuncao(fica, sai, t) : null;
   const avisos = fica && sai ? avisosDaJuncao(fica, sai, t) : [];
+  // Pela comparação, ou pelo 409 quando a comparação estava velha.
+  const ficaNoProntuario = Boolean(fica?.prontuario_linked) || principalNoProntuario === principal;
   const nomeDeQuemFica = rotuloDoContato(grupo.contatos.find((c) => c.id === principal), t);
   const nomeAbsorvido = rotuloDoContato(grupo.contatos.find((c) => c.id === secundario), t);
 
-  async function juntar() {
+  async function juntar(mesmaPessoa: boolean) {
     setConfirmando(false);
     try {
-      const res = await merge.mutateAsync({ primary_contact_id: principal, secondary_contact_ids: [secundario] });
+      const res = await merge.mutateAsync({
+        primary_contact_id: principal,
+        secondary_contact_ids: [secundario],
+        ...(mesmaPessoa ? { confirmar_ficha_do_prontuario: true as const } : {}),
+      });
       avisarResultadoDaJuncao(res.data, t);
       onFundido();
-    } catch {
-      /* showApiError já falou no toast */
+    } catch (err) {
+      if (pedeConfirmacaoDoProntuario(err)) {
+        setPrincipalNoProntuario(principal);
+        setConfirmando(true);
+      }
+      /* o resto, showApiError já falou no toast */
     }
   }
 
@@ -290,8 +317,9 @@ function GrupoParecido({
             nomeDeQuemFica={nomeDeQuemFica}
             nomesAbsorvidos={nomeAbsorvido}
             pendente={merge.isPending}
-            onConfirmar={() => void juntar()}
+            onConfirmar={(mesma) => void juntar(mesma)}
             avisos={avisos}
+            ficaNoProntuario={ficaNoProntuario}
           />
         </div>
       ) : null}

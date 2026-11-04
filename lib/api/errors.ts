@@ -64,6 +64,10 @@ export const ApiErrorCodes = {
   // (índice uniq_contacts_org_phone). O corpo traz `details.contact_id` para a
   // tela oferecer o contato existente em vez de só mostrar que deu erro.
   contact_exists: "contact_exists",
+  // POST /api/v1/contacts/merge cuja ficha que FICA está ligada ao prontuário,
+  // sem `confirmar_ficha_do_prontuario: true`: as mensagens (e os exames) da
+  // outra ficha passariam a ser deste paciente. A tela mostra o aviso e a caixa.
+  prontuario_confirmar_juncao: "prontuario_confirmar_juncao",
   duplicate_external_id: "duplicate_external_id",
   event_gone: "event_gone", // resend de run cujo event_log original foi apagado (on delete set null)
   no_actions_to_resend: "no_actions_to_resend", // resend de regra que não tem mais nenhuma ação de webhook — reenviar nada não é sucesso

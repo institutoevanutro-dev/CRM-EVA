@@ -30,7 +30,12 @@ import { useCompararFichas } from "@/hooks/contacts/useCompararFichas";
 import { useContactList } from "@/hooks/contacts/useContactList";
 import { useMergeContacts } from "@/hooks/contacts/useMergeContacts";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
-import { avisosDaJuncao, motivoQueImpedeAJuncao, quemFicaPorPadrao } from "@/lib/contacts/juncao";
+import {
+  avisosDaJuncao,
+  motivoQueImpedeAJuncao,
+  pedeConfirmacaoDoProntuario,
+  quemFicaPorPadrao,
+} from "@/lib/contacts/juncao";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
 import type { Contact } from "@/lib/types/contacts";
@@ -98,6 +103,7 @@ export function JuntarComOutraFicha({ contatoAtual, open, onOpenChange }: Props)
   const [escolhida, setEscolhida] = useState<Contact | null>(null);
   const [escolhido, setEscolhido] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  const [principalNoProntuario, setPrincipalNoProntuario] = useState<string | null>(null);
 
   useEffect(() => {
     const h = setTimeout(() => setBusca(termo.trim()), ESPERA_DA_BUSCA_MS);
@@ -113,11 +119,14 @@ export function JuntarComOutraFicha({ contatoAtual, open, onOpenChange }: Props)
   const sai = principal === contatoAtual.id ? outra : atual;
   const impede = fica && sai ? motivoQueImpedeAJuncao(fica, sai, t) : null;
   const avisos = fica && sai ? avisosDaJuncao(fica, sai, t) : [];
+  // Pela comparação, ou pelo 409 quando a comparação estava velha.
+  const ficaNoProntuario = Boolean(fica?.prontuario_linked) || (fica !== undefined && principalNoProntuario === fica.id);
 
   function voltarABusca() {
     setEscolhida(null);
     setEscolhido(null);
     setConfirmando(false);
+    setPrincipalNoProntuario(null);
   }
 
   function fechar(aberto: boolean) {
@@ -129,17 +138,26 @@ export function JuntarComOutraFicha({ contatoAtual, open, onOpenChange }: Props)
     onOpenChange(aberto);
   }
 
-  async function juntar() {
+  async function juntar(mesmaPessoa: boolean) {
     if (!fica || !sai) return;
     setConfirmando(false);
     try {
-      const res = await merge.mutateAsync({ primary_contact_id: fica.id, secondary_contact_ids: [sai.id] });
+      const res = await merge.mutateAsync({
+        primary_contact_id: fica.id,
+        secondary_contact_ids: [sai.id],
+        ...(mesmaPessoa ? { confirmar_ficha_do_prontuario: true as const } : {}),
+      });
       avisarResultadoDaJuncao(res.data, t);
       fechar(false);
       // A ficha aberta virou lápide: a tela vai para a que ficou.
       if (sai.id === contatoAtual.id) router.push(`/app/contacts/${fica.id}`);
-    } catch {
-      /* showApiError já falou no toast */
+    } catch (err) {
+      // Quem fica está no prontuário e a comparação estava velha: reabre com a caixa.
+      if (pedeConfirmacaoDoProntuario(err)) {
+        setPrincipalNoProntuario(fica.id);
+        setConfirmando(true);
+      }
+      /* o resto, showApiError já falou no toast */
     }
   }
 
@@ -202,8 +220,9 @@ export function JuntarComOutraFicha({ contatoAtual, open, onOpenChange }: Props)
               nomeDeQuemFica={rotuloDoContato(fica, t)}
               nomesAbsorvidos={rotuloDoContato(sai, t)}
               pendente={merge.isPending}
-              onConfirmar={() => void juntar()}
+              onConfirmar={(mesma) => void juntar(mesma)}
               avisos={avisos}
+              ficaNoProntuario={ficaNoProntuario}
             />
           </div>
         )}

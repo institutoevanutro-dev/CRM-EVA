@@ -6717,6 +6717,11 @@ export const DICIONARIO: Traducoes = {
   "A ficha ligada ao prontuário tem de ser a que fica.": {
     es: "La ficha vinculada a la historia clínica tiene que ser la que se queda.",
   },
+  "Esta ficha está ligada a um paciente no Prontuário. As mensagens e os exames da outra ficha passam a ser deste paciente. Junte só se forem a mesma pessoa.":
+    {
+      es: "Esta ficha está vinculada a un paciente en la historia clínica. Los mensajes y los exámenes de la otra ficha pasan a ser de este paciente. Júntelas solo si son la misma persona.",
+    },
+  "São a mesma pessoa": { es: "Son la misma persona" },
   "Quem ficou passou a não receber mensagens: o outro cadastro tinha pedido para parar.": {
     es: "La que se quedó dejó de recibir mensajes: la otra ficha había pedido parar.",
   },

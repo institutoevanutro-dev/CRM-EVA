@@ -68,6 +68,9 @@ function mundo(opts: {
   semSessao?: string[];
   erroLeituraHandle?: { message: string };
   rpcErro?: { message: string };
+  /** `contact_id`s ligados ao prontuário (`prontuario_contact_links`). */
+  vinculadas?: string[];
+  erroVinculos?: { message: string };
 }) {
   const identidades = opts.identidades.map((i) => ({ ...i }));
   const consultas: Consulta[] = [];
@@ -97,6 +100,11 @@ function mundo(opts: {
     if (q.tabela === "contacts") {
       const ids = (f["in:id"] as string[]) ?? [];
       return { data: opts.contatosVivos.filter((c) => ids.includes(c.id)), error: null };
+    }
+    if (q.tabela === "prontuario_contact_links") {
+      if (opts.erroVinculos) return { data: null, error: opts.erroVinculos };
+      const ids = (f["in:contact_id"] as string[]) ?? [];
+      return { data: (opts.vinculadas ?? []).filter((id) => ids.includes(id)).map((contact_id) => ({ contact_id })), error: null };
     }
     if (q.tabela === "conversations") {
       const igsid = f.provider_conversation_id as string;
@@ -175,6 +183,48 @@ describe("juntarPorArroba", () => {
         metadata: expect.objectContaining({ merged_contact_ids: ["C_B"], motivo: "mesmo_arroba_instagram" }),
       }),
     );
+  });
+
+  describe("ficha ligada ao prontuário não se junta no automático", () => {
+    // Sabotagem: tirar a conferência de `prontuario_contact_links` deixa o rpc
+    // rodar e os exames da outra ficha caírem no prontuário do paciente.
+    const doisMesmoArroba = (extra: { vinculadas?: string[]; erroVinculos?: { message: string } }) => {
+      handlesVivos = { IG_A: "ana.teste", IG_B: "ana.teste" };
+      return mundo({
+        identidades: [
+          { contact_id: "C_A", external_id: "IG_A", handle: "ana.teste" },
+          { contact_id: "C_B", external_id: "IG_B", handle: "ana.teste" },
+        ],
+        contatosVivos: [
+          { id: "C_A", created_at: ANTIGO },
+          { id: "C_B", created_at: NOVO },
+        ],
+        ...extra,
+      });
+    };
+
+    it.each([
+      ["o principal", ["C_A"]],
+      ["o secundário", ["C_B"]],
+    ])("%s está ligado: não junta, sem rpc nem auditoria, e a leitura sai pela org", async (_quem, vinculadas) => {
+      auditMock.mockClear();
+      const { admin, chamadasRpc, consultas } = doisMesmoArroba({ vinculadas });
+
+      const resultado = await juntarPorArroba(admin as never, { organizationId: "ORG", contactId: "C_B" });
+
+      expect(resultado).toEqual({ juntou: false });
+      expect(chamadasRpc).toEqual([]);
+      expect(auditMock).not.toHaveBeenCalled();
+      const leitura = consultas.find((q) => q.tabela === "prontuario_contact_links")!;
+      expect(leitura.filtros).toEqual({ organization_id: "ORG", "in:contact_id": ["C_A", "C_B"] });
+    });
+
+    it("erro ao ler o vínculo: não junta (nunca funde no escuro)", async () => {
+      const { admin, chamadasRpc } = doisMesmoArroba({ erroVinculos: { message: "timeout" } });
+
+      expect(await juntarPorArroba(admin as never, { organizationId: "ORG", contactId: "C_B" })).toEqual({ juntou: false });
+      expect(chamadasRpc).toEqual([]);
+    });
   });
 
   it("@ reciclado: A tinha @foo gravado mas hoje é @bar; B é @foo. Não junta, e o handle gravado de A vira @bar", async () => {

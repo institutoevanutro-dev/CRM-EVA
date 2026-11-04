@@ -32,6 +32,10 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  *     "Sempre atendimento humano". O update roda depois da RPC, pela sessão, e
  *     só APERTA. Se falhar, a fusão já aconteceu: a resposta diz
  *     `ia_nao_herdada` e a tela avisa, em vez de um 500 sobre um fato consumado.
+ *  3. **Quem fica ligado ao prontuário só absorve com confirmação** (409
+ *     `prontuario_confirmar_juncao` sem `confirmar_ficha_do_prontuario`). A
+ *     fusão leva todas as mensagens da absorvida — e com elas os exames que o
+ *     prontuário lê do WhatsApp. A auditoria registra a confirmação.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
@@ -142,15 +146,27 @@ export async function POST(req: NextRequest): Promise<Response> {
       .from("prontuario_contact_links")
       .select("contact_id")
       .eq("organization_id", org.orgId)
-      .in("contact_id", secundarios),
+      .in("contact_id", [principal, ...secundarios]),
   ]);
   if (travas.error || vinculos.error) {
     return fail("internal_error", "Não foi possível conferir as fichas antes de juntar.", 500, { requestId });
   }
-  if ((vinculos.data ?? []).length > 0) {
+  const ligadas = new Set((vinculos.data ?? []).map((v) => v.contact_id));
+  if (secundarios.some((id) => ligadas.has(id))) {
     return fail(
       "state_conflict",
       "A ficha ligada ao prontuário tem de ser a que fica. Se as duas estão ligadas, são pacientes diferentes no prontuário e não se juntam.",
+      409,
+      { requestId },
+    );
+  }
+  // Quem fica ligado ao prontuário recebe as mensagens (e os exames) da outra
+  // ficha: juntar a irmã aqui poria os exames dela no prontuário da paciente.
+  const principalNoProntuario = ligadas.has(principal);
+  if (principalNoProntuario && input.confirmar_ficha_do_prontuario !== true) {
+    return fail(
+      "prontuario_confirmar_juncao",
+      "Esta ficha está ligada a um paciente no Prontuário. As mensagens e os exames da outra ficha passam a ser deste paciente. Junte só se forem a mesma pessoa.",
       409,
       { requestId },
     );
@@ -239,6 +255,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       // Idem para a IA: quem ler a trilha acha por que a IA parou nesta ficha.
       ...(iaHerdada ? { ai_lock_inherited: iaHerdada } : {}),
       ...(iaNaoHerdada ? { ai_lock_inherit_failed: true } : {}),
+      // Quem operou confirmou que eram a mesma pessoa do prontuário.
+      ...(principalNoProntuario ? { prontuario_merge_confirmed: true } : {}),
     },
   });
 

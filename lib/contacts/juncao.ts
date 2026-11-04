@@ -10,6 +10,7 @@
  * passam. O aviso do telefone só sai quando as DUAS têm número: se quem fica não
  * tem, a fusão herda o número, e avisar empurraria a escolha para o lado errado.
  */
+import { ApiError } from "@/lib/api/types";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
 import { chaveDeTelefone } from "@/lib/contacts/duplicados";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
@@ -59,6 +60,15 @@ export function motivoQueImpedeAJuncao(fica: FichaParaComparar, absorvida: Ficha
   }
   if (absorvida.prontuario_linked) return t("A ficha ligada ao prontuário tem de ser a que fica.");
   return null;
+}
+
+/**
+ * O 409 de `POST /api/v1/contacts/merge` quando quem fica está ligado ao
+ * prontuário e a confirmação não veio. A tela que o recebe (dados velhos, ou o
+ * grupo forte, que não sabe do vínculo) reabre a confirmação com a caixa.
+ */
+export function pedeConfirmacaoDoProntuario(err: unknown): boolean {
+  return err instanceof ApiError && err.code === "prontuario_confirmar_juncao";
 }
 
 /** O que a junção faz com a ficha absorvida, só o que se aplica, na ordem da confirmação. */

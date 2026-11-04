@@ -2,6 +2,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
+import { pedeConfirmacaoDoProntuario } from "@/lib/contacts/juncao";
 import type { ContactsMergeInput } from "@/lib/schemas/contacts";
 
 export interface ResultadoDaFusao {
@@ -25,7 +26,10 @@ export function useMergeContacts() {
   return useMutation({
     mutationFn: async (input: ContactsMergeInput) =>
       apiClient.post<{ data: ResultadoDaFusao }>("/api/v1/contacts/merge", input),
-    onError: showApiError,
+    // O 409 do prontuário não é toast: a tela reabre a confirmação com a caixa.
+    onError: (err) => {
+      if (!pedeConfirmacaoDoProntuario(err)) showApiError(err);
+    },
     onSuccess: (_data, vars) => {
       // A fusão mexe em conversa, negócio e timeline, não só no cadastro — por
       // isso a invalidação é ampla. Invalidar só `contacts` deixaria o Inbox

@@ -220,6 +220,25 @@ export async function juntarPorArroba(
     if (!escolha) return NADA;
     const principalId = escolha.principal;
 
+    // Ficha ligada ao prontuário não se junta no automático: a fusão leva as
+    // mensagens (e os exames) da outra ficha para o paciente, e só uma pessoa
+    // confirma que são a mesma (a rota de merge pede a confirmação). Erro na
+    // leitura também não junta: nunca funde no escuro.
+    const { data: vinculos, error: erroVinculos } = await admin
+      .from("prontuario_contact_links")
+      .select("contact_id")
+      .eq("organization_id", input.organizationId)
+      .in("contact_id", [principalId, ...escolha.secundarios]);
+    if (erroVinculos || (vinculos ?? []).length > 0) {
+      logger.info("[instagram.juntar-por-arroba] ficha ligada ao prontuário; não junta no automático", {
+        organization_id: input.organizationId,
+        contact_id: input.contactId,
+        ligadas: ((vinculos as { contact_id: string }[] | null) ?? []).map((v) => v.contact_id),
+        erro: erroVinculos ? true : undefined,
+      });
+      return NADA;
+    }
+
     const { data: fusao, error: erroRpc } = await admin.rpc("fn_mesclar_contatos", {
       p_organization_id: input.organizationId,
       p_contato_principal: principalId,
