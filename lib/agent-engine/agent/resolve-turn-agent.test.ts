@@ -975,6 +975,27 @@ describe('resolveTurnAgent: nao_reabre_apos_equipe', () => {
     expect(semFala.out.assuntos?.map((a) => a.intentName)).toContain('vendas');
   });
 
+  it('campanha (M2): agente da campanha de assunto bloqueado + equipe falou → régua normal (fallback); sem fala, campanha', async () => {
+    const comCampanha = (falaDaEquipeEm: Date | null, idDaCampanha = 'agent-vendas') =>
+      resolveTurnAgent({} as never, {} as never, { ...baseInput, signal: 'Ok', stickyAgentId: null, stickyIntent: null, falaDaEquipeEm },
+        makeDeps({
+          loadActiveRouter: vi.fn().mockResolvedValue(r()),
+          loadPublishedAgentConfigById: idAwareLoader(),
+          agenteDaCampanha: vi.fn().mockResolvedValue(idDaCampanha),
+          classifyIntent: vi.fn().mockResolvedValue({ intentName: 'vendas', confidence: 0.9 }),
+        }));
+    const bloqueada = await comCampanha(new Date(Date.now() - 86_400_000));
+    expect(bloqueada.outcome).toBe('fallback');
+    expect(bloqueada.config?.agentId).toBe('agent-recepcao');
+    expect((await comCampanha(null)).outcome).toBe('campanha');
+    // Fala fora da janela de 7 dias: a campanha atende.
+    expect((await comCampanha(new Date(Date.now() - 8 * 86_400_000))).outcome).toBe('campanha');
+    // Agente da campanha de assunto fora da lista: atende.
+    const livre = await comCampanha(new Date(Date.now() - 86_400_000), 'agent-suporte');
+    expect(livre.outcome).toBe('campanha');
+    expect(livre.config?.agentId).toBe('agent-suporte');
+  });
+
   /** `resolveConversationTurn` com a conversa que o banco devolveria. */
   async function pelaConversa(linha: { ultima_fala_da_equipe: Date | null; marco_da_devolucao?: string | null }) {
     const db = {

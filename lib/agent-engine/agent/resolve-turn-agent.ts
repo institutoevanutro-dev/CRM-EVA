@@ -68,7 +68,11 @@
  *      numa conversa em que alguém da equipe escreveu desde o último "Devolver
  *      ao automático" MANUAL, o assunto da lista não é reaberto pela IA. A
  *      devolução manual libera tudo de novo; a automática (fim do dia seguinte,
- *      prazo do handoff) não libera. O
+ *      prazo do handoff) não libera. Só conta a fala dos últimos
+ *      `nao_reabre_janela_dias` (padrão 7). Vale também para o agente da
+ *      CAMPANHA (degrau 0): se ele é de um assunto da lista, a conversa segue
+ *      pela régua normal; e o assunto da lista sai de `assuntos`, então
+ *      `transfer_to_subject` não o oferece. O
  *      turno que cairia nele (sticky, classificado, reclassificado) vai para o
  *      fallback, com outcome 'fallback'; o follow-up desse assunto (sem
  *      mensagem) não troca de agente e cala. Se o fallback também está na lista,
@@ -233,6 +237,17 @@ export function ehTurnoSoDaEquipe(
   );
 }
 
+/**
+ * Regra 8: os assuntos de `nao_reabre_apos_equipe` em vigor neste turno. Só a
+ * fala da equipe dos últimos `naoReabreJanelaDias` conta (o marco da devolução
+ * manual já foi aplicado por quem leu a fala): vale o início mais recente.
+ */
+function assuntosBloqueados(router: LoadedRouter, falaDaEquipeEm: Date | null | undefined, agoraMs: number): string[] {
+  const janelaMs = (router.naoReabreJanelaDias ?? NAO_REABRE_JANELA_DIAS_PADRAO) * 86_400_000;
+  const falou = falaDaEquipeEm != null && falaDaEquipeEm.getTime() > agoraMs - janelaMs;
+  return falou ? (router.naoReabreAposEquipe ?? []) : [];
+}
+
 export async function resolveTurnAgent(
   db: pg.Pool,
   llmCfg: LlmEdgeConfig,
@@ -274,9 +289,26 @@ export async function resolveTurnAgent(
     //
     // Falha ABERTA: agente da campanha sem versão publicada devolve `null` em
     // `_loadAgentById`, e o turno segue pela régua normal em vez de calar.
+    const agoraMs = (deps.agora ?? (() => new Date()))().getTime();
+    // Uma leitura do roteador por turno: a campanha só a pede quando a equipe
+    // falou (regra 8), e a régua do número reaproveita a mesma.
+    let roteadorLido: Promise<LoadedRouter | null> | undefined;
+    const lerRoteador = () => (roteadorLido ??= _loadActiveRouter(db, input.tenantId, input.channelSessionId));
     const _agenteDaCampanha = deps.agenteDaCampanha ?? agenteDaCampanhaDaConversa;
     const idDaCampanha = await _agenteDaCampanha(db, input.tenantId, input.conversationId);
-    if (idDaCampanha !== null) {
+    // Regra 8 vale também para a campanha: com a equipe tendo falado, o agente
+    // da campanha que é de um assunto da lista não reabre a conversa. O turno
+    // segue pela régua normal, que bloqueia ou passa à equipe.
+    let campanhaBloqueada = false;
+    if (idDaCampanha !== null && input.falaDaEquipeEm != null) {
+      const r = await lerRoteador();
+      const bloqueados = r === null ? [] : assuntosBloqueados(r, input.falaDaEquipeEm, agoraMs);
+      campanhaBloqueada = r !== null && r.members.some((m) => m.agentId === idDaCampanha && bloqueados.includes(m.intentName));
+      if (campanhaBloqueada) {
+        deps.log.info('qualificacao_bloqueada_apos_equipe', { routerId: r!.id, alvo: 'campanha' });
+      }
+    }
+    if (idDaCampanha !== null && !campanhaBloqueada) {
       // Com o número: o agente da campanha que declarou OUTROS números não
       // fala neste (migration 0380) — volta null e segue a régua do número.
       const config = await _loadAgentById(db, input.tenantId, idDaCampanha, input.channelSessionId);
@@ -289,7 +321,7 @@ export async function resolveTurnAgent(
       });
     }
 
-    const router = await _loadActiveRouter(db, input.tenantId, input.channelSessionId);
+    const router = await lerRoteador();
     if (router === null) {
       return {
         config: await _loadAgentBySession(db, input.tenantId, input.channelSessionId),
@@ -302,12 +334,7 @@ export async function resolveTurnAgent(
 
     // Regra 8: a equipe já falou nesta conversa e o assunto está na lista
     // `nao_reabre_apos_equipe`. O assunto de um agente é o do membro dele.
-    // Só a fala dos últimos `naoReabreJanelaDias` conta (o marco da devolução
-    // manual já foi aplicado por quem leu a fala): vale o início mais recente.
-    const agoraMs = (deps.agora ?? (() => new Date()))().getTime();
-    const janelaMs = (router.naoReabreJanelaDias ?? NAO_REABRE_JANELA_DIAS_PADRAO) * 86_400_000;
-    const equipeFalou = input.falaDaEquipeEm != null && input.falaDaEquipeEm.getTime() > agoraMs - janelaMs;
-    const bloqueados = equipeFalou ? (router.naoReabreAposEquipe ?? []) : [];
+    const bloqueados = assuntosBloqueados(router, input.falaDaEquipeEm, agoraMs);
     const assuntoBloqueado = (intentName: string | null, agentId: string): string | null => {
       if (bloqueados.length === 0) return null;
       const assuntos = [intentName, ...router.members.filter((m) => m.agentId === agentId).map((m) => m.intentName)];
