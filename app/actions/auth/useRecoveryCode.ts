@@ -115,19 +115,31 @@ export async function useRecoveryCode(
   }
 
   // 4) Delete ALL TOTP factors for the user so they re-enroll on next login.
+  // O auth-js DEVOLVE { error } em vez de lançar; sem conferir, o código ficava
+  // gasto e a tela de entrada dizia "Autenticador removido" com o fator ainda lá.
+  let falhou: string | null = null;
   try {
-    const { data: factors } = await admin.auth.admin.mfa.listFactors({
+    const { data: factors, error: listErr } = await admin.auth.admin.mfa.listFactors({
       userId: targetUser.id,
     });
+    if (listErr) falhou = listErr.message;
     for (const f of factors?.factors ?? []) {
-      await admin.auth.admin.mfa.deleteFactor({ userId: targetUser.id, id: f.id });
+      if (falhou) break;
+      const { error: delErr } = await admin.auth.admin.mfa.deleteFactor({ userId: targetUser.id, id: f.id });
+      if (delErr) falhou = delErr.message;
     }
   } catch (err) {
-    logger.error("[useRecoveryCode] failed to delete factors", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    // Non-fatal: user still gets a recovery_used redirect; on next login the
-    // residual factor would block them, but seeded user has no factor anyway.
+    falhou = err instanceof Error ? err.message : String(err);
+  }
+  if (falhou) {
+    logger.error("[useRecoveryCode] failed to delete factors", { error: falhou });
+    // Devolve o código: o fator não saiu, então ele não foi usado de verdade.
+    await admin
+      .from("user_recovery_codes")
+      .update({ used_at: null, used_ip: null })
+      .eq("id", row.id)
+      .eq("user_id", targetUser.id);
+    return { ok: false, error: "service_unavailable" };
   }
 
   // 5) Audit (masked).

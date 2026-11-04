@@ -80,9 +80,13 @@ export default async function LoginPage({
           className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm"
           role="status"
         >
-          {t(
-            "Autenticador removido. Entre com a sua senha. Se você estava trocando a senha, peça um novo link em “Esqueci minha senha”.",
-          )}
+          {evalinkLigado
+            ? t(
+                "Autenticador removido. Entre de novo, pelo EvaLink ou com a sua senha. Se você estava trocando a senha, peça um novo link em “Esqueci minha senha”.",
+              )
+            : t(
+                "Autenticador removido. Entre com a sua senha. Se você estava trocando a senha, peça um novo link em “Esqueci minha senha”.",
+              )}
         </div>
       )}
       {error === "link_invalido" && (

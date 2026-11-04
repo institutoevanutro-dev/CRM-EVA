@@ -50,6 +50,9 @@ function links(texto: string): Array<{ tag: string; desligado: boolean }> {
   // Os nomes ligados ao hook no arquivo: as props dele (`prefetch: false` +
   // `onPointerEnter`/`onFocus`) só vêm da chamada de um destes.
   const doHook = new Set<string>();
+  // Nomes declarados de QUALQUER outro jeito (outro hook, parâmetro, função):
+  // o nome repetido em outro escopo não pode passar como se fosse o hook.
+  const outros = new Set<string>();
   const ligar = (no: ts.Node): void => {
     if (
       ts.isVariableDeclaration(no) &&
@@ -59,6 +62,12 @@ function links(texto: string): Array<{ tag: string; desligado: boolean }> {
       no.initializer.expression.getText(fonteTsx) === "usePrefetchPorIntencao"
     ) {
       doHook.add(no.name.text);
+    } else if (
+      (ts.isVariableDeclaration(no) || ts.isParameter(no) || ts.isBindingElement(no) || ts.isFunctionDeclaration(no)) &&
+      no.name !== undefined &&
+      ts.isIdentifier(no.name)
+    ) {
+      outros.add(no.name.text);
     }
     ts.forEachChild(no, ligar);
   };
@@ -70,7 +79,11 @@ function links(texto: string): Array<{ tag: string; desligado: boolean }> {
       for (const atributo of no.attributes.properties) {
         if (ts.isJsxSpreadAttribute(atributo)) {
           const e = atributo.expression;
-          desligado = ts.isCallExpression(e) && ts.isIdentifier(e.expression) && doHook.has(e.expression.text);
+          desligado =
+            ts.isCallExpression(e) &&
+            ts.isIdentifier(e.expression) &&
+            doHook.has(e.expression.text) &&
+            !outros.has(e.expression.text);
         } else if (atributo.name.getText(fonteTsx) === "prefetch") {
           desligado = PREFETCH_DESLIGADO.test(atributo.getText(fonteTsx));
         }
@@ -115,8 +128,16 @@ describe("o menu não prefetcha a árvore inteira (porte do original #3613)", ()
     // Antes do espalhamento, quem decide é o hook, que vem depois.
     const sobrescrito = `<Link href={d.href} prefetch={true} {...intencao(d.href)}>x</Link>`;
     expect(links(comHook(sobrescrito)).map((l) => l.desligado)).toEqual([true]);
-    // O nome sozinho não basta: `intencao` ligado a outra função não desliga nada.
+    // O nome sozinho não basta: `intencao` ligado a outra função não desliga nada,
+    // nem no mesmo arquivo do hook (o nome é conferido por arquivo, não por escopo,
+    // então repetir o nome reprova os dois e obriga a trocar um deles).
     expect(links(`const intencao = outroHook();\n${sobrescrito}`).map((l) => l.desligado)).toEqual([false]);
+    const doisComponentes =
+      `function A(){ const intencao = usePrefetchPorIntencao(); return <Link href="/a" {...intencao("/a")}>a</Link>; }\n` +
+      `function B(){ const intencao = useOutroHook(); return <Link href="/b" {...intencao("/b")}>b</Link>; }`;
+    expect(links(doisComponentes).map((l) => l.desligado)).toEqual([false, false]);
+    const parametro = comHook(`<>{itens.map((intencao) => <Link href="/b" {...intencao(intencao.href)}>b</Link>)}</>`);
+    expect(links(parametro).map((l) => l.desligado)).toEqual([false]);
   });
 
   it("o hook que desliga o prefetch automático existe e é o do módulo de navegação", () => {

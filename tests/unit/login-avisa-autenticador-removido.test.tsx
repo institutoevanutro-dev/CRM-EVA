@@ -19,6 +19,8 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser: async () => ({ data: { user: null } }) } }),
 }));
 vi.mock("@/components/auth/LoginForm", () => ({ LoginForm: () => null }));
+const evalink = vi.hoisted(() => ({ ligado: false }));
+vi.mock("@/lib/evalink/config", () => ({ configEvalink: () => (evalink.ligado ? { url: "https://conta.exemplo" } : null) }));
 
 async function entrar(params: Record<string, string>): Promise<string> {
   const { default: LoginPage } = await import("@/app/(public)/login/page");
@@ -31,6 +33,17 @@ describe("/login depois do código de recuperação", () => {
 
     expect(html).toContain("Autenticador removido. Entre com a sua senha.");
     expect(html).toContain("Se você estava trocando a senha, peça um novo link em “Esqueci minha senha”.");
+  });
+
+  it("com o EvaLink ligado, o aviso não manda só usar a senha (quem entra pelo EvaLink não tem)", async () => {
+    evalink.ligado = true;
+    try {
+      const html = await entrar({ recovery_used: "1" });
+      expect(html).toContain("Entre de novo, pelo EvaLink ou com a sua senha.");
+      expect(html).not.toContain("Entre com a sua senha.");
+    } finally {
+      evalink.ligado = false;
+    }
   });
 
   it("sem o parâmetro, nenhum aviso", async () => {

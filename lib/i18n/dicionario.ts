@@ -7556,6 +7556,9 @@ export const DICIONARIO: Traducoes = {
   "Autenticador removido. Entre com a sua senha. Se você estava trocando a senha, peça um novo link em “Esqueci minha senha”.": {
     es: "Autenticador eliminado. Entra con tu contraseña. Si estabas cambiando la contraseña, pide un nuevo enlace en “Olvidé mi contraseña”.",
   },
+  "Autenticador removido. Entre de novo, pelo EvaLink ou com a sua senha. Se você estava trocando a senha, peça um novo link em “Esqueci minha senha”.": {
+    es: "Autenticador eliminado. Vuelve a entrar, con EvaLink o con tu contraseña. Si estabas cambiando la contraseña, pide un nuevo enlace en “Olvidé mi contraseña”.",
+  },
   "Códigos copiados para a área de transferência.": {
     es: "Códigos copiados al portapapeles.",
   },
