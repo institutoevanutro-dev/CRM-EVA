@@ -95,7 +95,7 @@ import {
   loadPublishedAgentConfigById,
   type PublishedAgentConfig,
 } from './agent-config';
-import { classifyIntent, type IntentVerdict } from './intent-classifier';
+import { classifyIntent, ehAssuntoFixoSoDaEquipe, type IntentVerdict } from './intent-classifier';
 import { buildFatosDoContato } from './fatos-do-contato';
 import { historicoRecente, renderHistoricoRecente } from './historico-recente';
 import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-context';
@@ -407,7 +407,7 @@ export async function resolveTurnAgent(
     ]);
 
     // classifica — inclusive com sticky ativo, pra detectar troca de assunto (regra 2).
-    const verdict = await _classifyIntent(
+    const veredito = await _classifyIntent(
       db,
       llmCfg,
       {
@@ -417,6 +417,12 @@ export async function resolveTurnAgent(
       },
       { log: deps.log },
     );
+    // Intenção fixa do produto (`config.so_equipe`) não tem agente: aqui ela
+    // vale como "nenhuma". Sem isto o `member!` abaixo quebraria.
+    const verdict: IntentVerdict | null =
+      veredito !== null && ehAssuntoFixoSoDaEquipe(veredito.intentName)
+        ? { intentName: null, confidence: veredito.confidence }
+        : veredito;
 
     // regra 4: classificador falhou — um `null` é informação mais pobre que
     // "sem sinal", nunca deve derrubar a stickiness (review T4 finding 1).

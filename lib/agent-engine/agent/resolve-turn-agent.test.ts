@@ -977,3 +977,17 @@ describe('resolveTurnAgent: nao_reabre_apos_equipe', () => {
     expect(out.config?.agentId).toBe('agent-recepcao');
   });
 });
+
+describe('resolveTurnAgent: intenção fixa do produto sem regra própria vale como nenhuma', () => {
+  it('veredito negocio_com_a_empresa não quebra o turno: sem sticky cai no fallback, com sticky fica', async () => {
+    const base = { loadPublishedAgentConfigById: idAwareLoader(), agenteDaCampanha: vi.fn().mockResolvedValue(null),
+      classifyIntent: vi.fn().mockResolvedValue({ intentName: 'negocio_com_a_empresa', confidence: 0.85 }) };
+    const rt = router({ fallbackAgentId: 'agent-suporte', soEquipe: true });
+    const semSticky = await resolveTurnAgent({} as never, {} as never, { ...baseInput, signal: 'proposta', stickyAgentId: null, stickyIntent: null },
+      makeDeps({ ...base, loadActiveRouter: vi.fn().mockResolvedValue(rt) }));
+    expect(semSticky.outcome).toBe('fallback');
+    const comSticky = await resolveTurnAgent({} as never, {} as never, { ...baseInput, signal: 'proposta', stickyAgentId: 'agent-vendas', stickyIntent: 'vendas' },
+      makeDeps({ ...base, loadActiveRouter: vi.fn().mockResolvedValue(rt) }));
+    expect(comSticky.outcome).toBe('sticky');
+  });
+});

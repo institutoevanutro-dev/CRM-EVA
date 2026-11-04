@@ -135,6 +135,13 @@ describe('loadActiveRouter — modo de permanência', () => {
     expect((await comConfig({ nao_reabre_apos_equipe: 'consulta_nova' }))?.naoReabreAposEquipe).toEqual([]);
   });
 
+  it('so_equipe: só o booleano true liga', async () => {
+    expect((await comConfig({ so_equipe: true }))?.soEquipe).toBe(true);
+    for (const v of [undefined, false, 'sim', 1]) {
+      expect((await comConfig({ so_equipe: v }))?.soEquipe).toBe(false);
+    }
+  });
+
   it('interrompe que não é array vira lista vazia', async () => {
     for (const valor of ['queixa_clinica', 7, null, { 0: 'queixa_clinica' }]) {
       expect((await comConfig({ permanencia: 'agente', interrompe: valor }))?.interrompe).toEqual([]);

@@ -72,6 +72,13 @@ export interface LoadedRouter {
    * regra não existe (o padrão).
    */
   naoReabreAposEquipe?: string[];
+  /**
+   * `config.so_equipe === true`: o classificador também conhece as intenções
+   * fixas do produto (`ASSUNTOS_SO_DA_EQUIPE`, conversa de negócio e mensagem
+   * automática), e o turno que cai nelas passa à equipe sem resposta da IA.
+   * Desligado por padrão: o prompt do roteador fica byte a byte o de sempre.
+   */
+  soEquipe?: boolean;
 }
 
 /** `config.permanencia_expira_horas` ausente ou fora da forma. */
@@ -171,6 +178,7 @@ async function montar(
     permanencia_expira_horas?: unknown;
     interrompe?: unknown;
     nao_reabre_apos_equipe?: unknown;
+    so_equipe?: unknown;
   };
   const classifierModel =
     typeof cfg.classifier_model === 'string' && cfg.classifier_model.trim() !== ''
@@ -216,6 +224,8 @@ async function montar(
     permanenciaExpiraHoras,
     fallbackAgentId: router.fallback_agent_id,
     naoReabreAposEquipe,
+    // Só o booleano exato liga: "sim", 1 e afins ficam desligados.
+    soEquipe: cfg.so_equipe === true,
     members: memberRows.map((m) => ({
       agentId: m.agent_id,
       intentName: m.intent_name,
