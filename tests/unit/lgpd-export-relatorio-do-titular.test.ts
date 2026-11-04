@@ -498,3 +498,32 @@ describe("LGPD export: o cadastro antigo UNIDO ao do titular (revisão do PR)", 
     expect(JSON.stringify(payload)).not.toContain("Pedro");
   });
 });
+
+describe("LGPD export: arquivos enviados ao prontuário (0402)", () => {
+  it("entram os do titular, da organização dele, sem exam_id", async () => {
+    const envio = (message_id: string, over: Row = {}): Row => ({
+      organization_id: ORG,
+      message_id,
+      exam_id: "99999999-9999-4999-8999-999999999999",
+      ja_existia: false,
+      created_at: "2026-10-01T00:00:00Z",
+      // O mock filtra pela chave literal do embed `messages!inner(contact_id)`.
+      "messages.contact_id": TITULAR,
+      ...over,
+    });
+    rows.prontuario_exames_enviados = [
+      envio("msg-dela"),
+      envio("msg-dela-ja-estava", { ja_existia: true }),
+      envio("msg-de-outro", { "messages.contact_id": "contato-b" }),
+      envio("msg-de-outra-org", { organization_id: OUTRA_ORG }),
+    ];
+
+    const payload = await collectExportData(pedido);
+
+    expect(payload.exames_enviados_ao_prontuario).toEqual([
+      { message_id: "msg-dela", ja_existia: false, enviado_em: "2026-10-01T00:00:00Z" },
+      { message_id: "msg-dela-ja-estava", ja_existia: true, enviado_em: "2026-10-01T00:00:00Z" },
+    ]);
+    expect(JSON.stringify(payload)).not.toContain("99999999-9999-4999-8999-999999999999");
+  });
+});
