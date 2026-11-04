@@ -133,6 +133,29 @@ describe("configuração", () => {
   });
 });
 
+describe("ordem das checagens", () => {
+  it("configuração inválida com mensagem invisível → 404 e nenhuma linha na auditoria", async () => {
+    vi.stubEnv("PRONTUARIO_EXAMES_SEGREDO", "curto");
+    m.visivel.mockResolvedValueOnce({ data: null, error: null });
+    expect((await pedir()).status).toBe(404);
+    expect(m.audit).not.toHaveBeenCalled();
+  });
+
+  it("teto por pessoa → 409 rate_limited sem Retry-After (o apiClient repetiria um 429)", async () => {
+    m.rate.mockResolvedValueOnce({ allowed: false, limit: 30, count: 31 });
+    const r = await pedir();
+    expect(r.status).toBe(409);
+    expect((await r.json()).error.code).toBe("rate_limited");
+    expect(r.headers.get("Retry-After")).toBeNull();
+    nadaSaiu();
+  });
+
+  it("a visibilidade é filtrada pela organização da sessão", async () => {
+    await pedir();
+    expect(m.visivel).toHaveBeenCalledWith(expect.arrayContaining([["organization_id", ORG]]));
+  });
+});
+
 describe("checagem local", () => {
   it("id malformado → 422; mensagem invisível → 404; nada audita", async () => {
     expect((await pedir("x")).status).toBe(422);

@@ -48,6 +48,11 @@ async function erroDe(r: Response) {
 }
 
 describe("GET /api/v1/prontuario/midias/{id}", () => {
+  it("busca a mídia na organização da CHAVE", async () => {
+    await pedir();
+    expect(m.buscar).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ organizationId: ORG }));
+  });
+
   it("sem escopo → 403; id malformado → 404", async () => {
     m.validate.mockResolvedValueOnce({ organizationId: ORG, apiTokenId: TOKEN, scopes: ["prontuario:contacts:read"] });
     expect((await pedir()).status).toBe(403);

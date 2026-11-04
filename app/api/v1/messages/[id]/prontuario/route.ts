@@ -89,23 +89,13 @@ export async function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
 
   const cfg = estadoDosExames(org);
   if (cfg.estado === "desligada") return fail("prontuario_desligado", frase("prontuario_desligado"), 409, { requestId });
-  if (cfg.estado === "invalida") {
-    logger.error("prontuario.exames.config_invalida", { motivo: cfg.motivo, request_id: requestId });
-    await falhou(null, id.data.toLowerCase(), {
-      codigo: `config_${cfg.motivo}`,
-      status_do_prontuario: null,
-      codigo_do_prontuario: null,
-      tentativas: 0,
-    });
-    return fail("prontuario_configuracao", frase("prontuario_configuracao"), 502, { requestId });
-  }
-
   const teto = await checkRateLimit(`prontuario-exame:${org}:${userId}`, TETO_POR_PESSOA, JANELA_SEGUNDOS);
   if (!teto.allowed) {
-    return fail("rate_limited", t("Muitas tentativas seguidas. Tente em um minuto."), 429, {
+    // 409, não 429: o apiClient repete 429 depois do Retry-After e o botão ficaria
+    // preso em "Enviando…" por um minuto antes de mostrar o erro.
+    return fail("rate_limited", t("Muitas tentativas seguidas. Tente em um minuto."), 409, {
       requestId,
       headers: {
-        "Retry-After": String(JANELA_SEGUNDOS),
         "X-RateLimit-Limit": String(teto.limit),
         "X-RateLimit-Remaining": String(Math.max(0, teto.limit - teto.count)),
       },
@@ -121,6 +111,19 @@ export async function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
     .eq("organization_id", org)
     .maybeSingle();
   if (!visivel) return fail("not_found", frase("mensagem_indisponivel"), 404, { requestId });
+
+  // Configuração inválida só audita depois do teto e da visibilidade: sem isso,
+  // qualquer id no caminho gravaria uma linha na auditoria (que é append-only).
+  if (cfg.estado === "invalida") {
+    logger.error("prontuario.exames.config_invalida", { motivo: cfg.motivo, request_id: requestId });
+    await falhou(null, id.data.toLowerCase(), {
+      codigo: `config_${cfg.motivo}`,
+      status_do_prontuario: null,
+      codigo_do_prontuario: null,
+      tentativas: 0,
+    });
+    return fail("prontuario_configuracao", frase("prontuario_configuracao"), 502, { requestId });
+  }
 
   let midia;
   try {

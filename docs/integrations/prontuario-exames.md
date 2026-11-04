@@ -44,7 +44,7 @@ O CRM chama `POST {PRONTUARIO_URL}/api/integracoes/crm/exames` com `Authorizatio
 | 503 `crm_indisponivel` (depois da nova tentativa) | 502 `prontuario_sem_acesso_ao_crm` |
 | outro 5xx, rede, estouro, 2xx inválido | 502 `prontuario_indisponivel` |
 
-O navegador nunca recebe 429/503 do Prontuário: o `apiClient` repetiria o POST. Sucesso grava `prontuario_exames_enviados` e audita `prontuario.exam_sent`; toda outra tentativa audita `prontuario.exam_send_failed` com `codigo`, status e código do Prontuário e número de tentativas (`codigo: sem_resposta` quando não houve resposta; `config_segredo_curto`/`config_url_invalida` quando a configuração daqui é inválida).
+O navegador nunca recebe 429/503 do Prontuário nem desta rota: o `apiClient` repetiria o POST. O teto por pessoa (30/min) responde 409 `rate_limited`, sem `Retry-After`. Sucesso grava `prontuario_exames_enviados` e audita `prontuario.exam_sent`; toda outra tentativa audita `prontuario.exam_send_failed` com `codigo`, status e código do Prontuário e número de tentativas (`codigo: sem_resposta` quando não houve resposta; `config_segredo_curto`/`config_url_invalida` quando a configuração daqui é inválida).
 
 As frases de cada código estão em `lib/prontuario/exames.ts` (`FRASE_DO_CODIGO`), com espanhol.
 
