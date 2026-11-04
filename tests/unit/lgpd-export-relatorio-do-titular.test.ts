@@ -507,14 +507,23 @@ describe("LGPD export: arquivos enviados ao prontuário (0402)", () => {
       exam_id: "99999999-9999-4999-8999-999999999999",
       ja_existia: false,
       created_at: "2026-10-01T00:00:00Z",
-      // O mock filtra pela chave literal do embed `messages!inner(contact_id)`.
-      "messages.contact_id": TITULAR,
       ...over,
     });
+    const midia = (id: string, contact_id: string, over: Row = {}): Row => ({
+      id, organization_id: ORG, contact_id, direction: "inbound", type: "document", ...over,
+    });
+    // O coletor acha as mídias recebidas do titular e depois os envios delas.
+    rows.messages = [
+      ...(rows.messages ?? []),
+      midia("msg-dela", TITULAR),
+      midia("msg-dela-ja-estava", TITULAR, { type: "image" }),
+      midia("msg-de-outro", "contato-b"),
+      midia("msg-de-outra-org", TITULAR, { organization_id: OUTRA_ORG }),
+    ];
     rows.prontuario_exames_enviados = [
       envio("msg-dela"),
       envio("msg-dela-ja-estava", { ja_existia: true }),
-      envio("msg-de-outro", { "messages.contact_id": "contato-b" }),
+      envio("msg-de-outro"),
       envio("msg-de-outra-org", { organization_id: OUTRA_ORG }),
     ];
 

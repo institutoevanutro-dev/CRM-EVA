@@ -1128,13 +1128,28 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   // estas linhas ao anonimizar; o acesso as entrega, sem `exam_id`.
   let exames_enviados_ao_prontuario: NonNullable<ExportPayload["exames_enviados_ao_prontuario"]> = [];
   if (contactId) {
-    const { data, error } = await admin
-      .from("prontuario_exames_enviados")
-      .select("message_id, ja_existia, created_at, messages!inner(contact_id)")
+    // Duas consultas simples em vez de filtro embutido (messages!inner): só
+    // mensagem recebida com arquivo do titular pode ter ido ao prontuário.
+    const midias = await admin
+      .from("messages")
+      .select("id")
       .eq("organization_id", organizationId)
-      .eq("messages.contact_id", contactId)
-      .order("created_at", { ascending: false })
-      .limit(500);
+      .eq("contact_id", contactId)
+      .eq("direction", "inbound")
+      .in("type", ["image", "document"])
+      .limit(5000);
+    const ids = ((midias.data ?? []) as { id: string }[]).map((m) => m.id);
+    const { data, error } = midias.error
+      ? { data: null, error: midias.error }
+      : ids.length === 0
+        ? { data: [], error: null }
+        : await admin
+            .from("prontuario_exames_enviados")
+            .select("message_id, ja_existia, created_at")
+            .eq("organization_id", organizationId)
+            .in("message_id", ids)
+            .order("created_at", { ascending: false })
+            .limit(500);
     if (error) {
       logger.warn("[lgpd-export-worker] prontuario exams load failed", { request_id: requestId, error: error.message });
     } else if (data) {
