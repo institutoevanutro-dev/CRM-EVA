@@ -65,8 +65,10 @@
  *      PRÓPRIO fallback também não tiver versão publicada, config:null é o
  *      fim legítimo da linha — outcome permanece o que já descrevia a causa.
  *   8. `config.nao_reabre_apos_equipe` (decisão do dono do Instituto, 04/11/2026):
- *      numa conversa em que alguém da equipe já escreveu, o assunto da lista
- *      nunca é reaberto pela IA — nem depois de "Devolver ao automático". O
+ *      numa conversa em que alguém da equipe escreveu desde o último "Devolver
+ *      ao automático" MANUAL, o assunto da lista não é reaberto pela IA. A
+ *      devolução manual libera tudo de novo; a automática (fim do dia seguinte,
+ *      prazo do handoff) não libera. O
  *      turno que cairia nele (sticky, classificado, reclassificado) vai para o
  *      fallback, com outcome 'fallback'; o follow-up desse assunto (sem
  *      mensagem) não troca de agente e cala. Se o fallback também está na lista,
@@ -239,7 +241,7 @@ export async function resolveTurnAgent(
     stickyIntent: string | null;
     /** `conversations.active_agent_set_at`: o último turno atendido. Ver a regra 2c. */
     stickySetAt?: Date | null;
-    /** Alguém da equipe já escreveu nesta conversa. Ver a regra 8. */
+    /** Alguém da equipe escreveu desde a última devolução manual. Ver a regra 8. */
     equipeFalou?: boolean;
     /** Nenhuma saída nossa na conversa ainda (a mensagem abre a conversa). Ver a regra 9. */
     semSaida?: boolean;
@@ -547,6 +549,9 @@ export async function resolveConversationTurn(
 ): Promise<TurnAgentResolution> {
   // `equipe_falou`: a mesma régua de "envio de pessoa" de `robo-do-outro-lado.ts`
   // (tela, API de usuário, celular). O eco do envio da IA não é `external_device`.
+  // Só conta fala POSTERIOR ao último "Devolver ao automático" manual
+  // (`metadata.ia_devolvida_manualmente_em`, gravado por `lib/escalacao/retomada.ts`;
+  // a devolução automática não grava, então não libera). Marca ilegível = sem marca.
   const { rows } = await db.query<{
     active_ai_agent_id: string | null;
     active_intent: string | null;
@@ -554,12 +559,16 @@ export async function resolveConversationTurn(
     equipe_falou: boolean | null;
     sem_saida: boolean | null;
   }>(
-    `select active_ai_agent_id,active_intent,active_agent_set_at,
+    `select c.active_ai_agent_id,c.active_intent,c.active_agent_set_at,
             exists(select 1 from messages m where m.organization_id=$1 and m.conversation_id=$2
-                     and m.direction='outbound' and m.sent_via in ('crm','user','external_device')) as equipe_falou,
+                     and m.direction='outbound' and m.sent_via in ('crm','user','external_device')
+                     and m.created_at > coalesce(
+                       case when c.metadata->>'ia_devolvida_manualmente_em' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
+                            then (c.metadata->>'ia_devolvida_manualmente_em')::timestamptz end,
+                       '-infinity'::timestamptz)) as equipe_falou,
             not exists(select 1 from messages m where m.organization_id=$1 and m.conversation_id=$2
                      and m.direction='outbound') as sem_saida
-       from conversations where organization_id=$1 and id=$2`,
+       from conversations c where c.organization_id=$1 and c.id=$2`,
     [input.tenantId, input.conversationId],
   );
   const signalRow = input.inbound

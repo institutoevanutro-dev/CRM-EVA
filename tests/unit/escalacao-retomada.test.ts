@@ -16,7 +16,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { audit } from "@/lib/audit";
 import { fimDoDiaSeguinte } from "@/lib/escalacao/pausa-por-resposta-humana";
-import { devolverAtendimentoAoAgente, type OrigemDaRetomada } from "@/lib/escalacao/retomada";
+import {
+  CHAVE_DA_DEVOLUCAO_MANUAL,
+  devolverAtendimentoAoAgente,
+  type OrigemDaRetomada,
+} from "@/lib/escalacao/retomada";
 import type { Actor } from "@/lib/api/handlers/types";
 
 vi.mock("@/lib/audit", () => ({ audit: vi.fn().mockResolvedValue(undefined) }));
@@ -367,6 +371,29 @@ describe("devolver o atendimento ao agente", () => {
     });
     const atividade = cap.inserts.find((i) => i.tabela === "crm_lead_activities");
     expect(JSON.stringify(atividade?.valores)).toContain("automaticamente após 60 min");
+  });
+
+  it("devolução MANUAL grava o marco que libera nao_reabre_apos_equipe, sem apagar o resto do metadata", async () => {
+    const cap = novaCaptura();
+    const antes = Date.now();
+    const res = await retomar(
+      cenarioComAtendimentoHumano({ conversa: conversaPassadaAHumano({ metadata: { devolucao_ao_rodizio: { devolucoes: 1 } } }) }),
+      cap,
+    );
+    expect(res.ok).toBe(true);
+    const meta = cap.updates.find((u) => u.tabela === "conversations")?.valores.metadata as Record<string, unknown>;
+    expect(meta.devolucao_ao_rodizio).toEqual({ devolucoes: 1 });
+    expect(Date.parse(meta[CHAVE_DA_DEVOLUCAO_MANUAL] as string)).toBeGreaterThanOrEqual(antes);
+  });
+
+  it("devolução AUTOMÁTICA (fim do dia seguinte) não grava o marco: os assuntos seguem bloqueados", async () => {
+    const cap = novaCaptura();
+    const cron: Actor = { type: "webhook_source", id: "cron:handoff-devolucao" };
+    const res = await retomar(cenarioComAtendimentoHumano(), cap, cron, { automatica: { minutos: 60 } });
+    expect(res.ok).toBe(true);
+    const valores = cap.updates.find((u) => u.tabela === "conversations")?.valores;
+    expect(valores).toBeDefined();
+    expect(valores).not.toHaveProperty("metadata");
   });
 
   it("negócio ambíguo não vira atividade no card errado", async () => {

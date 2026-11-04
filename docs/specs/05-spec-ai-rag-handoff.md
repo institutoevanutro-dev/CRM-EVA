@@ -1143,10 +1143,17 @@ Caso medido (03/11/2026): "Assumir" 17:05, atendente pelo celular 17:11, devolu�
 
 **Assuntos que a IA não reabre depois que a equipe falou (opcional, por roteador).**
 `ai_routers.config.nao_reabre_apos_equipe` (lista de nomes de assunto; vazia por padrão). Numa
-conversa com qualquer envio de pessoa (`messages.sent_via` em `crm`, `user`, `external_device`),
-o turno que cairia num desses assuntos vai ao fallback do roteador; se o fallback também está na
-lista, a IA não fala e o turno de entrada passa a conversa à equipe com aviso. Vale também depois
-de "Devolver ao automático". Regra 8 de `lib/agent-engine/agent/resolve-turn-agent.ts`.
+conversa com envio de pessoa (`messages.sent_via` em `crm`, `user`, `external_device`) **depois
+do último "Devolver ao automático" manual**, o turno que cairia num desses assuntos vai ao
+fallback do roteador; se o fallback também está na lista, a IA não fala e o turno de entrada passa
+a conversa à equipe com aviso. Regra 8 de `lib/agent-engine/agent/resolve-turn-agent.ts`.
+
+"Devolver ao automático" (botão, API ou tool — `devolverAtendimentoAoAgente` sem `origem`) libera
+tudo de novo (decisão do dono, 04/11/2026): grava `conversations.metadata.ia_devolvida_manualmente_em`
+(ISO) e só fala da equipe com `messages.created_at` posterior a esse marco volta a bloquear. A
+devolução automática (prazo do handoff, fim do dia seguinte) **não** grava o marco, então não
+libera. Marco ausente ou ilegível = conta toda a história. Prova:
+`tests/invariants/ia-depois-da-equipe-devolucao-manual.test.ts`.
 
 **Conversa de negócio e resposta automática (opcional, por roteador).** `ai_routers.config.so_equipe
 = true` oferece ao classificador duas intenções fixas (`negocio_com_a_empresa`,
