@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { mudouDeAssunto, resolveConversationTurn, resolveTurnAgent } from './resolve-turn-agent';
+import { marcoDaDevolucaoManual, mudouDeAssunto, resolveConversationTurn, resolveTurnAgent } from './resolve-turn-agent';
 import { outrosAssuntosDoTurno } from './passagem-de-assunto';
 import type { PublishedAgentConfig } from './agent-config';
 import type { LoadedRouter } from './router-config';
@@ -918,7 +918,10 @@ describe('resolveTurnAgent: nao_reabre_apos_equipe', () => {
       classifyIntent: vi.fn().mockResolvedValue(verdict),
     }) as unknown as { log: { info: typeof info } };
     d.log.info = info;
-    const out = await resolveTurnAgent({} as never, {} as never, { ...baseInput, signal: 'Ok', ...input }, d as never);
+    const { equipeFalou, ...resto } = input;
+    // "A equipe falou" = fala de ontem, dentro da janela padrão de 7 dias.
+    const falaDaEquipeEm = equipeFalou === true ? new Date(Date.now() - 86_400_000) : null;
+    const out = await resolveTurnAgent({} as never, {} as never, { ...baseInput, signal: 'Ok', ...resto, falaDaEquipeEm }, d as never);
     return { out, info };
   }
 
@@ -972,11 +975,12 @@ describe('resolveTurnAgent: nao_reabre_apos_equipe', () => {
     expect(semFala.out.assuntos?.map((a) => a.intentName)).toContain('vendas');
   });
 
-  it('resolveConversationTurn lê equipe_falou da conversa (envio de pessoa: crm, user, celular)', async () => {
+  /** `resolveConversationTurn` com a conversa que o banco devolveria. */
+  async function pelaConversa(linha: { ultima_fala_da_equipe: Date | null; marco_da_devolucao?: string | null }) {
     const db = {
       query: vi.fn(async (sql: string) =>
         sql.includes('from conversations')
-          ? { rows: [{ active_ai_agent_id: 'agent-vendas', active_intent: 'vendas', active_agent_set_at: null, equipe_falou: true }] }
+          ? { rows: [{ active_ai_agent_id: 'agent-vendas', active_intent: 'vendas', active_agent_set_at: null, marco_da_devolucao: null, sem_saida: false, ...linha }] }
           : { rows: [{ body: 'Ok', type: 'text', media_url: null, media_storage_path: null, media_derived_text: null }] }),
     };
     const out = await resolveConversationTurn(db as never, {} as never, { ...baseInput, inbound: true },
@@ -986,8 +990,41 @@ describe('resolveTurnAgent: nao_reabre_apos_equipe', () => {
         agenteDaCampanha: vi.fn().mockResolvedValue(null),
         classifyIntent: vi.fn().mockResolvedValue({ intentName: 'vendas', confidence: 0.9 }),
       }));
-    expect(db.query.mock.calls[0]![0]).toMatch(/sent_via in \('crm','user','external_device'\)/);
+    return { out, sql: String(db.query.mock.calls[0]![0]) };
+  }
+  const diasAtras = (d: number) => new Date(Date.now() - d * 86_400_000);
+
+  it('resolveConversationTurn lê a última fala da equipe (crm, user, celular; sem eco nosso; pelo sent_at)', async () => {
+    const { out, sql } = await pelaConversa({ ultima_fala_da_equipe: diasAtras(1) });
+    expect(sql).toMatch(/sent_via in \('crm','user','external_device'\)/);
+    expect(sql).toMatch(/eco_de_envio_nosso/);
+    expect(sql).toMatch(/max\(coalesce\(m\.sent_at, m\.created_at\)\)/);
     expect(out.config?.agentId).toBe('agent-recepcao');
+  });
+
+  it('janela (padrão 7 dias): fala de 8 dias atrás não bloqueia; de 2 dias bloqueia; config muda a janela', async () => {
+    expect((await pelaConversa({ ultima_fala_da_equipe: diasAtras(8) })).out.config?.agentId).toBe('agent-vendas');
+    expect((await pelaConversa({ ultima_fala_da_equipe: diasAtras(2) })).out.config?.agentId).toBe('agent-recepcao');
+    const curta = await rodar(r({ naoReabreJanelaDias: 0.5 }), { stickyAgentId: null, stickyIntent: null, equipeFalou: true });
+    expect(curta.out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it('marco da devolução manual: fala anterior não bloqueia, posterior bloqueia; marco torto = sem marco, sem derrubar o turno', async () => {
+    const marco = diasAtras(1).toISOString();
+    expect((await pelaConversa({ ultima_fala_da_equipe: diasAtras(2), marco_da_devolucao: marco })).out.config?.agentId).toBe('agent-vendas');
+    expect((await pelaConversa({ ultima_fala_da_equipe: diasAtras(0.5), marco_da_devolucao: marco })).out.config?.agentId).toBe('agent-recepcao');
+    const torto = await pelaConversa({ ultima_fala_da_equipe: diasAtras(2), marco_da_devolucao: '2026-13-40T00:00:00Z' });
+    expect(torto.out.outcome).toBe('fallback');
+    expect(torto.out.config?.agentId).toBe('agent-recepcao');
+  });
+
+  it('marcoDaDevolucaoManual: só ISO completo e data que existe', () => {
+    expect(marcoDaDevolucaoManual('2026-11-03T17:30:01.123Z')?.toISOString()).toBe('2026-11-03T17:30:01.123Z');
+    expect(marcoDaDevolucaoManual('2026-13-40T00:00:00Z')).toBeNull();
+    expect(marcoDaDevolucaoManual('2026-11-03')).toBeNull();
+    expect(marcoDaDevolucaoManual('2026-11-03T17:30')).toBeNull();
+    expect(marcoDaDevolucaoManual('lixo')).toBeNull();
+    expect(marcoDaDevolucaoManual(42)).toBeNull();
   });
 });
 

@@ -135,6 +135,13 @@ describe('loadActiveRouter — modo de permanência', () => {
     expect((await comConfig({ nao_reabre_apos_equipe: 'consulta_nova' }))?.naoReabreAposEquipe).toEqual([]);
   });
 
+  it('nao_reabre_janela_dias: número positivo; ausente ou torto vira o padrão de 7', async () => {
+    expect((await comConfig({ nao_reabre_janela_dias: 3 }))?.naoReabreJanelaDias).toBe(3);
+    for (const v of [undefined, 0, -1, '3', null]) {
+      expect((await comConfig({ nao_reabre_janela_dias: v }))?.naoReabreJanelaDias).toBe(7);
+    }
+  });
+
   it('so_equipe: só o booleano true liga', async () => {
     expect((await comConfig({ so_equipe: true }))?.soEquipe).toBe(true);
     for (const v of [undefined, false, 'sim', 1]) {

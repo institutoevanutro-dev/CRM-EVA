@@ -60,8 +60,8 @@ function pool(texto: string, semSaida = false) {
       if (/select body,type,media_url/.test(sql)) {
         return { rows: [{ body: texto, type: 'text', media_url: null, media_storage_path: null, media_derived_text: null }] };
       }
-      if (/as equipe_falou/.test(sql)) {
-        return { rows: [{ active_ai_agent_id: null, active_intent: null, active_agent_set_at: null, equipe_falou: false, sem_saida: semSaida }] };
+      if (/as sem_saida/.test(sql)) {
+        return { rows: [{ active_ai_agent_id: null, active_intent: null, active_agent_set_at: null, marco_da_devolucao: null, ultima_fala_da_equipe: null, sem_saida: semSaida }] };
       }
       return { rows: [] };
     }),

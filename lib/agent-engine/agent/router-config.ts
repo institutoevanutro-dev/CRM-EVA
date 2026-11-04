@@ -12,6 +12,8 @@
  */
 import type pg from 'pg';
 
+import { NAO_REABRE_JANELA_DIAS_PADRAO } from '@/lib/escalacao/fala-da-equipe';
+
 export interface RouterMember {
   agentId: string;
   intentName: string;
@@ -72,6 +74,14 @@ export interface LoadedRouter {
    * regra não existe (o padrão).
    */
   naoReabreAposEquipe?: string[];
+  /**
+   * `config.nao_reabre_janela_dias` (padrão `NAO_REABRE_JANELA_DIAS_PADRAO`):
+   * só a fala da equipe destes últimos dias conta para `naoReabreAposEquipe`.
+   * Medido no Instituto em 04/11/2026: 81% das conversas dos últimos 30 dias já
+   * tinham fala da equipe, então sem janela a regra calaria a qualificação de
+   * quase todo mundo que voltasse meses depois.
+   */
+  naoReabreJanelaDias?: number;
   /**
    * `config.so_equipe === true`: o classificador também conhece as intenções
    * fixas do produto (`ASSUNTOS_SO_DA_EQUIPE`, conversa de negócio e mensagem
@@ -178,6 +188,7 @@ async function montar(
     permanencia_expira_horas?: unknown;
     interrompe?: unknown;
     nao_reabre_apos_equipe?: unknown;
+    nao_reabre_janela_dias?: unknown;
     so_equipe?: unknown;
   };
   const classifierModel =
@@ -211,6 +222,9 @@ async function montar(
       : [];
   const interrompe = listaDeAssuntos(cfg.interrompe);
   const naoReabreAposEquipe = listaDeAssuntos(cfg.nao_reabre_apos_equipe);
+  const janela = cfg.nao_reabre_janela_dias;
+  const naoReabreJanelaDias =
+    typeof janela === 'number' && Number.isFinite(janela) && janela > 0 ? janela : NAO_REABRE_JANELA_DIAS_PADRAO;
 
   return {
     id: router.id,
@@ -224,6 +238,7 @@ async function montar(
     permanenciaExpiraHoras,
     fallbackAgentId: router.fallback_agent_id,
     naoReabreAposEquipe,
+    naoReabreJanelaDias,
     // Só o booleano exato liga: "sim", 1 e afins ficam desligados.
     soEquipe: cfg.so_equipe === true,
     members: memberRows.map((m) => ({

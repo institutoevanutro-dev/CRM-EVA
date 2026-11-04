@@ -39,6 +39,7 @@ import { logger } from "@/lib/logger";
 import { autorizarContatoParaIA } from "@/lib/ai/elegibilidade/autorizacao";
 
 import { lerContinuidadeHumana, type ContinuidadeHumana } from "./continuidade";
+import { CHAVE_DA_DEVOLUCAO_MANUAL } from "./fala-da-equipe";
 
 export interface RetomadaDeps {
   /** Admin client (service role) OU client do request — os dois filtram org aqui. */
@@ -74,9 +75,9 @@ export type OrigemDaRetomada = { automatica: { minutos: number } };
  * MANUAL (tela, API, tool). É o marco de `nao_reabre_apos_equipe`: só fala da
  * equipe DEPOIS dela bloqueia o assunto (decisão do dono, 04/11/2026). A
  * devolução automática não grava — ela não libera. Lida pelo SQL de
- * `resolveConversationTurn` (`resolve-turn-agent.ts`), com a chave literal.
+ * `resolveConversationTurn` (`resolve-turn-agent.ts`). Mora em `fala-da-equipe.ts`.
  */
-export const CHAVE_DA_DEVOLUCAO_MANUAL = "ia_devolvida_manualmente_em";
+export { CHAVE_DA_DEVOLUCAO_MANUAL };
 
 export type RetomadaResultado =
   | {

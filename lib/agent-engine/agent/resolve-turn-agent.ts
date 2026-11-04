@@ -111,6 +111,11 @@ import { SEM_ATENDIMENTOS_NA_AGENDA, buildFatosDoContato } from './fatos-do-cont
 import { ehMenuDeRoboComOpcoes, ehMensagemDeRobo } from './human-handoff';
 import { historicoRecente, renderHistoricoRecente } from './historico-recente';
 import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-context';
+import {
+  CHAVE_DA_DEVOLUCAO_MANUAL,
+  NAO_REABRE_JANELA_DIAS_PADRAO,
+  SQL_FALA_DA_EQUIPE,
+} from '@/lib/escalacao/fala-da-equipe';
 
 /**
  * Teto de tempo da leitura dos fatos. Mesmo motivo e mesmo valor do `TETO_MS` de
@@ -242,8 +247,11 @@ export async function resolveTurnAgent(
     stickyIntent: string | null;
     /** `conversations.active_agent_set_at`: o último turno atendido. Ver a regra 2c. */
     stickySetAt?: Date | null;
-    /** Alguém da equipe escreveu desde a última devolução manual. Ver a regra 8. */
-    equipeFalou?: boolean;
+    /**
+     * A última fala da equipe DEPOIS da última devolução manual (`null` = não
+     * houve). Conta para a regra 8 só dentro de `naoReabreJanelaDias`.
+     */
+    falaDaEquipeEm?: Date | null;
     /** Nenhuma saída nossa na conversa ainda (a mensagem abre a conversa). Ver a regra 9. */
     semSaida?: boolean;
   },
@@ -294,7 +302,12 @@ export async function resolveTurnAgent(
 
     // Regra 8: a equipe já falou nesta conversa e o assunto está na lista
     // `nao_reabre_apos_equipe`. O assunto de um agente é o do membro dele.
-    const bloqueados = input.equipeFalou === true ? (router.naoReabreAposEquipe ?? []) : [];
+    // Só a fala dos últimos `naoReabreJanelaDias` conta (o marco da devolução
+    // manual já foi aplicado por quem leu a fala): vale o início mais recente.
+    const agoraMs = (deps.agora ?? (() => new Date()))().getTime();
+    const janelaMs = (router.naoReabreJanelaDias ?? NAO_REABRE_JANELA_DIAS_PADRAO) * 86_400_000;
+    const equipeFalou = input.falaDaEquipeEm != null && input.falaDaEquipeEm.getTime() > agoraMs - janelaMs;
+    const bloqueados = equipeFalou ? (router.naoReabreAposEquipe ?? []) : [];
     const assuntoBloqueado = (intentName: string | null, agentId: string): string | null => {
       if (bloqueados.length === 0) return null;
       const assuntos = [intentName, ...router.members.filter((m) => m.agentId === agentId).map((m) => m.intentName)];
@@ -540,6 +553,19 @@ export async function resolveTurnAgent(
   }
 }
 
+const ISO_COMPLETO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * `metadata.ia_devolvida_manualmente_em` como instante, ou `null` (sem marco)
+ * quando ausente ou torto: ISO completo E data que existe ("2026-13-40…" não).
+ * Exportada para o teste.
+ */
+export function marcoDaDevolucaoManual(v: unknown): Date | null {
+  if (typeof v !== 'string' || !ISO_COMPLETO.test(v)) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 /** One read-only selection before operation policy. A real queue job supplies correlation. */
 export async function resolveConversationTurn(
   db: pg.Pool,
@@ -554,30 +580,32 @@ export async function resolveConversationTurn(
   },
   deps: ResolveTurnAgentDeps,
 ): Promise<TurnAgentResolution> {
-  // `equipe_falou`: a mesma régua de "envio de pessoa" de `robo-do-outro-lado.ts`
-  // (tela, API de usuário, celular). O eco do envio da IA não é `external_device`.
-  // Só conta fala POSTERIOR ao último "Devolver ao automático" manual
+  // A última fala da equipe: a mesma régua de "envio de pessoa" de
+  // `robo-do-outro-lado.ts` (tela, API de usuário, celular), sem o eco do envio
+  // da IA (`SQL_FALA_DA_EQUIPE`). Pelo horário de ENVIO (`sent_at`; o celular
+  // grava o do aparelho). O marco da última devolução MANUAL
   // (`metadata.ia_devolvida_manualmente_em`, gravado por `lib/escalacao/retomada.ts`;
-  // a devolução automática não grava, então não libera). Marca ilegível = sem marca.
+  // a automática não grava, então não libera) é lido e validado AQUI, em JS:
+  // marca torta não derruba o turno, vira "sem marco".
   const { rows } = await db.query<{
     active_ai_agent_id: string | null;
     active_intent: string | null;
     active_agent_set_at: Date | null;
-    equipe_falou: boolean | null;
+    marco_da_devolucao: string | null;
+    ultima_fala_da_equipe: Date | null;
     sem_saida: boolean | null;
   }>(
     `select c.active_ai_agent_id,c.active_intent,c.active_agent_set_at,
-            exists(select 1 from messages m where m.organization_id=$1 and m.conversation_id=$2
-                     and m.direction='outbound' and m.sent_via in ('crm','user','external_device')
-                     and m.created_at > coalesce(
-                       case when c.metadata->>'ia_devolvida_manualmente_em' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T'
-                            then (c.metadata->>'ia_devolvida_manualmente_em')::timestamptz end,
-                       '-infinity'::timestamptz)) as equipe_falou,
+            c.metadata->>'${CHAVE_DA_DEVOLUCAO_MANUAL}' as marco_da_devolucao,
+            (select max(coalesce(m.sent_at, m.created_at)) from messages m
+              where m.organization_id=$1 and m.conversation_id=$2 and ${SQL_FALA_DA_EQUIPE}) as ultima_fala_da_equipe,
             not exists(select 1 from messages m where m.organization_id=$1 and m.conversation_id=$2
                      and m.direction='outbound') as sem_saida
        from conversations c where c.organization_id=$1 and c.id=$2`,
     [input.tenantId, input.conversationId],
   );
+  const marco = marcoDaDevolucaoManual(rows[0]?.marco_da_devolucao);
+  const fala = rows[0]?.ultima_fala_da_equipe ?? null;
   const signalRow = input.inbound
     ? (await db.query<CorpoDaMensagemRow>(
         "select body,type,media_url,media_storage_path,media_derived_text from messages where organization_id=$1 and conversation_id=$2 and direction='inbound' order by sent_at desc,created_at desc,id desc limit 1",
@@ -599,7 +627,7 @@ export async function resolveConversationTurn(
     stickyAgentId: rows[0]?.active_ai_agent_id ?? null,
     stickyIntent: rows[0]?.active_intent ?? null,
     stickySetAt: rows[0]?.active_agent_set_at ?? null,
-    equipeFalou: rows[0]?.equipe_falou === true,
+    falaDaEquipeEm: fala !== null && (marco === null || fala.getTime() > marco.getTime()) ? fala : null,
     semSaida: rows[0]?.sem_saida === true,
   }, deps);
   if (resolucao.config !== null) return resolucao;
