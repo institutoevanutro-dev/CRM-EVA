@@ -53,6 +53,7 @@ const SCOPES: { id: string; label: string }[] = [
   { id: "agenda:read", label: "Prontuário: ler compromissos da agenda" },
   { id: "agenda:reschedule", label: "Prontuário: remarcar compromissos da agenda" },
   // Só "Realizado": não registra falta, não remarca, não cancela (migration 0401).
+  { id: "prontuario:funil", label: "Prontuário: alimentar o funil (funis, etapas e leads)" },
   { id: "agenda:outcome", label: "Prontuário: marcar compromisso como realizado (requer operador de agenda)" },
   { id: "role:ai_operator", label: "Operador de agenda (necessário para remarcar ou marcar como realizado)" },
   // Só a rota do Financeiro aceita: não abre MCP nem conversas.
