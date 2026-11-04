@@ -128,6 +128,13 @@ describe('loadActiveRouter — modo de permanência', () => {
     expect((await comConfig({}))?.permanenciaExpiraHoras).toBe(24);
   });
 
+  it('nao_reabre_apos_equipe: lista aparada; ausente ou torta vira lista vazia (a regra não existe)', async () => {
+    const r = await comConfig({ nao_reabre_apos_equipe: ['consulta_nova ', 'recepcao_geral', 3, ''] });
+    expect(r?.naoReabreAposEquipe).toEqual(['consulta_nova', 'recepcao_geral']);
+    expect((await comConfig({}))?.naoReabreAposEquipe).toEqual([]);
+    expect((await comConfig({ nao_reabre_apos_equipe: 'consulta_nova' }))?.naoReabreAposEquipe).toEqual([]);
+  });
+
   it('interrompe que não é array vira lista vazia', async () => {
     for (const valor of ['queixa_clinica', 7, null, { 0: 'queixa_clinica' }]) {
       expect((await comConfig({ permanencia: 'agente', interrompe: valor }))?.interrompe).toEqual([]);

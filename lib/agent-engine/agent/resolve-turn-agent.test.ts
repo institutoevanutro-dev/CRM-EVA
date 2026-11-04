@@ -898,3 +898,82 @@ describe("resolveTurnAgent: no modo 'agente' a permanência expira", () => {
     expect(out.config?.agentId).toBe('agent-suporte');
   });
 });
+
+// ─── Regra 8: o assunto que a IA não reabre depois que a equipe falou ───
+describe('resolveTurnAgent: nao_reabre_apos_equipe', () => {
+  const tres = [
+    ...members,
+    { agentId: 'agent-recepcao', intentName: 'recepcao', intentDescription: 'geral', examples: [] },
+  ];
+  const r = (over: Partial<LoadedRouter> = {}) =>
+    router({ members: tres, fallbackAgentId: 'agent-recepcao', naoReabreAposEquipe: ['vendas'], ...over });
+
+  async function rodar(rt: LoadedRouter, input: { stickyAgentId: string | null; stickyIntent: string | null; equipeFalou?: boolean; signal?: string | null }, verdict: unknown = { intentName: 'vendas', confidence: 0.9 }) {
+    const info = vi.fn();
+    const d = makeDeps({
+      loadActiveRouter: vi.fn().mockResolvedValue(rt),
+      loadPublishedAgentConfigById: idAwareLoader(),
+      agenteDaCampanha: vi.fn().mockResolvedValue(null),
+      classifyIntent: vi.fn().mockResolvedValue(verdict),
+    }) as unknown as { log: { info: typeof info } };
+    d.log.info = info;
+    const out = await resolveTurnAgent({} as never, {} as never, { ...baseInput, signal: 'Ok', ...input }, d as never);
+    return { out, info };
+  }
+
+  it('sticky em vendas + equipe falou → fallback, com log', async () => {
+    const { out, info } = await rodar(r(), { stickyAgentId: 'agent-vendas', stickyIntent: 'vendas', equipeFalou: true });
+    expect(out.outcome).toBe('fallback');
+    expect(out.config?.agentId).toBe('agent-recepcao');
+    expect(info).toHaveBeenCalledWith('qualificacao_bloqueada_apos_equipe', expect.objectContaining({ assunto: 'vendas' }));
+  });
+
+  it('classificado em vendas + equipe falou → fallback', async () => {
+    const { out } = await rodar(r(), { stickyAgentId: null, stickyIntent: null, equipeFalou: true });
+    expect(out.outcome).toBe('fallback');
+    expect(out.config?.agentId).toBe('agent-recepcao');
+  });
+
+  it('follow-up (sem mensagem) com sticky em vendas + equipe falou → cala, não troca de agente', async () => {
+    const { out } = await rodar(r(), { stickyAgentId: 'agent-vendas', stickyIntent: null, equipeFalou: true, signal: null });
+    expect(out.outcome).toBe('bloqueado_apos_equipe');
+    expect(out.config).toBeNull();
+  });
+
+  it('sem fala da equipe → como hoje', async () => {
+    const { out } = await rodar(r(), { stickyAgentId: null, stickyIntent: null, equipeFalou: false });
+    expect(out.outcome).toBe('classified');
+    expect(out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it('assunto fora da lista segue atendido pela IA', async () => {
+    const { out } = await rodar(r(), { stickyAgentId: null, stickyIntent: null, equipeFalou: true }, { intentName: 'suporte', confidence: 0.9 });
+    expect(out.config?.agentId).toBe('agent-suporte');
+  });
+
+  it('fallback também na lista → bloqueado_apos_equipe, sem agente (nunca o genérico)', async () => {
+    const { out } = await rodar(r({ naoReabreAposEquipe: ['vendas', 'recepcao'] }), { stickyAgentId: 'agent-vendas', stickyIntent: 'vendas', equipeFalou: true });
+    expect(out.outcome).toBe('bloqueado_apos_equipe');
+    expect(out.config).toBeNull();
+    const semMatch = await rodar(r({ naoReabreAposEquipe: ['recepcao'] }), { stickyAgentId: null, stickyIntent: null, equipeFalou: true }, { intentName: null, confidence: 0.2 });
+    expect(semMatch.out.outcome).toBe('bloqueado_apos_equipe');
+  });
+
+  it('resolveConversationTurn lê equipe_falou da conversa (envio de pessoa: crm, user, celular)', async () => {
+    const db = {
+      query: vi.fn(async (sql: string) =>
+        sql.includes('from conversations')
+          ? { rows: [{ active_ai_agent_id: 'agent-vendas', active_intent: 'vendas', active_agent_set_at: null, equipe_falou: true }] }
+          : { rows: [{ body: 'Ok', type: 'text', media_url: null, media_storage_path: null, media_derived_text: null }] }),
+    };
+    const out = await resolveConversationTurn(db as never, {} as never, { ...baseInput, inbound: true },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(r()),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        agenteDaCampanha: vi.fn().mockResolvedValue(null),
+        classifyIntent: vi.fn().mockResolvedValue({ intentName: 'vendas', confidence: 0.9 }),
+      }));
+    expect(db.query.mock.calls[0]![0]).toMatch(/sent_via in \('crm','user','external_device'\)/);
+    expect(out.config?.agentId).toBe('agent-recepcao');
+  });
+});

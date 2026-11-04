@@ -87,6 +87,15 @@ const CALADAS_DE_PROPOSITO: Record<string, string> = {
   // seja, alimentar o próprio loop que a passagem existe para cortar. A equipe
   // é avisada pelo aviso de inbox que a mesma passagem abre.
   "lib/agent-engine/agent/robo-do-outro-lado.ts": "o outro lado é um robô; avisar alimenta o loop",
+  // Decisão do dono do produto no Instituto (04/11/2026), as duas ligáveis por
+  // roteador e desligadas por padrão: (1) conversa de negócio e resposta
+  // automática de outro sistema não recebem NADA da IA — nas conversas medidas
+  // a IA escrevia "vou passar para a equipe" e o fornecedor seguia negociando
+  // com ela; (2) no assunto que a IA não reabre depois que a equipe falou, uma
+  // mensagem automática por cima da equipe é justamente o defeito. A equipe é
+  // avisada pelo aviso de inbox que a mesma passagem abre.
+  "lib/agent-engine/agent/turno-da-equipe.ts":
+    "negócio/robô não recebe nada da IA; assunto que não reabre depois que a equipe falou",
 };
 
 /**

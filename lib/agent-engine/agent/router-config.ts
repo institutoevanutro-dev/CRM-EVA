@@ -64,6 +64,14 @@ export interface LoadedRouter {
   permanenciaExpiraHoras: number;
   fallbackAgentId: string | null;
   members: RouterMember[];
+  /**
+   * `config.nao_reabre_apos_equipe`: assuntos que a IA NUNCA reabre numa
+   * conversa em que alguém da equipe já escreveu (tela, API de usuário ou
+   * celular). Turno que cairia num deles vai para o fallback; se o fallback
+   * também está na lista, a IA não fala (`resolve-turn-agent.ts`). Vazio = a
+   * regra não existe (o padrão).
+   */
+  naoReabreAposEquipe?: string[];
 }
 
 /** `config.permanencia_expira_horas` ausente ou fora da forma. */
@@ -162,6 +170,7 @@ async function montar(
     permanencia?: unknown;
     permanencia_expira_horas?: unknown;
     interrompe?: unknown;
+    nao_reabre_apos_equipe?: unknown;
   };
   const classifierModel =
     typeof cfg.classifier_model === 'string' && cfg.classifier_model.trim() !== ''
@@ -184,13 +193,16 @@ async function montar(
   const expira = cfg.permanencia_expira_horas;
   const permanenciaExpiraHoras =
     typeof expira === 'number' && Number.isFinite(expira) && expira > 0 ? expira : PERMANENCIA_EXPIRA_HORAS_PADRAO;
-  const interrompe = Array.isArray(cfg.interrompe)
-    ? cfg.interrompe
-        .filter((i): i is string => typeof i === 'string')
-        // Aparado: 'queixa_clinica ' digitado com espaço tem de casar com o membro.
-        .map((i) => i.trim())
-        .filter((i) => i !== '')
-    : [];
+  // Aparado: 'queixa_clinica ' digitado com espaço tem de casar com o membro.
+  const listaDeAssuntos = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v
+          .filter((i): i is string => typeof i === 'string')
+          .map((i) => i.trim())
+          .filter((i) => i !== '')
+      : [];
+  const interrompe = listaDeAssuntos(cfg.interrompe);
+  const naoReabreAposEquipe = listaDeAssuntos(cfg.nao_reabre_apos_equipe);
 
   return {
     id: router.id,
@@ -203,6 +215,7 @@ async function montar(
     interrompe,
     permanenciaExpiraHoras,
     fallbackAgentId: router.fallback_agent_id,
+    naoReabreAposEquipe,
     members: memberRows.map((m) => ({
       agentId: m.agent_id,
       intentName: m.intent_name,

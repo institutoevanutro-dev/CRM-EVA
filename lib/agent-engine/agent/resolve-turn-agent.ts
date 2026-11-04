@@ -64,6 +64,14 @@
  *      outcome reclassificado honestamente ('fallback'/'no_match'). Se o
  *      PRÓPRIO fallback também não tiver versão publicada, config:null é o
  *      fim legítimo da linha — outcome permanece o que já descrevia a causa.
+ *   8. `config.nao_reabre_apos_equipe` (decisão do dono do Instituto, 04/11/2026):
+ *      numa conversa em que alguém da equipe já escreveu, o assunto da lista
+ *      nunca é reaberto pela IA — nem depois de "Devolver ao automático". O
+ *      turno que cairia nele (sticky, classificado, reclassificado) vai para o
+ *      fallback, com outcome 'fallback'; o follow-up desse assunto (sem
+ *      mensagem) não troca de agente e cala. Se o fallback também está na lista,
+ *      sai `bloqueado_apos_equipe` com config null: a IA não fala, e o turno
+ *      de entrada passa a conversa à equipe com aviso (`inbound-turn.ts`).
  *
  * Robustez: qualquer erro inesperado no branch do router (DB fora do ar,
  * shape quebrado) NUNCA derruba o turno — cai no `loadPublishedAgentConfig`
@@ -125,7 +133,13 @@ export interface TurnAgentResolution {
      * genérico: a declaração disse que aqui a IA não fala. Ver
      * `resolveConversationTurn`.
      */
-    | 'numero_recusado';
+    | 'numero_recusado'
+    /**
+     * A equipe já escreveu nesta conversa e o assunto escolhido (e o fallback)
+     * está em `nao_reabre_apos_equipe`: a IA não reabre. `config` é null e o
+     * turno NÃO cai no genérico — ver `inbound-turn.ts`.
+     */
+    | 'bloqueado_apos_equipe';
   /**
    * Todos os membros do roteador e o modo dele, sempre que a decisão veio de um
    * roteador (`routerId !== null`). É o que o turno precisa para oferecer
@@ -179,6 +193,8 @@ export async function resolveTurnAgent(
     stickyIntent: string | null;
     /** `conversations.active_agent_set_at`: o último turno atendido. Ver a regra 2c. */
     stickySetAt?: Date | null;
+    /** Alguém da equipe já escreveu nesta conversa. Ver a regra 8. */
+    equipeFalou?: boolean;
   },
   deps: ResolveTurnAgentDeps,
 ): Promise<TurnAgentResolution> {
@@ -235,11 +251,27 @@ export async function resolveTurnAgent(
       permanencia: router.permanencia,
     };
 
-    // fallback do router ou genérico — usado pelas regras 4, 5, 6 e 7.
+    // Regra 8: a equipe já falou nesta conversa e o assunto está na lista
+    // `nao_reabre_apos_equipe`. O assunto de um agente é o do membro dele.
+    const bloqueados = input.equipeFalou === true ? (router.naoReabreAposEquipe ?? []) : [];
+    const assuntoBloqueado = (intentName: string | null, agentId: string): string | null => {
+      if (bloqueados.length === 0) return null;
+      const assuntos = [intentName, ...router.members.filter((m) => m.agentId === agentId).map((m) => m.intentName)];
+      return assuntos.find((a): a is string => a !== null && bloqueados.includes(a)) ?? null;
+    };
+
+    // fallback do router ou genérico — usado pelas regras 4, 5, 6, 7 e 8.
     const resolveFallback = async (
       outcome: 'no_match' | 'classifier_failed',
       confidence: number | null,
     ): Promise<TurnAgentResolution> => {
+      if (router.fallbackAgentId !== null) {
+        const assunto = assuntoBloqueado(null, router.fallbackAgentId);
+        if (assunto !== null) {
+          deps.log.info('qualificacao_bloqueada_apos_equipe', { routerId: router.id, assunto, alvo: 'fallback' });
+          return { config: null, routerId: router.id, intentName: null, confidence, outcome: 'bloqueado_apos_equipe', ...doRoteador };
+        }
+      }
       if (router.fallbackAgentId === null) {
         // Regra 5: sem fallback declarado, quem atende é o agente publicado da
         // SESSÃO — o comportamento de antes do router existir. `null` aqui
@@ -284,6 +316,15 @@ export async function resolveTurnAgent(
       intentName: string | null,
       confidence: number | null,
     ): Promise<TurnAgentResolution> => {
+      const assunto = assuntoBloqueado(intentName, agentId);
+      if (assunto !== null) {
+        deps.log.info('qualificacao_bloqueada_apos_equipe', { routerId: router.id, assunto, alvo: outcome });
+        // Follow-up (sem mensagem) do assunto bloqueado não muda de agente: cala.
+        if (input.signal === null) {
+          return { config: null, routerId: router.id, intentName: null, confidence, outcome: 'bloqueado_apos_equipe', ...doRoteador };
+        }
+        return resolveFallback('no_match', confidence);
+      }
       const config = await _loadAgentById(db, input.tenantId, agentId);
       if (config === null) {
         deps.log.warn('resolve-turn-agent: agente casado sem versão publicada — tentando fallback do router', {
@@ -432,12 +473,18 @@ export async function resolveConversationTurn(
   },
   deps: ResolveTurnAgentDeps,
 ): Promise<TurnAgentResolution> {
+  // `equipe_falou`: a mesma régua de "envio de pessoa" de `robo-do-outro-lado.ts`
+  // (tela, API de usuário, celular). O eco do envio da IA não é `external_device`.
   const { rows } = await db.query<{
     active_ai_agent_id: string | null;
     active_intent: string | null;
     active_agent_set_at: Date | null;
+    equipe_falou: boolean | null;
   }>(
-    'select active_ai_agent_id,active_intent,active_agent_set_at from conversations where organization_id=$1 and id=$2',
+    `select active_ai_agent_id,active_intent,active_agent_set_at,
+            exists(select 1 from messages m where m.organization_id=$1 and m.conversation_id=$2
+                     and m.direction='outbound' and m.sent_via in ('crm','user','external_device')) as equipe_falou
+       from conversations where organization_id=$1 and id=$2`,
     [input.tenantId, input.conversationId],
   );
   const signalRow = input.inbound
@@ -461,6 +508,7 @@ export async function resolveConversationTurn(
     stickyAgentId: rows[0]?.active_ai_agent_id ?? null,
     stickyIntent: rows[0]?.active_intent ?? null,
     stickySetAt: rows[0]?.active_agent_set_at ?? null,
+    equipeFalou: rows[0]?.equipe_falou === true,
   }, deps);
   if (resolucao.config !== null) return resolucao;
   return (await numeroFechadoPelaDeclaracao(db, input.tenantId, input.channelSessionId))

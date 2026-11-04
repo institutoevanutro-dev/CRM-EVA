@@ -146,6 +146,7 @@ import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
 import { avisarJanelaFechada, resolverAvisoDeJanela } from '../pacing/aviso-de-janela';
 import { resolveConversationTurn, type TurnAgentResolution } from './resolve-turn-agent';
+import { passarTurnoAEquipeSeForOCaso } from './turno-da-equipe';
 import {
   MARCA_DA_PASSAGEM_NO_JOB,
   MARCA_DE_ENVIO_DA_ORIGEM_NO_JOB,
@@ -2517,6 +2518,14 @@ async function executarTurnoDoAgente(
     runLog.info('nenhum agente atende neste número (declaração de números) — turno sem resposta', {
       conversation_id: input.conversationId,
       channel_session_id: input.channelSessionId,
+    });
+    return;
+  }
+  // A equipe já falou e o assunto não reabre (regra 8 de `resolve-turn-agent.ts`).
+  // O turno de entrada já passou a conversa à equipe; o follow-up só não fala.
+  if (!preview && routed.outcome === 'bloqueado_apos_equipe') {
+    runLog.info('assunto não reabre depois que a equipe falou — turno sem resposta', {
+      conversation_id: input.conversationId,
     });
     return;
   }
@@ -6187,6 +6196,17 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       channelSessionId: payload.channel_session_id,
       inbound: true,
     }, { log: deps.log });
+    // O roteador decidiu que a IA não responde este turno: passa à equipe calado.
+    if (
+      await passarTurnoAEquipeSeForOCaso(
+        pool,
+        { tenantId: job.organization_id, leadId: job.contact_id, conversationId: payload.conversation_id },
+        resolvedAgent,
+        withFields(deps.log, { job_id: job.id, conversation_id: payload.conversation_id }),
+      )
+    ) {
+      return;
+    }
     const operationAgent = resolvedAgent.config;
     if (operationAgent?.operationMode === 'assisted') {
       // O GATE VALE TAMBÉM NO ASSISTIDO, e é aqui que ele precisa estar.
