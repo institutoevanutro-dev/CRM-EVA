@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { mudouDeAssunto, resolveConversationTurn, resolveTurnAgent } from './resolve-turn-agent';
+import { outrosAssuntosDoTurno } from './passagem-de-assunto';
 import type { PublishedAgentConfig } from './agent-config';
 import type { LoadedRouter } from './router-config';
 
@@ -957,6 +958,18 @@ describe('resolveTurnAgent: nao_reabre_apos_equipe', () => {
     expect(out.config).toBeNull();
     const semMatch = await rodar(r({ naoReabreAposEquipe: ['recepcao'] }), { stickyAgentId: null, stickyIntent: null, equipeFalou: true }, { intentName: null, confidence: 0.2 });
     expect(semMatch.out.outcome).toBe('bloqueado_apos_equipe');
+  });
+
+  it('transfer_to_subject não oferece o assunto bloqueado (M1): sai de `assuntos` só com a equipe tendo falado', async () => {
+    const comFala = await rodar(r(), { stickyAgentId: null, stickyIntent: null, equipeFalou: true }, { intentName: 'suporte', confidence: 0.9 });
+    expect(comFala.out.assuntos?.map((a) => a.intentName)).toEqual(['suporte', 'recepcao']);
+    const outros = outrosAssuntosDoTurno({
+      previa: false, jobKind: 'inbound_turn', jaPassou: false,
+      routed: { ...comFala.out, permanencia: 'agente' }, agentId: 'agent-suporte',
+    });
+    expect(outros.find((a) => a.intentName === 'vendas')).toBeUndefined();
+    const semFala = await rodar(r(), { stickyAgentId: null, stickyIntent: null, equipeFalou: false }, { intentName: 'suporte', confidence: 0.9 });
+    expect(semFala.out.assuntos?.map((a) => a.intentName)).toContain('vendas');
   });
 
   it('resolveConversationTurn lê equipe_falou da conversa (envio de pessoa: crm, user, celular)', async () => {

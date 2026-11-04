@@ -292,16 +292,6 @@ export async function resolveTurnAgent(
       };
     }
 
-    // Vai em toda resolução que sai DESTE roteador (`TurnAgentResolution.assuntos`).
-    const doRoteador = {
-      assuntos: router.members.map((m) => ({
-        intentName: m.intentName,
-        description: m.intentDescription,
-        agentId: m.agentId,
-      })),
-      permanencia: router.permanencia,
-    };
-
     // Regra 8: a equipe já falou nesta conversa e o assunto está na lista
     // `nao_reabre_apos_equipe`. O assunto de um agente é o do membro dele.
     const bloqueados = input.equipeFalou === true ? (router.naoReabreAposEquipe ?? []) : [];
@@ -309,6 +299,21 @@ export async function resolveTurnAgent(
       if (bloqueados.length === 0) return null;
       const assuntos = [intentName, ...router.members.filter((m) => m.agentId === agentId).map((m) => m.intentName)];
       return assuntos.find((a): a is string => a !== null && bloqueados.includes(a)) ?? null;
+    };
+
+    // Vai em toda resolução que sai DESTE roteador (`TurnAgentResolution.assuntos`).
+    // Sem os assuntos bloqueados pela regra 8: é desta lista que sai o destino
+    // de `transfer_to_subject`, e a passagem não pode reabrir o que o roteador
+    // não reabre.
+    const doRoteador = {
+      assuntos: router.members
+        .filter((m) => assuntoBloqueado(m.intentName, m.agentId) === null)
+        .map((m) => ({
+          intentName: m.intentName,
+          description: m.intentDescription,
+          agentId: m.agentId,
+        })),
+      permanencia: router.permanencia,
     };
 
     // fallback do router ou genérico — usado pelas regras 4, 5, 6, 7 e 8.
