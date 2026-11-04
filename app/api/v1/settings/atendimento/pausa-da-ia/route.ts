@@ -10,6 +10,10 @@
  * um campo, o outro ou os dois; `{ minutos }` sozinho segue como sempre.
  * `cliente_sem_resposta_max_horas` (1..24, padrão 4) é a idade máxima da
  * mensagem do cliente que essa retomada ainda responde.
+ * `fim_do_dia_seguinte` (booleano) grava `ia_volta_apos_equipe`: depois que
+ * alguém da equipe responde, a IA só volta no fim do dia seguinte ou com
+ * "Devolver ao automático", e o cliente sem resposta vira aviso em vez de
+ * retomada. `false` desliga.
  *
  * Gate = manager+, o mesmo da tela onde o campo mora (Distribuição de
  * atendimento). A escrita vai pelo admin client pelo motivo descrito em
@@ -26,14 +30,17 @@ import { ApiError } from "@/lib/api/types";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import {
+  IA_VOLTA_FIM_DO_DIA_SEGUINTE,
   clienteSemRespostaMaxHorasSchema,
   clienteSemRespostaSchema,
   lerClienteSemRespostaMaxHoras,
   lerClienteSemRespostaMin,
+  lerIaVoltaAposEquipe,
   lerPausaPorRespostaHumanaMin,
   pausaPorRespostaHumanaSchema,
   settingsComClienteSemResposta,
   settingsComClienteSemRespostaMaxHoras,
+  settingsComIaVoltaAposEquipe,
   settingsComPausaPorRespostaHumana,
 } from "@/lib/escalacao/pausa-por-resposta-humana";
 import { requireSupportWrite } from "@/lib/impersonate/support";
@@ -47,13 +54,15 @@ const corpoSchema = z
     minutos: pausaPorRespostaHumanaSchema.optional(),
     cliente_sem_resposta_min: clienteSemRespostaSchema.nullable().optional(),
     cliente_sem_resposta_max_horas: clienteSemRespostaMaxHorasSchema.optional(),
+    fim_do_dia_seguinte: z.boolean().optional(),
   })
   .refine(
     (c) =>
       c.minutos !== undefined ||
       c.cliente_sem_resposta_min !== undefined ||
-      c.cliente_sem_resposta_max_horas !== undefined,
-    { message: "informe minutos, cliente_sem_resposta_min ou cliente_sem_resposta_max_horas" },
+      c.cliente_sem_resposta_max_horas !== undefined ||
+      c.fim_do_dia_seguinte !== undefined,
+    { message: "informe minutos, cliente_sem_resposta_min, cliente_sem_resposta_max_horas ou fim_do_dia_seguinte" },
   );
 
 export async function PATCH(req: NextRequest): Promise<Response> {
@@ -95,18 +104,27 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   const espera = input.cliente_sem_resposta_min === undefined ? esperaAnterior : input.cliente_sem_resposta_min;
   const maxHorasAnterior = lerClienteSemRespostaMaxHoras(orgRow.settings);
   const maxHoras = input.cliente_sem_resposta_max_horas ?? maxHorasAnterior;
-  const estado = { minutos, cliente_sem_resposta_min: espera, cliente_sem_resposta_max_horas: maxHoras };
+  const fimAnterior = lerIaVoltaAposEquipe(orgRow.settings) !== null;
+  const fim = input.fim_do_dia_seguinte ?? fimAnterior;
+  const estado = {
+    minutos,
+    cliente_sem_resposta_min: espera,
+    cliente_sem_resposta_max_horas: maxHoras,
+    fim_do_dia_seguinte: fim,
+  };
 
   // Mesmo valor que já vale: nada mudou, então não grava nem audita.
   const mudouPausa = minutos !== anterior;
   const mudouEspera = espera !== esperaAnterior;
   const mudouMaxHoras = maxHoras !== maxHorasAnterior;
-  if (!mudouPausa && !mudouEspera && !mudouMaxHoras) return ok(estado, { requestId });
+  const mudouFim = fim !== fimAnterior;
+  if (!mudouPausa && !mudouEspera && !mudouMaxHoras && !mudouFim) return ok(estado, { requestId });
 
   let settings: unknown = orgRow.settings;
   if (mudouPausa) settings = settingsComPausaPorRespostaHumana(settings, minutos);
   if (mudouEspera) settings = settingsComClienteSemResposta(settings, espera);
   if (mudouMaxHoras) settings = settingsComClienteSemRespostaMaxHoras(settings, maxHoras);
+  if (mudouFim) settings = settingsComIaVoltaAposEquipe(settings, fim ? IA_VOLTA_FIM_DO_DIA_SEGUINTE : null);
 
   const { error: updErr } = await supabase
     .from("organizations")
@@ -127,6 +145,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       ...(mudouMaxHoras
         ? { cliente_sem_resposta_max_de_horas: maxHorasAnterior, cliente_sem_resposta_max_para_horas: maxHoras }
         : {}),
+      ...(mudouFim ? { fim_do_dia_seguinte_de: fimAnterior, fim_do_dia_seguinte_para: fim } : {}),
     },
   });
 

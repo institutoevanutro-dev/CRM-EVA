@@ -1121,6 +1121,41 @@ motivos de exclusão em `lib/escalacao/devolucao-automatica.ts`. Motivação med
 conversas ativas de um dia estavam em handoff formal e nenhuma foi devolvida — o cliente que
 escreveu de novo ficou sem resposta, com humano ocupado e IA proibida.
 
+**A IA só volta no fim do dia seguinte depois que a equipe fala (opcional, por organização).**
+Com `organizations.settings.atendimento.ia_volta_apos_equipe = "fim_do_dia_seguinte"` (Configurações ›
+Distribuição de atendimento, chave "Depois que a equipe responde, a IA só volta no fim do dia
+seguinte"; ausente = comportamento acima):
+
+- os dois escritores da pausa por resposta humana (tela, `app/api/v1/messages/_handler.ts`, e
+  celular, `pausarIaPorAtendimentoManual`) gravam `bot_silenced_until` até a meia-noite local do
+  dia D+2 no fuso da organização (`fimDoDiaSeguinte`, `lib/escalacao/pausa-por-resposta-humana.ts`),
+  em vez de agora + N minutos. Cada fala nova renova;
+- a devolução por prazo acima não devolve a conversa em que a equipe escreveu depois do handoff
+  (ou que tem pausa finita em vigor) antes desse instante (`esperaDaEquipeMs`,
+  `lib/escalacao/devolucao-automatica.ts`). Handoff sem fala da equipe segue o prazo em minutos;
+- o "cliente sem resposta durante a pausa" (`pausa_cliente_sem_resposta_min`) não devolve mais a
+  conversa à IA: abre um aviso na Central (`agent_inbox_items`, kind `other`, título "Cliente
+  escreveu e ninguém da equipe respondeu", um por mensagem pendente);
+- "Devolver ao automático" segue religando na hora.
+
+Caso medido (03/11/2026): "Assumir" 17:05, atendente pelo celular 17:11, devolução de 15 min às
+17:30, paciente "Ok" às 19:47 e a IA voltou à qualificação por cima da equipe.
+
+**Assuntos que a IA não reabre depois que a equipe falou (opcional, por roteador).**
+`ai_routers.config.nao_reabre_apos_equipe` (lista de nomes de assunto; vazia por padrão). Numa
+conversa com qualquer envio de pessoa (`messages.sent_via` em `crm`, `user`, `external_device`),
+o turno que cairia num desses assuntos vai ao fallback do roteador; se o fallback também está na
+lista, a IA não fala e o turno de entrada passa a conversa à equipe com aviso. Vale também depois
+de "Devolver ao automático". Regra 8 de `lib/agent-engine/agent/resolve-turn-agent.ts`.
+
+**Conversa de negócio e resposta automática (opcional, por roteador).** `ai_routers.config.so_equipe
+= true` oferece ao classificador duas intenções fixas (`negocio_com_a_empresa`,
+`mensagem_automatica`, em `lib/agent-engine/agent/assuntos-so-da-equipe.ts`). Com uma delas,
+confiança ≥ 0,9 e contato sem nada na agenda — ou com a mensagem que abre a conversa se declarando
+robô ou pedindo escolha de menu —, a IA não escreve nada: `performHumanHandoff` (reason
+`assunto_da_equipe`, sem aviso ao contato) e um aviso na Central que diz para usar "Devolver ao
+automático" se for cliente. Regra 9 do mesmo arquivo; execução em `turno-da-equipe.ts`.
+
 ---
 
 ## 8. Guardrails LLM

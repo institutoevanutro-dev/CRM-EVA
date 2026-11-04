@@ -23,6 +23,7 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import {
   lerClienteSemRespostaMaxHoras,
   lerClienteSemRespostaMin,
+  lerIaVoltaAposEquipe,
   lerPausaPorRespostaHumanaMin,
 } from "@/lib/escalacao/pausa-por-resposta-humana";
 import { DEFAULT_VISIBILITY_MODE, ROLE_RANK, type VisibilityMode } from "@/lib/auth/types";
@@ -99,6 +100,7 @@ export default async function AtendimentoSettingsPage() {
             initial={lerPausaPorRespostaHumanaMin(data?.settings)}
             initialEspera={lerClienteSemRespostaMin(data?.settings)}
             initialMaxHoras={lerClienteSemRespostaMaxHoras(data?.settings)}
+            initialFimDoDiaSeguinte={lerIaVoltaAposEquipe(data?.settings) !== null}
           />
           <ChannelRoutingForm initial={channels} />
           <AssinaturaForm initial={{ humanos: assinatura.humanos, ia: assinatura.ia, nome_ia: assinatura.nomeIa }} />

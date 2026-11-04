@@ -4947,6 +4947,12 @@ export const DICIONARIO: Traducoes = {
     es: "De 5 a 240 minutos. Déjelo en blanco para desactivar: así la IA solo vuelve cuando termina la pausa. No aplica a conversaciones tomadas con el botón de asumir.",
   },
   "Quando uma pessoa responde o cliente": { es: "Cuando una persona responde al cliente" },
+  "Depois que a equipe responde, a IA só volta no fim do dia seguinte": {
+    es: "Después de que el equipo responde, la IA solo vuelve al final del día siguiente",
+  },
+  "Ligado: a IA fica fora da conversa até a meia-noite do dia seguinte à última resposta da equipe, ou até alguém clicar em Devolver ao automático. Se o cliente escrever e ninguém responder, abre um aviso na Central em vez de a IA voltar. Se o WhatsApp do celular manda saudação automática, ela conta como resposta da equipe.": {
+    es: "Activado: la IA queda fuera de la conversación hasta la medianoche del día siguiente a la última respuesta del equipo, o hasta que alguien haga clic en Devolver al automático. Si el cliente escribe y nadie responde, se abre un aviso en la Central en lugar de que vuelva la IA. Si el WhatsApp del celular envía un saludo automático, cuenta como respuesta del equipo.",
+  },
   "A IA sai da conversa por um tempo para não responder junto. Vale para resposta pelo celular e pela tela, e cada nova resposta recomeça a contagem.": {
     es: "La IA sale de la conversación por un tiempo para no responder a la vez. Vale para respuestas desde el celular y desde la pantalla, y cada nueva respuesta reinicia la cuenta.",
   },
