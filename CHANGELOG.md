@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.47.0] — 2026-11-04
+
+### Adicionado
+
+- **Chave do Prontuário só para o funil** Novo escopo de chave `prontuario:funil` (Configurações › Chaves de API): abre só as cinco ferramentas que o Prontuário usa para alimentar o funil (listar funis e etapas, criar e atualizar o lead, mover de etapa). Assim a chave de remarcação do Prontuário deixa de precisar de `mcp:read` e `mcp:write`, que abrem o CRM inteiro. Chaves existentes não mudam.
+
 ## [4.46.1] — 2026-11-04
 
 ### Alterado
@@ -8764,7 +8770,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.46.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.47.0...HEAD
+[4.47.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.46.1...v4.47.0
 [4.46.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.46.0...v4.46.1
 [4.46.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.45.0...v4.46.0
 [4.45.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.44.1...v4.45.0
