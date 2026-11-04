@@ -609,6 +609,12 @@ test.describe("Contatos duplicados — juntar pela tela", () => {
     await expect(confirmacao.getByText(NOME_SORRISO_B, { exact: false }).first()).toBeVisible();
     await expect(confirmacao.getByText(/n[ãa]o h[áa] como desfazer/i)).toBeVisible();
     await expect(confirmacao.getByTestId("avisos-da-juncao")).toContainText("não passa para quem fica");
+    // B está ligada ao prontuário: juntar nela exige "São a mesma pessoa" (trava de 04/11).
+    const juntarContatos = confirmacao.getByRole("button", { name: /juntar contatos/i });
+    await expect(confirmacao.getByTestId("juncao-prontuario")).toBeVisible();
+    await expect(juntarContatos).toBeDisabled();
+    await confirmacao.getByRole("checkbox", { name: /são a mesma pessoa/i }).check();
+    await expect(juntarContatos).toBeEnabled();
     await captura(page, "10-confirmacao-na-ficha");
     const resposta = page.waitForResponse(
       (r) => r.url().includes("/api/v1/contacts/merge") && r.request().method() === "POST",

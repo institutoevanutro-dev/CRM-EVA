@@ -397,7 +397,8 @@ test.describe.serial("Inbox: enviar exame ao Prontuário", () => {
       await expect(b.getByTestId("erro-ao-prontuario")).toHaveText(frase);
       await page.waitForTimeout(5_000);
       await expect(b.getByTestId("erro-ao-prontuario")).toBeVisible();
-      await expect(b.getByText("No prontuário")).toHaveCount(0);
+      // Pelo selo, não pelo texto: a frase de erro também contém "no Prontuário".
+      await expect(b.getByTestId("selo-do-prontuario")).toHaveCount(0);
       expect(pedidos.filter((p) => p.message_id === msg[k])).toHaveLength(nPedidos);
       await page.screenshot({ path: path.join(EVIDENCIA, `4-erro-${k}.png`), fullPage: true });
     }
