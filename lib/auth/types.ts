@@ -219,6 +219,14 @@ export interface ActiveOrg {
    */
   paciente_pelo_cadastro?: boolean;
   /**
+   * A integração "Exames do WhatsApp → Prontuário" está acesa nesta
+   * organização (`estadoDosExames` ≠ desligada: as três `PRONTUARIO_*` e a org
+   * certa). Acende também quando a configuração é INVÁLIDA, para o clique dizer
+   * "avise o administrador" em vez de o recurso sumir calado. Só o layout de
+   * `/app` preenche; ausente é desligado. Não é autorização: a rota decide.
+   */
+  exames_ao_prontuario?: boolean;
+  /**
    * O que ESTA organização definiu para si — CAMPO A CAMPO, e só o que ela
    * mesma definiu.
    *

@@ -134,6 +134,24 @@ const COPY: Record<string, { variant: Variant; msg?: string }> = {
   // a rota diz quantos segundos, ou qual é a janela do número.
   bonus_ritmo: { variant: "warning" },
   fora_da_janela_da_fila: { variant: "warning" },
+
+  // ---- Exames do WhatsApp → Prontuário ----
+  //
+  // Sem `msg`: a rota manda a frase de cada desfecho (lib/prontuario/exames.ts).
+  // Configuração é erro (avise o administrador); o resto é espera ou ação da
+  // recepção.
+  paciente_nao_vinculado: { variant: "warning" },
+  vinculo_nao_confirmado: { variant: "warning" },
+  contato_com_varios_pacientes: { variant: "warning" },
+  midia_nao_encontrada: { variant: "warning" },
+  midia_ainda_nao_disponivel: { variant: "warning" },
+  formato_nao_aceito: { variant: "warning" },
+  grande_demais: { variant: "warning" },
+  fora_do_prontuario: { variant: "warning" },
+  prontuario_desligado: { variant: "warning" },
+  prontuario_indisponivel: { variant: "warning" },
+  prontuario_sem_acesso_ao_crm: { variant: "warning" },
+  prontuario_configuracao: { variant: "error" },
 };
 
 /**

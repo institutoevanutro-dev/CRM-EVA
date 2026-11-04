@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { Message } from "@/lib/types/messaging";
 import { CitationButton } from "@/components/ai/CitationButton";
 import { MediaRenderer } from "@/components/inbox/media/MediaRenderer";
+import { ExameNoProntuario } from "@/components/inbox/ExameNoProntuario";
 import { MediaUnavailable } from "@/components/inbox/media/MediaUnavailable";
 import { ContactCard } from "@/components/inbox/media/ContactCard";
 import { resolveSharedContact } from "@/lib/messaging/contact-card";
@@ -70,6 +71,15 @@ interface Props {
   onReenviar?: (m: Message, confirmado: boolean) => Promise<void>;
   /** Gerente para cima reenvia mensagem de colega — a mesma régua da rota. */
   podeReenviarDeOutros?: boolean;
+  /**
+   * Exames do WhatsApp → Prontuário. Desligado por padrão: sem
+   * `onEnviarAoProntuario` não há botão nem dica (a leitura do super-admin não
+   * passa); o selo aparece para qualquer papel. Valores estáveis para o `memo`.
+   */
+  onEnviarAoProntuario?: (m: Message) => void;
+  enviandoAoProntuario?: boolean;
+  quemEnviouAoProntuario?: string | null;
+  erroAoProntuario?: string | null;
 }
 
 /**
@@ -131,6 +141,10 @@ export const MessageBubble = memo(function MessageBubble({
   nomeDoAutor,
   onReenviar,
   podeReenviarDeOutros = false,
+  onEnviarAoProntuario,
+  enviandoAoProntuario = false,
+  quemEnviouAoProntuario = null,
+  erroAoProntuario = null,
 }: Props) {
   const [ocupado, setOcupado] = useState(false);
   const [confirmandoReenvio, setConfirmandoReenvio] = useState(false);
@@ -420,6 +434,14 @@ export const MessageBubble = memo(function MessageBubble({
             {hasMedia && (
               <div className={cn(message.body && "mb-1")}>
                 <MediaRenderer message={message} agora={agora} />
+                <ExameNoProntuario
+                  message={message}
+                  agora={agora}
+                  onEnviar={onEnviarAoProntuario}
+                  enviando={enviandoAoProntuario}
+                  quemEnviou={quemEnviouAoProntuario}
+                  erro={erroAoProntuario}
+                />
               </div>
             )}
 
