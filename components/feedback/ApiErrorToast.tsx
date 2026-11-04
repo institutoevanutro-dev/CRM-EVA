@@ -142,6 +142,7 @@ const COPY: Record<string, { variant: Variant; msg?: string }> = {
   // recepção.
   paciente_nao_vinculado: { variant: "warning" },
   vinculo_nao_confirmado: { variant: "warning" },
+  midia_em_outro_paciente: { variant: "warning" },
   contato_com_varios_pacientes: { variant: "warning" },
   midia_nao_encontrada: { variant: "warning" },
   midia_ainda_nao_disponivel: { variant: "warning" },

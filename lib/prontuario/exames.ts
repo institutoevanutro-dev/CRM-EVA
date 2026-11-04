@@ -65,6 +65,7 @@ export function situacaoDoExame(m: Message, agora: number): SituacaoDoExame | nu
 export const FRASE_DO_CODIGO = {
   paciente_nao_vinculado: "Este contato ainda não está ligado a um paciente no Prontuário.",
   vinculo_nao_confirmado: "Este contato ainda não está confirmado no Prontuário. Peça para confirmar o vínculo lá.",
+  midia_em_outro_paciente: "Este arquivo já está no prontuário de outro paciente. Confira o vínculo com o CRM.",
   contato_com_varios_pacientes: "Este contato está ligado a mais de um paciente no Prontuário; corrija o vínculo lá.",
   midia_nao_encontrada: "O Prontuário não encontrou este arquivo na conversa. Se ele acabou de chegar, tente em instantes.",
   midia_ainda_nao_disponivel: "O arquivo ainda está chegando. Tente em instantes.",

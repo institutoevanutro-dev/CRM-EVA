@@ -207,6 +207,7 @@ export const ApiErrorCodes = {
   // Nunca 429/503 ao navegador: o apiClient repetiria o POST sozinho.
   paciente_nao_vinculado: "paciente_nao_vinculado", // 409
   vinculo_nao_confirmado: "vinculo_nao_confirmado", // 409: o Prontuário ainda não confirmou o vínculo
+  midia_em_outro_paciente: "midia_em_outro_paciente", // 409: o arquivo já está no prontuário de outro paciente
   contato_com_varios_pacientes: "contato_com_varios_pacientes", // 409
   midia_nao_encontrada: "midia_nao_encontrada", // 422
   formato_nao_aceito: "formato_nao_aceito", // 422

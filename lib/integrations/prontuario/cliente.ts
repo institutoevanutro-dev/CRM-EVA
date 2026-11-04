@@ -59,6 +59,7 @@ const SEM_NOVA_TENTATIVA_503 = new Set(["integracao_desligada", "crm_nao_configu
 export type CodigoDoEnvio =
   | "paciente_nao_vinculado"
   | "vinculo_nao_confirmado"
+  | "midia_em_outro_paciente"
   | "contato_com_varios_pacientes"
   | "midia_nao_encontrada"
   | "midia_ainda_nao_disponivel"
@@ -151,6 +152,8 @@ function traduzir(t: Tentativa): CodigoDoEnvio {
       if (c === "contato_com_varios_pacientes") return "contato_com_varios_pacientes";
       if (c === "midia_ainda_nao_disponivel") return "midia_ainda_nao_disponivel";
       if (c === CODIGO_DO_PRONTUARIO_VINCULO_NAO_CONFIRMADO) return "vinculo_nao_confirmado";
+      // A mensagem já está no prontuário de OUTRO paciente (índice owner + source_message_id, PR #112).
+      if (c === "midia_em_outro_paciente") return "midia_em_outro_paciente";
       return "prontuario_indisponivel";
     case 422:
       return c === "formato_nao_aceito" ? "formato_nao_aceito" : "prontuario_indisponivel";

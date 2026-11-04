@@ -49,6 +49,7 @@ const JANELA_SEGUNDOS = 60;
 const STATUS_DO_CODIGO: Record<CodigoDoEnvio, number> = {
   paciente_nao_vinculado: 409,
   vinculo_nao_confirmado: 409,
+  midia_em_outro_paciente: 409,
   contato_com_varios_pacientes: 409,
   midia_ainda_nao_disponivel: 409,
   midia_nao_encontrada: 422,

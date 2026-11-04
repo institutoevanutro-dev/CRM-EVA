@@ -36,6 +36,7 @@ O CRM chama `POST {PRONTUARIO_URL}/api/integracoes/crm/exames` com `Authorizatio
 | 201 / 200 `ja_existia` | 201 / 200 com `{message_id, ja_existia, enviado_em, enviado_por_user_id}` (sem `exam_id`) |
 | 404 `paciente_nao_vinculado` | 409 `paciente_nao_vinculado` |
 | 409 vínculo não confirmado (`CODIGO_DO_PRONTUARIO_VINCULO_NAO_CONFIRMADO`) | 409 `vinculo_nao_confirmado` |
+| 409 `midia_em_outro_paciente` (o arquivo já está no prontuário de outro paciente) | 409 `midia_em_outro_paciente`, sem nova tentativa |
 | 404 `midia_nao_encontrada` | 422 `midia_nao_encontrada` |
 | 409 `contato_com_varios_pacientes` / `midia_ainda_nao_disponivel` | 409 com o mesmo código |
 | 422 `formato_nao_aceito` / 413 `grande_demais` | 422 com o mesmo código |

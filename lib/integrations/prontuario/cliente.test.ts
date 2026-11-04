@@ -93,6 +93,7 @@ describe("enviarExameAoProntuario: cada resposta do Prontuário (tabela 5.3)", (
     ["404 sem código", [json(404, "<html>404</html>")], "prontuario_configuracao", 1],
     ["409 contato_com_varios_pacientes", [erro(409, "contato_com_varios_pacientes")], "contato_com_varios_pacientes", 1],
     ["409 midia_ainda_nao_disponivel", [erro(409, "midia_ainda_nao_disponivel")], "midia_ainda_nao_disponivel", 1],
+    ["409 midia_em_outro_paciente", [erro(409, "midia_em_outro_paciente")], "midia_em_outro_paciente", 1],
     ["409 vínculo não confirmado", [erro(409, CODIGO_DO_PRONTUARIO_VINCULO_NAO_CONFIRMADO)], "vinculo_nao_confirmado", 1],
     ["422 formato_nao_aceito", [erro(422, "formato_nao_aceito")], "formato_nao_aceito", 1],
     ["413 grande_demais", [erro(413, "grande_demais")], "grande_demais", 1],

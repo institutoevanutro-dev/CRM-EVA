@@ -44,6 +44,9 @@ export const DICIONARIO: Traducoes = {
   "Este contato ainda não está ligado a um paciente no Prontuário.": {
     es: "Este contacto todavía no está vinculado a un paciente en la historia clínica.",
   },
+  "Este arquivo já está no prontuário de outro paciente. Confira o vínculo com o CRM.": {
+    es: "Este archivo ya está en la historia clínica de otro paciente. Revise el vínculo con el CRM.",
+  },
   "Este contato ainda não está confirmado no Prontuário. Peça para confirmar o vínculo lá.": {
     es: "Este contacto aún no está confirmado en la historia clínica. Pida que confirmen el vínculo allí.",
   },
