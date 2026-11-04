@@ -55,3 +55,33 @@ export function situacaoDoExame(m: Message, agora: number): SituacaoDoExame | nu
   if (m.media_size_bytes > LIMITE_DO_PRONTUARIO_BYTES) return "grande";
   return "botao";
 }
+
+/**
+ * As frases de cada desfecho do envio, em português (a chave do dicionário).
+ * Moram aqui, e não na rota, porque o espanhol de cada uma é conferido em
+ * `lib/prontuario/exames.test.ts` (o gate de i18n não varre `app/api`).
+ * O CRM decide pelo código; nunca repassa o texto do Prontuário.
+ */
+export const FRASE_DO_CODIGO = {
+  paciente_nao_vinculado: "Este contato ainda não está ligado a um paciente no Prontuário.",
+  vinculo_nao_confirmado: "Este contato ainda não está confirmado no Prontuário. Peça para confirmar o vínculo lá.",
+  contato_com_varios_pacientes: "Este contato está ligado a mais de um paciente no Prontuário; corrija o vínculo lá.",
+  midia_nao_encontrada: "O Prontuário não encontrou este arquivo na conversa. Se ele acabou de chegar, tente em instantes.",
+  midia_ainda_nao_disponivel: "O arquivo ainda está chegando. Tente em instantes.",
+  formato_nao_aceito: "O Prontuário aceita só PDF, JPG ou PNG. Peça ao paciente um PDF ou foto comum.",
+  grande_demais: "O arquivo passa de 10 MB, o limite do Prontuário.",
+  prontuario_configuracao: "A integração com o Prontuário não está configurada. Avise o administrador.",
+  prontuario_indisponivel: "O Prontuário não respondeu. Tente de novo em instantes.",
+  limite_de_pedidos: "O Prontuário recebeu muitos envios agora. Tente em um minuto.",
+  prontuario_sem_acesso_ao_crm: "O Prontuário não conseguiu buscar o arquivo no CRM. Tente de novo em instantes.",
+  fora_do_prontuario:
+    "Este arquivo não pode ir ao prontuário: só PDF ou foto de até 10 MB recebidos pelo WhatsApp nos últimos 60 dias.",
+  prontuario_desligado: "O envio ao prontuário não está ligado nesta organização.",
+  so_da_equipe: "O envio ao prontuário é só da equipe da clínica.",
+  mensagem_indisponivel: "Mensagem indisponível.",
+  falha_interna: "Não foi possível enviar agora.",
+} as const;
+
+export type ChaveDaFrase = keyof typeof FRASE_DO_CODIGO;
+
+export const fraseDoCodigo = (c: ChaveDaFrase, t: (s: string) => string): string => t(FRASE_DO_CODIGO[c]);

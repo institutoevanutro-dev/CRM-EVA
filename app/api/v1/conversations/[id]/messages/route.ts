@@ -11,6 +11,7 @@ import { auditarLeitura } from "@/lib/audit/leitura";
 import { ehAberturaDeLeitura } from "@/lib/audit/releitura";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { juntarExamesEnviados } from "@/lib/prontuario/exames-enviados";
 import { listMessagesQuerySchema } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
 
@@ -76,7 +77,9 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
       requestId,
       metadata: { mensagens: messages.length },
     });
-    return ok(messages, { requestId, meta: { cursor, has_more } });
+    // O selo do Prontuário (migration 0402) entra aqui, fora do handler compartilhado.
+    const comSelo = await juntarExamesEnviados(activeOrg.orgId, messages);
+    return ok(comSelo, { requestId, meta: { cursor, has_more } });
   } catch (err) {
     if (err instanceof ApiError) {
       return fail(err.code, err.message, err.status, { requestId });

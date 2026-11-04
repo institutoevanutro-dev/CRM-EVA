@@ -199,6 +199,19 @@ export const ApiErrorCodes = {
   // ─── Exames do WhatsApp → Prontuário ───
   // 409: a mídia ainda não foi guardada pelo CRM (o worker de persistência não terminou).
   midia_ainda_nao_disponivel: "midia_ainda_nao_disponivel",
+  // Desfechos do botão "Enviar ao prontuário" (POST /api/v1/messages/{id}/prontuario).
+  // Nunca 429/503 ao navegador: o apiClient repetiria o POST sozinho.
+  paciente_nao_vinculado: "paciente_nao_vinculado", // 409
+  vinculo_nao_confirmado: "vinculo_nao_confirmado", // 409: o Prontuário ainda não confirmou o vínculo
+  contato_com_varios_pacientes: "contato_com_varios_pacientes", // 409
+  midia_nao_encontrada: "midia_nao_encontrada", // 422
+  formato_nao_aceito: "formato_nao_aceito", // 422
+  grande_demais: "grande_demais", // 422: acima de 10 MiB
+  fora_do_prontuario: "fora_do_prontuario", // 422: não é PDF/foto recebida pelo WhatsApp nos últimos 60 dias
+  prontuario_desligado: "prontuario_desligado", // 409: a integração não está ligada nesta organização
+  prontuario_configuracao: "prontuario_configuracao", // 502: configuração inválida aqui ou lá
+  prontuario_indisponivel: "prontuario_indisponivel", // 502
+  prontuario_sem_acesso_ao_crm: "prontuario_sem_acesso_ao_crm", // 502: o Prontuário não conseguiu ler o arquivo no CRM
 
   // 500 / upstream
   internal_error: "internal_error",

@@ -41,6 +41,40 @@ export const DICIONARIO: Traducoes = {
   "Prontuário: baixar PDF e fotos que o paciente mandou pelo WhatsApp": {
     es: "Historia clínica: descargar PDF y fotos que el paciente envió por WhatsApp",
   },
+  "Este contato ainda não está ligado a um paciente no Prontuário.": {
+    es: "Este contacto todavía no está vinculado a un paciente en la historia clínica.",
+  },
+  "Este contato ainda não está confirmado no Prontuário. Peça para confirmar o vínculo lá.": {
+    es: "Este contacto aún no está confirmado en la historia clínica. Pida que confirmen el vínculo allí.",
+  },
+  "Este contato está ligado a mais de um paciente no Prontuário; corrija o vínculo lá.": {
+    es: "Este contacto está vinculado a más de un paciente en la historia clínica; corrija el vínculo allí.",
+  },
+  "O Prontuário não encontrou este arquivo na conversa. Se ele acabou de chegar, tente em instantes.": {
+    es: "La historia clínica no encontró este archivo en la conversación. Si acaba de llegar, intente en unos instantes.",
+  },
+  "O arquivo ainda está chegando. Tente em instantes.": { es: "El archivo todavía está llegando. Intente en unos instantes." },
+  "O Prontuário aceita só PDF, JPG ou PNG. Peça ao paciente um PDF ou foto comum.": {
+    es: "La historia clínica solo acepta PDF, JPG o PNG. Pida al paciente un PDF o una foto común.",
+  },
+  "O arquivo passa de 10 MB, o limite do Prontuário.": { es: "El archivo supera los 10 MB, el límite de la historia clínica." },
+  "A integração com o Prontuário não está configurada. Avise o administrador.": {
+    es: "La integración con la historia clínica no está configurada. Avise al administrador.",
+  },
+  "O Prontuário não respondeu. Tente de novo em instantes.": { es: "La historia clínica no respondió. Intente de nuevo en unos instantes." },
+  "O Prontuário recebeu muitos envios agora. Tente em um minuto.": {
+    es: "La historia clínica recibió muchos envíos ahora. Intente en un minuto.",
+  },
+  "O Prontuário não conseguiu buscar o arquivo no CRM. Tente de novo em instantes.": {
+    es: "La historia clínica no pudo obtener el archivo del CRM. Intente de nuevo en unos instantes.",
+  },
+  "Este arquivo não pode ir ao prontuário: só PDF ou foto de até 10 MB recebidos pelo WhatsApp nos últimos 60 dias.": {
+    es: "Este archivo no puede ir a la historia clínica: solo PDF o foto de hasta 10 MB recibidos por WhatsApp en los últimos 60 días.",
+  },
+  "O envio ao prontuário não está ligado nesta organização.": { es: "El envío a la historia clínica no está activado en esta organización." },
+  "O envio ao prontuário é só da equipe da clínica.": { es: "El envío a la historia clínica es solo del equipo de la clínica." },
+  "Mensagem indisponível.": { es: "Mensaje no disponible." },
+  "Não foi possível enviar agora.": { es: "No fue posible enviar ahora." },
   // O fio do Inbox acompanha a última mensagem (porte do original #3209).
   "Mensagens da conversa": { es: "Mensajes de la conversación" },
   "Novas mensagens · Ir para o fim": { es: "Mensajes nuevos · Ir al final" },

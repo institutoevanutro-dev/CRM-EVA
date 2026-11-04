@@ -59,3 +59,17 @@ describe("situacaoDoExame", () => {
     expect(situacaoDoExame(msg({ media_mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), AGORA)).toBeNull();
   });
 });
+
+describe("FRASE_DO_CODIGO", () => {
+  it("toda frase tem espanhol, e o português não muda", async () => {
+    const { FRASE_DO_CODIGO, fraseDoCodigo } = await import("./exames");
+    const { DICIONARIO, traduzir } = await import("@/lib/i18n/dicionario");
+    for (const [codigo, frase] of Object.entries(FRASE_DO_CODIGO)) {
+      expect(DICIONARIO[frase]?.es, codigo).toBeTruthy();
+      expect(traduzir(frase, "pt-BR")).toBe(frase);
+    }
+    expect(fraseDoCodigo("vinculo_nao_confirmado", (s) => traduzir(s, "es"))).toBe(
+      "Este contacto aún no está confirmado en la historia clínica. Pida que confirmen el vínculo allí.",
+    );
+  });
+});

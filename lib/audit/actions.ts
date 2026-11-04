@@ -863,6 +863,11 @@ export const AUDIT_ACTIONS = [
   // tamanho, contato). Nunca nome do arquivo nem conteúdo.
   "prontuario.media_listed",
   "prontuario.media_downloaded",
+  // O botão "Enviar ao prontuário": o envio confirmado (metadata: contact_id,
+  // ja_existia) e TODA tentativa sem sucesso (contact_id, codigo, status e
+  // código do Prontuário, tentativas). Nunca exam_id, nome nem conteúdo.
+  "prontuario.exam_sent",
+  "prontuario.exam_send_failed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

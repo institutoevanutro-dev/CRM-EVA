@@ -38,6 +38,8 @@ const LEITURAS: Array<[arquivo: string, metodo: string, acao: string]> = [
 const MUTACOES: Array<[arquivo: string, metodo: string, acao: string]> = [
   ["app/api/v1/conversations/[id]/media/route.ts", "POST", "conversation.media_uploaded"],
   ["app/api/v1/audit/export/route.ts", "GET", "audit.exported"],
+  ["app/api/v1/messages/[id]/prontuario/route.ts", "POST", "prontuario.exam_sent"],
+  ["app/api/v1/messages/[id]/prontuario/route.ts", "POST", "prontuario.exam_send_failed"],
 ];
 
 function corpoDoMetodo(arquivo: string, metodo: string): string {
