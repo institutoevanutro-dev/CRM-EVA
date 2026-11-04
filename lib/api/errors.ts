@@ -196,6 +196,10 @@ export const ApiErrorCodes = {
   campanha_conteudo_invalido: "campanha_conteudo_invalido", // 422: texto vazio ou variável que não existe
   campanha_base_legal_invalida: "campanha_base_legal_invalida", // 422: interesse legítimo sem referência da LIA
 
+  // ─── Exames do WhatsApp → Prontuário ───
+  // 409: a mídia ainda não foi guardada pelo CRM (o worker de persistência não terminou).
+  midia_ainda_nao_disponivel: "midia_ainda_nao_disponivel",
+
   // 500 / upstream
   internal_error: "internal_error",
   upstream_unavailable: "upstream_unavailable",

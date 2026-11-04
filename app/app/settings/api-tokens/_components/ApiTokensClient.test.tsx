@@ -41,6 +41,19 @@ it("oferece a chave só do Financeiro e envia apenas esse escopo, por 365 dias",
   }));
 });
 
+it("a chave dos exames do Prontuário sai só com prontuario:media:read", async () => {
+  render(<ApiTokensClient />);
+  fireEvent.click(screen.getByRole("button", { name: "Criar token" }));
+  fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Prontuário VPS exames WhatsApp" } });
+  const opcao = screen.getByRole("button", { name: /^prontuario:media:read —/ });
+  expect(opcao).toHaveAttribute("title", "Prontuário: baixar PDF e fotos que o paciente mandou pelo WhatsApp");
+  fireEvent.click(opcao);
+  fireEvent.click(screen.getByRole("button", { name: /^Criar$/ }));
+  await waitFor(() => expect(create).toHaveBeenLastCalledWith({
+    name: "Prontuário VPS exames WhatsApp", scopes: ["prontuario:media:read"], expires_in_days: undefined,
+  }));
+});
+
 it("o contrato de criação aceita a chave do Financeiro do jeito que a tela a envia", () => {
   expect(createApiTokenSchema.parse({ name: "Financeiro leitura", scopes: ["financeiro:contatos"], expires_in_days: 365 }))
     .toEqual({ name: "Financeiro leitura", scopes: ["financeiro:contatos"], expires_in_days: 365 });

@@ -858,6 +858,11 @@ export const AUDIT_ACTIONS = [
    * lista de Duplicados. A trilha guarda só os dois ids, nunca nome nem telefone.
    */
   "contact.duplicate_dismissed",
+  // Exames do WhatsApp → Prontuário. LEITURA pela chave de mídia do Prontuário
+  // (lib/audit/leitura.ts): a lista (ids, quantidade, dias) e o arquivo (mime,
+  // tamanho, contato). Nunca nome do arquivo nem conteúdo.
+  "prontuario.media_listed",
+  "prontuario.media_downloaded",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

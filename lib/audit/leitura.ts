@@ -20,6 +20,8 @@ export const ACOES_DE_LEITURA = [
   "conversation.exported",
   "message.media_viewed",
   "prontuario.contact_read",
+  "prontuario.media_listed",
+  "prontuario.media_downloaded",
   "lgpd.request_previewed",
 ] as const;
 

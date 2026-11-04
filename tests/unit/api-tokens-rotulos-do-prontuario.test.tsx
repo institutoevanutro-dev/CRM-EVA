@@ -35,6 +35,7 @@ describe("rótulos de escopo da tela de tokens", () => {
     // O rótulo de cada escopo mora no `title` do botão dele.
     expect(screen.getByTitle("Prontuário: pesquisar cadastro de contatos")).toBeInTheDocument();
     expect(screen.getByTitle("Prontuário: criar e atualizar cadastro de contatos")).toBeInTheDocument();
+    expect(screen.getByTitle("Prontuário: baixar PDF e fotos que o paciente mandou pelo WhatsApp")).toBeInTheDocument();
     // Controle: o irmão que já dizia "Prontuário" segue igual, então o diálogo abriu mesmo.
     expect(screen.getByTitle("Prontuário: ler compromissos da agenda")).toBeInTheDocument();
   });

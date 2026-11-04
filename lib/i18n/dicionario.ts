@@ -37,6 +37,10 @@ import type { Idioma } from "./idiomas";
 type Traducoes = Record<string, Partial<Record<Exclude<Idioma, "pt-BR">, string>>>;
 
 export const DICIONARIO: Traducoes = {
+  // Exames do WhatsApp → Prontuário (migration 0402). "Prontuário" = "Historia clínica".
+  "Prontuário: baixar PDF e fotos que o paciente mandou pelo WhatsApp": {
+    es: "Historia clínica: descargar PDF y fotos que el paciente envió por WhatsApp",
+  },
   // O fio do Inbox acompanha a última mensagem (porte do original #3209).
   "Mensagens da conversa": { es: "Mensajes de la conversación" },
   "Novas mensagens · Ir para o fim": { es: "Mensajes nuevos · Ir al final" },
