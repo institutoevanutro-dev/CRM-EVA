@@ -76,6 +76,7 @@ export const DICIONARIO: Traducoes = {
   "Mensagem indisponível.": { es: "Mensaje no disponible." },
   "Não foi possível enviar agora.": { es: "No fue posible enviar ahora." },
   "Enviar ao prontuário": { es: "Enviar a la historia clínica" },
+  "Enviando ao prontuário…": { es: "Enviando a la historia clínica…" },
   "No prontuário": { es: "En la historia clínica" },
   "por {nome} · {data}": { es: "por {nome} · {data}" },
   "já estava lá · conferido por {nome} · {data}": { es: "ya estaba allí · confirmado por {nome} · {data}" },

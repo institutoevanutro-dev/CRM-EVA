@@ -74,7 +74,7 @@ export function ExameNoProntuario({ message, agora, onEnviar, enviando = false, 
   return (
     <div className="mt-1 flex flex-col items-start gap-1">
       {enviando ? (
-        <Button size="default" variant="secondary" disabled aria-busy="true">
+        <Button size="default" variant="secondary" disabled aria-busy="true" title={t("Enviando ao prontuário…")}>
           <CircleNotch className="motion-safe:animate-spin" aria-hidden />
           {t("Enviando…")}
         </Button>
