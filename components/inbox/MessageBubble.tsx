@@ -332,6 +332,7 @@ export const MessageBubble = memo(function MessageBubble({
       <div
         // Identidade, não aparência: specs contam bolhas por este id, não pela classe.
         data-testid="message-bubble"
+        data-message-id={message.id}
         className={cn(
           "max-w-[75%] min-w-0 text-sm",
           isBareSticker

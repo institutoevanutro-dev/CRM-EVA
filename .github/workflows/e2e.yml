@@ -836,6 +836,7 @@ jobs:
         webhooks.spec.ts
         zona-de-perigo-apaga-dados-de-teste.spec.ts
         roteamento-por-canal.spec.ts
+        inbox-enviar-exame-ao-prontuario.spec.ts
 
       FORA_DO_CI: >-
         vps-fresh-onboarding.spec.ts
