@@ -83,12 +83,14 @@ export interface LoadedRouter {
    */
   naoReabreJanelaDias?: number;
   /**
-   * `config.so_equipe === true`: o classificador também conhece as intenções
-   * fixas do produto (`ASSUNTOS_SO_DA_EQUIPE`, conversa de negócio e mensagem
-   * automática), e o turno que cai nelas passa à equipe sem resposta da IA.
-   * Desligado por padrão: o prompt do roteador fica byte a byte o de sempre.
+   * `config.so_equipe`: o classificador também conhece as intenções fixas do
+   * produto (`ASSUNTOS_SO_DA_EQUIPE`, conversa de negócio e mensagem
+   * automática). `true` = o turno que cai nelas passa à equipe sem resposta da
+   * IA; `'observar'` = só registra (`turno_so_da_equipe_observado`) e a IA
+   * atende como sempre, para medir o falso positivo antes de ligar. Desligado
+   * por padrão: o prompt do roteador fica byte a byte o de sempre.
    */
-  soEquipe?: boolean;
+  soEquipe?: boolean | 'observar';
 }
 
 /** `config.permanencia_expira_horas` ausente ou fora da forma. */
@@ -239,8 +241,8 @@ async function montar(
     fallbackAgentId: router.fallback_agent_id,
     naoReabreAposEquipe,
     naoReabreJanelaDias,
-    // Só o booleano exato liga: "sim", 1 e afins ficam desligados.
-    soEquipe: cfg.so_equipe === true,
+    // Só o booleano exato ou "observar": "sim", 1 e afins ficam desligados.
+    soEquipe: cfg.so_equipe === true ? true : cfg.so_equipe === 'observar' ? 'observar' : false,
     members: memberRows.map((m) => ({
       agentId: m.agent_id,
       intentName: m.intent_name,

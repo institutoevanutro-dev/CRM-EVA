@@ -86,6 +86,9 @@
  *      declara robô, ou é menu de robô (instrução de escolha E duas opções
  *      numeradas), dá o mesmo desfecho sem modelo.
  *      Abaixo do corte, a intenção fixa vale como "nenhuma".
+ *      Com `so_equipe: "observar"` a mesma decisão só vai ao log
+ *      (`turno_so_da_equipe_observado`, com o motivo) e o turno segue como se
+ *      a flag estivesse desligada: nenhum aviso, nada passa à equipe.
  *
  * Robustez: qualquer erro inesperado no branch do router (DB fora do ar,
  * shape quebrado) NUNCA derruba o turno — cai no `loadPublishedAgentConfig`
@@ -229,7 +232,7 @@ export function ehTurnoSoDaEquipe(
   fatos: string | null,
 ): boolean {
   return (
-    router.soEquipe === true &&
+    (router.soEquipe === true || router.soEquipe === 'observar') &&
     verdict !== null &&
     ehAssuntoFixoSoDaEquipe(verdict.intentName) &&
     verdict.confidence >= Math.max(router.minConfidence, CONFIANCA_MINIMA_SO_EQUIPE) &&
@@ -505,17 +508,23 @@ export async function resolveTurnAgent(
     // Regra 9, sem modelo: a mensagem que ABRE a conversa se declara robô ou
     // é menu de robô (instrução de escolha + duas opções numeradas). Só a
     // instrução é gente citando menu, e cala paciente.
-    const soEquipe = (intentName: string, confidence: number): TurnAgentResolution => {
-      deps.log.info('turno_so_da_equipe', { routerId: router.id, intentName, confidence });
+    // No modo 'observar' a decisão só vai ao log, e o turno segue como sempre.
+    const soEquipe = (intentName: string, confidence: number, motivo: string): TurnAgentResolution | null => {
+      if (router.soEquipe === 'observar') {
+        deps.log.info('turno_so_da_equipe_observado', { routerId: router.id, intentName, confidence, motivo });
+        return null;
+      }
+      deps.log.info('turno_so_da_equipe', { routerId: router.id, intentName, confidence, motivo });
       return { config: null, routerId: router.id, intentName, confidence, outcome: 'so_equipe', ...doRoteador };
     };
-    if (
-      router.soEquipe === true &&
-      input.semSaida === true &&
-      semNadaNaAgenda(fatos) &&
-      (ehMensagemDeRobo(input.signal) || ehMenuDeRoboComOpcoes(input.signal))
-    ) {
-      return soEquipe('mensagem_automatica', 1);
+    if ((router.soEquipe === true || router.soEquipe === 'observar') && input.semSaida === true && semNadaNaAgenda(fatos)) {
+      const motivo = ehMensagemDeRobo(input.signal)
+        ? 'autodeclaracao_de_robo'
+        : ehMenuDeRoboComOpcoes(input.signal)
+          ? 'menu_de_robo'
+          : null;
+      const r = motivo === null ? null : soEquipe('mensagem_automatica', 1, motivo);
+      if (r !== null) return r;
     }
 
     // classifica — inclusive com sticky ativo, pra detectar troca de assunto (regra 2).
@@ -531,7 +540,10 @@ export async function resolveTurnAgent(
     );
     // Regra 9: negócio ou mensagem automática, com confiança alta e contato sem
     // agenda. Antes da permanência: vale também com agente atual.
-    if (ehTurnoSoDaEquipe(router, veredito, fatos)) return soEquipe(veredito!.intentName!, veredito!.confidence);
+    if (ehTurnoSoDaEquipe(router, veredito, fatos)) {
+      const r = soEquipe(veredito!.intentName!, veredito!.confidence, 'classificador');
+      if (r !== null) return r;
+    }
     // Intenção fixa do produto (`config.so_equipe`) não tem agente: aqui ela
     // vale como "nenhuma". Sem isto o `member!` abaixo quebraria.
     const verdict: IntentVerdict | null =

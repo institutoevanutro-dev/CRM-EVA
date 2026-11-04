@@ -270,7 +270,7 @@ describe('classifyIntent — provedor do classificador', () => {
 
 describe("classifyIntent com config.so_equipe", () => {
   const log = { log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never };
-  const chamar = async (r: typeof router & { soEquipe?: boolean }, texto: string) => {
+  const chamar = async (r: typeof router & { soEquipe?: boolean | 'observar' }, texto: string) => {
     const runModelCall = vi.fn().mockResolvedValue({ result: { text: texto } });
     const out = await classifyIntent({} as never, {} as never,
       { tenantId: 'o1', leadId: 'l1', jobId: 'j1', router: r, signal: 'Somos distribuidores de luvas' },
@@ -289,10 +289,19 @@ describe("classifyIntent com config.so_equipe", () => {
     const { out, prompt } = await chamar({ ...router, soEquipe: true }, '{"intent":"negocio_com_a_empresa","confidence":0.97}');
     expect(prompt).toContain('- negocio_com_a_empresa:');
     expect(prompt).toContain('- mensagem_automatica:');
-    expect(prompt).toContain('NÃO inclui quem quer ser atendido');
+    // M3: as descrições dizem o que NÃO é, com exemplos de cliente.
+    expect(prompt).toContain('NÃO inclui cliente ou paciente');
+    expect(prompt).toContain('vocês têm parceria com o meu convênio?');
+    expect(prompt).toContain('NÃO inclui perguntas do cliente sobre o NOSSO horário, valores ou opções');
     expect(out).toEqual({ intentName: 'negocio_com_a_empresa', confidence: 0.97 });
     expect(ehAssuntoFixoSoDaEquipe('mensagem_automatica')).toBe(true);
     expect(ehAssuntoFixoSoDaEquipe('vendas')).toBe(false);
     expect(ASSUNTOS_SO_DA_EQUIPE.map((m) => m.intentName)).toEqual(['negocio_com_a_empresa', 'mensagem_automatica']);
+  });
+
+  it("'observar': o classificador também recebe as intenções fixas (é o veredito que se mede)", async () => {
+    const { out, prompt } = await chamar({ ...router, soEquipe: 'observar' }, '{"intent":"mensagem_automatica","confidence":0.95}');
+    expect(prompt).toContain('- mensagem_automatica:');
+    expect(out).toEqual({ intentName: 'mensagem_automatica', confidence: 0.95 });
   });
 });

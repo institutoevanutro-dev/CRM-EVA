@@ -28,7 +28,10 @@ export interface IntentVerdict {
 
 /** As intenções que este roteador oferece ao classificador. */
 function intencoesDoRoteador(router: Pick<LoadedRouter, 'members' | 'soEquipe'>): RouterMember[] {
-  return router.soEquipe === true ? [...router.members, ...ASSUNTOS_SO_DA_EQUIPE] : router.members;
+  // No modo 'observar' também: é o veredito do classificador que se mede.
+  return router.soEquipe === true || router.soEquipe === 'observar'
+    ? [...router.members, ...ASSUNTOS_SO_DA_EQUIPE]
+    : router.members;
 }
 
 /** Instrução final fixa — pede JSON estrito, marcador estável pros testes/prompt. */

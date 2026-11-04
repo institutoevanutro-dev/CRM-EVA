@@ -46,7 +46,7 @@ const deps = {
   llmCfg: {}, crmCfg: {}, knobs: {}, clock: () => AGORA,
 } as unknown as InboundTurnDeps;
 
-const roteador = (soEquipe: boolean) => ({
+const roteador = (soEquipe: boolean | 'observar') => ({
   id: 'r1', name: 'R', classifierModel: null, classifierProvider: null, sticky: true, minConfidence: 0.8,
   permanencia: 'agente', interrompe: ['queixa'], permanenciaExpiraHoras: 24, fallbackAgentId: 'agent-recepcao',
   naoReabreAposEquipe: [], soEquipe,
@@ -110,6 +110,19 @@ describe('turno de entrada com config.so_equipe', () => {
  * é paciente, não robô. Antes, `temInstrucaoDeMenu` sozinha calava estas frases
  * (abertura da conversa, sem agenda) sem chamar modelo nenhum.
  */
+describe("config.so_equipe = 'observar'", () => {
+  it('fornecedor (0,95): NÃO passa à equipe, sem aviso; o turno segue para o agente e o log registra', async () => {
+    mocks.router.mockResolvedValue(roteador('observar'));
+    mocks.classify.mockResolvedValue({ intentName: 'negocio_com_a_empresa', confidence: 0.95 });
+    await expect(
+      createInboundTurnHandler(deps)(job as never, pool('Somos uma distribuidora fictícia, segue nosso catálogo') as never, { workerId: 'w' }),
+    ).rejects.toThrow();
+    expect(mocks.perform).not.toHaveBeenCalled();
+    expect(mocks.byId).toHaveBeenCalled();
+    expect(deps.log.info).toHaveBeenCalledWith('turno_so_da_equipe_observado', expect.objectContaining({ motivo: 'classificador' }));
+  });
+});
+
 describe('1ª mensagem com instrução de menu mas sem opções numeradas é paciente', () => {
   it.each([
     'qual a opção desejada pra quem tem testa marcada?',

@@ -142,8 +142,9 @@ describe('loadActiveRouter — modo de permanência', () => {
     }
   });
 
-  it('so_equipe: só o booleano true liga', async () => {
+  it('so_equipe: só o booleano true liga; "observar" só registra', async () => {
     expect((await comConfig({ so_equipe: true }))?.soEquipe).toBe(true);
+    expect((await comConfig({ so_equipe: 'observar' }))?.soEquipe).toBe('observar');
     for (const v of [undefined, false, 'sim', 1]) {
       expect((await comConfig({ so_equipe: v }))?.soEquipe).toBe(false);
     }

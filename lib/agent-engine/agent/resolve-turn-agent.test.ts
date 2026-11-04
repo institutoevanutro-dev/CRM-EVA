@@ -1075,6 +1075,13 @@ describe('resolveTurnAgent: config.so_equipe', () => {
     signal?: string;
   } = {}) {
     const classifyIntent = vi.fn().mockResolvedValue(over.verdict ?? { intentName: 'negocio_com_a_empresa', confidence: 0.95 });
+    const deps = makeDeps({
+      loadActiveRouter: vi.fn().mockResolvedValue(router({ soEquipe: true, fallbackAgentId: 'agent-suporte', ...over.router })),
+      loadPublishedAgentConfigById: idAwareLoader(),
+      agenteDaCampanha: vi.fn().mockResolvedValue(null),
+      classifyIntent,
+      buildFatosDoContato: vi.fn().mockResolvedValue(over.fatos === undefined ? FATOS : over.fatos),
+    });
     const out = await resolveTurnAgent({} as never, {} as never,
       {
         ...baseInput,
@@ -1083,14 +1090,8 @@ describe('resolveTurnAgent: config.so_equipe', () => {
         stickyIntent: over.sticky ? 'vendas' : null,
         semSaida: over.semSaida ?? false,
       },
-      makeDeps({
-        loadActiveRouter: vi.fn().mockResolvedValue(router({ soEquipe: true, fallbackAgentId: 'agent-suporte', ...over.router })),
-        loadPublishedAgentConfigById: idAwareLoader(),
-        agenteDaCampanha: vi.fn().mockResolvedValue(null),
-        classifyIntent,
-        buildFatosDoContato: vi.fn().mockResolvedValue(over.fatos === undefined ? FATOS : over.fatos),
-      }));
-    return { out, classifyIntent };
+      deps);
+    return { out, classifyIntent, info: (deps as unknown as { log: { info: ReturnType<typeof vi.fn> } }).log.info };
   }
 
   it('0,95 e contato sem agenda → so_equipe, sem agente', async () => {
@@ -1135,6 +1136,29 @@ describe('resolveTurnAgent: config.so_equipe', () => {
     const menu = 'Bem-vindo à Loja Fictícia!\n1 - Pedidos\n2 - Trocas\nDigite o número da opção desejada';
     expect((await rodar({ semSaida: true, signal: menu, verdict: { intentName: null, confidence: 0.1 } })).out.outcome).toBe('so_equipe');
     expect((await rodar({ semSaida: false, signal: menu, verdict: { intentName: null, confidence: 0.1 } })).out.outcome).toBe('fallback');
+  });
+
+  it("modo 'observar': classificador → atende como sempre e só registra, com o motivo", async () => {
+    const { out, info } = await rodar({ router: { soEquipe: 'observar' } });
+    expect(out.outcome).toBe('fallback');
+    expect(out.config?.agentId).toBe('agent-suporte');
+    expect(info).toHaveBeenCalledWith('turno_so_da_equipe_observado', expect.objectContaining({ intentName: 'negocio_com_a_empresa', motivo: 'classificador' }));
+    expect(info).not.toHaveBeenCalledWith('turno_so_da_equipe', expect.anything());
+  });
+
+  it("modo 'observar': robô na abertura → registra e segue para o classificador", async () => {
+    const { out, info, classifyIntent } = await rodar({
+      router: { soEquipe: 'observar' }, semSaida: true, verdict: { intentName: 'vendas', confidence: 0.9 },
+      signal: 'Olá! Esta é uma mensagem automática. Retornaremos em breve.',
+    });
+    expect(out.outcome).toBe('classified');
+    expect(classifyIntent).toHaveBeenCalled();
+    expect(info).toHaveBeenCalledWith('turno_so_da_equipe_observado', expect.objectContaining({ motivo: 'autodeclaracao_de_robo' }));
+  });
+
+  it("modo calar (true) registra turno_so_da_equipe com o motivo", async () => {
+    const { info } = await rodar();
+    expect(info).toHaveBeenCalledWith('turno_so_da_equipe', expect.objectContaining({ motivo: 'classificador' }));
   });
 
   it('paciente numerando as próprias dúvidas na primeira mensagem não é robô', async () => {
