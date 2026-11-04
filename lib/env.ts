@@ -69,6 +69,10 @@ const schema = z.object({
   PRECIFICAEVA_URL: z.string().optional(),
   PRECIFICAEVA_TOKEN: z.string().optional(),
   PRECIFICAEVA_ORGANIZATION_ID: z.string().optional(),
+  // Envio de exame do WhatsApp ao Prontuário (opcional): origem https, segredo (≥32) e organização.
+  PRONTUARIO_URL: z.string().optional(),
+  PRONTUARIO_EXAMES_SEGREDO: z.string().optional(),
+  PRONTUARIO_ORGANIZATION_ID: z.string().optional(),
   MARKETING_ORGANIZATION_ID: z.string().optional(),
   MARKETING_REPORT_TOKEN: z.string().optional(),
   // Origens (vírgula) do site que grava o código de clique do Google Ads (migration 0400).
