@@ -47,9 +47,12 @@ export function VersionFooter({
   }
 
   const novo = data.latest_version?.replace(/^v/i, "") ?? "";
+  // Sem prefetch, como o resto do menu (porte do original #3613): visível, o
+  // aviso fazia o servidor montar a tela de atualização a cada carga de página.
   return (
     <Link
       href="/app/settings/atualizacao"
+      prefetch={false}
       onClick={onNavigate}
       title={`${t("Nova versão")} ${novo} ${t("disponível")}`}
       className={cn(

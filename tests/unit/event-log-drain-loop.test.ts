@@ -8,7 +8,7 @@
  * dizia "não consigo ouvir áudio" com o texto chegando ao banco meio minuto
  * depois. A transcrição em si levava 3,9s.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Logger } from '@/lib/agent-engine/obs/logger';
 import type { DrainSummary } from '@/lib/event-log/drain';
@@ -28,7 +28,7 @@ const {
   runEventLogDrainLoop,
 } = await import('@/lib/event-log/drain-loop');
 
-const knobs = { intervalMs: 2_000, idleIntervalMs: 10_000, batchSize: 50 };
+const knobs = { intervalMs: 2_000, idleIntervalMs: 10_000, staleSweepMs: 60_000, batchSize: 50 };
 const vazio: DrainSummary = { scanned: 0, done: 0, retried: 0, failed: 0, dead: 0 };
 // O dublê mantém o tipo do MOCK (`log.warn` é um `vi.fn()` que as asserções
 // interrogam); o cast para `Logger` fica no ponto em que ele CRUZA a fronteira
@@ -74,7 +74,8 @@ describe('runEventLogDrainLoop', () => {
     await runEventLogDrainLoop({ ...knobs, intervalMs: 0, idleIntervalMs: 0 }, logger, abort.signal);
 
     expect(ensureHandlersRegistered).toHaveBeenCalledOnce();
-    expect(drainEventLog).toHaveBeenCalledWith({ marcador: 'admin' }, { limit: 50 });
+    // O primeiro tick SEMPRE procura `processing` preso.
+    expect(drainEventLog).toHaveBeenCalledWith({ marcador: 'admin' }, { limit: 50, varrerPresos: true });
   });
 
   it('admin client indisponível DESLIGA o laço sem derrubar o worker', async () => {
@@ -117,5 +118,49 @@ describe('runEventLogDrainLoop', () => {
 
     expect(ticks).toBe(3);
     expect(log.error).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('procura por `processing` preso — no máximo 1×/min, sem mexer no ritmo (#3701, parcial)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('procura no 1º tick e de novo só a cada `staleSweepMs`; o ocioso de 3 s não recua', async () => {
+    const abort = new AbortController();
+    const varreduras: Array<boolean | undefined> = [];
+    let marcarPrimeiroTick!: () => void;
+    const primeiroTick = new Promise<void>((r) => {
+      marcarPrimeiroTick = r;
+    });
+    drainEventLog.mockImplementation((_admin: unknown, opts: { varrerPresos?: boolean }) => {
+      varreduras.push(opts.varrerPresos);
+      marcarPrimeiroTick();
+      return Promise.resolve({ ...vazio, scanned: 1 });
+    });
+
+    const laco = runEventLogDrainLoop(
+      { ...knobs, idleIntervalMs: 3_000, staleSweepMs: 60_000 },
+      logger,
+      abort.signal,
+    );
+    // O 1º tick é esperado numa promessa: o import dinâmico de carregarDepsDoLaco
+    // roda em tempo real, e o caso tem de passar sozinho, com o cache frio.
+    await primeiroTick;
+    await vi.advanceTimersByTimeAsync(120_000);
+    // Para o laço ANTES de afirmar: asserção vermelha não deixa o laço pendurado.
+    abort.abort();
+    await laco;
+
+    expect(
+      varreduras.length,
+      'o ocioso de 3 s mudou: em 120 s deviam ser 41 passadas (0, 3, …, 120 s)',
+    ).toBe(41);
+    const umMinuto = [true, ...Array<boolean>(19).fill(false)];
+    expect(varreduras, 'procurou fora do minuto').toEqual([...umMinuto, ...umMinuto, true]);
   });
 });

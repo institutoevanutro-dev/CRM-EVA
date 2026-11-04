@@ -111,6 +111,10 @@ vi.mock("@/lib/auth/rate-limit", () => ({
     return limite.barrado;
   }),
 }));
+const fatores = vi.hoisted(() => ({
+  listar: (): unknown => ({ data: { factors: [{ id: "f1" }] }, error: null }),
+  apagar: (): unknown => ({ error: null }),
+}));
 const listUsers = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({
@@ -119,7 +123,7 @@ vi.mock("@/lib/supabase/admin", () => ({
     auth: {
       admin: {
         listUsers,
-        mfa: { listFactors: async () => ({ data: { factors: [] }, error: null }), deleteFactor: async () => ({ error: null }) },
+        mfa: { listFactors: async () => fatores.listar(), deleteFactor: async () => fatores.apagar() },
       },
     },
   }),
@@ -153,6 +157,8 @@ beforeEach(() => {
     },
     error: null,
   });
+  fatores.listar = () => ({ data: { factors: [{ id: "f1" }] }, error: null });
+  fatores.apagar = () => ({ error: null });
   vi.mocked(redirect).mockClear();
   vi.mocked(createClient).mockResolvedValue({
     auth: {
@@ -179,6 +185,20 @@ describe("código de recuperação: gerar e usar", () => {
     vi.mocked(redirect).mockClear();
     expect(await usar(digitar(codigos[3]!))).toEqual({ ok: false, error: "invalid_or_used" });
     expect(entrou()).toBe(false);
+  });
+
+  // O auth-js DEVOLVE { error } em vez de lançar. Se o autenticador não sai, o
+  // código volta a valer e a tela não diz "Autenticador removido".
+  it.each([
+    ["apagar o fator", () => { fatores.apagar = () => ({ error: { message: "502" } }); }],
+    ["listar os fatores", () => { fatores.listar = () => ({ data: null, error: { message: "rede" } }); }],
+  ])("se %s falha, o código não fica gasto e não há aviso de removido", async (_nome, quebrar) => {
+    const codigos = await emitir();
+    quebrar();
+
+    expect(await usar(codigos[2]!)).toEqual({ ok: false, error: "service_unavailable" });
+    expect(entrou()).toBe(false);
+    expect(banco.linhas.every((l) => l.used_at === null)).toBe(true);
   });
 
   it("um código que não foi emitido é recusado", async () => {
