@@ -19,42 +19,11 @@ import { extrairObjetoJsonDoTexto } from '@/lib/agent-engine/texto/extrair-json-
 import type { Logger } from '../obs/logger';
 import { runModelCall, type LlmEdgeConfig } from '../edge/llm/run-model-call';
 import type { LoadedRouter, RouterMember } from './router-config';
+import { ASSUNTOS_SO_DA_EQUIPE } from './assuntos-so-da-equipe';
 
 export interface IntentVerdict {
   intentName: string | null;
   confidence: number;
-}
-
-/**
- * Intenções FIXAS do produto, oferecidas ao classificador só quando o roteador
- * liga `config.so_equipe`. Não têm agente (`agentId` vazio): quem decide o que
- * fazer com elas é `resolve-turn-agent.ts` (passa à equipe, sem resposta).
- *
- * A descrição exclui de propósito o que um cliente pergunta sobre convênio,
- * plano, preço ou pagamento: o pior erro aqui é calar um cliente real.
- */
-export const ASSUNTOS_SO_DA_EQUIPE: readonly RouterMember[] = [
-  {
-    agentId: '',
-    intentName: 'negocio_com_a_empresa',
-    intentDescription:
-      'fornecedor, vendedor ou representante oferecendo produto ou serviço À EMPRESA, proposta comercial ou de parceria, divulgação, cobrança de outra empresa. NÃO inclui quem quer ser atendido ou comprar, nem pergunta sobre convênio, plano, preço ou pagamento',
-    examples: [],
-  },
-  {
-    agentId: '',
-    intentName: 'mensagem_automatica',
-    intentDescription:
-      'resposta automática de outra empresa ou robô: "recebemos sua mensagem", horário de atendimento, menu de opções numeradas, "esta é uma mensagem automática"',
-    examples: [],
-  },
-];
-
-const NOMES_SO_DA_EQUIPE = new Set(ASSUNTOS_SO_DA_EQUIPE.map((m) => m.intentName));
-
-/** O nome é de uma intenção fixa do produto (não de um membro do roteador)? */
-export function ehAssuntoFixoSoDaEquipe(intentName: string | null): boolean {
-  return intentName !== null && NOMES_SO_DA_EQUIPE.has(intentName);
 }
 
 /** As intenções que este roteador oferece ao classificador. */

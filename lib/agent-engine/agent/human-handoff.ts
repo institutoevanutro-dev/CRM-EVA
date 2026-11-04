@@ -189,6 +189,17 @@ export function ehMenuDeOpcoesNumeradas(mensagem: string): boolean {
 }
 
 /**
+ * A mensagem PEDE uma escolha de menu ("digite o número", "selecione uma
+ * opção", "menu de opções")? Só a instrução: uma lista numerada sem ela pode ser
+ * gente numerando as próprias dúvidas.
+ */
+export function temInstrucaoDeMenu(mensagem: string): boolean {
+  if (mensagem.trim() === '') return false;
+  const normalizada = normalize(mensagem);
+  return INSTRUCOES_DE_MENU.some((re) => re.test(normalizada));
+}
+
+/**
  * O pedido casado é UMA OPÇÃO do menu? (marca 1, a que a guarda usa)
  *
  * Ser menu não basta: uma pessoa que numera as próprias dúvidas ("1. o preço /

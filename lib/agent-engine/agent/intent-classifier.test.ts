@@ -1,12 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  ASSUNTOS_SO_DA_EQUIPE,
-  buildClassifierPrompt,
-  classifyIntent,
-  ehAssuntoFixoSoDaEquipe,
-  parseIntentVerdict,
-} from './intent-classifier';
+import { ASSUNTOS_SO_DA_EQUIPE, ehAssuntoFixoSoDaEquipe } from './assuntos-so-da-equipe';
+import { buildClassifierPrompt, classifyIntent, parseIntentVerdict } from './intent-classifier';
 
 const members = [
   { agentId: 'a1', intentName: 'vendas', intentDescription: 'Quer comprar ou saber preço', examples: ['quanto custa'] },

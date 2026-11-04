@@ -991,3 +991,84 @@ describe('resolveTurnAgent: intenção fixa do produto sem regra própria vale c
     expect(comSticky.outcome).toBe('sticky');
   });
 });
+
+// ─── Regra 9: negócio e mensagem automática só abrem caso ───
+describe('resolveTurnAgent: config.so_equipe', () => {
+  const COM_AGENDA = 'Fatos do CRM sobre este contato (agenda):\n- Compromissos futuros: 10/11 consulta (confirmado)';
+  async function rodar(over: {
+    router?: Partial<LoadedRouter>;
+    verdict?: unknown;
+    fatos?: string | null;
+    sticky?: boolean;
+    semSaida?: boolean;
+    signal?: string;
+  } = {}) {
+    const classifyIntent = vi.fn().mockResolvedValue(over.verdict ?? { intentName: 'negocio_com_a_empresa', confidence: 0.95 });
+    const out = await resolveTurnAgent({} as never, {} as never,
+      {
+        ...baseInput,
+        signal: over.signal ?? 'Somos distribuidores de luvas e queremos apresentar nosso catálogo',
+        stickyAgentId: over.sticky ? 'agent-vendas' : null,
+        stickyIntent: over.sticky ? 'vendas' : null,
+        semSaida: over.semSaida ?? false,
+      },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(router({ soEquipe: true, fallbackAgentId: 'agent-suporte', ...over.router })),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        agenteDaCampanha: vi.fn().mockResolvedValue(null),
+        classifyIntent,
+        buildFatosDoContato: vi.fn().mockResolvedValue(over.fatos === undefined ? FATOS : over.fatos),
+      }));
+    return { out, classifyIntent };
+  }
+
+  it('0,95 e contato sem agenda → so_equipe, sem agente', async () => {
+    const { out } = await rodar();
+    expect(out.outcome).toBe('so_equipe');
+    expect(out.config).toBeNull();
+    expect(out.intentName).toBe('negocio_com_a_empresa');
+  });
+
+  it('0,85 (abaixo do corte de 0,9) → agente normal', async () => {
+    const { out } = await rodar({ verdict: { intentName: 'negocio_com_a_empresa', confidence: 0.85 } });
+    expect(out.outcome).toBe('fallback');
+    expect(out.config?.agentId).toBe('agent-suporte');
+  });
+
+  it('contato com compromisso na agenda nunca é calado', async () => {
+    expect((await rodar({ fatos: COM_AGENDA })).out.outcome).toBe('fallback');
+  });
+
+  it('fatos ilegíveis não contam como agenda vazia', async () => {
+    expect((await rodar({ fatos: null })).out.config?.agentId).toBe('agent-suporte');
+  });
+
+  it("sticky em modo 'agente' com interrompe de outro assunto → ainda so_equipe", async () => {
+    const { out } = await rodar({ sticky: true, router: { permanencia: 'agente', interrompe: ['suporte'] } });
+    expect(out.outcome).toBe('so_equipe');
+  });
+
+  it('sem a flag, a mesma resposta do modelo não cala ninguém', async () => {
+    const { out } = await rodar({ router: { soEquipe: false } });
+    expect(out.outcome).toBe('fallback');
+  });
+
+  it('primeira mensagem que se declara robô → so_equipe sem chamar o modelo', async () => {
+    const { out, classifyIntent } = await rodar({ semSaida: true, signal: 'Olá! Esta é uma mensagem automática. Retornaremos em breve.' });
+    expect(out.outcome).toBe('so_equipe');
+    expect(out.intentName).toBe('mensagem_automatica');
+    expect(classifyIntent).not.toHaveBeenCalled();
+  });
+
+  it('primeira mensagem com menu que pede escolha → so_equipe; já com saída nossa, não', async () => {
+    const menu = 'Bem-vindo à Loja Fictícia!\n1 - Pedidos\n2 - Trocas\nDigite o número da opção desejada';
+    expect((await rodar({ semSaida: true, signal: menu, verdict: { intentName: null, confidence: 0.1 } })).out.outcome).toBe('so_equipe');
+    expect((await rodar({ semSaida: false, signal: menu, verdict: { intentName: null, confidence: 0.1 } })).out.outcome).toBe('fallback');
+  });
+
+  it('paciente numerando as próprias dúvidas na primeira mensagem não é robô', async () => {
+    const lista = '1) quanto custa a consulta? 2) tem horário sábado?';
+    const { out } = await rodar({ semSaida: true, signal: lista, verdict: { intentName: 'vendas', confidence: 0.9 } });
+    expect(out.outcome).toBe('classified');
+  });
+});

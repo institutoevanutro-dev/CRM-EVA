@@ -72,6 +72,13 @@
  *      mensagem) não troca de agente e cala. Se o fallback também está na lista,
  *      sai `bloqueado_apos_equipe` com config null: a IA não fala, e o turno
  *      de entrada passa a conversa à equipe com aviso (`inbound-turn.ts`).
+ *   9. `config.so_equipe`: o classificador conhece duas intenções fixas do
+ *      produto (conversa de negócio com a empresa e mensagem automática). Com
+ *      uma delas, confiança ≥ 0,9 e contato sem nada na agenda, sai
+ *      `so_equipe` com config null: a IA não escreve nada e o turno de entrada
+ *      passa a conversa à equipe com aviso. A mensagem que ABRE a conversa e se
+ *      declara robô ou pede escolha de menu dá o mesmo desfecho sem modelo.
+ *      Abaixo do corte, a intenção fixa vale como "nenhuma".
  *
  * Robustez: qualquer erro inesperado no branch do router (DB fora do ar,
  * shape quebrado) NUNCA derruba o turno — cai no `loadPublishedAgentConfig`
@@ -95,8 +102,10 @@ import {
   loadPublishedAgentConfigById,
   type PublishedAgentConfig,
 } from './agent-config';
-import { classifyIntent, ehAssuntoFixoSoDaEquipe, type IntentVerdict } from './intent-classifier';
-import { buildFatosDoContato } from './fatos-do-contato';
+import { classifyIntent, type IntentVerdict } from './intent-classifier';
+import { ehAssuntoFixoSoDaEquipe } from './assuntos-so-da-equipe';
+import { SEM_ATENDIMENTOS_NA_AGENDA, buildFatosDoContato } from './fatos-do-contato';
+import { ehMensagemDeRobo, temInstrucaoDeMenu } from './human-handoff';
 import { historicoRecente, renderHistoricoRecente } from './historico-recente';
 import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-context';
 
@@ -139,7 +148,13 @@ export interface TurnAgentResolution {
      * está em `nao_reabre_apos_equipe`: a IA não reabre. `config` é null e o
      * turno NÃO cai no genérico — ver `inbound-turn.ts`.
      */
-    | 'bloqueado_apos_equipe';
+    | 'bloqueado_apos_equipe'
+    /**
+     * `config.so_equipe`: conversa de negócio ou mensagem automática, de
+     * contato sem nada na agenda. `config` é null; o turno de entrada passa a
+     * conversa à equipe calado (`turno-da-equipe.ts`). Regra 9.
+     */
+    | 'so_equipe';
   /**
    * Todos os membros do roteador e o modo dele, sempre que a decisão veio de um
    * roteador (`routerId !== null`). É o que o turno precisa para oferecer
@@ -179,6 +194,37 @@ export function mudouDeAssunto(
   );
 }
 
+/**
+ * Confiança mínima para calar a IA por conversa de negócio ou mensagem
+ * automática, acima do mínimo do roteador quando ele é menor. O erro aqui é
+ * calar um cliente real, então o corte é alto.
+ */
+export const CONFIANCA_MINIMA_SO_EQUIPE = 0.9;
+
+/** O contato não tem nada na agenda. Fatos ilegíveis (`null`) NÃO contam como vazios. */
+function semNadaNaAgenda(fatos: string | null): boolean {
+  return fatos !== null && fatos.includes(SEM_ATENDIMENTOS_NA_AGENDA);
+}
+
+/**
+ * Regra 9: o veredito manda o turno à equipe? Só com `config.so_equipe`,
+ * intenção fixa do produto, confiança ≥ `CONFIANCA_MINIMA_SO_EQUIPE` e contato
+ * sem nada na agenda. A rota de teste do roteador usa a mesma.
+ */
+export function ehTurnoSoDaEquipe(
+  router: Pick<LoadedRouter, 'soEquipe' | 'minConfidence'>,
+  verdict: IntentVerdict | null,
+  fatos: string | null,
+): boolean {
+  return (
+    router.soEquipe === true &&
+    verdict !== null &&
+    ehAssuntoFixoSoDaEquipe(verdict.intentName) &&
+    verdict.confidence >= Math.max(router.minConfidence, CONFIANCA_MINIMA_SO_EQUIPE) &&
+    semNadaNaAgenda(fatos)
+  );
+}
+
 export async function resolveTurnAgent(
   db: pg.Pool,
   llmCfg: LlmEdgeConfig,
@@ -195,6 +241,8 @@ export async function resolveTurnAgent(
     stickySetAt?: Date | null;
     /** Alguém da equipe já escreveu nesta conversa. Ver a regra 8. */
     equipeFalou?: boolean;
+    /** Nenhuma saída nossa na conversa ainda (a mensagem abre a conversa). Ver a regra 9. */
+    semSaida?: boolean;
   },
   deps: ResolveTurnAgentDeps,
 ): Promise<TurnAgentResolution> {
@@ -406,6 +454,21 @@ export async function resolveTurnAgent(
         : null,
     ]);
 
+    // Regra 9, sem modelo: a mensagem que ABRE a conversa se declara robô ou
+    // pede escolha de menu ("digite o número da opção").
+    const soEquipe = (intentName: string, confidence: number): TurnAgentResolution => {
+      deps.log.info('turno_so_da_equipe', { routerId: router.id, intentName, confidence });
+      return { config: null, routerId: router.id, intentName, confidence, outcome: 'so_equipe', ...doRoteador };
+    };
+    if (
+      router.soEquipe === true &&
+      input.semSaida === true &&
+      semNadaNaAgenda(fatos) &&
+      (ehMensagemDeRobo(input.signal) || temInstrucaoDeMenu(input.signal))
+    ) {
+      return soEquipe('mensagem_automatica', 1);
+    }
+
     // classifica — inclusive com sticky ativo, pra detectar troca de assunto (regra 2).
     const veredito = await _classifyIntent(
       db,
@@ -417,6 +480,9 @@ export async function resolveTurnAgent(
       },
       { log: deps.log },
     );
+    // Regra 9: negócio ou mensagem automática, com confiança alta e contato sem
+    // agenda. Antes da permanência: vale também com agente atual.
+    if (ehTurnoSoDaEquipe(router, veredito, fatos)) return soEquipe(veredito!.intentName!, veredito!.confidence);
     // Intenção fixa do produto (`config.so_equipe`) não tem agente: aqui ela
     // vale como "nenhuma". Sem isto o `member!` abaixo quebraria.
     const verdict: IntentVerdict | null =
@@ -486,10 +552,13 @@ export async function resolveConversationTurn(
     active_intent: string | null;
     active_agent_set_at: Date | null;
     equipe_falou: boolean | null;
+    sem_saida: boolean | null;
   }>(
     `select active_ai_agent_id,active_intent,active_agent_set_at,
             exists(select 1 from messages m where m.organization_id=$1 and m.conversation_id=$2
-                     and m.direction='outbound' and m.sent_via in ('crm','user','external_device')) as equipe_falou
+                     and m.direction='outbound' and m.sent_via in ('crm','user','external_device')) as equipe_falou,
+            not exists(select 1 from messages m where m.organization_id=$1 and m.conversation_id=$2
+                     and m.direction='outbound') as sem_saida
        from conversations where organization_id=$1 and id=$2`,
     [input.tenantId, input.conversationId],
   );
@@ -515,6 +584,7 @@ export async function resolveConversationTurn(
     stickyIntent: rows[0]?.active_intent ?? null,
     stickySetAt: rows[0]?.active_agent_set_at ?? null,
     equipeFalou: rows[0]?.equipe_falou === true,
+    semSaida: rows[0]?.sem_saida === true,
   }, deps);
   if (resolucao.config !== null) return resolucao;
   return (await numeroFechadoPelaDeclaracao(db, input.tenantId, input.channelSessionId))

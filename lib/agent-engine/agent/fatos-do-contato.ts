@@ -147,10 +147,13 @@ function linha(fatos: readonly FatoDeAgenda[], maximo: number, quando: Quando): 
  * não há nada: para o classificador, "sem atendimentos" é justamente o fato que
  * separa o paciente novo do antigo.
  */
+/** A linha que diz "este contato não tem nada na agenda". Quem lê o texto pergunta por ela. */
+export const SEM_ATENDIMENTOS_NA_AGENDA = "- Sem atendimentos registrados na agenda.";
+
 export function renderFatosDoContato(fatos: FatosDoContato): string {
   const cabecalho = "Fatos do CRM sobre este contato (agenda):";
   if (fatos.anteriores.length === 0 && fatos.futuros.length === 0) {
-    return `${cabecalho}\n- Sem atendimentos registrados na agenda.`;
+    return `${cabecalho}\n${SEM_ATENDIMENTOS_NA_AGENDA}`;
   }
   return [
     cabecalho,

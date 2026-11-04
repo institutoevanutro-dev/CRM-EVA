@@ -2521,11 +2521,13 @@ async function executarTurnoDoAgente(
     });
     return;
   }
-  // A equipe já falou e o assunto não reabre (regra 8 de `resolve-turn-agent.ts`).
-  // O turno de entrada já passou a conversa à equipe; o follow-up só não fala.
-  if (!preview && routed.outcome === 'bloqueado_apos_equipe') {
-    runLog.info('assunto não reabre depois que a equipe falou — turno sem resposta', {
+  // A equipe já falou e o assunto não reabre (regra 8 de `resolve-turn-agent.ts`),
+  // ou é conversa de negócio / mensagem automática (regra 9). O turno de entrada
+  // já passou a conversa à equipe; aqui só garante que ninguém fala.
+  if (!preview && (routed.outcome === 'bloqueado_apos_equipe' || routed.outcome === 'so_equipe')) {
+    runLog.info('o roteador deixou este turno com a equipe — turno sem resposta', {
       conversation_id: input.conversationId,
+      outcome: routed.outcome,
     });
     return;
   }
