@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
@@ -42,6 +43,17 @@ export function ResetPasswordForm() {
       } else if (res.error === "mfa_invalid") {
         setNeedsMfa(true);
         setServerError(t("Código de verificação inválido. Tente de novo."));
+      } else if (res.error === "mfa_locked") {
+        setNeedsMfa(true);
+        setServerError(t("Muitas tentativas. Aguarde alguns minutos."));
+      } else if (res.error === "mfa_locked_today") {
+        setNeedsMfa(true);
+        // O código de recuperação leva à tela de entrada, não de volta para cá.
+        setServerError(
+          t(
+            "Muitos códigos errados hoje: novas tentativas só a partir das 21h (horário de Brasília). Para não esperar, use “Perdi acesso ao autenticador” e, depois do código de recuperação, peça um novo link em “Esqueci minha senha”.",
+          ),
+        );
       } else if (res.error === "session_expired") {
         setServerError(
           t("Sessão de redefinição expirada. Peça um novo link em Recuperar senha."),
@@ -111,6 +123,14 @@ export function ResetPasswordForm() {
       <Button type="submit" className="w-full" disabled={isPending}>
         {isPending ? t("Salvando...") : t("Definir nova senha")}
       </Button>
+      {/* A mesma saída da tela de entrada: o código de recuperação apaga o autenticador. */}
+      {needsMfa && (
+        <div className="text-center text-sm">
+          <Link href="/login/recovery" className="text-muted-foreground underline-offset-4 hover:underline">
+            {t("Perdi acesso ao autenticador")}
+          </Link>
+        </div>
+      )}
     </form>
   );
 }

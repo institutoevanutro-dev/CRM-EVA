@@ -432,11 +432,13 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXT_PUBLIC_ADMIN_URL=http://localhost:3000
 
 # Workers — ritmo com que o worker roda os handlers do event_log. Vazio = os
-# defaults (2s com trabalho, 10s ocioso, 50 por lote). Não há mais opt-in: o
+# defaults (2s com trabalho, 10s ocioso, 50 por lote; procura por evento preso
+# em processing no máximo 1×/min). Não há mais opt-in: o
 # `EVENT_LOG_WORKER_ENABLED` que ficava aqui nunca teve leitor e saiu em
 # 2026-08-25, junto com a chegada do laço de verdade no worker.
 EVENT_LOG_DRAIN_INTERVAL_MS=2000
 EVENT_LOG_DRAIN_IDLE_INTERVAL_MS=10000
+EVENT_LOG_DRAIN_STALE_SWEEP_MS=60000
 EVENT_LOG_DRAIN_BATCH_SIZE=50
 ```
 

@@ -132,6 +132,14 @@ export async function reconcileSessions(
       }
     }
 
+    // Nada a mudar não vira instrução (porte do DeskcommCRM #3706). `nossas` é
+    // exatamente o conjunto que o `where` abaixo alcança; quando todas já estão
+    // em `nextStatus`, o update devolveria 0 linhas e saía assim mesmo, uma vez
+    // por sessão a cada WATCHDOG_INTERVAL_MS. Fica DEPOIS da retomada: antes
+    // dela, a sessão STOPPED com espelho STOPPED nunca seria religada. O
+    // `is distinct from` continua no `where` como trava de corrida.
+    if (nossas.every((nossa) => nossa.status === nextStatus)) continue;
+
     const { rows } = await pool.query<{ id: string; status: string }>(
       `update channel_sessions
           set status = $2, updated_at = now()
