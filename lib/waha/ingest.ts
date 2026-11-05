@@ -20,6 +20,7 @@ import { marcarConversaComMensagem } from "@/lib/channels/marcar-conversa";
 import { aplicarEfeitosPosEntrada } from "@/lib/channels/pos-entrada";
 import { garantirLeadDaConversa } from "@/lib/leads/nascimento-do-lead";
 import { pausarIaPorAtendimentoManual } from "@/lib/escalacao/atendimento-manual";
+import { MARCA_DE_ECO_NOSSO } from "@/lib/escalacao/fala-da-equipe";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
@@ -1136,6 +1137,13 @@ async function handleOutboundFromUserPhone(
     : null;
 
   const now = new Date().toISOString();
+  const metadataDoCelular: Record<string, unknown> = {
+    raw_type: p.type,
+    fromMe: true,
+    ...(bare !== p.id ? { external_id_original: p.id } : {}),
+    ...(citacao?.texto && !citadaId ? { reply_to_body: citacao.texto } : {}),
+    ...(mediaFilenameOf(p) ? { media_filename: mediaFilenameOf(p) } : {}),
+  };
   const { data: insertedOutbound, error: insertErr } = await admin
     .from("messages")
     .insert({
@@ -1159,13 +1167,7 @@ async function handleOutboundFromUserPhone(
       // remontá-lo do bare usa o chat do envio de hoje, que pode não ser o do
       // eco (PN de um lado, @lid do outro). Ver `idDaCitadaNoCanal` no handler.
       reply_to_message_id: citadaId,
-      metadata: {
-        raw_type: p.type,
-        fromMe: true,
-        ...(bare !== p.id ? { external_id_original: p.id } : {}),
-        ...(citacao?.texto && !citadaId ? { reply_to_body: citacao.texto } : {}),
-        ...(mediaFilenameOf(p) ? { media_filename: mediaFilenameOf(p) } : {}),
-      },
+      metadata: metadataDoCelular,
     })
     .select("id")
     .maybeSingle();
@@ -1259,6 +1261,17 @@ async function handleOutboundFromUserPhone(
     // A conversa que começa pelo celular nasce no funil (DeskcommCRM #2543).
     // Só o que não é eco: o eco é o envio do PRÓPRIO CRM.
     await nascerLeadDaConversaPeloCelular(admin, session, contactId, conversationId);
+  } else if (insertedOutbound?.id) {
+    // Eco do NOSSO envio que ficou gravado como `external_device` (a corrida
+    // acima não casou o id a tempo). A linha fica (gravar é tolerante), mas
+    // marcada: senão ela conta como fala da equipe (`lib/escalacao/fala-da-equipe.ts`)
+    // e a IA não reabre o assunto, ou segura o cliente até o fim do dia
+    // seguinte, porque ela mesma falou.
+    await admin
+      .from("messages")
+      .update({ metadata: { ...metadataDoCelular, [MARCA_DE_ECO_NOSSO]: true } })
+      .eq("organization_id", session.organization_id)
+      .eq("id", insertedOutbound.id);
   }
 
   await audit({

@@ -96,6 +96,7 @@ vi.mock("@/lib/env", () => ({
 vi.mock("@/lib/channels/health", () => ({ sincronizarSaudeDaConexao: vi.fn(async () => {}) }));
 
 import { dispatchWahaEvent, type WahaEnvelope, type WahaPayload } from "@/lib/waha/ingest";
+import { MARCA_DE_ECO_NOSSO } from "@/lib/escalacao/fala-da-equipe";
 
 const ORG = "org-1";
 const CONVERSA = "conversa-1";
@@ -209,12 +210,26 @@ function banco(linhas: Linha[]) {
             },
           }),
         }),
-        update: () => {
+        // Aplica o patch às linhas que casam com os `eq` (a marca do eco nosso).
+        update: (patch: Record<string, unknown>) => {
+          const filtros: Filtro[] = [];
+          const aplicar = () => {
+            for (const m of messages) if (casa(m, filtros)) Object.assign(m, patch);
+          };
           const enc: Record<string, unknown> = { error: null };
-          enc.eq = () => enc;
+          enc.eq = (c: string, v: unknown) => {
+            filtros.push([c, v, "eq"]);
+            return enc;
+          };
           enc.in = () => enc;
-          enc.maybeSingle = async () => ({ data: null, error: null });
-          enc.then = (ok: (v: unknown) => unknown) => Promise.resolve(ok({ data: null, error: null }));
+          enc.maybeSingle = async () => {
+            aplicar();
+            return { data: null, error: null };
+          };
+          enc.then = (ok: (v: unknown) => unknown) => {
+            aplicar();
+            return Promise.resolve(ok({ data: null, error: null }));
+          };
           return enc;
         },
       };
@@ -394,5 +409,18 @@ describe("#3138 — eco da linha que saiu sem id do canal", () => {
       messages.length,
       "o gate pulou o INSERT — perder mensagem do celular é o #108",
     ).toBe(2);
+  });
+
+  it("a linha do eco gravada como celular sai MARCADA (não conta como fala da equipe); digitação real, não", async () => {
+    const eco1 = banco([envioQueSaiuSemId()]);
+    await dispatchWahaEvent(eco1.admin as never, SESSION as never, envelope(eco(TEXTO)), "req-3138-6");
+    const doEco = eco1.messages.find((m) => m.sent_via === "external_device");
+    expect(doEco?.metadata).toMatchObject({ fromMe: true, [MARCA_DE_ECO_NOSSO]: true });
+
+    const gente = banco([envioQueSaiuSemId()]);
+    await dispatchWahaEvent(gente.admin as never, SESSION as never, envelope(eco("oi, aqui é da recepção")), "req-3138-7");
+    const digitada = gente.messages.find((m) => m.sent_via === "external_device");
+    expect(digitada?.metadata).toMatchObject({ fromMe: true });
+    expect((digitada?.metadata as Record<string, unknown>)[MARCA_DE_ECO_NOSSO]).toBeUndefined();
   });
 });
