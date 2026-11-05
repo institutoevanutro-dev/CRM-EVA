@@ -20,6 +20,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
+import { diaLocalISO, instanteDe } from "@/lib/agenda/fuso";
+import { FUSO_PADRAO, fusoUtilizavel } from "@/lib/tempo/fusos";
+
 export const PAUSA_PADRAO_MIN = 5;
 export const PAUSA_MINIMA_MIN = 5;
 export const PAUSA_MAXIMA_MIN = 24 * 60;
@@ -117,31 +120,84 @@ export function settingsComClienteSemResposta(settings: unknown, minutos: number
   return settingsComAtendimento(settings, "pausa_cliente_sem_resposta_min", minutos);
 }
 
+// ─── A IA só volta no fim do dia seguinte depois que a equipe fala ───────────
+//
+// `organizations.settings.atendimento.ia_volta_apos_equipe`. Com o valor
+// `"fim_do_dia_seguinte"`, a pausa por resposta humana deixa de ser "agora + N
+// minutos" e passa a durar até a meia-noite local do dia D+2 (o FIM do dia
+// seguinte à fala), no fuso da organização. Só o botão "Devolver ao automático"
+// religa antes. Ausente ou qualquer outro valor = o comportamento de sempre
+// (minutos), então clone antigo e instalação nova não mudam.
+//
+// Medido no Instituto (03/11/2026): a equipe respondeu às 17:11, a devolução de
+// 15 min soltou a conversa às 17:30, o paciente disse "Ok" às 19:47 e a IA
+// voltou à qualificação por cima da equipe.
+
+export const IA_VOLTA_FIM_DO_DIA_SEGUINTE = "fim_do_dia_seguinte" as const;
+export type IaVoltaAposEquipe = typeof IA_VOLTA_FIM_DO_DIA_SEGUINTE;
+
+/** O modo em vigor, ou `null` = desligado (minutos, como sempre). Nunca lança. */
+export function lerIaVoltaAposEquipe(settings: unknown): IaVoltaAposEquipe | null {
+  const bruto = (settings as { atendimento?: { ia_volta_apos_equipe?: unknown } } | null | undefined)?.atendimento
+    ?.ia_volta_apos_equipe;
+  return bruto === IA_VOLTA_FIM_DO_DIA_SEGUINTE ? IA_VOLTA_FIM_DO_DIA_SEGUINTE : null;
+}
+
+/** Os `settings` com o modo trocado (`null` desliga), e SÓ ele. */
+export function settingsComIaVoltaAposEquipe(settings: unknown, modo: IaVoltaAposEquipe | null): Record<string, unknown> {
+  return settingsComAtendimento(settings, "ia_volta_apos_equipe", modo);
+}
+
 /**
- * A pausa da organização, em milissegundos. Uma consulta por chave primária;
- * qualquer falha (erro, linha ausente, exceção) devolve o padrão. O chamador já
- * resolveu `organizationId` de fonte confiável.
+ * O fim do dia seguinte ao instante `agora`, no fuso pedido: a meia-noite local
+ * do dia D+2. Fala às 17:11 de 03/11 em São Paulo → 05/11 00:00 local
+ * (`2026-11-05T03:00:00Z`). Fuso inutilizável cai no padrão do produto.
+ */
+export function fimDoDiaSeguinte(agora: Date, fuso: string): Date {
+  const tz = fusoUtilizavel(fuso);
+  const [a, m, d] = diaLocalISO(agora, tz).split("-").map(Number);
+  // Normaliza ANTES ("dia 32" vira dia 1 do mês seguinte): `instanteDe`
+  // confere que a hora devolvida é a pedida, e uma data inexistente não bate.
+  const alvo = new Date(Date.UTC(a!, m! - 1, d! + 2));
+  return instanteDe({ ano: alvo.getUTCFullYear(), mes: alvo.getUTCMonth() + 1, dia: alvo.getUTCDate() }, tz);
+}
+
+/** Até quando a IA fica fora, para estes `settings` e este fuso. Pura. */
+export function prazoDaPausa(settings: unknown, fuso: string | null | undefined, agora: Date): Date {
+  return lerIaVoltaAposEquipe(settings) === IA_VOLTA_FIM_DO_DIA_SEGUINTE
+    ? fimDoDiaSeguinte(agora, fuso ?? FUSO_PADRAO)
+    : new Date(agora.getTime() + lerPausaPorRespostaHumanaMin(settings) * 60 * 1000);
+}
+
+/**
+ * Até quando a IA fica fora depois que uma pessoa responde agora. Os DOIS
+ * escritores (tela e celular) chamam esta. Uma consulta por chave primária;
+ * qualquer falha (erro, linha ausente, exceção) cai no padrão em minutos. O
+ * chamador já resolveu `organizationId` de fonte confiável.
  *
  * `aoFalhar` é como a falha deixa rastro: quem chama do servidor passa o
  * `logger.warn`. O logger não é importado aqui porque a tela importa este
  * módulo. Recebe só o detalhe técnico do erro, nunca dado de cliente.
  */
-export async function carregarPausaPorRespostaHumanaMs(
+export async function carregarPrazoDaPausa(
   supabase: SupabaseClient,
   organizationId: string,
+  agora: Date,
   aoFalhar?: (detalhe: string) => void,
-): Promise<number> {
+): Promise<Date> {
   let settings: unknown = null;
+  let fuso: string | null = null;
   try {
     const { data, error } = await supabase
       .from("organizations")
-      .select("settings")
+      .select("settings, timezone")
       .eq("id", organizationId)
       .maybeSingle();
     if (error) aoFalhar?.(String(error.message ?? "erro").slice(0, 160));
     settings = (data as { settings?: unknown } | null)?.settings;
+    fuso = (data as { timezone?: string | null } | null)?.timezone ?? null;
   } catch (err) {
     aoFalhar?.(err instanceof Error ? err.message.slice(0, 160) : "erro");
   }
-  return lerPausaPorRespostaHumanaMin(settings) * 60 * 1000;
+  return prazoDaPausa(settings, fuso, agora);
 }

@@ -383,6 +383,7 @@ class InsercaoPg<T> implements PromiseLike<RespostaFalsa<null>> {
 class AtualizacaoPg<T> implements PromiseLike<RespostaFalsa<unknown>> {
   private filtros: Array<[string, unknown]> = [];
   private naoNulos: string[] = [];
+  private nulos: string[] = [];
   private colunasDeVolta: string | null = null;
 
   constructor(
@@ -403,6 +404,13 @@ class AtualizacaoPg<T> implements PromiseLike<RespostaFalsa<unknown>> {
     return this;
   }
 
+  /** Só `is(coluna, null)`: a trava "ninguém assumiu no meio" da devolução (`retomada.ts`). */
+  is(coluna: string, valor: unknown): this {
+    if (valor !== null) return naoImplementado(`is(${String(valor)})`);
+    this.nulos.push(coluna);
+    return this;
+  }
+
   select(colunas = "*"): this {
     this.colunasDeVolta = colunas;
     return this;
@@ -420,6 +428,7 @@ class AtualizacaoPg<T> implements PromiseLike<RespostaFalsa<unknown>> {
       return `"${c}" = $${valores.length}`;
     });
     for (const c of this.naoNulos) onde.push(`"${c}" is not null`);
+    for (const c of this.nulos) onde.push(`"${c}" is null`);
     let texto = `update public."${this.tabela}" set ${sets.join(", ")}`;
     if (onde.length > 0) texto += ` where ${onde.join(" and ")}`;
     if (this.colunasDeVolta) texto += ` returning ${colunasSql(this.colunasDeVolta)}`;

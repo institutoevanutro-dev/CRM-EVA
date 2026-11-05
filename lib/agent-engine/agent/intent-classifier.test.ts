@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { buildClassifierPrompt, parseIntentVerdict, classifyIntent } from './intent-classifier';
+import { ASSUNTOS_SO_DA_EQUIPE, ehAssuntoFixoSoDaEquipe } from './assuntos-so-da-equipe';
+import { buildClassifierPrompt, classifyIntent, parseIntentVerdict } from './intent-classifier';
 
 const members = [
   { agentId: 'a1', intentName: 'vendas', intentDescription: 'Quer comprar ou saber preço', examples: ['quanto custa'] },
@@ -264,5 +265,43 @@ describe('classifyIntent — provedor do classificador', () => {
       },
       { log: log(), runModelCall } as never);
     expect(runModelCall.mock.calls[0]![2]).not.toHaveProperty('llmOverride');
+  });
+});
+
+describe("classifyIntent com config.so_equipe", () => {
+  const log = { log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never };
+  const chamar = async (r: typeof router & { soEquipe?: boolean | 'observar' }, texto: string) => {
+    const runModelCall = vi.fn().mockResolvedValue({ result: { text: texto } });
+    const out = await classifyIntent({} as never, {} as never,
+      { tenantId: 'o1', leadId: 'l1', jobId: 'j1', router: r, signal: 'Somos distribuidores de luvas' },
+      { ...log, runModelCall } as never);
+    return { out, prompt: runModelCall.mock.calls[0]![2].messages[0].content as string };
+  };
+
+  it('desligado: o prompt é byte a byte o de antes, e a intenção fixa é recusada no parse', async () => {
+    const { out, prompt } = await chamar({ ...router, soEquipe: false }, '{"intent":"negocio_com_a_empresa","confidence":0.97}');
+    expect(prompt).toBe(buildClassifierPrompt(members, 'Somos distribuidores de luvas'));
+    expect(prompt).not.toContain('negocio_com_a_empresa');
+    expect(out).toEqual({ intentName: null, confidence: 0 });
+  });
+
+  it('ligado: o prompt lista as duas intenções fixas e o parse as aceita', async () => {
+    const { out, prompt } = await chamar({ ...router, soEquipe: true }, '{"intent":"negocio_com_a_empresa","confidence":0.97}');
+    expect(prompt).toContain('- negocio_com_a_empresa:');
+    expect(prompt).toContain('- mensagem_automatica:');
+    // M3: as descrições dizem o que NÃO é, com exemplos de cliente.
+    expect(prompt).toContain('NÃO inclui cliente ou paciente');
+    expect(prompt).toContain('vocês têm parceria com o meu convênio?');
+    expect(prompt).toContain('NÃO inclui perguntas do cliente sobre o NOSSO horário, valores ou opções');
+    expect(out).toEqual({ intentName: 'negocio_com_a_empresa', confidence: 0.97 });
+    expect(ehAssuntoFixoSoDaEquipe('mensagem_automatica')).toBe(true);
+    expect(ehAssuntoFixoSoDaEquipe('vendas')).toBe(false);
+    expect(ASSUNTOS_SO_DA_EQUIPE.map((m) => m.intentName)).toEqual(['negocio_com_a_empresa', 'mensagem_automatica']);
+  });
+
+  it("'observar': o classificador também recebe as intenções fixas (é o veredito que se mede)", async () => {
+    const { out, prompt } = await chamar({ ...router, soEquipe: 'observar' }, '{"intent":"mensagem_automatica","confidence":0.95}');
+    expect(prompt).toContain('- mensagem_automatica:');
+    expect(out).toEqual({ intentName: 'mensagem_automatica', confidence: 0.95 });
   });
 });

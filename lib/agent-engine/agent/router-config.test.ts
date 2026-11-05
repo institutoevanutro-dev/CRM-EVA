@@ -128,6 +128,28 @@ describe('loadActiveRouter — modo de permanência', () => {
     expect((await comConfig({}))?.permanenciaExpiraHoras).toBe(24);
   });
 
+  it('nao_reabre_apos_equipe: lista aparada; ausente ou torta vira lista vazia (a regra não existe)', async () => {
+    const r = await comConfig({ nao_reabre_apos_equipe: ['consulta_nova ', 'recepcao_geral', 3, ''] });
+    expect(r?.naoReabreAposEquipe).toEqual(['consulta_nova', 'recepcao_geral']);
+    expect((await comConfig({}))?.naoReabreAposEquipe).toEqual([]);
+    expect((await comConfig({ nao_reabre_apos_equipe: 'consulta_nova' }))?.naoReabreAposEquipe).toEqual([]);
+  });
+
+  it('nao_reabre_janela_dias: número positivo; ausente ou torto vira o padrão de 7', async () => {
+    expect((await comConfig({ nao_reabre_janela_dias: 3 }))?.naoReabreJanelaDias).toBe(3);
+    for (const v of [undefined, 0, -1, '3', null]) {
+      expect((await comConfig({ nao_reabre_janela_dias: v }))?.naoReabreJanelaDias).toBe(7);
+    }
+  });
+
+  it('so_equipe: só o booleano true liga; "observar" só registra', async () => {
+    expect((await comConfig({ so_equipe: true }))?.soEquipe).toBe(true);
+    expect((await comConfig({ so_equipe: 'observar' }))?.soEquipe).toBe('observar');
+    for (const v of [undefined, false, 'sim', 1]) {
+      expect((await comConfig({ so_equipe: v }))?.soEquipe).toBe(false);
+    }
+  });
+
   it('interrompe que não é array vira lista vazia', async () => {
     for (const valor of ['queixa_clinica', 7, null, { 0: 'queixa_clinica' }]) {
       expect((await comConfig({ permanencia: 'agente', interrompe: valor }))?.interrompe).toEqual([]);

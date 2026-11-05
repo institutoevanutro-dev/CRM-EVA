@@ -27,6 +27,8 @@ let acessosAoBanco = 0;
 /** As chamadas encadeadas na leitura de `messages`, para provar filtro e teto. */
 let consultasDeMensagens: Array<Array<[string, unknown[]]>> = [];
 let banco: Record<string, unknown[]>;
+/** Linhas inseridas, por tabela (o aviso na Central). */
+let inseridos: Array<[string, Record<string, unknown>]> = [];
 
 vi.mock("@/lib/env", () => ({ env: { INTERNAL_CRON_SECRET: "segredo-do-cron", INTERNAL_SECRET: "" } }));
 vi.mock("@/lib/audit", () => ({ audit: (...a: unknown[]) => auditar(...a) }));
@@ -62,6 +64,10 @@ vi.mock("@/lib/supabase/admin", () => ({
         neq: () => chain,
         order: () => chain,
         limit: anota("limit"),
+        insert: (linha: Record<string, unknown>) => {
+          inseridos.push([tabela, linha]);
+          return Promise.resolve({ error: null });
+        },
         maybeSingle: () =>
           Promise.resolve({ data: (banco[tabela] ?? [])[0] ?? null, error: null }),
         then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => resolver().then(res, rej),
@@ -106,6 +112,7 @@ beforeEach(() => {
   auditar.mockReset();
   acessosAoBanco = 0;
   consultasDeMensagens = [];
+  inseridos = [];
   devolver.mockResolvedValue({ ok: true, conversationId: VENCIDA, jaEstavaComOAgente: false });
   banco = {
     organizations: [{ id: ORG, settings: { routing: { handoff_return_after_minutes: 60 } } }],
@@ -136,6 +143,37 @@ describe("cron handoff-devolucao", () => {
     });
     expect(auditar).toHaveBeenCalledTimes(1);
     expect(auditar.mock.calls[0]?.[0]).toMatchObject({ action: "conversation.handoff_auto_return_run" });
+  });
+
+  it("modo 'fim do dia seguinte': a fala da EQUIPE segura, não last_outbound_at (lembrete, campanha, eco nosso não seguram)", async () => {
+    banco.organizations = [
+      {
+        id: ORG,
+        timezone: "America/Sao_Paulo",
+        settings: { routing: { handoff_return_after_minutes: 60 }, atendimento: { ia_volta_apos_equipe: "fim_do_dia_seguinte" } },
+      },
+    ];
+    // Saída 80 min atrás, DEPOIS do handoff (90 min atrás).
+    banco.conversations = [conversa(90, { last_outbound_at: min(80) })];
+
+    // A saída foi um lembrete: nenhuma fala da equipe → regra dos 60 min, devolve.
+    banco.messages = [];
+    await chamar();
+    expect(devolver).toHaveBeenCalledTimes(1);
+
+    // O eco do envio da IA gravado como celular também não segura.
+    devolver.mockClear();
+    banco.messages = [{ sent_at: min(80), created_at: min(80), metadata: { eco_de_envio_nosso: true } }];
+    await chamar();
+    expect(devolver).toHaveBeenCalledTimes(1);
+
+    // A equipe falou pelo celular: segura até o fim do dia seguinte.
+    devolver.mockClear();
+    banco.messages = [{ sent_at: min(80), created_at: min(80), metadata: { fromMe: true } }];
+    await chamar();
+    expect(devolver).not.toHaveBeenCalled();
+    const filtros = consultasDeMensagens.at(-1)!;
+    expect(filtros).toEqual(expect.arrayContaining([["limit", [10]]]));
   });
 
   it("dentro do prazo: nada é devolvido e a rodada não audita", async () => {
@@ -230,6 +268,61 @@ describe("cron handoff-devolucao", () => {
       expect(corpo.data.cliente_sem_resposta_na_pausa.retomadas).toBe(1);
       expect(auditar).toHaveBeenCalledTimes(1);
       expect(auditar.mock.calls[0]?.[0]).toMatchObject({ action: "conversation.handoff_auto_return_run" });
+    });
+
+    it("modo 'fim do dia seguinte' ligado: NÃO devolve nem despacha; abre um aviso na Central, uma vez só", async () => {
+      banco.organizations = [
+        {
+          id: ORG,
+          timezone: "America/Sao_Paulo",
+          settings: { atendimento: { pausa_cliente_sem_resposta_min: 15, ia_volta_apos_equipe: "fim_do_dia_seguinte" } },
+        },
+      ];
+      banco.conversations = [pausada(20)];
+      const corpo = (await (await chamar()).json()) as {
+        data: { cliente_sem_resposta_na_pausa: { retomadas: number; avisos: number } };
+      };
+      expect(devolver).not.toHaveBeenCalled();
+      expect(despachar).not.toHaveBeenCalled();
+      expect(corpo.data.cliente_sem_resposta_na_pausa).toMatchObject({ retomadas: 0, avisos: 1 });
+      expect(inseridos).toHaveLength(1);
+      expect(inseridos[0]![0]).toBe("agent_inbox_items");
+      expect(inseridos[0]![1]).toMatchObject({
+        organization_id: ORG,
+        kind: "other",
+        ref_kind: "conversation",
+        ref_id: VENCIDA,
+        title: "Cliente escreveu e ninguém da equipe respondeu",
+      });
+      expect(String(inseridos[0]![1].body)).toMatch(/só volta sozinha em \d{2}\/\d{2} às \d{2}:\d{2}\./);
+      expect(auditar).toHaveBeenCalledTimes(1);
+
+      // Já existe aviso desta conversa depois da última saída: não abre outro.
+      banco.agent_inbox_items = [{ id: "aviso-1" }];
+      inseridos = [];
+      auditar.mockReset();
+      await chamar();
+      expect(inseridos).toEqual([]);
+      expect(devolver).not.toHaveBeenCalled();
+      expect(auditar).not.toHaveBeenCalled();
+    });
+
+    it("modo ligado SEM pausa_cliente_sem_resposta_min: o aviso da Central sai mesmo assim (15 min), sem retomar (m4)", async () => {
+      banco.organizations = [
+        { id: ORG, timezone: "America/Sao_Paulo", settings: { atendimento: { ia_volta_apos_equipe: "fim_do_dia_seguinte" } } },
+      ];
+      banco.conversations = [pausada(20)];
+      const corpo = (await (await chamar()).json()) as {
+        data: { cliente_sem_resposta_na_pausa: { retomadas: number; avisos: number } };
+      };
+      expect(devolver).not.toHaveBeenCalled();
+      expect(corpo.data.cliente_sem_resposta_na_pausa).toMatchObject({ retomadas: 0, avisos: 1 });
+      expect(inseridos[0]?.[1]).toMatchObject({ kind: "other", title: "Cliente escreveu e ninguém da equipe respondeu" });
+      // Antes dos 15 min, nada.
+      inseridos = [];
+      banco.conversations = [pausada(10)];
+      await chamar();
+      expect(inseridos).toEqual([]);
     });
 
     it("dentro dos N minutos: nada acontece e a rodada não audita", async () => {

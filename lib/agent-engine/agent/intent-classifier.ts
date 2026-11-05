@@ -19,10 +19,19 @@ import { extrairObjetoJsonDoTexto } from '@/lib/agent-engine/texto/extrair-json-
 import type { Logger } from '../obs/logger';
 import { runModelCall, type LlmEdgeConfig } from '../edge/llm/run-model-call';
 import type { LoadedRouter, RouterMember } from './router-config';
+import { ASSUNTOS_SO_DA_EQUIPE } from './assuntos-so-da-equipe';
 
 export interface IntentVerdict {
   intentName: string | null;
   confidence: number;
+}
+
+/** As intenções que este roteador oferece ao classificador. */
+function intencoesDoRoteador(router: Pick<LoadedRouter, 'members' | 'soEquipe'>): RouterMember[] {
+  // No modo 'observar' também: é o veredito do classificador que se mede.
+  return router.soEquipe === true || router.soEquipe === 'observar'
+    ? [...router.members, ...ASSUNTOS_SO_DA_EQUIPE]
+    : router.members;
 }
 
 /** Instrução final fixa — pede JSON estrito, marcador estável pros testes/prompt. */
@@ -158,14 +167,14 @@ export async function classifyIntent(
         ...(input.router.classifierProvider
           ? { llmOverride: { provider: input.router.classifierProvider } }
           : {}),
-        messages: [{ role: 'user', content: buildClassifierPrompt(input.router.members, input.signal, input.fatos, {
+        messages: [{ role: 'user', content: buildClassifierPrompt(intencoesDoRoteador(input.router), input.signal, input.fatos, {
           historico: input.historico,
           assuntoAtual: input.assuntoAtual,
         }) }],
       },
       { log: deps.log },
     );
-    return parseIntentVerdict(result.text, input.router.members);
+    return parseIntentVerdict(result.text, intencoesDoRoteador(input.router));
   } catch (err) {
     // Falha do classificador NUNCA derruba o turno — chamador cai no fallback do router.
     deps.log.warn('intent-classifier: falha ao classificar intenção — turno cai no fallback', {

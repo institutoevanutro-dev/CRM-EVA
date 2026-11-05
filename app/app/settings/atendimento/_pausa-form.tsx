@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import {
@@ -25,10 +26,12 @@ export function PausaDaIaForm({
   initial,
   initialEspera,
   initialMaxHoras,
+  initialFimDoDiaSeguinte,
 }: {
   initial: number;
   initialEspera: number | null;
   initialMaxHoras: number;
+  initialFimDoDiaSeguinte: boolean;
 }) {
   const t = useT();
   const [minutos, setMinutos] = useState(String(initial));
@@ -37,6 +40,8 @@ export function PausaDaIaForm({
   const [esperaSalva, setEsperaSalva] = useState(initialEspera);
   const [maxHoras, setMaxHoras] = useState(String(initialMaxHoras));
   const [maxHorasSalvo, setMaxHorasSalvo] = useState(initialMaxHoras);
+  const [fim, setFim] = useState(initialFimDoDiaSeguinte);
+  const [fimSalvo, setFimSalvo] = useState(initialFimDoDiaSeguinte);
   const [isPending, startTransition] = useTransition();
 
   const valor = Number(minutos);
@@ -64,10 +69,12 @@ export function PausaDaIaForm({
           minutos: valor,
           cliente_sem_resposta_min: valorEspera,
           cliente_sem_resposta_max_horas: valorMaxHoras,
+          fim_do_dia_seguinte: fim,
         });
         setSalvo(valor);
         setEsperaSalva(valorEspera);
         setMaxHorasSalvo(valorMaxHoras);
+        setFimSalvo(fim);
         toast.success(t("Pausa da IA salva."));
       } catch (err) {
         toast.error(err instanceof Error ? t(err.message) : t("Não consegui salvar."));
@@ -86,6 +93,25 @@ export function PausaDaIaForm({
             )}
           </p>
         </div>
+        <div className="flex max-w-xl items-start justify-between gap-4">
+          <div className="space-y-1">
+            <Label htmlFor="ia_volta_fim_do_dia_seguinte">
+              {t("Depois que a equipe responde, a IA só volta no fim do dia seguinte")}
+            </Label>
+            <p id="ia_volta_fim_do_dia_seguinte_ajuda" className="text-xs text-muted-foreground">
+              {t(
+                "Ligado: a IA fica fora da conversa até a meia-noite do dia seguinte à última resposta da equipe, ou até alguém clicar em Devolver ao automático. Se o cliente escrever e ninguém responder, abre um aviso na Central em vez de a IA voltar. Se o WhatsApp do celular manda saudação automática, ela conta como resposta da equipe.",
+              )}
+            </p>
+          </div>
+          <Switch
+            id="ia_volta_fim_do_dia_seguinte"
+            checked={fim}
+            disabled={isPending}
+            aria-describedby="ia_volta_fim_do_dia_seguinte_ajuda"
+            onCheckedChange={setFim}
+          />
+        </div>
         <div className="max-w-sm space-y-1">
           <Label htmlFor="pausa_ia_min">
             {t("Quanto tempo a IA fica fora da conversa depois que uma pessoa responde (minutos)")}
@@ -98,7 +124,7 @@ export function PausaDaIaForm({
             min={PAUSA_MINIMA_MIN}
             max={PAUSA_MAXIMA_MIN}
             value={minutos}
-            disabled={isPending}
+            disabled={isPending || fim}
             aria-invalid={!valido}
             aria-describedby="pausa_ia_min_ajuda"
             onChange={(e) => setMinutos(e.target.value)}
@@ -169,7 +195,7 @@ export function PausaDaIaForm({
             !valido ||
             !esperaValida ||
             !maxHorasValido ||
-            (valor === salvo && valorEspera === esperaSalva && valorMaxHoras === maxHorasSalvo)
+            (valor === salvo && valorEspera === esperaSalva && valorMaxHoras === maxHorasSalvo && fim === fimSalvo)
           }
         >
           {isPending ? t("Salvando…") : t("Salvar pausa")}

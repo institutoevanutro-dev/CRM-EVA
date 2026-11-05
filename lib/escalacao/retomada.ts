@@ -39,6 +39,7 @@ import { logger } from "@/lib/logger";
 import { autorizarContatoParaIA } from "@/lib/ai/elegibilidade/autorizacao";
 
 import { lerContinuidadeHumana, type ContinuidadeHumana } from "./continuidade";
+import { CHAVE_DA_DEVOLUCAO_MANUAL } from "./fala-da-equipe";
 
 export interface RetomadaDeps {
   /** Admin client (service role) OU client do request — os dois filtram org aqui. */
@@ -69,6 +70,15 @@ export type RetomadaFalha =
  */
 export type OrigemDaRetomada = { automatica: { minutos: number } };
 
+/**
+ * Marca em `conversations.metadata` (ISO) do último "Devolver ao automático"
+ * MANUAL (tela, API, tool). É o marco de `nao_reabre_apos_equipe`: só fala da
+ * equipe DEPOIS dela bloqueia o assunto (decisão do dono, 04/11/2026). A
+ * devolução automática não grava — ela não libera. Lida pelo SQL de
+ * `resolveConversationTurn` (`resolve-turn-agent.ts`). Mora em `fala-da-equipe.ts`.
+ */
+export { CHAVE_DA_DEVOLUCAO_MANUAL };
+
 export type RetomadaResultado =
   | {
       ok: true;
@@ -89,6 +99,7 @@ interface ConversaRow {
   assigned_to_user_id: string | null;
   assignee_kind: string | null;
   bot_silenced_until: string | null;
+  metadata: unknown;
 }
 
 export async function devolverAtendimentoAoAgente(
@@ -99,7 +110,7 @@ export async function devolverAtendimentoAoAgente(
 
   const { data: convData, error: convErr } = await supabase
     .from("conversations")
-    .select("id, contact_id, status, assigned_to_user_id, assignee_kind, bot_silenced_until")
+    .select("id, contact_id, status, assigned_to_user_id, assignee_kind, bot_silenced_until, metadata")
     .eq("id", input.conversationId)
     .eq("organization_id", organizationId)
     .maybeSingle();
@@ -174,6 +185,19 @@ export async function devolverAtendimentoAoAgente(
       assignee_kind: "ai",
       status: proximoStatus,
       status_changed_at: new Date().toISOString(),
+      // Só a manual libera os assuntos de `nao_reabre_apos_equipe`.
+      // ponytail: read-modify-write do jsonb; outro escritor no mesmo instante
+      // perde a chave dele. Vira `jsonb_set` por RPC se isso aparecer.
+      ...(input.origem
+        ? {}
+        : {
+            metadata: {
+              ...(conv.metadata && typeof conv.metadata === "object" && !Array.isArray(conv.metadata)
+                ? (conv.metadata as Record<string, unknown>)
+                : {}),
+              [CHAVE_DA_DEVOLUCAO_MANUAL]: new Date().toISOString(),
+            },
+          }),
     })
     .eq("id", input.conversationId)
     .eq("organization_id", organizationId)

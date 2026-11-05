@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { mudouDeAssunto, resolveConversationTurn, resolveTurnAgent } from './resolve-turn-agent';
+import { marcoDaDevolucaoManual, mudouDeAssunto, resolveConversationTurn, resolveTurnAgent } from './resolve-turn-agent';
+import { outrosAssuntosDoTurno } from './passagem-de-assunto';
 import type { PublishedAgentConfig } from './agent-config';
 import type { LoadedRouter } from './router-config';
 
@@ -896,5 +897,273 @@ describe("resolveTurnAgent: no modo 'agente' a permanência expira", () => {
     expect(db.query.mock.calls[0]![0]).toContain('active_agent_set_at');
     expect(out.outcome).toBe('classified');
     expect(out.config?.agentId).toBe('agent-suporte');
+  });
+});
+
+// ─── Regra 8: o assunto que a IA não reabre depois que a equipe falou ───
+describe('resolveTurnAgent: nao_reabre_apos_equipe', () => {
+  const tres = [
+    ...members,
+    { agentId: 'agent-recepcao', intentName: 'recepcao', intentDescription: 'geral', examples: [] },
+  ];
+  const r = (over: Partial<LoadedRouter> = {}) =>
+    router({ members: tres, fallbackAgentId: 'agent-recepcao', naoReabreAposEquipe: ['vendas'], ...over });
+
+  async function rodar(rt: LoadedRouter, input: { stickyAgentId: string | null; stickyIntent: string | null; equipeFalou?: boolean; signal?: string | null }, verdict: unknown = { intentName: 'vendas', confidence: 0.9 }) {
+    const info = vi.fn();
+    const d = makeDeps({
+      loadActiveRouter: vi.fn().mockResolvedValue(rt),
+      loadPublishedAgentConfigById: idAwareLoader(),
+      agenteDaCampanha: vi.fn().mockResolvedValue(null),
+      classifyIntent: vi.fn().mockResolvedValue(verdict),
+    }) as unknown as { log: { info: typeof info } };
+    d.log.info = info;
+    const { equipeFalou, ...resto } = input;
+    // "A equipe falou" = fala de ontem, dentro da janela padrão de 7 dias.
+    const falaDaEquipeEm = equipeFalou === true ? new Date(Date.now() - 86_400_000) : null;
+    const out = await resolveTurnAgent({} as never, {} as never, { ...baseInput, signal: 'Ok', ...resto, falaDaEquipeEm }, d as never);
+    return { out, info };
+  }
+
+  it('sticky em vendas + equipe falou → fallback, com log', async () => {
+    const { out, info } = await rodar(r(), { stickyAgentId: 'agent-vendas', stickyIntent: 'vendas', equipeFalou: true });
+    expect(out.outcome).toBe('fallback');
+    expect(out.config?.agentId).toBe('agent-recepcao');
+    expect(info).toHaveBeenCalledWith('qualificacao_bloqueada_apos_equipe', expect.objectContaining({ assunto: 'vendas' }));
+  });
+
+  it('classificado em vendas + equipe falou → fallback', async () => {
+    const { out } = await rodar(r(), { stickyAgentId: null, stickyIntent: null, equipeFalou: true });
+    expect(out.outcome).toBe('fallback');
+    expect(out.config?.agentId).toBe('agent-recepcao');
+  });
+
+  it('follow-up (sem mensagem) com sticky em vendas + equipe falou → cala, não troca de agente', async () => {
+    const { out } = await rodar(r(), { stickyAgentId: 'agent-vendas', stickyIntent: null, equipeFalou: true, signal: null });
+    expect(out.outcome).toBe('bloqueado_apos_equipe');
+    expect(out.config).toBeNull();
+  });
+
+  it('sem fala da equipe → como hoje', async () => {
+    const { out } = await rodar(r(), { stickyAgentId: null, stickyIntent: null, equipeFalou: false });
+    expect(out.outcome).toBe('classified');
+    expect(out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it('assunto fora da lista segue atendido pela IA', async () => {
+    const { out } = await rodar(r(), { stickyAgentId: null, stickyIntent: null, equipeFalou: true }, { intentName: 'suporte', confidence: 0.9 });
+    expect(out.config?.agentId).toBe('agent-suporte');
+  });
+
+  it('fallback também na lista → bloqueado_apos_equipe, sem agente (nunca o genérico)', async () => {
+    const { out } = await rodar(r({ naoReabreAposEquipe: ['vendas', 'recepcao'] }), { stickyAgentId: 'agent-vendas', stickyIntent: 'vendas', equipeFalou: true });
+    expect(out.outcome).toBe('bloqueado_apos_equipe');
+    expect(out.config).toBeNull();
+    const semMatch = await rodar(r({ naoReabreAposEquipe: ['recepcao'] }), { stickyAgentId: null, stickyIntent: null, equipeFalou: true }, { intentName: null, confidence: 0.2 });
+    expect(semMatch.out.outcome).toBe('bloqueado_apos_equipe');
+  });
+
+  it('transfer_to_subject não oferece o assunto bloqueado (M1): sai de `assuntos` só com a equipe tendo falado', async () => {
+    const comFala = await rodar(r(), { stickyAgentId: null, stickyIntent: null, equipeFalou: true }, { intentName: 'suporte', confidence: 0.9 });
+    expect(comFala.out.assuntos?.map((a) => a.intentName)).toEqual(['suporte', 'recepcao']);
+    const outros = outrosAssuntosDoTurno({
+      previa: false, jobKind: 'inbound_turn', jaPassou: false,
+      routed: { ...comFala.out, permanencia: 'agente' }, agentId: 'agent-suporte',
+    });
+    expect(outros.find((a) => a.intentName === 'vendas')).toBeUndefined();
+    const semFala = await rodar(r(), { stickyAgentId: null, stickyIntent: null, equipeFalou: false }, { intentName: 'suporte', confidence: 0.9 });
+    expect(semFala.out.assuntos?.map((a) => a.intentName)).toContain('vendas');
+  });
+
+  it('campanha (M2): agente da campanha de assunto bloqueado + equipe falou → régua normal (fallback); sem fala, campanha', async () => {
+    const comCampanha = (falaDaEquipeEm: Date | null, idDaCampanha = 'agent-vendas') =>
+      resolveTurnAgent({} as never, {} as never, { ...baseInput, signal: 'Ok', stickyAgentId: null, stickyIntent: null, falaDaEquipeEm },
+        makeDeps({
+          loadActiveRouter: vi.fn().mockResolvedValue(r()),
+          loadPublishedAgentConfigById: idAwareLoader(),
+          agenteDaCampanha: vi.fn().mockResolvedValue(idDaCampanha),
+          classifyIntent: vi.fn().mockResolvedValue({ intentName: 'vendas', confidence: 0.9 }),
+        }));
+    const bloqueada = await comCampanha(new Date(Date.now() - 86_400_000));
+    expect(bloqueada.outcome).toBe('fallback');
+    expect(bloqueada.config?.agentId).toBe('agent-recepcao');
+    expect((await comCampanha(null)).outcome).toBe('campanha');
+    // Fala fora da janela de 7 dias: a campanha atende.
+    expect((await comCampanha(new Date(Date.now() - 8 * 86_400_000))).outcome).toBe('campanha');
+    // Agente da campanha de assunto fora da lista: atende.
+    const livre = await comCampanha(new Date(Date.now() - 86_400_000), 'agent-suporte');
+    expect(livre.outcome).toBe('campanha');
+    expect(livre.config?.agentId).toBe('agent-suporte');
+  });
+
+  /** `resolveConversationTurn` com a conversa que o banco devolveria. */
+  async function pelaConversa(linha: { ultima_fala_da_equipe: Date | null; marco_da_devolucao?: string | null }) {
+    const db = {
+      query: vi.fn(async (sql: string) =>
+        sql.includes('from conversations')
+          ? { rows: [{ active_ai_agent_id: 'agent-vendas', active_intent: 'vendas', active_agent_set_at: null, marco_da_devolucao: null, sem_saida: false, ...linha }] }
+          : { rows: [{ body: 'Ok', type: 'text', media_url: null, media_storage_path: null, media_derived_text: null }] }),
+    };
+    const out = await resolveConversationTurn(db as never, {} as never, { ...baseInput, inbound: true },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(r()),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        agenteDaCampanha: vi.fn().mockResolvedValue(null),
+        classifyIntent: vi.fn().mockResolvedValue({ intentName: 'vendas', confidence: 0.9 }),
+      }));
+    return { out, sql: String(db.query.mock.calls[0]![0]) };
+  }
+  const diasAtras = (d: number) => new Date(Date.now() - d * 86_400_000);
+
+  it('resolveConversationTurn lê a última fala da equipe (crm, user, celular; sem eco nosso; pelo sent_at)', async () => {
+    const { out, sql } = await pelaConversa({ ultima_fala_da_equipe: diasAtras(1) });
+    expect(sql).toMatch(/sent_via in \('crm','user','external_device'\)/);
+    expect(sql).toMatch(/eco_de_envio_nosso/);
+    expect(sql).toMatch(/max\(coalesce\(m\.sent_at, m\.created_at\)\)/);
+    expect(out.config?.agentId).toBe('agent-recepcao');
+  });
+
+  it('janela (padrão 7 dias): fala de 8 dias atrás não bloqueia; de 2 dias bloqueia; config muda a janela', async () => {
+    expect((await pelaConversa({ ultima_fala_da_equipe: diasAtras(8) })).out.config?.agentId).toBe('agent-vendas');
+    expect((await pelaConversa({ ultima_fala_da_equipe: diasAtras(2) })).out.config?.agentId).toBe('agent-recepcao');
+    const curta = await rodar(r({ naoReabreJanelaDias: 0.5 }), { stickyAgentId: null, stickyIntent: null, equipeFalou: true });
+    expect(curta.out.config?.agentId).toBe('agent-vendas');
+  });
+
+  it('marco da devolução manual: fala anterior não bloqueia, posterior bloqueia; marco torto = sem marco, sem derrubar o turno', async () => {
+    const marco = diasAtras(1).toISOString();
+    expect((await pelaConversa({ ultima_fala_da_equipe: diasAtras(2), marco_da_devolucao: marco })).out.config?.agentId).toBe('agent-vendas');
+    expect((await pelaConversa({ ultima_fala_da_equipe: diasAtras(0.5), marco_da_devolucao: marco })).out.config?.agentId).toBe('agent-recepcao');
+    const torto = await pelaConversa({ ultima_fala_da_equipe: diasAtras(2), marco_da_devolucao: '2026-13-40T00:00:00Z' });
+    expect(torto.out.outcome).toBe('fallback');
+    expect(torto.out.config?.agentId).toBe('agent-recepcao');
+  });
+
+  it('marcoDaDevolucaoManual: só ISO completo e data que existe', () => {
+    expect(marcoDaDevolucaoManual('2026-11-03T17:30:01.123Z')?.toISOString()).toBe('2026-11-03T17:30:01.123Z');
+    expect(marcoDaDevolucaoManual('2026-13-40T00:00:00Z')).toBeNull();
+    expect(marcoDaDevolucaoManual('2026-11-03')).toBeNull();
+    expect(marcoDaDevolucaoManual('2026-11-03T17:30')).toBeNull();
+    expect(marcoDaDevolucaoManual('lixo')).toBeNull();
+    expect(marcoDaDevolucaoManual(42)).toBeNull();
+  });
+});
+
+describe('resolveTurnAgent: intenção fixa do produto sem regra própria vale como nenhuma', () => {
+  it('veredito negocio_com_a_empresa não quebra o turno: sem sticky cai no fallback, com sticky fica', async () => {
+    const base = { loadPublishedAgentConfigById: idAwareLoader(), agenteDaCampanha: vi.fn().mockResolvedValue(null),
+      classifyIntent: vi.fn().mockResolvedValue({ intentName: 'negocio_com_a_empresa', confidence: 0.85 }) };
+    const rt = router({ fallbackAgentId: 'agent-suporte', soEquipe: true });
+    const semSticky = await resolveTurnAgent({} as never, {} as never, { ...baseInput, signal: 'proposta', stickyAgentId: null, stickyIntent: null },
+      makeDeps({ ...base, loadActiveRouter: vi.fn().mockResolvedValue(rt) }));
+    expect(semSticky.outcome).toBe('fallback');
+    const comSticky = await resolveTurnAgent({} as never, {} as never, { ...baseInput, signal: 'proposta', stickyAgentId: 'agent-vendas', stickyIntent: 'vendas' },
+      makeDeps({ ...base, loadActiveRouter: vi.fn().mockResolvedValue(rt) }));
+    expect(comSticky.outcome).toBe('sticky');
+  });
+});
+
+// ─── Regra 9: negócio e mensagem automática só abrem caso ───
+describe('resolveTurnAgent: config.so_equipe', () => {
+  const COM_AGENDA = 'Fatos do CRM sobre este contato (agenda):\n- Compromissos futuros: 10/11 consulta (confirmado)';
+  async function rodar(over: {
+    router?: Partial<LoadedRouter>;
+    verdict?: unknown;
+    fatos?: string | null;
+    sticky?: boolean;
+    semSaida?: boolean;
+    signal?: string;
+  } = {}) {
+    const classifyIntent = vi.fn().mockResolvedValue(over.verdict ?? { intentName: 'negocio_com_a_empresa', confidence: 0.95 });
+    const deps = makeDeps({
+      loadActiveRouter: vi.fn().mockResolvedValue(router({ soEquipe: true, fallbackAgentId: 'agent-suporte', ...over.router })),
+      loadPublishedAgentConfigById: idAwareLoader(),
+      agenteDaCampanha: vi.fn().mockResolvedValue(null),
+      classifyIntent,
+      buildFatosDoContato: vi.fn().mockResolvedValue(over.fatos === undefined ? FATOS : over.fatos),
+    });
+    const out = await resolveTurnAgent({} as never, {} as never,
+      {
+        ...baseInput,
+        signal: over.signal ?? 'Somos distribuidores de luvas e queremos apresentar nosso catálogo',
+        stickyAgentId: over.sticky ? 'agent-vendas' : null,
+        stickyIntent: over.sticky ? 'vendas' : null,
+        semSaida: over.semSaida ?? false,
+      },
+      deps);
+    return { out, classifyIntent, info: (deps as unknown as { log: { info: ReturnType<typeof vi.fn> } }).log.info };
+  }
+
+  it('0,95 e contato sem agenda → so_equipe, sem agente', async () => {
+    const { out } = await rodar();
+    expect(out.outcome).toBe('so_equipe');
+    expect(out.config).toBeNull();
+    expect(out.intentName).toBe('negocio_com_a_empresa');
+  });
+
+  it('0,85 (abaixo do corte de 0,9) → agente normal', async () => {
+    const { out } = await rodar({ verdict: { intentName: 'negocio_com_a_empresa', confidence: 0.85 } });
+    expect(out.outcome).toBe('fallback');
+    expect(out.config?.agentId).toBe('agent-suporte');
+  });
+
+  it('contato com compromisso na agenda nunca é calado', async () => {
+    expect((await rodar({ fatos: COM_AGENDA })).out.outcome).toBe('fallback');
+  });
+
+  it('fatos ilegíveis não contam como agenda vazia', async () => {
+    expect((await rodar({ fatos: null })).out.config?.agentId).toBe('agent-suporte');
+  });
+
+  it("sticky em modo 'agente' com interrompe de outro assunto → ainda so_equipe", async () => {
+    const { out } = await rodar({ sticky: true, router: { permanencia: 'agente', interrompe: ['suporte'] } });
+    expect(out.outcome).toBe('so_equipe');
+  });
+
+  it('sem a flag, a mesma resposta do modelo não cala ninguém', async () => {
+    const { out } = await rodar({ router: { soEquipe: false } });
+    expect(out.outcome).toBe('fallback');
+  });
+
+  it('primeira mensagem que se declara robô → so_equipe sem chamar o modelo', async () => {
+    const { out, classifyIntent } = await rodar({ semSaida: true, signal: 'Olá! Esta é uma mensagem automática. Retornaremos em breve.' });
+    expect(out.outcome).toBe('so_equipe');
+    expect(out.intentName).toBe('mensagem_automatica');
+    expect(classifyIntent).not.toHaveBeenCalled();
+  });
+
+  it('primeira mensagem com menu que pede escolha → so_equipe; já com saída nossa, não', async () => {
+    const menu = 'Bem-vindo à Loja Fictícia!\n1 - Pedidos\n2 - Trocas\nDigite o número da opção desejada';
+    expect((await rodar({ semSaida: true, signal: menu, verdict: { intentName: null, confidence: 0.1 } })).out.outcome).toBe('so_equipe');
+    expect((await rodar({ semSaida: false, signal: menu, verdict: { intentName: null, confidence: 0.1 } })).out.outcome).toBe('fallback');
+  });
+
+  it("modo 'observar': classificador → atende como sempre e só registra, com o motivo", async () => {
+    const { out, info } = await rodar({ router: { soEquipe: 'observar' } });
+    expect(out.outcome).toBe('fallback');
+    expect(out.config?.agentId).toBe('agent-suporte');
+    expect(info).toHaveBeenCalledWith('turno_so_da_equipe_observado', expect.objectContaining({ intentName: 'negocio_com_a_empresa', motivo: 'classificador' }));
+    expect(info).not.toHaveBeenCalledWith('turno_so_da_equipe', expect.anything());
+  });
+
+  it("modo 'observar': robô na abertura → registra e segue para o classificador", async () => {
+    const { out, info, classifyIntent } = await rodar({
+      router: { soEquipe: 'observar' }, semSaida: true, verdict: { intentName: 'vendas', confidence: 0.9 },
+      signal: 'Olá! Esta é uma mensagem automática. Retornaremos em breve.',
+    });
+    expect(out.outcome).toBe('classified');
+    expect(classifyIntent).toHaveBeenCalled();
+    expect(info).toHaveBeenCalledWith('turno_so_da_equipe_observado', expect.objectContaining({ motivo: 'autodeclaracao_de_robo' }));
+  });
+
+  it("modo calar (true) registra turno_so_da_equipe com o motivo", async () => {
+    const { info } = await rodar();
+    expect(info).toHaveBeenCalledWith('turno_so_da_equipe', expect.objectContaining({ motivo: 'classificador' }));
+  });
+
+  it('paciente numerando as próprias dúvidas na primeira mensagem não é robô', async () => {
+    const lista = '1) quanto custa a consulta? 2) tem horário sábado?';
+    const { out } = await rodar({ semSaida: true, signal: lista, verdict: { intentName: 'vendas', confidence: 0.9 } });
+    expect(out.outcome).toBe('classified');
   });
 });

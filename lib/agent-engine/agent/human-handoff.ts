@@ -189,6 +189,23 @@ export function ehMenuDeOpcoesNumeradas(mensagem: string): boolean {
 }
 
 /**
+ * A mensagem é MENU DE ROBÔ: pede a escolha ("digite o número", "opção
+ * desejada") E traz pelo menos duas opções numeradas. As duas coisas: só a
+ * instrução é gente citando o menu de alguém ("qual a opção desejada pra quem
+ * tem testa marcada?", "no site diz digite o número do cartão"), e só a lista
+ * pode ser gente numerando as próprias dúvidas. É o que cala a primeira
+ * mensagem da conversa (`resolve-turn-agent.ts`, regra 9), então erra para o
+ * lado de NÃO calar.
+ */
+export function ehMenuDeRoboComOpcoes(mensagem: string): boolean {
+  if (mensagem.trim() === '') return false;
+  const normalizada = normalize(mensagem);
+  if (!INSTRUCOES_DE_MENU.some((re) => re.test(normalizada))) return false;
+  const opcoes = normalizada.match(OPCAO_NUMERADA);
+  return opcoes !== null && new Set(opcoes.map((o) => o.replace(/\D/gu, ''))).size >= 2;
+}
+
+/**
  * O pedido casado é UMA OPÇÃO do menu? (marca 1, a que a guarda usa)
  *
  * Ser menu não basta: uma pessoa que numera as próprias dúvidas ("1. o preço /

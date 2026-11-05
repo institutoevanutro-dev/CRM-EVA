@@ -44,6 +44,8 @@
  */
 import { normalizarTexto } from "@/lib/opt-out/deteccao";
 
+import { fimDoDiaSeguinte } from "./pausa-por-resposta-humana";
+
 /** Piso e teto do prazo, em minutos. Abaixo de 5 a IA volta no meio da digitação. */
 export const PRAZO_MIN_MINUTOS = 5;
 export const PRAZO_MAX_MINUTOS = 24 * 60;
@@ -65,6 +67,13 @@ export interface ConversaEmHandoff {
   status_changed_at: string | null;
   /** Embed de `contacts` (FK many-to-one); `null` quando não há contato. */
   contacts?: { is_blocked: boolean | null; ai_opt_out: boolean | null } | null;
+  /**
+   * Horário de envio da última fala da EQUIPE (`lib/escalacao/fala-da-equipe.ts`),
+   * lido pelo cron só nas organizações com o modo "fim do dia seguinte".
+   * Ausente = não houve. NÃO é `last_outbound_at`: lembrete, campanha e aviso
+   * também movem aquele, e não são a equipe falando.
+   */
+  ultima_fala_da_equipe_at?: string | null;
 }
 
 /** Lê o prazo de `organizations.settings`. Ausente, nulo ou fora da faixa é "nunca". */
@@ -166,6 +175,12 @@ export function numerosComQuemAtenda(
 
 export interface Selecao {
   prazoPorOrg: ReadonlyMap<string, number>;
+  /**
+   * `organization_id` → fuso, SÓ das organizações com
+   * `atendimento.ia_volta_apos_equipe = "fim_do_dia_seguinte"`. Ausente = a
+   * regra dos minutos, como sempre. Ver `esperaDaEquipeMs`.
+   */
+  fusoDoFimDoDiaSeguinte?: ReadonlyMap<string, string>;
   /** `organization_id` → números com quem atenda (`numerosComQuemAtenda`). */
   sessoesComAgente: ReadonlyMap<string, ReadonlySet<string>>;
   agoraMs: number;
@@ -179,7 +194,34 @@ export type MotivoDeNaoDevolver =
   | "contato_bloqueado"
   | "sessao_sem_agente"
   | "sem_relogio"
-  | "dentro_do_prazo";
+  | "dentro_do_prazo"
+  | "equipe_falou_aguarda_fim_do_dia_seguinte";
+
+/**
+ * Com o modo "fim do dia seguinte" ligado, até quando a equipe segura a
+ * conversa (ms), ou `null` = a equipe não falou e vale a regra dos minutos.
+ *
+ * Dois sinais, vale o mais longo:
+ *   - a pausa finita em vigor (`bot_silenced_until`), que os escritores já
+ *     gravaram até o fim do dia seguinte à fala;
+ *   - a fala da EQUIPE depois do início do handoff (`ultima_fala_da_equipe_at`
+ *     ≥ o maior entre `last_handoff_at` e `assigned_at`). Não `last_outbound_at`:
+ *     lembrete, campanha e aviso também o movem, e segurariam o cliente sem
+ *     ninguém da equipe ter falado. É o caso medido: "Assumir" às 17:05:04, fala pelo
+ *     celular às 17:11 (com `'infinity'` o escritor não regrava a pausa), e a
+ *     devolução de 15 min soltou a conversa às 17:30.
+ */
+export function esperaDaEquipeMs(c: ConversaEmHandoff, fuso: string): number | null {
+  const pausa = epoch(c.bot_silenced_until);
+  const inicios = [epoch(c.last_handoff_at), epoch(c.assigned_at)].filter((t): t is number => t !== null);
+  const saida = epoch(c.ultima_fala_da_equipe_at ?? null);
+  const daFala =
+    inicios.length > 0 && saida !== null && saida >= Math.max(...inicios)
+      ? fimDoDiaSeguinte(new Date(saida), fuso).getTime()
+      : null;
+  const sinais = [pausa, daFala].filter((t): t is number => t !== null);
+  return sinais.length > 0 ? Math.max(...sinais) : null;
+}
 
 export function avaliarDevolucao(
   c: ConversaEmHandoff,
@@ -197,6 +239,13 @@ export function avaliarDevolucao(
   }
   const sinal = ultimoSinalHumanoMs(c);
   if (sinal === null) return { devolver: false, motivo: "sem_relogio" };
+  const fuso = sel.fusoDoFimDoDiaSeguinte?.get(c.organization_id);
+  if (fuso !== undefined) {
+    const espera = esperaDaEquipeMs(c, fuso);
+    if (espera !== null && sel.agoraMs < espera) {
+      return { devolver: false, motivo: "equipe_falou_aguarda_fim_do_dia_seguinte" };
+    }
+  }
   if (sel.agoraMs - sinal < minutos * 60_000) return { devolver: false, motivo: "dentro_do_prazo" };
   return { devolver: true, minutos };
 }
@@ -256,6 +305,12 @@ export interface SelecaoDaPausa {
   maxHorasPorOrg?: ReadonlyMap<string, number>;
   sessoesComAgente: ReadonlyMap<string, ReadonlySet<string>>;
   agoraMs: number;
+  /**
+   * Organizações com `atendimento.ia_volta_apos_equipe` ligado. Nelas a pausa
+   * é a equipe segurando a conversa até o fim do dia seguinte, e a IA não volta
+   * antes: quem seria retomado vira AVISO na Central (`avisar: true`).
+   */
+  avisarEmVezDeRetomar?: ReadonlySet<string>;
 }
 
 export type MotivoDeNaoRetomar =
@@ -271,7 +326,13 @@ export type MotivoDeNaoRetomar =
   | "sem_mensagem_pendente"
   | "pendente_antiga"
   | "dentro_da_espera"
-  | "so_despedida";
+  | "so_despedida"
+  | "equipe_falou";
+
+export type AvaliacaoDaRetomada =
+  | { retomar: true; minutos: number; avisar?: undefined }
+  | { retomar: false; motivo: "equipe_falou"; avisar: true; minutos: number }
+  | { retomar: false; motivo: Exclude<MotivoDeNaoRetomar, "equipe_falou">; avisar?: undefined };
 
 /**
  * Teto de idade da mensagem pendente, padrão de quem ligou a retomada sem
@@ -370,7 +431,7 @@ export function avaliarRetomadaPorClienteSemResposta(
   c: ConversaEmPausa,
   sel: SelecaoDaPausa,
   pendentes?: readonly UltimaEntrada[],
-): { retomar: true; minutos: number } | { retomar: false; motivo: MotivoDeNaoRetomar } {
+): AvaliacaoDaRetomada {
   const minutos = sel.esperaPorOrg.get(c.organization_id);
   if (minutos === undefined) return { retomar: false, motivo: "sem_ajuste" };
   if (estaComHumanoDuravel(c)) return { retomar: false, motivo: "humano_duravel" };
@@ -397,17 +458,20 @@ export function avaliarRetomadaPorClienteSemResposta(
   const esperaDesde = desde !== null && desde > saida ? desde : entrada;
   if (sel.agoraMs - esperaDesde < minutos * 60_000) return { retomar: false, motivo: "dentro_da_espera" };
   if (pendentes !== undefined && todasSaoDespedida(pendentes)) return { retomar: false, motivo: "so_despedida" };
+  if (sel.avisarEmVezDeRetomar?.has(c.organization_id)) {
+    return { retomar: false, motivo: "equipe_falou", avisar: true, minutos };
+  }
   return { retomar: true, minutos };
 }
 
 export function selecionarClientesSemResposta(
   conversas: readonly ConversaEmPausa[],
   sel: SelecaoDaPausa,
-): Array<{ conversa: ConversaEmPausa; minutos: number }> {
-  const out: Array<{ conversa: ConversaEmPausa; minutos: number }> = [];
+): Array<{ conversa: ConversaEmPausa; minutos: number; avisar: boolean }> {
+  const out: Array<{ conversa: ConversaEmPausa; minutos: number; avisar: boolean }> = [];
   for (const conversa of conversas) {
     const r = avaliarRetomadaPorClienteSemResposta(conversa, sel);
-    if (r.retomar) out.push({ conversa, minutos: r.minutos });
+    if (r.retomar || r.avisar) out.push({ conversa, minutos: r.minutos, avisar: r.avisar === true });
   }
   return out;
 }

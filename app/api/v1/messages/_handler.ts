@@ -62,7 +62,7 @@ import type { ListMessagesQuery, SendMessageInput } from "@/lib/schemas";
 import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { logger } from "@/lib/logger";
-import { carregarPausaPorRespostaHumanaMs } from "@/lib/escalacao/pausa-por-resposta-humana";
+import { carregarPrazoDaPausa } from "@/lib/escalacao/pausa-por-resposta-humana";
 import { devolverIdOriginalAoEcoDeOutraConversa } from "@/lib/messaging/eco-em-outra-conversa";
 import { previaDaMensagem } from "@/lib/messaging/previa-da-mensagem";
 import { aplicarAssinatura, configAssinatura, linhaDeAssinatura } from "@/lib/messaging/assinatura";
@@ -358,16 +358,16 @@ async function resolverMidiaDaBiblioteca(
  * (lib/agent-engine/agent/human-handoff.ts) só olhava `force_human`/`bot_silenced_until`,
  * e nenhum envio manual tocava nenhum dos dois.
  *
- * O tamanho da janela é o ajuste da organização (padrão 5 min), o mesmo que a
- * resposta pelo celular usa: `lib/escalacao/pausa-por-resposta-humana.ts`.
+ * O tamanho da janela é o ajuste da organização (padrão 5 min, ou o fim do dia
+ * seguinte com `atendimento.ia_volta_apos_equipe`), o mesmo que a resposta pelo
+ * celular usa: `lib/escalacao/pausa-por-resposta-humana.ts`.
  *
  * Postgres 'infinity' (handoff permanente — regex/tool/orquestrador) chega do PostgREST
  * como o literal texto "infinity", que `new Date(...)` não parseia. Nunca encurtar isso
  * para uma janela finita: se já está travado pra sempre, este helper não mexe.
  */
-function extendBotSilence(current: string | null, now: string, pausaMs: number): string | undefined {
+function extendBotSilence(current: string | null, candidate: Date): string | undefined {
   if (current === "infinity") return undefined;
-  const candidate = new Date(new Date(now).getTime() + pausaMs);
   if (current && new Date(current) >= candidate) return undefined;
   return candidate.toISOString();
 }
@@ -1426,13 +1426,13 @@ export async function sendMessageHandler(
     awaiting_since: c.last_inbound_at,
   };
   if (ctx.actor.type === "user") {
-    const pausaMs = await carregarPausaPorRespostaHumanaMs(supabase, c.organization_id, (detail) =>
+    const prazo = await carregarPrazoDaPausa(supabase, c.organization_id, new Date(now), (detail) =>
       logger.warn("[messages] ajuste da pausa da IA ilegível — usando o padrão", {
         organization_id: c.organization_id,
         detail,
       }),
     );
-    const silenceUntil = extendBotSilence(c.bot_silenced_until, now, pausaMs);
+    const silenceUntil = extendBotSilence(c.bot_silenced_until, prazo);
     if (silenceUntil) conversationUpdate.bot_silenced_until = silenceUntil;
   }
 

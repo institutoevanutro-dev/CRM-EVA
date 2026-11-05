@@ -15,7 +15,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { audit } from "@/lib/audit";
-import { devolverAtendimentoAoAgente, type OrigemDaRetomada } from "@/lib/escalacao/retomada";
+import { fimDoDiaSeguinte } from "@/lib/escalacao/pausa-por-resposta-humana";
+import {
+  CHAVE_DA_DEVOLUCAO_MANUAL,
+  devolverAtendimentoAoAgente,
+  type OrigemDaRetomada,
+} from "@/lib/escalacao/retomada";
 import type { Actor } from "@/lib/api/handlers/types";
 
 vi.mock("@/lib/audit", () => ({ audit: vi.fn().mockResolvedValue(undefined) }));
@@ -230,6 +235,23 @@ describe("devolver o atendimento ao agente", () => {
     });
   });
 
+  it("'Devolver ao automático' religa NA HORA, mesmo com a pausa até o fim do dia seguinte em vigor", async () => {
+    // Equipe falou às 17:11 de 03/11 com o modo ligado: pausa até 05/11 00:00 local.
+    // Às 19:47 a IA está calada; o botão é o único caminho para ela voltar antes.
+    const ate = fimDoDiaSeguinte(new Date("2026-11-03T20:11:00Z"), "America/Sao_Paulo").toISOString();
+    expect(ate).toBe("2026-11-05T03:00:00.000Z");
+    const cap = novaCaptura();
+    const r = await retomar(
+      cenarioComAtendimentoHumano({
+        conversa: conversaPassadaAHumano({ assigned_to_user_id: null, assignee_kind: "ai", status: "open", bot_silenced_until: ate }),
+      }),
+      cap,
+    );
+    expect(r.ok).toBe(true);
+    expect(cap.updates.find((u) => u.tabela === "conversations")?.valores).toMatchObject({ bot_silenced_until: null });
+    expect(cap.updates).toContainEqual({ tabela: "contacts", valores: { force_human: false } });
+  });
+
   it("solta o dono humano pela regra que já existe, em vez de escrever a coluna na mão", async () => {
     const cap = novaCaptura();
     await retomar(cenarioComAtendimentoHumano(), cap);
@@ -349,6 +371,29 @@ describe("devolver o atendimento ao agente", () => {
     });
     const atividade = cap.inserts.find((i) => i.tabela === "crm_lead_activities");
     expect(JSON.stringify(atividade?.valores)).toContain("automaticamente após 60 min");
+  });
+
+  it("devolução MANUAL grava o marco que libera nao_reabre_apos_equipe, sem apagar o resto do metadata", async () => {
+    const cap = novaCaptura();
+    const antes = Date.now();
+    const res = await retomar(
+      cenarioComAtendimentoHumano({ conversa: conversaPassadaAHumano({ metadata: { devolucao_ao_rodizio: { devolucoes: 1 } } }) }),
+      cap,
+    );
+    expect(res.ok).toBe(true);
+    const meta = cap.updates.find((u) => u.tabela === "conversations")?.valores.metadata as Record<string, unknown>;
+    expect(meta.devolucao_ao_rodizio).toEqual({ devolucoes: 1 });
+    expect(Date.parse(meta[CHAVE_DA_DEVOLUCAO_MANUAL] as string)).toBeGreaterThanOrEqual(antes);
+  });
+
+  it("devolução AUTOMÁTICA (fim do dia seguinte) não grava o marco: os assuntos seguem bloqueados", async () => {
+    const cap = novaCaptura();
+    const cron: Actor = { type: "webhook_source", id: "cron:handoff-devolucao" };
+    const res = await retomar(cenarioComAtendimentoHumano(), cap, cron, { automatica: { minutos: 60 } });
+    expect(res.ok).toBe(true);
+    const valores = cap.updates.find((u) => u.tabela === "conversations")?.valores;
+    expect(valores).toBeDefined();
+    expect(valores).not.toHaveProperty("metadata");
   });
 
   it("negócio ambíguo não vira atividade no card errado", async () => {

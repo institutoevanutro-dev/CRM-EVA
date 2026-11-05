@@ -12,6 +12,8 @@
  */
 import type pg from 'pg';
 
+import { NAO_REABRE_JANELA_DIAS_PADRAO } from '@/lib/escalacao/fala-da-equipe';
+
 export interface RouterMember {
   agentId: string;
   intentName: string;
@@ -64,6 +66,31 @@ export interface LoadedRouter {
   permanenciaExpiraHoras: number;
   fallbackAgentId: string | null;
   members: RouterMember[];
+  /**
+   * `config.nao_reabre_apos_equipe`: assuntos que a IA NUNCA reabre numa
+   * conversa em que alguém da equipe já escreveu (tela, API de usuário ou
+   * celular). Turno que cairia num deles vai para o fallback; se o fallback
+   * também está na lista, a IA não fala (`resolve-turn-agent.ts`). Vazio = a
+   * regra não existe (o padrão).
+   */
+  naoReabreAposEquipe?: string[];
+  /**
+   * `config.nao_reabre_janela_dias` (padrão `NAO_REABRE_JANELA_DIAS_PADRAO`):
+   * só a fala da equipe destes últimos dias conta para `naoReabreAposEquipe`.
+   * Medido no Instituto em 04/11/2026: 81% das conversas dos últimos 30 dias já
+   * tinham fala da equipe, então sem janela a regra calaria a qualificação de
+   * quase todo mundo que voltasse meses depois.
+   */
+  naoReabreJanelaDias?: number;
+  /**
+   * `config.so_equipe`: o classificador também conhece as intenções fixas do
+   * produto (`ASSUNTOS_SO_DA_EQUIPE`, conversa de negócio e mensagem
+   * automática). `true` = o turno que cai nelas passa à equipe sem resposta da
+   * IA; `'observar'` = só registra (`turno_so_da_equipe_observado`) e a IA
+   * atende como sempre, para medir o falso positivo antes de ligar. Desligado
+   * por padrão: o prompt do roteador fica byte a byte o de sempre.
+   */
+  soEquipe?: boolean | 'observar';
 }
 
 /** `config.permanencia_expira_horas` ausente ou fora da forma. */
@@ -162,6 +189,9 @@ async function montar(
     permanencia?: unknown;
     permanencia_expira_horas?: unknown;
     interrompe?: unknown;
+    nao_reabre_apos_equipe?: unknown;
+    nao_reabre_janela_dias?: unknown;
+    so_equipe?: unknown;
   };
   const classifierModel =
     typeof cfg.classifier_model === 'string' && cfg.classifier_model.trim() !== ''
@@ -184,13 +214,19 @@ async function montar(
   const expira = cfg.permanencia_expira_horas;
   const permanenciaExpiraHoras =
     typeof expira === 'number' && Number.isFinite(expira) && expira > 0 ? expira : PERMANENCIA_EXPIRA_HORAS_PADRAO;
-  const interrompe = Array.isArray(cfg.interrompe)
-    ? cfg.interrompe
-        .filter((i): i is string => typeof i === 'string')
-        // Aparado: 'queixa_clinica ' digitado com espaço tem de casar com o membro.
-        .map((i) => i.trim())
-        .filter((i) => i !== '')
-    : [];
+  // Aparado: 'queixa_clinica ' digitado com espaço tem de casar com o membro.
+  const listaDeAssuntos = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v
+          .filter((i): i is string => typeof i === 'string')
+          .map((i) => i.trim())
+          .filter((i) => i !== '')
+      : [];
+  const interrompe = listaDeAssuntos(cfg.interrompe);
+  const naoReabreAposEquipe = listaDeAssuntos(cfg.nao_reabre_apos_equipe);
+  const janela = cfg.nao_reabre_janela_dias;
+  const naoReabreJanelaDias =
+    typeof janela === 'number' && Number.isFinite(janela) && janela > 0 ? janela : NAO_REABRE_JANELA_DIAS_PADRAO;
 
   return {
     id: router.id,
@@ -203,6 +239,10 @@ async function montar(
     interrompe,
     permanenciaExpiraHoras,
     fallbackAgentId: router.fallback_agent_id,
+    naoReabreAposEquipe,
+    naoReabreJanelaDias,
+    // Só o booleano exato ou "observar": "sim", 1 e afins ficam desligados.
+    soEquipe: cfg.so_equipe === true ? true : cfg.so_equipe === 'observar' ? 'observar' : false,
     members: memberRows.map((m) => ({
       agentId: m.agent_id,
       intentName: m.intent_name,

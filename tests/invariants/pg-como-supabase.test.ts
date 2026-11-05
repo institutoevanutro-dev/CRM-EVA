@@ -281,6 +281,24 @@ describe("UPDATE — implementado depois, e por pressão do próprio adaptador",
     expect(data).toBeNull();
   });
 
+  it("`.is(coluna, null)` só atualiza onde a coluna É nula — a trava da devolução", async () => {
+    const { rows } = await pool.query<{ id: string }>(
+      `insert into crm_pipelines (organization_id, name, slug, position, description)
+       values ($1, 'Com Desc', 'alvo-is-com', 77, 'tem'), ($1, 'Sem Desc', 'alvo-is-sem', 77, null) returning id`,
+      [ORG],
+    );
+    const linhas = await db
+      .from("crm_pipelines")
+      .update({ name: "Mexido" })
+      .eq("organization_id", ORG)
+      .eq("position", 77)
+      .is("description", null)
+      .select("id");
+    const ids = ((linhas.data ?? []) as Array<{ id: string }>).map((l) => l.id);
+    expect(ids).toContain(rows[1]!.id);
+    expect(ids).not.toContain(rows[0]!.id);
+  });
+
   it("filtro que não casa devolve `data: null` SEM erro", async () => {
     const { data, error } = await db
       .from("crm_pipelines")
