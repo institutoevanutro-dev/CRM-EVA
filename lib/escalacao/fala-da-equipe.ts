@@ -3,9 +3,9 @@
  * equipe"): saída de pessoa pela tela (`crm`), pela API de usuário (`user`) ou
  * pelo celular (`external_device`). A mesma régua de `robo-do-outro-lado.ts`.
  *
- * Fora: o eco do envio da própria IA que a ingestão do WAHA não conseguiu casar
- * a tempo e gravou como `external_device` (corrida descrita em
- * `lib/waha/ingest.ts`). A ingestão marca essa linha com `MARCA_DE_ECO_NOSSO`.
+ * Fora: o eco do envio da própria IA que a ingestão do canal não conseguiu
+ * casar a tempo e gravou como `external_device` (a corrida com o envio, descrita
+ * na ingestão). A ingestão marca essa linha com `MARCA_DE_ECO_NOSSO`.
  *
  * Módulo sem dependência: o motor da IA e o cron leem daqui.
  */
