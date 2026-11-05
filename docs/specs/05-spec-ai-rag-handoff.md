@@ -1132,36 +1132,57 @@ seguinte"; ausente = comportamento acima):
   em vez de agora + N minutos. Cada fala nova renova;
 - a devolução por prazo acima não devolve a conversa em que a equipe escreveu depois do handoff
   (ou que tem pausa finita em vigor) antes desse instante (`esperaDaEquipeMs`,
-  `lib/escalacao/devolucao-automatica.ts`). Handoff sem fala da equipe segue o prazo em minutos;
+  `lib/escalacao/devolucao-automatica.ts`). "Escreveu" é a última saída de pessoa
+  (`lib/escalacao/fala-da-equipe.ts`), lida pelo cron; **não** `last_outbound_at`, que lembrete,
+  campanha e aviso também movem. Handoff sem fala da equipe segue o prazo em minutos;
 - o "cliente sem resposta durante a pausa" (`pausa_cliente_sem_resposta_min`) não devolve mais a
   conversa à IA: abre um aviso na Central (`agent_inbox_items`, kind `other`, título "Cliente
-  escreveu e ninguém da equipe respondeu", um por mensagem pendente);
+  escreveu e ninguém da equipe respondeu", um por mensagem pendente). Com o modo ligado o aviso
+  sai mesmo sem `pausa_cliente_sem_resposta_min`, depois de 15 min;
 - "Devolver ao automático" segue religando na hora.
 
 Caso medido (03/11/2026): "Assumir" 17:05, atendente pelo celular 17:11, devolução de 15 min às
 17:30, paciente "Ok" às 19:47 e a IA voltou à qualificação por cima da equipe.
 
+**O que conta como fala da equipe.** Saída com `messages.sent_via` em `crm`, `user` ou
+`external_device` (`lib/escalacao/fala-da-equipe.ts`), **menos** o eco do envio da IA que a
+ingestão do WAHA gravou como `external_device` na corrida com o envio — essa linha leva
+`metadata.eco_de_envio_nosso = true` (`lib/waha/ingest.ts`). Pelo horário de envio
+(`coalesce(sent_at, created_at)`; o celular grava o do aparelho).
+
 **Assuntos que a IA não reabre depois que a equipe falou (opcional, por roteador).**
 `ai_routers.config.nao_reabre_apos_equipe` (lista de nomes de assunto; vazia por padrão). Numa
-conversa com envio de pessoa (`messages.sent_via` em `crm`, `user`, `external_device`) **depois
-do último "Devolver ao automático" manual**, o turno que cairia num desses assuntos vai ao
-fallback do roteador; se o fallback também está na lista, a IA não fala e o turno de entrada passa
-a conversa à equipe com aviso. Regra 8 de `lib/agent-engine/agent/resolve-turn-agent.ts`.
+conversa com fala da equipe **nos últimos `ai_routers.config.nao_reabre_janela_dias` dias (padrão
+7)** e **depois do último "Devolver ao automático" manual** — vale o início mais recente —, o
+turno que cairia num desses assuntos vai ao fallback do roteador; se o fallback também está na
+lista, a IA não fala e o turno de entrada passa a conversa à equipe com aviso. Vale também para o
+agente da campanha (degrau 0: se ele é de um assunto da lista, a conversa segue pela régua normal),
+e o assunto da lista sai da lista de `transfer_to_subject`. Regra 8 de
+`lib/agent-engine/agent/resolve-turn-agent.ts`. A janela existe porque, medido no Instituto em
+04/11/2026, 81% das conversas dos últimos 30 dias já tinham fala da equipe.
 
 "Devolver ao automático" (botão, API ou tool — `devolverAtendimentoAoAgente` sem `origem`) libera
 tudo de novo (decisão do dono, 04/11/2026): grava `conversations.metadata.ia_devolvida_manualmente_em`
-(ISO) e só fala da equipe com `messages.created_at` posterior a esse marco volta a bloquear. A
-devolução automática (prazo do handoff, fim do dia seguinte) **não** grava o marco, então não
-libera. Marco ausente ou ilegível = conta toda a história. Prova:
-`tests/invariants/ia-depois-da-equipe-devolucao-manual.test.ts`.
+(ISO) e só fala da equipe enviada depois desse marco volta a bloquear. A devolução automática
+(prazo do handoff, fim do dia seguinte) **não** grava o marco, então não libera. O marco é
+validado em JS (ISO completo e data que existe); ausente ou torto = sem marco, e o turno não cai.
+Prova: `tests/invariants/ia-depois-da-equipe-devolucao-manual.test.ts`.
 
-**Conversa de negócio e resposta automática (opcional, por roteador).** `ai_routers.config.so_equipe
-= true` oferece ao classificador duas intenções fixas (`negocio_com_a_empresa`,
-`mensagem_automatica`, em `lib/agent-engine/agent/assuntos-so-da-equipe.ts`). Com uma delas,
-confiança ≥ 0,9 e contato sem nada na agenda — ou com a mensagem que abre a conversa se declarando
-robô ou pedindo escolha de menu —, a IA não escreve nada: `performHumanHandoff` (reason
-`assunto_da_equipe`, sem aviso ao contato) e um aviso na Central que diz para usar "Devolver ao
-automático" se for cliente. Regra 9 do mesmo arquivo; execução em `turno-da-equipe.ts`.
+**Conversa de negócio e resposta automática (opcional, por roteador).** `ai_routers.config.so_equipe`
+aceita `true` ou `"observar"` e oferece ao classificador duas intenções fixas
+(`negocio_com_a_empresa`, `mensagem_automatica`, em `lib/agent-engine/agent/assuntos-so-da-equipe.ts`;
+as descrições dizem com exemplos o que NÃO é: cliente perguntando convênio, parceria de desconto,
+preço, nosso horário ou opções). Com uma delas, confiança ≥ 0,9 e contato sem nada na agenda — ou
+com a mensagem que abre a conversa se declarando robô, ou sendo menu de robô (instrução de escolha
+**e** pelo menos duas opções numeradas; só a instrução é gente citando menu) —:
+
+- `true`: a IA não escreve nada: `performHumanHandoff` (reason `assunto_da_equipe`, sem aviso ao
+  contato) e um aviso na Central que diz para usar "Devolver ao automático" se for cliente;
+- `"observar"`: só sai o log `turno_so_da_equipe_observado` (com `motivo`: `classificador`,
+  `autodeclaracao_de_robo` ou `menu_de_robo`), e o turno segue como se a flag estivesse desligada.
+  É o modo para medir o falso positivo antes de ligar.
+
+Regra 9 do mesmo arquivo; execução em `turno-da-equipe.ts`.
 
 ---
 
