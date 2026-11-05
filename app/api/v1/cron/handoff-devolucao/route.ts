@@ -65,6 +65,7 @@ import {
 import { partesNoFuso } from "@/lib/agenda/fuso";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { devolverAtendimentoAoAgente, type RetomadaResultado } from "@/lib/escalacao/retomada";
+import { MARCA_DE_ECO_NOSSO, SENT_VIA_DA_EQUIPE } from "@/lib/escalacao/fala-da-equipe";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -190,6 +191,47 @@ async function sessoesComAgente(
   return numerosComQuemAtenda(agentes, roteadores, (declaradosData ?? []) as NumeroDeclarado[]);
 }
 
+/**
+ * Modo "fim do dia seguinte": a fala da EQUIPE de cada conversa candidata
+ * (`ultima_fala_da_equipe_at`), não `last_outbound_at`. Só onde pode haver fala
+ * depois do início do handoff (a saída mais recente é posterior a ele), então a
+ * conversa calada não custa consulta. Falha de leitura = sem fala: a regra dos
+ * minutos de antes, nunca segurar o cliente às cegas.
+ */
+async function anotarFalaDaEquipe(
+  admin: SupabaseClient,
+  conversas: ConversaEmHandoff[],
+  fusos: ReadonlyMap<string, string>,
+  requestId: string,
+): Promise<void> {
+  for (const c of conversas) {
+    if (!fusos.has(c.organization_id) || !c.last_outbound_at) continue;
+    const inicio = [c.last_handoff_at, c.assigned_at].filter((t): t is string => !!t).sort().pop();
+    if (!inicio || Date.parse(c.last_outbound_at) < Date.parse(inicio)) continue;
+    const { data, error } = await admin
+      .from("messages")
+      .select("sent_at, created_at, metadata")
+      .eq("organization_id", c.organization_id)
+      .eq("conversation_id", c.id)
+      .eq("direction", "outbound")
+      .in("sent_via", [...SENT_VIA_DA_EQUIPE])
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (error) {
+      logger.warn("[handoff-devolucao] fala da equipe ilegível — vale a regra dos minutos", {
+        conversation_id: c.id,
+        organization_id: c.organization_id,
+        detalhe: error.message,
+        requestId,
+      });
+      continue;
+    }
+    type Linha = { sent_at: string | null; created_at: string; metadata: Record<string, unknown> | null };
+    const fala = ((data ?? []) as Linha[]).find((m) => m.metadata?.[MARCA_DE_ECO_NOSSO] !== true);
+    c.ultima_fala_da_equipe_at = fala ? (fala.sent_at ?? fala.created_at) : null;
+  }
+}
+
 export async function devolverHandoffsVencidos(
   admin: SupabaseClient,
   requestId: string,
@@ -210,6 +252,7 @@ export async function devolverHandoffsVencidos(
     .limit(SCAN_LIMIT);
   if (error) throw new Error(`conversations: ${error.message}`);
   const conversas = (data ?? []) as unknown as ConversaEmHandoff[];
+  await anotarFalaDaEquipe(admin, conversas, fusoDoFimDoDiaSeguinte, requestId);
 
   const vencidas = selecionarVencidas(conversas, {
     prazoPorOrg,

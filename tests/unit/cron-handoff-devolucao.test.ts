@@ -145,6 +145,37 @@ describe("cron handoff-devolucao", () => {
     expect(auditar.mock.calls[0]?.[0]).toMatchObject({ action: "conversation.handoff_auto_return_run" });
   });
 
+  it("modo 'fim do dia seguinte': a fala da EQUIPE segura, não last_outbound_at (lembrete, campanha, eco nosso não seguram)", async () => {
+    banco.organizations = [
+      {
+        id: ORG,
+        timezone: "America/Sao_Paulo",
+        settings: { routing: { handoff_return_after_minutes: 60 }, atendimento: { ia_volta_apos_equipe: "fim_do_dia_seguinte" } },
+      },
+    ];
+    // Saída 80 min atrás, DEPOIS do handoff (90 min atrás).
+    banco.conversations = [conversa(90, { last_outbound_at: min(80) })];
+
+    // A saída foi um lembrete: nenhuma fala da equipe → regra dos 60 min, devolve.
+    banco.messages = [];
+    await chamar();
+    expect(devolver).toHaveBeenCalledTimes(1);
+
+    // O eco do envio da IA gravado como celular também não segura.
+    devolver.mockClear();
+    banco.messages = [{ sent_at: min(80), created_at: min(80), metadata: { eco_de_envio_nosso: true } }];
+    await chamar();
+    expect(devolver).toHaveBeenCalledTimes(1);
+
+    // A equipe falou pelo celular: segura até o fim do dia seguinte.
+    devolver.mockClear();
+    banco.messages = [{ sent_at: min(80), created_at: min(80), metadata: { fromMe: true } }];
+    await chamar();
+    expect(devolver).not.toHaveBeenCalled();
+    const filtros = consultasDeMensagens.at(-1)!;
+    expect(filtros).toEqual(expect.arrayContaining([["limit", [10]]]));
+  });
+
   it("dentro do prazo: nada é devolvido e a rodada não audita", async () => {
     banco.conversations = [conversa(30)];
     await chamar();

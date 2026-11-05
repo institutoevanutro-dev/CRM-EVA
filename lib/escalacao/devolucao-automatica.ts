@@ -67,6 +67,13 @@ export interface ConversaEmHandoff {
   status_changed_at: string | null;
   /** Embed de `contacts` (FK many-to-one); `null` quando não há contato. */
   contacts?: { is_blocked: boolean | null; ai_opt_out: boolean | null } | null;
+  /**
+   * Horário de envio da última fala da EQUIPE (`lib/escalacao/fala-da-equipe.ts`),
+   * lido pelo cron só nas organizações com o modo "fim do dia seguinte".
+   * Ausente = não houve. NÃO é `last_outbound_at`: lembrete, campanha e aviso
+   * também movem aquele, e não são a equipe falando.
+   */
+  ultima_fala_da_equipe_at?: string | null;
 }
 
 /** Lê o prazo de `organizations.settings`. Ausente, nulo ou fora da faixa é "nunca". */
@@ -197,16 +204,17 @@ export type MotivoDeNaoDevolver =
  * Dois sinais, vale o mais longo:
  *   - a pausa finita em vigor (`bot_silenced_until`), que os escritores já
  *     gravaram até o fim do dia seguinte à fala;
- *   - a saída DEPOIS do início do handoff (`last_outbound_at` ≥ o maior entre
- *     `last_handoff_at` e `assigned_at`). Em handoff a IA não envia, então essa
- *     saída é da equipe. É o caso medido: "Assumir" às 17:05:04, fala pelo
+ *   - a fala da EQUIPE depois do início do handoff (`ultima_fala_da_equipe_at`
+ *     ≥ o maior entre `last_handoff_at` e `assigned_at`). Não `last_outbound_at`:
+ *     lembrete, campanha e aviso também o movem, e segurariam o cliente sem
+ *     ninguém da equipe ter falado. É o caso medido: "Assumir" às 17:05:04, fala pelo
  *     celular às 17:11 (com `'infinity'` o escritor não regrava a pausa), e a
  *     devolução de 15 min soltou a conversa às 17:30.
  */
 export function esperaDaEquipeMs(c: ConversaEmHandoff, fuso: string): number | null {
   const pausa = epoch(c.bot_silenced_until);
   const inicios = [epoch(c.last_handoff_at), epoch(c.assigned_at)].filter((t): t is number => t !== null);
-  const saida = epoch(c.last_outbound_at);
+  const saida = epoch(c.ultima_fala_da_equipe_at ?? null);
   const daFala =
     inicios.length > 0 && saida !== null && saida >= Math.max(...inicios)
       ? fimDoDiaSeguinte(new Date(saida), fuso).getTime()

@@ -245,6 +245,7 @@ describe("modo 'fim do dia seguinte' — a linha do tempo de 03/11 (Instituto)",
     last_handoff_at: "2026-11-03T20:05:04Z",
     last_outbound_at: "2026-11-03T20:11:00Z",
     status_changed_at: "2026-11-03T20:05:04Z",
+    ultima_fala_da_equipe_at: "2026-11-03T20:11:00Z",
   });
   const sel = (agora: string, ligado = true) => ({
     prazoPorOrg: new Map([[ORG, 15]]),
@@ -272,7 +273,7 @@ describe("modo 'fim do dia seguinte' — a linha do tempo de 03/11 (Instituto)",
   });
 
   it("ligado, mas a equipe não escreveu depois do handoff: 15 min, como sempre", () => {
-    const calada = { ...caso, last_outbound_at: "2026-11-03T20:00:00Z" };
+    const calada = { ...caso, last_outbound_at: "2026-11-03T20:00:00Z", ultima_fala_da_equipe_at: "2026-11-03T20:00:00Z" };
     expect(esperaDaEquipeMs(calada, SP)).toBeNull();
     expect(avaliarDevolucao(calada, sel("2026-11-03T20:20:05Z"))).toEqual({ devolver: true, minutos: 15 });
   });
@@ -286,5 +287,12 @@ describe("modo 'fim do dia seguinte' — a linha do tempo de 03/11 (Instituto)",
       last_handoff_at: "2026-11-03T20:11:00.300Z",
     };
     expect(avaliarDevolucao(comPausa, sel("2026-11-04T12:00:00Z"))).toMatchObject({ devolver: false });
+  });
+
+  it("ligado: lembrete/campanha/aviso movem last_outbound_at mas não são a equipe — 15 min, como sempre (m3)", () => {
+    const soLembrete = { ...caso, last_outbound_at: "2026-11-03T20:11:00Z", ultima_fala_da_equipe_at: null };
+    expect(esperaDaEquipeMs(soLembrete, SP)).toBeNull();
+    // A regra dos minutos conta do último sinal (o lembrete das 17:11): 17:26 devolve.
+    expect(avaliarDevolucao(soLembrete, sel("2026-11-03T20:26:05Z"))).toEqual({ devolver: true, minutos: 15 });
   });
 });
