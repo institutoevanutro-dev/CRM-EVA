@@ -286,23 +286,30 @@ export async function devolverHandoffsVencidos(
   return { organizacoes: prazoPorOrg.size, examinadas: conversas.length, devolvidas, falhas };
 }
 
+/**
+ * Com o modo "fim do dia seguinte" ligado e sem `pausa_cliente_sem_resposta_min`,
+ * quantos minutos o cliente espera antes do aviso na Central. A tela promete o
+ * aviso com o modo ligado, mesmo sem a retomada configurada.
+ */
+const AVISO_SEM_RESPOSTA_PADRAO_MIN = 15;
+
 async function esperasPorOrganizacao(
   admin: SupabaseClient,
 ): Promise<{ esperas: Map<string, number>; maxHoras: Map<string, number>; fusos: Map<string, string> }> {
-  const { data, error } = await admin
-    .from("organizations")
-    .select("id, settings, timezone")
-    .not("settings->atendimento->pausa_cliente_sem_resposta_min", "is", null);
+  // Sem filtro no banco: a organização entra pela retomada configurada OU pelo
+  // modo "fim do dia seguinte" (que só avisa), e as duas chaves moram em
+  // caminhos diferentes do jsonb. Organizações são poucas por instalação.
+  const { data, error } = await admin.from("organizations").select("id, settings, timezone");
   if (error) throw new Error(`organizations: ${error.message}`);
   const esperas = new Map<string, number>();
   const maxHoras = new Map<string, number>();
   const fusos = new Map<string, string>();
   for (const row of (data ?? []) as LinhaDaOrganizacao[]) {
-    const minutos = lerClienteSemRespostaMin(row.settings);
+    anotarFimDoDiaSeguinte(row, fusos);
+    const minutos = lerClienteSemRespostaMin(row.settings) ?? (fusos.has(row.id) ? AVISO_SEM_RESPOSTA_PADRAO_MIN : null);
     if (minutos === null) continue;
     esperas.set(row.id, minutos);
     maxHoras.set(row.id, lerClienteSemRespostaMaxHoras(row.settings));
-    anotarFimDoDiaSeguinte(row, fusos);
   }
   return { esperas, maxHoras, fusos };
 }

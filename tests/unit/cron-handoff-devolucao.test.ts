@@ -307,6 +307,24 @@ describe("cron handoff-devolucao", () => {
       expect(auditar).not.toHaveBeenCalled();
     });
 
+    it("modo ligado SEM pausa_cliente_sem_resposta_min: o aviso da Central sai mesmo assim (15 min), sem retomar (m4)", async () => {
+      banco.organizations = [
+        { id: ORG, timezone: "America/Sao_Paulo", settings: { atendimento: { ia_volta_apos_equipe: "fim_do_dia_seguinte" } } },
+      ];
+      banco.conversations = [pausada(20)];
+      const corpo = (await (await chamar()).json()) as {
+        data: { cliente_sem_resposta_na_pausa: { retomadas: number; avisos: number } };
+      };
+      expect(devolver).not.toHaveBeenCalled();
+      expect(corpo.data.cliente_sem_resposta_na_pausa).toMatchObject({ retomadas: 0, avisos: 1 });
+      expect(inseridos[0]?.[1]).toMatchObject({ kind: "other", title: "Cliente escreveu e ninguém da equipe respondeu" });
+      // Antes dos 15 min, nada.
+      inseridos = [];
+      banco.conversations = [pausada(10)];
+      await chamar();
+      expect(inseridos).toEqual([]);
+    });
+
     it("dentro dos N minutos: nada acontece e a rodada não audita", async () => {
       banco.conversations = [pausada(10)];
       await chamar();
