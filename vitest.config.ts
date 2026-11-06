@@ -16,6 +16,13 @@ export default defineConfig({
     // depois); só para de cronometrar a lentidão da máquina como se fosse
     // asserção. Caso que precisa de mais (abrir processo filho) declara o seu.
     testTimeout: 15_000,
+    // O log de um teste ia ao processo principal por mensagem; se o worker
+    // fechasse com uma ainda no caminho, a suíte saía com exit 1 e todos os
+    // testes verdes ("Closing rpc while onUserConsoleLog was pending").
+    // Foi a causa de 4 das 5 reprovações à toa do `verify` até 06/11/2026.
+    // Escrevendo direto no terminal não há mensagem a esperar. Custo: o log
+    // não vem mais agrupado sob o nome do arquivo de teste.
+    disableConsoleIntercept: true,
     setupFiles: ["./tests/setup/vitest.setup.ts"],
     globals: true,
     coverage: { provider: "v8", reporter: ["text", "html"] },
