@@ -40,7 +40,7 @@ const buttonVariants = cva(
         ghost:
           "bg-transparent text-text hover:bg-accent-soft hover:text-accent",
         destructive:
-          "bg-error text-white hover:brightness-95 shadow-xs",
+          "bg-error text-on-error hover:brightness-95 shadow-xs",
         link:
           "bg-transparent text-accent underline underline-offset-4 decoration-1 hover:decoration-2 h-auto p-0",
       },

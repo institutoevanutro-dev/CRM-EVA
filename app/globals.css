@@ -92,6 +92,7 @@
   --color-warning-bg: rgba(176, 122, 43, 0.12);
   --color-warning-fg: #875a1a;
   --color-error: #a94a3c;
+  --color-on-error: #ffffff;
   --color-error-bg: rgba(169, 74, 60, 0.12);
   --color-error-fg: #8a3a2e;
   --color-info: #4a7a93;
@@ -172,7 +173,7 @@
   --muted-foreground: var(--color-text-muted);
   --accent-foreground: var(--color-accent-fg);
   --destructive: var(--color-error);
-  --destructive-foreground: #ffffff;
+  --destructive-foreground: var(--color-on-error);
   --border: var(--color-border);
   --input: var(--color-border);
   --ring: var(--color-accent-500);
@@ -311,6 +312,7 @@
   --color-warning-bg: rgba(176, 122, 43, 0.12);
   --color-warning-fg: #875a1a;
   --color-error: #a94a3c;
+  --color-on-error: #ffffff;
   --color-error-bg: rgba(169, 74, 60, 0.12);
   --color-error-fg: #8a3a2e;
   --color-info: #4a7a93;
@@ -337,7 +339,7 @@
   --muted-foreground: var(--color-text-muted);
   --accent-foreground: var(--color-accent-fg);
   --destructive: var(--color-error);
-  --destructive-foreground: #ffffff;
+  --destructive-foreground: var(--color-on-error);
   --border: var(--color-border);
   --input: var(--color-border);
   --ring: var(--color-accent-500);
@@ -371,7 +373,8 @@
   /* Text (dark) */
   --color-text: #f1ede0;
   --color-text-muted: #b5b09f;
-  --color-text-subtle: #8f8a7a;
+  /* 4,51:1 na superfície elevada (antes #8f8a7a, 4,01:1 — D1.11). */
+  --color-text-subtle: #989385;
 
   /* Borders (dark) */
   --color-border: #24392f;
@@ -416,6 +419,8 @@
   --color-warning-bg: rgba(208, 148, 85, 0.18);
   --color-warning-fg: #e0ad77;
   --color-error: #c87263;
+  /* Texto sobre o vermelho do escuro: tinta, não branco (5,26:1 contra 3,48:1). */
+  --color-on-error: #161510;
   --color-error-bg: rgba(200, 114, 99, 0.18);
   --color-error-fg: #d99182;
   --color-info: #7da9bf;
@@ -446,7 +451,7 @@
   --muted-foreground: var(--color-text-muted);
   --accent-foreground: var(--color-accent-fg);
   --destructive: var(--color-error);
-  --destructive-foreground: #ffffff;
+  --destructive-foreground: var(--color-on-error);
   --border: var(--color-border);
   --input: var(--color-border);
   --ring: var(--color-accent-400);
@@ -552,6 +557,7 @@
   --color-warning-bg: var(--color-warning-bg);
   --color-warning-fg: var(--color-warning-fg);
   --color-error: var(--color-error);
+  --color-on-error: var(--color-on-error);
   --color-error-bg: var(--color-error-bg);
   --color-error-fg: var(--color-error-fg);
   --color-info: var(--color-info);
@@ -577,7 +583,7 @@
   --color-secondary: var(--color-surface-elevated);
   --color-secondary-foreground: var(--color-text);
   --color-destructive: var(--color-error);
-  --color-destructive-foreground: #ffffff;
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-muted: var(--color-surface-elevated);
   --color-muted-foreground: var(--color-text-muted);
   --color-popover: var(--color-surface);

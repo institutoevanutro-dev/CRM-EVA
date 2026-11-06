@@ -95,6 +95,7 @@ export {
   Sun,
   Moon,
   MonitorPlay,
+  Desktop,
   // conversation
   ChatCircle,
   Phone,
