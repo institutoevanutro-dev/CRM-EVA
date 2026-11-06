@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.49.1] — 2026-11-06
+
+### Corrigido
+
+- **A IA não manda mais palavra de outro alfabeto no meio da resposta** O modelo às vezes mistura idiomas e solta uma palavra em russo, chinês, árabe ou outro alfabeto no meio de uma frase em português. A conferência que roda antes de cada envio da IA agora barra letra desses alfabetos e pede ao modelo que reescreva a mensagem no idioma da conversa. Se ele insistir, a mensagem sai mesmo assim, como já acontece com o vocabulário interno, para o cliente não ficar sem resposta. Português, espanhol, acentos, emoji e símbolos como µ passam normalmente.
+
 ## [4.49.0] — 2026-11-05
 
 ### Adicionado
@@ -8794,7 +8800,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.49.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.49.1...HEAD
+[4.49.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.49.0...v4.49.1
 [4.49.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.48.0...v4.49.0
 [4.48.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.47.0...v4.48.0
 [4.47.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.46.1...v4.47.0
