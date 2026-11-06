@@ -1116,3 +1116,20 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ---- Campo que não amplia a tela no iPhone (D1.2) -----------------------
+   Com fonte abaixo de 16 px, o Safari do iPhone amplia a página ao focar o
+   campo, e ela não volta sozinha. Em tela de toque, todo campo de texto tem
+   no mínimo 16 px. Fora de `@layer` de propósito: vence o `text-sm` dos
+   campos crus (marcação da Agenda, buscas) sem precisar caçá-los um a um, e
+   vence o `md:text-sm` do Input no iPad. NÃO usar `maximum-scale` no
+   viewport para "resolver" isto: ele bloqueia o zoom de acessibilidade.
+   Controles sem texto digitado (caixa, rádio, faixa, cor, arquivo) ficam de
+   fora — não têm fonte que importe e o Safari não amplia neles. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  select,
+  textarea {
+    font-size: max(16px, 1rem);
+  }
+}
