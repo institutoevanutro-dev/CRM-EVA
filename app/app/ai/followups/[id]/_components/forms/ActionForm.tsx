@@ -42,7 +42,7 @@ function AjudaDasVariaveis({ texto }: { texto: string }) {
         {"{{saudacao}}"} {t("vira Bom dia, Boa tarde ou Boa noite na hora do envio, no fuso da organização.")}
       </p>
       {desconhecidas.length > 0 ? (
-        <p className="text-xs text-warning" data-testid="aviso-variavel-do-followup">
+        <p className="text-xs text-warning-fg" data-testid="aviso-variavel-do-followup">
           {t("Variável que não existe: use só as da lista.")} {desconhecidas.join(" ")}
         </p>
       ) : null}

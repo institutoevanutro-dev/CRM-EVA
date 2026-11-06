@@ -111,7 +111,7 @@ function Variacao({ atual, anterior }: { atual: number; anterior: number }) {
   const subiu = atual > anterior;
   // Seta + texto: a cor nunca é a única pista.
   return (
-    <span className={`text-xs ${subiu ? "text-success" : "text-error"}`}>
+    <span className={`text-xs ${subiu ? "text-success-fg" : "text-error"}`}>
       {subiu ? "▲" : "▼"} {Math.abs(atual - anterior)}{" "}
       <span className="text-text-muted">{subiu ? t("a mais que o mês anterior") : t("a menos que o mês anterior")}</span>
     </span>
@@ -154,7 +154,7 @@ function Indicador({
   return (
     <div className="flex min-w-0 flex-col rounded-2xl border bg-surface p-4 shadow-sm">
       <dt className="text-sm text-text-muted">{rotulo}</dt>
-      <dd className={`numero mt-1 text-3xl ${alerta ? "text-warning" : "text-text"}`}>{valor}</dd>
+      <dd className={`numero mt-1 text-3xl ${alerta ? "text-warning-fg" : "text-text"}`}>{valor}</dd>
       <dd className="mt-1 text-xs text-text-muted">{janela}</dd>
       {extra ? <dd className="mt-1">{extra}</dd> : null}
     </div>

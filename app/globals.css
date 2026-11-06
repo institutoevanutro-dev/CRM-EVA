@@ -53,6 +53,12 @@
   /* Borda de campo: 3,58:1 no branco e 3,26:1 no fundo — a de cartão (1,31:1)
      sumia em volta do campo (WCAG 1.4.11). */
   --color-border-input: #8c877b;
+  /* D1.3: nomes que 19 classes já usavam sem gerar CSS. `accent-strong` é a
+     hover (700 no claro, 300 no escuro), por apelido: a régua de contraste
+     ignora alias e não conta o mesmo pixel duas vezes. */
+  --color-surface-muted: var(--color-surface-elevated);
+  --color-accent-strong: var(--color-accent-hover);
+  --color-warning-border: rgba(176, 122, 43, 0.4);
 
   /* Accent — Sage (11 stops) */
   --color-accent-50:  #f3f6f1;
@@ -290,6 +296,12 @@
   /* Borda de campo: 3,58:1 no branco e 3,26:1 no fundo — a de cartão (1,31:1)
      sumia em volta do campo (WCAG 1.4.11). */
   --color-border-input: #8c877b;
+  /* D1.3: nomes que 19 classes já usavam sem gerar CSS. `accent-strong` é a
+     hover (700 no claro, 300 no escuro), por apelido: a régua de contraste
+     ignora alias e não conta o mesmo pixel duas vezes. */
+  --color-surface-muted: var(--color-surface-elevated);
+  --color-accent-strong: var(--color-accent-hover);
+  --color-warning-border: rgba(176, 122, 43, 0.4);
   --color-accent: var(--color-accent-600);
   --color-accent-fg: #ffffff;
   --color-accent-soft: var(--color-accent-100);
@@ -380,6 +392,12 @@
   --color-border: #24392f;
   --color-border-strong: #2f4a3e;
   --color-border-input: #6c7871;
+  /* D1.3: nomes que 19 classes já usavam sem gerar CSS. `accent-strong` é a
+     hover (700 no claro, 300 no escuro), por apelido: a régua de contraste
+     ignora alias e não conta o mesmo pixel duas vezes. */
+  --color-surface-muted: var(--color-surface-elevated);
+  --color-accent-strong: var(--color-accent-hover);
+  --color-warning-border: rgba(208, 148, 85, 0.4);
 
   /* Accent stays same hex stops; default shifts up for dark contrast */
   --color-accent-50:  #f3f6f1;
@@ -574,6 +592,9 @@
   --color-border: var(--color-border);
   --color-border-strong: var(--color-border-strong);
   --color-border-input: var(--color-border-input);
+  --color-surface-muted: var(--color-surface-muted);
+  --color-accent-strong: var(--color-accent-strong);
+  --color-warning-border: var(--color-warning-border);
   --color-input: var(--color-border);
   --color-ring: var(--color-accent-500);
   --color-background: var(--color-bg);
