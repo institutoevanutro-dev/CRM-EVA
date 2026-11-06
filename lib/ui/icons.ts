@@ -79,6 +79,7 @@ export {
   Warning,
   WarningOctagon,
   Info,
+  Circle,
   CircleNotch,
   // lgpd
   Scales as ScalesSimple,

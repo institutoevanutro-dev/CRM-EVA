@@ -957,9 +957,10 @@
 
    `tailwindcss-animate` NÃO está instalado neste repo (`plugins: []` no
    tailwind.config.ts) — `animate-in`/`slide-in-from-*` são classes que não
-   existem e falham em silêncio. Os seis Sheets em produção abrem sem transição
-   nenhuma por causa disso. Daí este bloco ser CSS à mão, no modelo do
-   `.card-pulse` acima, que é o precedente local. */
+   existem e falham em silêncio (por isso Dialog, AlertDialog e Sheet abriam
+   sem transição até a D1.1, que deu a eles keyframes à mão no fim deste
+   arquivo). Daí este bloco ser CSS à mão, no modelo do `.card-pulse` acima,
+   que é o precedente local. */
 .agenda-coluna-horarios {
   width: 0;
   opacity: 0;
@@ -1051,4 +1052,67 @@
   background-color: var(--conversa-fundo-cor, var(--color-bg));
   background-image: var(--conversa-fundo-imagem, none);
   background-size: 16px 16px;
+}
+
+/* ---- Movimento de diálogo, confirmação e gaveta (D1.1) ------------------
+   Sem biblioteca de animação: o Tailwind 4 descarta `animate-in`,
+   `zoom-in-95` e `slide-in-from-*` sem aviso (não há plugin instalado), e
+   por isso os diálogos abriam em 0 ms. Aqui ficam só os três movimentos que
+   mostram o que mudou: o véu escurece, o diálogo cresce de 95 a 100%, a
+   gaveta entra pelo lado de onde vem. Menus (Select, Dropdown, Popover,
+   Tooltip) abrem na hora, de propósito — não "conserte" isso instalando
+   `tw-animate-css`, que ligaria ~170 animações de uma vez.
+
+   `scale` e `translate` são as propriedades INDIVIDUAIS, e não `transform`:
+   o diálogo é centrado por `translate-x/y-[-50%]` (que o Tailwind 4 escreve
+   na propriedade `translate`); animar `scale` não briga com a centralização.
+   A gaveta não usa `translate` para posicionar, então anima-o à vontade.
+
+   O Radix espera o `animationend` do estado `closed` antes de desmontar; com
+   movimento reduzido a duração vai a 0,01 ms (regra global abaixo) e ele
+   desmonta na hora. */
+@keyframes eva-veu-entra { from { opacity: 0; } }
+@keyframes eva-veu-sai { to { opacity: 0; } }
+@keyframes eva-dialogo-entra { from { opacity: 0; scale: 0.95; } }
+@keyframes eva-dialogo-sai { to { opacity: 0; scale: 0.95; } }
+@keyframes eva-gaveta-entra { from { translate: var(--gaveta-de); } }
+@keyframes eva-gaveta-sai { to { translate: var(--gaveta-de); } }
+
+@utility anima-veu {
+  &[data-state="open"] { animation: eva-veu-entra 200ms var(--ease-out); }
+  &[data-state="closed"] { animation: eva-veu-sai 150ms var(--ease-in-out); }
+}
+@utility anima-dialogo {
+  &[data-state="open"] { animation: eva-dialogo-entra 200ms var(--ease-out); }
+  &[data-state="closed"] { animation: eva-dialogo-sai 150ms var(--ease-in-out); }
+}
+/* `--gaveta-de` diz de onde ela vem: `100% 0` (direita), `-100% 0`
+   (esquerda), `0 -100%` (topo), `0 100%` (base). Posto no `sheet.tsx`. */
+@utility anima-gaveta {
+  &[data-state="open"] { animation: eva-gaveta-entra 300ms var(--ease-out); }
+  &[data-state="closed"] { animation: eva-gaveta-sai 200ms var(--ease-in-out); }
+}
+
+/* Ponto de "conexão caída": pulsa 3 vezes e para (antes, `animate-pulse`
+   infinito). Chamar a atenção uma vez é aviso; piscar para sempre é ruído. */
+@keyframes eva-pulso { 50% { opacity: 0.4; } }
+@utility pulsa-tres-vezes {
+  animation: eva-pulso 2s var(--ease-in-out) 3;
+}
+
+/* ---- Movimento reduzido, global (D1.1) ----------------------------------
+   Fora de `@layer` e com `!important` de propósito: tem de vencer qualquer
+   utilitário (`transition-*`, `animate-*`) e qualquer bloco acima. Quem liga
+   "Reduzir movimento" no Mac ou no iPhone chega ao MESMO estado final, só
+   sem o percurso. 0,01 ms e não `none`: o `animationend` continua disparando,
+   e é dele que o Radix depende para desmontar diálogo e gaveta. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

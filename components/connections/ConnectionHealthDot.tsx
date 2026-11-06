@@ -39,7 +39,8 @@ export function ConnectionHealthDot({ className }: { className?: string }) {
       className={cn(
         "inline-block h-2 w-2 shrink-0 rounded-full",
         DOT_COLOR[health],
-        health === "down" && "animate-pulse",
+        // Pulsa 3 vezes e para: avisa uma vez, sem piscar para sempre (D1.1).
+        health === "down" && "pulsa-tres-vezes",
         className,
       )}
       title={t(DOT_LABEL[health])}
