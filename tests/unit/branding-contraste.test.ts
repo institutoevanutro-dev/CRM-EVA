@@ -69,13 +69,13 @@ describe("extrairRegua — os pares saem do globals.css, nunca de lista à mão"
   });
 
   it("alcança o anel de foco, que mora em @layer base e uma lista à mão perderia", () => {
-    // ESTE é o par do relato: `accent-600` contra bg dá 5,51 e passaria qualquer gate
-    // ingênuo, mas quem pinta o anel é `accent-500` — e ele dá 3,79. Uma régua que só
-    // olhasse o stop da semente deixaria o anel pousar em ~2,07 com o gate verde.
+    // ESTE é o par do relato: o anel pintava `accent-500` (3,63 contra bg) enquanto o
+    // accent passava folgado. Desde a D1.4 o anel é `accent-600`, a principal (5,27);
+    // a régua continua precisando alcançá-lo, porque mora em @layer base.
     const foco = REGUA.claro.papeis.find((p) => p.token.includes(":focus-visible"));
     expect(foco, "o anel de foco sumiu da régua").toBeDefined();
     expect(foco?.tipo).toBe("componente");
-    expect(foco?.fonte).toMatchObject({ tipo: "grau", indice: 5 });
+    expect(foco?.fonte).toMatchObject({ tipo: "grau", indice: 6 });
 
     const focoEscuro = REGUA.escuro.papeis.find((p) => p.token.includes(":focus-visible"));
     expect(focoEscuro?.fonte).toMatchObject({ tipo: "grau", indice: 4 });
@@ -121,8 +121,8 @@ describe("extrairRegua — os pares saem do globals.css, nunca de lista à mão"
 
     // Re-medidos em 07/10/2026 na paleta do Eva Financeiro (spec 2026-10-07-cores-e-menu); os pisos não mudaram.
     expect(razao("--color-accent", "--color-bg")).toBeCloseTo(5.27, 2);
-    expect(razao(":focus-visible/outline", "--color-bg")).toBeCloseTo(3.63, 2);
-    expect(razao(":focus-visible/outline", "--color-surface-elevated")).toBeCloseTo(3.48, 2);
+    expect(razao(":focus-visible/outline", "--color-bg")).toBeCloseTo(5.27, 2);
+    expect(razao(":focus-visible/outline", "--color-surface-elevated")).toBeCloseTo(5.05, 2);
   });
 
   it("a Sage inteira, como está no CSS, cabe nos pisos", () => {

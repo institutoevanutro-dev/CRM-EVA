@@ -202,9 +202,9 @@ export function SidebarContent({
           </span>
         ) : marcaDoProduto ? (
           collapsed ? (
-            <SimboloDoProduto nome={nome} className="h-8 w-8" />
+            <SimboloDoProduto nome={nome} sobreFunda className="h-8 w-8" />
           ) : (
-            <LogotipoDoProduto nome={nome} className="h-8 w-auto" />
+            <LogotipoDoProduto nome={nome} sobreFunda className="h-8 w-auto" />
           )
         ) : (
           <span className={cn("font-semibold tracking-tight", collapsed && "sr-only")}>{nome}</span>

@@ -36,7 +36,7 @@ export function VersionFooter({
     return (
       <p
         className={cn(
-          "px-3 py-1 text-[11px] text-sidebar-muted",
+          "px-3 py-1 text-xs text-sidebar-fg",
           collapsed && "px-0 text-center",
         )}
         title={`${t("Versão")} ${label}`}

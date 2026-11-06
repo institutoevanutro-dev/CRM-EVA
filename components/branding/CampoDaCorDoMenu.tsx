@@ -5,38 +5,30 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/hooks/i18n/useT";
 import {
-  baseDoDegradeDoMenu,
   FRENTE_DO_MENU,
   FRENTE_SECUNDARIA_DO_MENU,
   fundoDoMenu,
   menuDaCorDaMarca,
   menuFoiEscurecido,
 } from "@/lib/branding/menu";
-import { compor, ehHexValido, normalizarHex } from "@/lib/branding/rampa";
+import { ehHexValido, normalizarHex } from "@/lib/branding/rampa";
 
-/** O menu de fábrica do `app/globals.css`: fundo e base do degradê, por tema. */
+/** O menu de fábrica do `app/globals.css`, por tema. */
 const MENU_PADRAO = {
-  claro: { fundo: "#1d352c", base: "#5a8a5f" },
-  escuro: { fundo: "#0b1612", base: "#82a077" },
+  claro: { fundo: "#1d352c" },
+  escuro: { fundo: "#0b1612" },
 } as const;
 
 const COR_NEUTRA_DO_SELETOR = "#808080";
 
-/**
- * O degradê do `@utility fundo-lateral`, em hex: 22% de preto no topo, o fundo a
- * 42% e 38% da base no pé. É a prévia; quem pinta o menu de verdade é o CSS.
- */
-function degrade(fundo: string, base: string): string {
-  return `linear-gradient(180deg, ${compor("#000000", 0.22, fundo)} 0%, ${fundo} 42%, ${compor(base, 0.38, fundo)} 100%)`;
-}
-
-function Previa({ rotulo, fundo, base }: { rotulo: string; fundo: string; base: string }) {
+/** A prévia do `@utility fundo-lateral`, que é liso desde a D1.4. */
+function Previa({ rotulo, fundo }: { rotulo: string; fundo: string }) {
   return (
     <div
       data-previa-do-menu={rotulo}
       data-fundo={fundo}
       className="flex h-24 w-32 flex-col justify-between rounded-md p-2 text-xs"
-      style={{ backgroundImage: degrade(fundo, base), backgroundColor: fundo }}
+      style={{ backgroundColor: fundo }}
     >
       <span style={{ color: FRENTE_DO_MENU }} className="font-medium">
         {rotulo}
@@ -66,10 +58,10 @@ export function CampoDaCorDoMenu({
   const invalido = limpo.length > 0 && !valido;
 
   const claro = valido
-    ? { fundo: fundoDoMenu(limpo, "claro"), base: baseDoDegradeDoMenu(limpo, "claro") }
+    ? { fundo: fundoDoMenu(limpo, "claro") }
     : MENU_PADRAO.claro;
   const escuro = valido
-    ? { fundo: fundoDoMenu(limpo, "escuro"), base: baseDoDegradeDoMenu(limpo, "escuro") }
+    ? { fundo: fundoDoMenu(limpo, "escuro") }
     : MENU_PADRAO.escuro;
 
   return (
@@ -120,8 +112,8 @@ export function CampoDaCorDoMenu({
         </p>
       ) : null}
       <div className="flex gap-3">
-        <Previa rotulo={t("Modo claro")} fundo={claro.fundo} base={claro.base} />
-        <Previa rotulo={t("Modo escuro")} fundo={escuro.fundo} base={escuro.base} />
+        <Previa rotulo={t("Modo claro")} fundo={claro.fundo} />
+        <Previa rotulo={t("Modo escuro")} fundo={escuro.fundo} />
       </div>
     </div>
   );

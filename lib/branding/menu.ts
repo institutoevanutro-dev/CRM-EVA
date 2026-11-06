@@ -3,8 +3,8 @@
  *
  * O menu NÃO segue a marca sozinho: com o campo em branco o verde de fábrica do
  * `app/globals.css` fica, qualquer que seja a cor da marca. Quando a organização
- * escolhe uma cor, este módulo a transforma nos dois tokens que `css.ts` emite
- * (`--color-sidebar-bg` e `--color-sidebar-tint`), sempre em `#rrggbb`, porque
+ * escolhe uma cor, este módulo a transforma no token que `css.ts` emite
+ * (`--color-sidebar-bg`), sempre em `#rrggbb`, porque
  * a allowlist de `css.ts` não aceita `color-mix` no valor.
  *
  * A frente do menu é clara (`--color-sidebar-fg` e `--color-sidebar-muted`), então
@@ -26,12 +26,6 @@ export const FRENTE_SECUNDARIA_DO_MENU = "#b9b39c";
 
 /** O menu de fábrica, no claro: a referência de luz do botão "Usar a cor da marca". */
 const MENU_DE_FABRICA = "#1d352c";
-
-/**
- * A cor que o degradê do menu mistura na base. De fábrica é `--color-success`
- * (#5a8a5f no claro, #82a077 no escuro).
- */
-const BASE_DO_DEGRADE_DE_FABRICA = { claro: "#5a8a5f", escuro: "#82a077" } as const;
 
 /**
  * Quanto de preto o escuro põe sobre o claro. É a relação que o `globals.css`
@@ -84,13 +78,4 @@ export function fundoDoMenu(menu: string, tema: "claro" | "escuro"): string {
 /** `true` quando a cor escolhida precisou escurecer para o texto do menu passar. */
 export function menuFoiEscurecido(menu: string): boolean {
   return fundoDoMenu(menu, "claro") !== normalizarHex(menu);
-}
-
-/**
- * A base do degradê (`--color-sidebar-tint`): a luz e o croma máximo do verde de
- * fábrica, com o matiz da cor do menu. Um menu de outro matiz não fica com verde
- * no pé, e um menu cinza ganha base cinza.
- */
-export function baseDoDegradeDoMenu(menu: string, tema: "claro" | "escuro"): string {
-  return oklchParaHex(naLuzDe(BASE_DO_DEGRADE_DE_FABRICA[tema], menu));
 }

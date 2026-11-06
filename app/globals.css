@@ -667,18 +667,12 @@
    tem equivalente em `@theme`), então o apelido vira utilitário explícito. */
 /* Números de painel: Inter com dígitos de mesma largura e traço firme. O título é
    serifado, mas número em serifa fina fica difícil de ler de relance. */
-/* Fundo do menu lateral: o mesmo degradê do PrecificaEva e do Eva Financeiro (escuro no topo, a
-   cor do menu embaixo). Sem cor de menu, `--color-sidebar-tint` não existe e o fundo mistura com
-   `--color-success`, o verde de fábrica. Com cor de menu da organização, `lib/branding/css.ts` emite
-   `--color-sidebar-bg` e `--color-sidebar-tint`. */
+/* Fundo do menu lateral: a funda LISA (D1.4, "sim 2" do André em 06/11/2026). O degradê de antes
+   misturava 38% de `--color-success` no pé, e ali o papel em dourado do cartão da conta caía a
+   3,16:1 e o texto secundário a 3,03:1; liso, 4,79 e 4,59. Com cor de menu da organização,
+   `lib/branding/css.ts` emite `--color-sidebar-bg`. */
 @utility fundo-lateral {
   background-color: var(--color-sidebar-bg);
-  background-image: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--color-sidebar-bg) 78%, black) 0%,
-    var(--color-sidebar-bg) 42%,
-    color-mix(in srgb, var(--color-sidebar-bg) 62%, var(--color-sidebar-tint, var(--color-success))) 100%
-  );
 }
 
 @utility numero {
@@ -834,14 +828,22 @@
     color: var(--color-accent-50);
   }
 
-  /* Focus ring: Sage 500/400, 2px with offset */
+  /* Contorno de foco: a principal (5,27:1 no fundo claro; accent-500 dava 3,63).
+     No escuro a principal já é accent-400. Sobre a funda do menu, dourado: a
+     sálvia ali tinha 2,09:1 (D1.4, WCAG 2.4.7 e 1.4.11). */
+  /* `accent-600` e não `--color-accent`: são o MESMO pixel em toda instalação
+     (`lib/branding/css.ts` emite a rampa já deslocada), e a régua de contraste
+     (`extrairRegua`) só mede referência direta a um grau da rampa. */
   :focus-visible {
-    outline: 2px solid var(--color-accent-500);
+    outline: 2px solid var(--color-accent-600);
     outline-offset: 2px;
     border-radius: var(--radius-sm);
   }
   [data-theme="dark"] :focus-visible {
     outline-color: var(--color-accent-400);
+  }
+  .fundo-lateral :focus-visible {
+    outline-color: var(--color-gold);
   }
 
   /* Modo de alto contraste do sistema (Windows High Contrast / forced-colors).

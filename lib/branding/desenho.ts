@@ -100,4 +100,8 @@ export const LOGOTIPO = {
 export const CORES_DA_MARCA = {
   claro: { simbolo: "#506d48", nome: "#1c1a16", sufixo: "#5d594f" },
   escuro: { simbolo: "#82a077", nome: "#f5f4ef", sufixo: "#8e8b7f" },
+  /** Sobre a funda do menu, que é escura nos DOIS temas (D1.4): símbolo
+   *  4,53:1, nome em creme e "CRM" em dourado. Com as cores do claro, o nome
+   *  ficava a 1,32:1 — uma mancha no menu de toda instalação nova. */
+  funda: { simbolo: "#82a077", nome: "#f5efd9", sufixo: "#d9b24c" },
 } as const;

@@ -80,7 +80,7 @@ describe("o portão do bloco da organização", () => {
     const css = await renderizar();
     expect(css).toContain("body:has([data-marca-org])");
     expect(css).toContain("--color-sidebar-bg: #111111;");
-    expect(css).toContain("--color-sidebar-tint:");
+    expect(css).not.toContain("--color-sidebar-tint");
     expect(css).not.toContain("--color-brand");
   });
 

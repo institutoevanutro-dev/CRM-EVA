@@ -10,7 +10,6 @@ import { CampoDaCorDoMenu } from "@/components/branding/CampoDaCorDoMenu";
 import { PISOS, razaoDeContraste } from "@/lib/branding/contraste";
 import { cssDaMarca, ESCOPO_DA_INSTALACAO, ESCOPO_DA_ORGANIZACAO } from "@/lib/branding/css";
 import {
-  baseDoDegradeDoMenu,
   FRENTE_DO_MENU,
   FRENTE_SECUNDARIA_DO_MENU,
   fundoDoMenu,
@@ -88,11 +87,10 @@ describe("com cor de menu", () => {
       Record<string, string>,
       Record<string, string>,
     ];
-    expect(Object.keys(claro).sort()).toEqual(["--color-sidebar-bg", "--color-sidebar-tint"]);
+    expect(Object.keys(claro).sort()).toEqual(["--color-sidebar-bg"]);
     expect(Object.keys(escuro).sort()).toEqual(Object.keys(claro).sort());
     for (const b of [claro, escuro]) {
       expect(b["--color-sidebar-bg"]).toMatch(HEX6);
-      expect(b["--color-sidebar-tint"]).toMatch(HEX6);
     }
     expect(claro["--color-sidebar-bg"]).toBe("#111111");
   });
@@ -137,19 +135,14 @@ describe("com cor de menu", () => {
     expect(deltaEOklab(fundoDoMenu("#1d352c", "escuro"), "#0b1612")).toBeLessThanOrEqual(0.02);
   });
 
-  it("a base do degradê segue o matiz do menu: cinza dá base cinza", () => {
-    expect(hexParaOklch(baseDoDegradeDoMenu("#3a3f47", "claro")).C).toBeLessThanOrEqual(
-      hexParaOklch("#3a3f47").C + 0.001,
-    );
-  });
-
-  it("as frentes medidas e a reserva do degradê são as do globals.css", () => {
+  it("as frentes medidas são as do globals.css, e o fundo é liso", () => {
     const fg = /--color-sidebar-fg:\s*(#[0-9a-f]{6});/i.exec(CSS_DO_PRODUTO)?.[1];
     const muted = /--color-sidebar-muted:\s*(#[0-9a-f]{6});/i.exec(CSS_DO_PRODUTO)?.[1];
     expect(fg?.toLowerCase()).toBe(FRENTE_DO_MENU);
     expect(muted?.toLowerCase()).toBe(FRENTE_SECUNDARIA_DO_MENU);
     const utilitario = /@utility fundo-lateral \{[\s\S]*?\n\}/.exec(CSS_DO_PRODUTO)?.[0] ?? "";
-    expect(utilitario).toContain("var(--color-sidebar-tint, var(--color-success))");
+    expect(utilitario).toContain("background-color: var(--color-sidebar-bg)");
+    expect(utilitario).not.toContain("background-image");
   });
 });
 
