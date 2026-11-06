@@ -24,6 +24,11 @@
    coisas que no v3 ele não vencia. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/* `toque:` = tela de toque (dedo, não cursor). Decide pelo PONTEIRO e não
+   pela largura: um iPad em paisagem tem largura de notebook e dedo de
+   celular. Usado na altura de campo e botão (D1.8). */
+@custom-variant toque (@media (pointer: coarse));
+
 /* ─────────────────────────────────────────────────────────────────────────
    DeskcommCRM — Design System tokens (Sage palette · density Aerada)
    Source of truth: /app/design/lib/tokens.ts (PALETTES.sage)
@@ -45,6 +50,9 @@
   /* Borders (light) */
   --color-border: #e6e1d3;
   --color-border-strong: #d6cfbd;
+  /* Borda de campo: 3,58:1 no branco e 3,26:1 no fundo — a de cartão (1,31:1)
+     sumia em volta do campo (WCAG 1.4.11). */
+  --color-border-input: #8c877b;
 
   /* Accent — Sage (11 stops) */
   --color-accent-50:  #f3f6f1;
@@ -278,6 +286,9 @@
   --color-text-subtle: #6b6b6b;
   --color-border: #e6e1d3;
   --color-border-strong: #d6cfbd;
+  /* Borda de campo: 3,58:1 no branco e 3,26:1 no fundo — a de cartão (1,31:1)
+     sumia em volta do campo (WCAG 1.4.11). */
+  --color-border-input: #8c877b;
   --color-accent: var(--color-accent-600);
   --color-accent-fg: #ffffff;
   --color-accent-soft: var(--color-accent-100);
@@ -365,6 +376,7 @@
   /* Borders (dark) */
   --color-border: #24392f;
   --color-border-strong: #2f4a3e;
+  --color-border-input: #6c7871;
 
   /* Accent stays same hex stops; default shifts up for dark contrast */
   --color-accent-50:  #f3f6f1;
@@ -555,6 +567,7 @@
      é decisão de design, não de migração. */
   --color-border: var(--color-border);
   --color-border-strong: var(--color-border-strong);
+  --color-border-input: var(--color-border-input);
   --color-input: var(--color-border);
   --color-ring: var(--color-accent-500);
   --color-background: var(--color-bg);
