@@ -379,3 +379,24 @@ describe("renderVetoDeVazamento — o veto ensina a SAÍDA, não só o problema"
     expect(renderVetoDeVazamento(["webhook"])).not.toMatch(/equipe|time vai|acionar/i);
   });
 });
+
+describe("letra de outro alfabeto (medido em 03/11/2026: \"после\" no meio de resposta em português)", () => {
+  it("barra a palavra russa e diz ao modelo para reescrever no idioma da conversa", () => {
+    const r = detectarVazamentoInterno("Perfeito! Te mando os horários после da consulta, tudo bem?");
+    expect(r).toMatchObject({ achou: true, termos: ["после"], categorias: ["escrita_estrangeira"] });
+    expect(renderVetoDeVazamento(r.termos, r.categorias)).toMatch(/outro idioma.*"после".*REESCREVA/s);
+  });
+
+  it.each(["中文", "ありがとう", "안녕", "شكرا", "שלום", "ขอบคุณ", "नमस्ते"])("barra %s", (palavra) => {
+    expect(detectarVazamentoInterno(`Olá ${palavra} tudo bem`).categorias).toEqual(["escrita_estrangeira"]);
+  });
+
+  it.each([
+    "Olá, Ana! 😊 Tudo bem? Sua consulta é às 9h ✅",
+    "¡Hola! ¿Cómo estás? Mañana tenemos horário às 10h.",
+    "A dose é de 5 µg e o preço é R$ 150,00 — combinado?",
+    "Ç, ã, õ, é, ü, ñ: acentos de português e espanhol passam.",
+  ])("não barra texto latino com acento, emoji e símbolo: %s", (frase) => {
+    expect(detectarVazamentoInterno(frase).achou).toBe(false);
+  });
+});

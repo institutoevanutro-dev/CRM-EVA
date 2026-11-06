@@ -619,7 +619,7 @@ export const internalVocabularyGate: Gate = {
     return {
       pass: false,
       code: 'internal_vocabulary_leak',
-      reason: renderVetoDeVazamento(achado.termos),
+      reason: renderVetoDeVazamento(achado.termos, achado.categorias),
       // detail é LOGADO e persistido: contagem + CATEGORIAS (rótulos nossos, fechados),
       // nunca os termos — termo casado é trecho da candidata, e um snake_case pode ter
       // vindo de um dado do lead. A medição que a doutrina pede cabe nestes dois campos.

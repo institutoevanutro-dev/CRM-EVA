@@ -55,7 +55,24 @@ import { TOOL_CATALOG, catalogEntry } from '@/lib/mcp/tools/catalog';
 import { CHANNEL_CAPABILITIES } from '@/lib/channels/capabilities';
 
 /** Categoria da regra que pegou o termo — vai ao trace (rótulo nosso, nunca o corpo). */
-export type CategoriaVazamento = 'snake_case' | 'tool' | 'papel' | 'arquitetura' | 'erro_cru';
+export type CategoriaVazamento =
+  | 'snake_case'
+  | 'tool'
+  | 'papel'
+  | 'arquitetura'
+  | 'erro_cru'
+  | 'escrita_estrangeira';
+
+/**
+ * (F) LETRA DE OUTRO ALFABETO — o modelo às vezes mistura idiomas no meio da frase.
+ * Medido no Instituto Eva em 03/11/2026: "после" (russo, "depois") no meio de uma
+ * resposta em português, 1 em ~2.100 turnos do gpt-5.4. Atendimento aqui é sempre em
+ * alfabeto latino (português e espanhol), então qualquer letra destes alfabetos é
+ * defeito do modelo, nunca fala do cliente. Emoji e símbolos não são letra e passam.
+ * Grego ficou de fora: µ/Ω aparecem em unidade de medida.
+ */
+const RE_ESCRITA_ESTRANGEIRA =
+  /[\p{Script=Cyrillic}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Thai}\p{Script=Devanagari}]+/gu;
 
 export interface VazamentoInterno {
   achou: boolean;
@@ -434,6 +451,9 @@ export function detectarVazamentoInterno(body: string): VazamentoInterno {
   const texto = comCaixa.toLowerCase();
 
   const achados: Achado[] = achaSnakeCase(comCaixa);
+  for (const m of body.matchAll(RE_ESCRITA_ESTRANGEIRA)) {
+    achados.push({ termo: m[0], categoria: 'escrita_estrangeira', posicao: m.index });
+  }
   for (const m of texto.matchAll(RE_NOMES_DE_TOOL)) {
     achados.push({ termo: m[0], categoria: 'tool', posicao: m.index });
   }
@@ -466,7 +486,20 @@ export function detectarVazamentoInterno(body: string): VazamentoInterno {
  * com o `casePromiseGate`, que veta promessa-de-humano sem caso aberto. Um veto que
  * empurra o modelo para o veto seguinte não ensina, só empurra o problema.
  */
-export function renderVetoDeVazamento(termos: readonly string[]): string {
+export function renderVetoDeVazamento(
+  termos: readonly string[],
+  categorias: readonly CategoriaVazamento[] = [],
+): string {
+  if (categorias.length === 1 && categorias[0] === 'escrita_estrangeira') {
+    return (
+      `Sua mensagem tem palavra de outro idioma e outro alfabeto: ${termos
+        .slice(0, 3)
+        .map((t) => `"${t}"`)
+        .join(', ')}. ` +
+      'O cliente lê português (ou espanhol). REESCREVA a MESMA mensagem inteira no idioma ' +
+      'da conversa, trocando essa palavra pela equivalente.'
+    );
+  }
   const partes = termos.slice(0, 3).map((t) => {
     const entrada = catalogEntry(t);
     return entrada === undefined ? `"${t}"` : `"${t}" (é o nome interno de «${entrada.rotulo.toLowerCase()}»)`;
