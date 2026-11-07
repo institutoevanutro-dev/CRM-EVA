@@ -20047,7 +20047,11 @@ begin
  if new.appointment_revision is not null and new.status in ('active','waiting_reply','paused_handoff','paused_manual') then
   -- P0001, não 40001: 40001 é serialization_failure e o cliente retenta para
   -- sempre. followup_stale é permanente. Medido: 6000 erros/min, CPU 100%, 24h.
-  if old.status not in ('active','waiting_reply','paused_handoff','paused_manual') or not exists(
+  -- 0403: a única volta de 'cancelled' é a reativação manual do que a trava de
+  -- envio recusou (MOTIVO_ENVIO_VETADO em send-ledger.ts). O recibo e a consulta
+  -- continuam exigidos abaixo: desfazer a presença segue impedindo a volta.
+  if (old.status not in ('active','waiting_reply','paused_handoff','paused_manual')
+      and not (old.status='cancelled' and old.cancel_reason='O envio foi recusado pelas regras do atendimento.')) or not exists(
    select 1 from public.calendar_appointments a join public.appointment_recovery_receipts r
     on r.organization_id=a.organization_id and r.appointment_id=a.id and r.appointment_revision=a.revision
    where a.organization_id=new.organization_id and a.id=new.appointment_id and a.revision=new.appointment_revision
