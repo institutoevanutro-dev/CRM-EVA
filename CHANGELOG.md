@@ -8,6 +8,16 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.51.0] — 2026-11-07
+
+### Adicionado
+
+- **Reativar um follow-up encerrado porque o envio foi recusado** Um follow-up encerrado com o motivo "O envio foi recusado pelas regras do atendimento." agora mostra, na tela de detalhe, o botão "Reativar neste passo" e um botão para voltar já no passo seguinte. A inscrição volta para a mesma sequência, presa à mesma consulta e à mesma versão do fluxo. As esperas contadas a partir da consulta recalculam a data sozinhas, e o envio continua respeitando os horários do canal e da organização. Só gerentes e administradores veem o botão, e cada reativação fica registrada no histórico do follow-up e na auditoria. Follow-ups encerrados por qualquer outro motivo não podem ser reativados.
+
+### Corrigido
+
+- **Mensagem de follow-up barrada por repetição é adiada em vez de encerrar a sequência** Quando vários contatos recebiam o mesmo passo de texto fixo na mesma hora (por exemplo, um passo marcado para o dia da consulta, que sai para todos na abertura da janela), a trava contra mensagens repetidas barrava a terceira cópia quase igual, e o sistema encerrava a sequência inteira daquele contato, com todos os passos seguintes. Agora, quando só a trava de repetição barra o envio, o passo é adiado de 5 a 30 minutos e, se tiver variações de texto, a nova tentativa usa a variação seguinte. São até 3 adiamentos; depois disso a sequência é encerrada, como antes. Os horários de envio continuam valendo, e um envio barrado por qualquer outra regra continua encerrando a sequência como antes.
+
 ## [4.50.0] — 2026-11-07
 
 ### Alterado
@@ -8812,7 +8822,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.50.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.51.0...HEAD
+[4.51.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.50.0...v4.51.0
 [4.50.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.49.2...v4.50.0
 [4.49.2]: https://github.com/melgarafael/DeskcommCRM/compare/v4.49.1...v4.49.2
 [4.49.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.49.0...v4.49.1
