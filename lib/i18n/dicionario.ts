@@ -1349,6 +1349,7 @@ export const DICIONARIO: Traducoes = {
   Publicado: { es: "Publicado" },
   Rascunho: { es: "Borrador" },
   Pausado: { es: "Pausado" },
+  Principal: { es: "Principal" },
   Arquivado: { es: "Archivado" },
   Inválido: { es: "Inválido" },
   default: { es: "predeterminado" },

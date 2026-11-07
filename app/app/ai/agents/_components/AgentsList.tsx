@@ -48,11 +48,11 @@ export function AgentsList({ initialData, canWrite }: Props) {
           )}
         </p>
         {canWrite && (
-          <Link href="/app/ai/agents/new">
-            <Button className="mt-1">
+          <Button asChild className="mt-1">
+            <Link href="/app/ai/agents/new">
               <Plus size={14} aria-hidden className="mr-2" /> {t("Novo agente")}
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         )}
       </Card>
     );
@@ -70,11 +70,11 @@ export function AgentsList({ initialData, canWrite }: Props) {
           onShowArchivedChange={setShowArchived}
         />
         {canWrite && (
-          <Link href="/app/ai/agents/new">
-            <Button>
+          <Button asChild>
+            <Link href="/app/ai/agents/new">
               <Plus size={14} aria-hidden className="mr-2" /> {t("Novo agente")}
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         )}
       </div>
 
