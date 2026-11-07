@@ -103,6 +103,10 @@ export const followupTurnPayloadSchema = z
     fixed_body: z.string().min(1).max(4000).optional(),
     /** Qual redação do passo `text` o engine escolheu (0 = `body`); volta no `sent`. */
     variante: z.number().int().min(0).optional(),
+    /** Todas as redações do passo `text` (0 = `body`) — a trava de repetição troca de redação ao adiar. */
+    variantes: z.array(z.string().min(1).max(4000)).max(5).optional(),
+    /** Adiamentos já gastos pela trava de repetição neste passo. */
+    tentativa_repetida: z.number().int().min(0).optional(),
     /** action mode `template` — corpo em `message_templates`. */
     template_id: z.string().uuid().optional(),
     /** action mode `ai_message` — modelo de reserva (`message_templates`), porte de b94446a5c. */
@@ -461,6 +465,8 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
         promptHint: payload.prompt_hint,
         fixedBody: payload.fixed_body,
         variante: payload.variante,
+        variantes: payload.variantes,
+        tentativaRepetida: payload.tentativa_repetida ?? 0,
         templateId: payload.template_id,
         fallbackTemplateId: payload.fallback_template_id,
         mediaId: payload.media_id,
@@ -532,6 +538,8 @@ async function runFlowDrivenTurn(
     promptHint: string | undefined;
     fixedBody: string | undefined;
     variante: number | undefined;
+    variantes: string[] | undefined;
+    tentativaRepetida: number;
     templateId: string | undefined;
     fallbackTemplateId: string | undefined;
     mediaId: string | undefined;
@@ -695,7 +703,29 @@ async function runFlowDrivenTurn(
         await complete(pool, { jobId:job.id,jobClaim:claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'sent', ...(input.variante !== undefined ? { variante: input.variante } : {}) } });
       } else if (sent === 'pulado') {
         await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'pulado', reason: TEXTO_DO_BLOQUEIO.fora_das_24h_do_instagram } });
-      } else if(sent === 'skipped') {
+      } else if (sent === 'repetido' && input.tentativaRepetida < MAX_ADIAMENTOS_POR_REPETICAO) {
+        // Só a trava de repetição vetou: o texto do operador é legítimo, o que
+        // pesou foi sair junto com cópias quase iguais (etapa ancorada no dia →
+        // todos às 08:00). Cancelar custava o resto do fluxo. Adia com
+        // espalhamento e, havendo variantes, tenta a redação seguinte. A janela
+        // continua valendo: o job adiado passa de novo pela cadeia inteira.
+        const until = new Date(clock().getTime() + atrasoDaRepeticao());
+        const opcoes = input.variantes;
+        const proxima = opcoes && opcoes.length > 1 && input.variante !== undefined ? (input.variante + 1) % opcoes.length : undefined;
+        await rescheduleReentry(pool, {
+          tenantId: target.tenantId,
+          leadId: target.leadId,
+          jobId: job.id,
+          at: until,
+          payload: {
+            ...job.payload,
+            tentativa_repetida: input.tentativaRepetida + 1,
+            ...(proxima !== undefined ? { fixed_body: opcoes![proxima], variante: proxima } : {}),
+          },
+        });
+        runLog.info('passo do fluxo adiado pela trava de repetição', { node_id: nodeId, tentativa: input.tentativaRepetida + 1, ate: until.toISOString() });
+        await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'deferred', until, reason: 'mass_identical' } });
+      } else if(sent === 'skipped' || sent === 'repetido') {
         await complete(pool,{jobId:job.id,jobClaim:claimOfJob(job),organizationId:target.tenantId,enrollmentId,nodeId,result:{kind:'skipped',reason:'O envio foi recusado pelas regras do atendimento.'}});
       }
       return;
@@ -986,6 +1016,8 @@ async function sendFixedOutbound(
 ): Promise<
   | "sent"
   | "skipped"
+  /** Vetado SÓ pela trava de repetição (spinning) — quem chama decide se adia. */
+  | "repetido"
   | "pulado"
   | { kind: "deferred"; until: Date; reason: string }
   | { kind: "skipped"; reason: string; midiaRecusada: true }
@@ -1097,7 +1129,7 @@ async function sendFixedOutbound(
       return { kind: "deferred", until: chain.nextAllowedAt, reason: chain.code };
     }
     runLog.info('envio fixo vetado pela cadeia — não re-agendado', { code: chain.code });
-    return "skipped";
+    return chain.code === 'mass_identical' ? "repetido" : "skipped";
   }
 
   const outcome = chain.outcome;
@@ -1151,6 +1183,18 @@ async function sendFixedOutbound(
  * (`reconcileAcceptedSend`) e não a confunda com um envio da IA.
  */
 const SEQ_DO_MODELO_DE_RESERVA = 1000;
+
+/**
+ * Texto fixo do fluxo vetado só pela trava de repetição: quantas vezes adia
+ * antes do desfecho terminal de sempre (`skipped`, cancela a inscrição).
+ */
+export const MAX_ADIAMENTOS_POR_REPETICAO = 3;
+/** Espalhamento do adiamento: 5 a 30 min, para as cópias do mesmo passo não voltarem juntas. */
+export const ATRASO_DA_REPETICAO_MS = { min: 5 * 60_000, max: 30 * 60_000 } as const;
+function atrasoDaRepeticao(): number {
+  const { min, max } = ATRASO_DA_REPETICAO_MS;
+  return min + Math.floor(Math.random() * (max - min));
+}
 const MOTIVO_RESERVA_RECUSADA =
   'A IA não enviou a mensagem e o modelo de reserva também foi recusado pelas regras do atendimento.';
 

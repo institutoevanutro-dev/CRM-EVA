@@ -103,6 +103,14 @@ export interface FollowupJobRequest {
     fixed_body?: string;
     /** action (mode 'text') — qual redação saiu (0 = `body`, n = `variants[n-1]`); ausente sem variantes. Vai ao evento `action_sent`. */
     variante?: number;
+    /**
+     * action (mode 'text') com variantes — TODAS as redações, na ordem (0 = `body`),
+     * já com {{volta}}. Só o turno lê, e só quando a trava de repetição veta: a nova
+     * tentativa sai com a redação seguinte (`followup-turn.ts`).
+     */
+    variantes?: string[];
+    /** Quantas vezes este passo já foi adiado pela trava de repetição (spinning). */
+    tentativa_repetida?: number;
     /** action (mode 'media') — item da biblioteca de mídias; legenda opcional com {{volta}} já interpolado. */
     media_id?: string;
     media_caption?: string;
@@ -311,7 +319,8 @@ export function turnPayloadExtras(
     // (contato, nó): o mesmo paciente recebe sempre a mesma redação deste passo.
     const opcoes = [body, ...variants];
     const variante = indiceDaVariante(`${contactId}:${node.id}`, opcoes.length);
-    return { fixed_body: interpolarVolta(opcoes[variante]!, events), variante };
+    const variantes = opcoes.map((o) => interpolarVolta(o, events));
+    return { fixed_body: variantes[variante]!, variante, variantes };
   }
   if (node.type === "action" && node.config.mode === "media") {
     return {
