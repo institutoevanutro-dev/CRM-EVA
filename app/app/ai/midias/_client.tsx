@@ -86,7 +86,6 @@ export function BibliotecaDeMidias() {
           icon={ImageSquare}
           headline={t("Nenhuma mídia cadastrada ainda.")}
           subcopy={t("Suba fotos e vídeos para o agente enviar na hora certa da conversa.")}
-          primary={{ label: t("Nova mídia"), onClick: () => setNovo({ title: "", when: "", tags: "", pessoa: true }) }}
         />
       ) : (
         <div className="flex flex-col gap-3">

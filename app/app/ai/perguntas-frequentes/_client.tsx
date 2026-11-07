@@ -192,7 +192,6 @@ export function PerguntasFrequentesClient() {
           icon={Question}
           headline={t("Nenhuma pergunta frequente cadastrada ainda.")}
           subcopy={t("Cadastre as perguntas que os pacientes mais fazem; o agente responde com o seu texto.")}
-          primary={{ label: t("Nova pergunta frequente"), onClick: () => abrir() }}
         />
       ) : (
         <div className="flex flex-col gap-3">
