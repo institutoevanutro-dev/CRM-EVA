@@ -141,7 +141,6 @@ export function ApiTokensClient() {
           icon={Key}
           headline={t("Nenhum token criado ainda.")}
           subcopy={t("Um token deixa outro sistema ler ou gravar no CRM sem a sua senha.")}
-          primary={{ label: t("Criar token"), onClick: () => setCreateOpen(true) }}
         />
       ) : (
         <TabelaDeChaves
