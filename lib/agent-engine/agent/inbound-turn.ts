@@ -202,10 +202,11 @@ import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { diffCheckpoint } from '@/lib/leads/checkpoint-diff';
 import {
   correcaoDoTurnoMudo,
+  falhaDoTurnoMudo,
   PASSOS_DA_CORRECAO,
   semChamadasSemResultado,
   turnoMudoPedeCorrecao,
-  turnoMudoPorCorte,
+  type FalhaDoTurnoMudo,
 } from './turno-mudo';
 // #3557 (issue #3281 do original): o clique humano pode ocupar a vaga da correção do
 // turno mudo. Veto, falha e oferta existente não autorizam outra geração.
@@ -882,6 +883,29 @@ const TRANSPARENCIA_SYSTEM_BLOCK =
   'falhou sem você entender o motivo. O lead não precisa do diagnóstico, precisa saber o que fazer ' +
   'agora: diga que vai verificar/confirmar e volta com a resposta, peça mais um instante, ou pergunte de ' +
   'novo o que falta — nunca admita que "o sistema" ou "a confirmação" teve um problema.';
+
+/** O aviso da Central para cada falha do turno mudo (`falhaDoTurnoMudo`). */
+const AVISO_DO_TURNO_MUDO: Record<FalhaDoTurnoMudo, { title: string; body: string }> = {
+  corte: {
+    title: 'A IA não respondeu um cliente: a resposta passou do tamanho máximo',
+    body:
+      'A resposta da IA foi cortada no limite de tamanho e, por isso, não foi enviada. ' +
+      'A nova tentativa automática também não respondeu. Abra a conversa e responda o ' +
+      'cliente. Se isso se repetir, avise quem administra a instalação.',
+  },
+  correcao_barrada: {
+    title: 'A IA não respondeu um cliente: as regras de segurança barraram a resposta',
+    body:
+      'A IA tentou responder, as regras de segurança barraram a mensagem, e a resposta da ' +
+      'correção automática também foi barrada. Abra a conversa e responda o cliente.',
+  },
+  correcao_sem_resposta: {
+    title: 'A IA não respondeu um cliente: a correção automática não chegou a responder',
+    body:
+      'O turno terminou sem mensagem para o cliente e a correção automática da IA gastou todas ' +
+      'as etapas em consultas, sem chegar a responder. Abra a conversa e responda o cliente.',
+  },
+};
 
 /**
  * Bloco de sistema RESIDENTE de autoria — SEMPRE presente, como o de transparência.
@@ -5562,6 +5586,11 @@ async function executarTurnoDoAgente(
         }),
       });
     let correcaoCortada = false;
+    // A correção chamou send_message/send_template e mesmo assim nada saiu (veto de novo):
+    // o modelo QUIS responder — falha, não silêncio escolhido (porte do #4038).
+    let correcaoTentouEnviar = false;
+    // A correção gastou o teto de passos dela só em consultas, sem responder.
+    let tetoNaCorrecao = false;
     if (
       pedidoHumano ||
       (!preview && liveJob().kind === 'inbound_turn' && turnoMudoPedeCorrecao(silencioDoTurno()))
@@ -5578,6 +5607,7 @@ async function executarTurnoDoAgente(
           ? INSTRUCAO_DO_PEDIDO_HUMANO
           : correcaoDoTurnoMudo(agentConfig?.toolIds ?? []),
       };
+      const tentativasAntesDaCorrecao = tentativasDeEnvio;
       const correcao = await runModelCall(
         pool,
         deps.llmCfg,
@@ -5610,6 +5640,12 @@ async function executarTurnoDoAgente(
         { registry: deps.registry, log: runLog },
       );
       correcaoCortada = correcao.result.finishReason === 'length';
+      correcaoTentouEnviar = tentativasDeEnvio > tentativasAntesDaCorrecao;
+      tetoNaCorrecao = tetoDePassosAtingido({
+        passosUsados: correcao.result.steps?.length ?? 0,
+        maxSteps: Math.min(maxSteps, PASSOS_DA_CORRECAO),
+        finishReason: correcao.result.finishReason,
+      });
       mensagensDoTurno = [...mensagensDoTurno, pedidoDeCorrecao, ...correcao.result.responseMessages];
       if (runError !== null) throw runError;
       if (outcomes.some((o) => o.kind === 'failed')) {
@@ -5618,19 +5654,24 @@ async function executarTurnoDoAgente(
       runLog.info('correção do turno mudo concluída', { messages_sent: outcomes.length });
     }
 
-    // CLIENTE SEM RESPOSTA POR CORTE: nada saiu e o modelo foi cortado no teto
-    // de tokens (na resposta ou na correção). Antes o turno acabava mudo com um
-    // `info` no log do worker, que ninguém na clínica lê. Vira aviso na Central,
-    // um por conversa enquanto aberto. Não envia nada: nunca duplica mensagem.
-    if (
-      !preview &&
-      liveJob().kind === 'inbound_turn' &&
-      turnoMudoPorCorte({ ...silencioDoTurno(), saidaCortada, correcaoCortada })
-    ) {
-      runLog.error('output_truncated — cliente sem resposta neste turno', {
+    // CLIENTE SEM RESPOSTA POR FALHA: nada saiu e o modelo foi cortado no teto de
+    // tokens (na resposta ou na correção), ou a correção TENTOU responder e a cadeia
+    // barrou de novo, ou gastou os passos dela sem responder (porte do #4038). Antes o
+    // turno acabava mudo com um `info` no log do worker, que ninguém na clínica lê. Vira
+    // aviso na Central, um por conversa e motivo enquanto aberto. Não envia nada: nunca
+    // duplica mensagem. O silêncio escolhido na correção segue sem aviso.
+    const falha =
+      !preview && liveJob().kind === 'inbound_turn'
+        ? falhaDoTurnoMudo({ ...silencioDoTurno(), saidaCortada, correcaoCortada, correcaoTentouEnviar, tetoNaCorrecao })
+        : null;
+    if (falha !== null) {
+      runLog.error(`${falha === 'corte' ? 'output_truncated' : `turno_mudo_${falha}`} — cliente sem resposta neste turno`, {
         job_id: liveJob().id,
         correcao_cortada: correcaoCortada,
+        correcao_tentou_enviar: correcaoTentouEnviar,
+        teto_na_correcao: tetoNaCorrecao,
       });
+      const aviso = AVISO_DO_TURNO_MUDO[falha];
       try {
         await insertInboxItem(
           pool,
@@ -5638,11 +5679,8 @@ async function executarTurnoDoAgente(
           {
             kind: 'other',
             severity: 'critical',
-            title: 'A IA não respondeu um cliente: a resposta passou do tamanho máximo',
-            body:
-              'A resposta da IA foi cortada no limite de tamanho e, por isso, não foi enviada. ' +
-              'A nova tentativa automática também não respondeu. Abra a conversa e responda o ' +
-              'cliente. Se isso se repetir, avise quem administra a instalação.',
+            title: aviso.title,
+            body: aviso.body,
             refKind: 'conversation',
             refId: input.conversationId,
           },
@@ -5650,7 +5688,7 @@ async function executarTurnoDoAgente(
         );
       } catch (err) {
         // Best-effort: o aviso que falha não derruba o turno nem esconde a causa.
-        runLog.error('aviso de resposta cortada não foi gravado', {
+        runLog.error('aviso de cliente sem resposta não foi gravado', {
           error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
         });
       }

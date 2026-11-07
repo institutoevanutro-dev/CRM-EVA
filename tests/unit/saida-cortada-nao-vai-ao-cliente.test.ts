@@ -18,7 +18,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { semChamadasSemResultado, turnoMudoPorCorte } from "@/lib/agent-engine/agent/turno-mudo";
+import { falhaDoTurnoMudo, semChamadasSemResultado, turnoMudoPorCorte } from "@/lib/agent-engine/agent/turno-mudo";
 
 async function enviadosCom(finish: "length" | "tool-calls"): Promise<string[]> {
   const enviados: string[] = [];
@@ -102,6 +102,40 @@ describe("o turno mudo por corte vira aviso; o silêncio deliberado, não", () =
     // Desde o #3673 a correção roda também depois de um veto de ensino. Se ELA é cortada,
     // era a última chance e o cliente ficou sem resposta — o original não avisava este caso.
     expect(turnoMudoPorCorte({ ...MUDO, tentativasDeEnvio: 1, correcaoCortada: true })).toBe(true);
+  });
+});
+
+describe("a correção barrada de novo vira aviso, em vez de calar o turno (porte do #4038)", () => {
+  const SINAIS = { correcaoTentouEnviar: false, tetoNaCorrecao: false };
+
+  it("⭐ tentou na 1ª chamada, levou veto, e a correção tentou e foi barrada de novo: avisa", () => {
+    expect(falhaDoTurnoMudo({ ...MUDO, ...SINAIS, tentativasDeEnvio: 2, correcaoTentouEnviar: true })).toBe(
+      "correcao_barrada",
+    );
+  });
+
+  it("⭐ a correção gastou o teto de passos sem responder: avisa", () => {
+    expect(falhaDoTurnoMudo({ ...MUDO, ...SINAIS, tentativasDeEnvio: 1, tetoNaCorrecao: true })).toBe(
+      "correcao_sem_resposta",
+    );
+  });
+
+  it("controle: veto e depois silêncio escolhido na correção (sem chamar nada): não avisa", () => {
+    expect(falhaDoTurnoMudo({ ...MUDO, ...SINAIS, tentativasDeEnvio: 1 })).toBeNull();
+  });
+
+  it.each([
+    ["o veto da correção manda parar", { vetoIrrevogavel: true }],
+    ["algo saiu", { enviadas: 1 }],
+    ["o turno foi descartado", { turnoDescartado: true }],
+    ["a conversa foi passada à equipe", { passouParaAEquipe: true }],
+    ["o teto de envio do número barrou", { capDeEnvio: true }],
+  ])("tentou e foi barrada, mas %s: não avisa", (_razao, mudanca) => {
+    expect(falhaDoTurnoMudo({ ...MUDO, ...SINAIS, correcaoTentouEnviar: true, ...mudanca })).toBeNull();
+  });
+
+  it("o corte vence: é o mesmo aviso de antes", () => {
+    expect(falhaDoTurnoMudo({ ...MUDO, ...SINAIS, correcaoCortada: true, correcaoTentouEnviar: true })).toBe("corte");
   });
 });
 

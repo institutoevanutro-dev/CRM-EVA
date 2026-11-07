@@ -143,6 +143,29 @@ export function turnoMudoPorCorte(
 }
 
 /**
+ * Por que o turno mudo vira aviso na Central, ou `null` quando o silêncio é decisão
+ * (porte do #4038 do original). Além do corte (`turnoMudoPorCorte`), dois sinais de
+ * FALHA da correção, lidos depois dela:
+ * - `correcao_barrada`: ela CHAMOU send_message/send_template e nada saiu — o modelo
+ *   quis responder e a cadeia barrou de novo com um veto de ensino;
+ * - `correcao_sem_resposta`: ela gastou o teto de passos (`PASSOS_DA_CORRECAO`) só em
+ *   consultas, sem chegar a responder.
+ * A correção que encerra SEM CHAMAR NADA segue sem aviso (silêncio escolhido), e o
+ * veto irrevogável continua isentando: `turnoMudoPedeCorrecao` já o lê.
+ */
+export type FalhaDoTurnoMudo = 'corte' | 'correcao_barrada' | 'correcao_sem_resposta';
+
+export function falhaDoTurnoMudo(
+  t: Parameters<typeof turnoMudoPorCorte>[0] & { correcaoTentouEnviar: boolean; tetoNaCorrecao: boolean },
+): FalhaDoTurnoMudo | null {
+  if (turnoMudoPorCorte(t)) return 'corte';
+  if (!turnoMudoPedeCorrecao(t)) return null;
+  if (t.correcaoTentouEnviar) return 'correcao_barrada';
+  if (t.tetoNaCorrecao) return 'correcao_sem_resposta';
+  return null;
+}
+
+/**
  * A fita da resposta cortada, sem as chamadas de ferramenta que ficaram sem
  * resultado. O passo cortado no teto de tokens não executa ferramenta, mas a
  * chamada continua na fita; reenviá-la na correção faz o AI SDK recusar o pedido
