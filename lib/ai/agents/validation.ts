@@ -143,6 +143,11 @@ const versionShapeSchema = z
     // pelo pacing anti-ban. Defaults espelham a migration 0059.
     split_messages: z.boolean().default(false),
     split_max_chars: z.number().int().min(80).max(4000).default(600),
+    /**
+     * #3940 — intervalo mínimo, em ms, entre uma resposta da IA e a próxima à
+     * MESMA conversa. `null`/ausente/0 = sem intervalo. Teto de 10 min.
+     */
+    reply_min_interval_ms: z.number().int().min(0).max(600000).nullable().optional(),
     followup: followupConfigSchema,
     // ── Papel OPERADOR (spec 16 §3.2) ───────────────────────────────────────
     // Todos com `.default(...)`, e é o que mantém retrocompatível: agent e

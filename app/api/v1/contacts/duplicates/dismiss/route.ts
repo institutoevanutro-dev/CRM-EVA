@@ -6,7 +6,7 @@
  * `dispensarParDeContatos`, sob trava: repetir, ou inverter o par, não grava
  * segunda linha.
  *
- * Só par de nome se dispensa. Mesmo telefone ou mesmo e-mail é `par_forte`
+ * Só par de nome se dispensa. Mesmo telefone, mesmo e-mail ou mesmo CPF é `par_forte`
  * (422 `not_dismissable`): a sugestão forte não some por clique, junta-se.
  *
  * Esta rota é a porta: autoriza, valida, chama, audita. Mesmo papel da fusão
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         { requestId },
       );
     }
-    return fail("not_dismissable", "Mesmo telefone ou mesmo e-mail não se dispensa: junte as fichas.", 422, {
+    return fail("not_dismissable", "Mesmo telefone, mesmo e-mail ou mesmo CPF não se dispensa: junte as fichas.", 422, {
       requestId,
     });
   }

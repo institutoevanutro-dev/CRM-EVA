@@ -115,6 +115,7 @@ import {
 import { classifyIntent, type IntentVerdict } from './intent-classifier';
 import { ehAssuntoFixoSoDaEquipe } from './assuntos-so-da-equipe';
 import { SEM_ATENDIMENTOS_NA_AGENDA, buildFatosDoContato } from './fatos-do-contato';
+import { buildFatosDoCrmDoContato } from './fatos-do-crm-do-contato';
 import { ehMenuDeRoboComOpcoes, ehMensagemDeRobo } from './human-handoff';
 import { historicoRecente, renderHistoricoRecente } from './historico-recente';
 import { corpoDaMensagem, type CorpoDaMensagemRow } from '../edge/crm/get-lead-context';
@@ -188,6 +189,8 @@ export interface ResolveTurnAgentDeps {
   loadPublishedAgentConfig?: typeof loadPublishedAgentConfig;
   classifyIntent?: typeof classifyIntent;
   buildFatosDoContato?: typeof buildFatosDoContato;
+  /** Funis/etapas com negócio aberto e etiquetas do contato (#4110 do original). */
+  buildFatosDoCrmDoContato?: typeof buildFatosDoCrmDoContato;
   historicoRecente?: typeof historicoRecente;
   /** Relógio injetável: é o que separa atendimento anterior de compromisso futuro. */
   agora?: () => Date;
@@ -280,6 +283,7 @@ export async function resolveTurnAgent(
   const _loadAgentBySession = deps.loadPublishedAgentConfig ?? loadPublishedAgentConfig;
   const _classifyIntent = deps.classifyIntent ?? classifyIntent;
   const _buildFatos = deps.buildFatosDoContato ?? buildFatosDoContato;
+  const _buildFatosDoCrm = deps.buildFatosDoCrmDoContato ?? buildFatosDoCrmDoContato;
   const _historicoRecente = deps.historicoRecente ?? historicoRecente;
 
   try {
@@ -497,13 +501,22 @@ export async function resolveTurnAgent(
       }
       return null;
     };
-    const [fatos, historico] = await Promise.all([
+    // #4110 do original: funis/etapas com negócio ABERTO e etiquetas, numa
+    // terceira leitura contra o mesmo teto. Só vão ao CLASSIFICADOR; a regra 9
+    // (`so_equipe`) e `ehTurnoSoDaEquipe` seguem lendo só a agenda (`fatos`).
+    // O log leva o motivo, nunca a lista.
+    const avisoDosFatosDoCrm = 'resolve-turn-agent: funis e etiquetas do contato indisponíveis — classificando sem eles';
+    const [fatos, historico, fatosDoCrm] = await Promise.all([
       ler(avisoDosFatos, () => _buildFatos(db, input.tenantId, input.leadId, (deps.agora ?? (() => new Date()))())),
       comContexto
         ? ler(avisoDoHistorico, async () =>
             renderHistoricoRecente(await _historicoRecente(db, input.tenantId, input.conversationId)) || null)
         : null,
+      ler(avisoDosFatosDoCrm, () =>
+        _buildFatosDoCrm(db, input.tenantId, input.leadId, (motivo) =>
+          deps.log.warn(avisoDosFatosDoCrm, { routerId: router.id, motivo }))),
     ]);
+    const fatosDoClassificador = [fatos, fatosDoCrm].filter((f): f is string => f !== null).join('\n\n') || null;
 
     // Regra 9, sem modelo: a mensagem que ABRE a conversa se declara robô ou
     // é menu de robô (instrução de escolha + duas opções numeradas). Só a
@@ -532,7 +545,7 @@ export async function resolveTurnAgent(
       db,
       llmCfg,
       {
-        tenantId: input.tenantId, leadId: input.leadId, jobId: input.jobId, router, signal: input.signal, fatos,
+        tenantId: input.tenantId, leadId: input.leadId, jobId: input.jobId, router, signal: input.signal, fatos: fatosDoClassificador,
         // Fora do modo novo as chaves nem existem: a entrada é a de antes.
         ...(comContexto ? { historico, assuntoAtual } : {}),
       },

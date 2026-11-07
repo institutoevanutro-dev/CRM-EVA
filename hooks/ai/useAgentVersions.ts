@@ -31,6 +31,8 @@ export interface AgentVersionRow {
   knowledge_source_ids: string[];
   split_messages: boolean;
   split_max_chars: number;
+  /** #3940 — pausa mínima (ms) entre uma resposta da IA e a próxima. `null` = sem pausa. */
+  reply_min_interval_ms: number | null;
   followup: { enabled: boolean; flow_pointer_ids: string[] };
   status: "draft" | "published" | "superseded" | "archived";
   published_at: string | null;

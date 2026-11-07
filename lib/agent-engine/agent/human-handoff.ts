@@ -27,6 +27,7 @@ import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { ehOptOutProvavel } from '@/lib/opt-out/deteccao';
 import { sqlContatoInterno } from '@/lib/contacts/tags-internas';
 import { PROVIDERS_COM_SILENCIO_DE_ROTEAMENTO } from '@/lib/channels/capabilities';
+import { CONVERSATION_TERMINAL_STATUSES } from '@/lib/schemas/messaging';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 
 import type { Logger } from '../obs/logger';
@@ -321,6 +322,9 @@ export function detectAmbiguousOptOut(message: string): boolean {
  * não a solta: ela não é trava de pessoa). Entra pela forma SQL da régua única
  * (`lib/contacts/tags-internas.ts`), porque este predicado é SQL direto.
  */
+/** `'closed', 'archived'` — derivada da fonte única, nunca literal novo. */
+const STATUS_TERMINAIS_EM_SQL = CONVERSATION_TERMINAL_STATUSES.map((s) => `'${s}'`).join(', ');
+
 export async function isLeadInHandoff(
   db: pg.Pool,
   tenantId: string,
@@ -330,8 +334,22 @@ export async function isLeadInHandoff(
    * passo fixo de fluxo e para a "pessoa no comando" do turno de fluxo: a marca
    * "sempre atendimento humano" cala a IA, não é uma pessoa assumindo.
    */
-  opcoes: { ignorarTravaDoContato?: boolean } = {},
+  opcoes: {
+    ignorarTravaDoContato?: boolean;
+    /**
+     * #4146 — conversations.id do turno. Presente: o silêncio só vale para ELA
+     * (o handoff de uma conversa não cala outra, nem outro número do contato).
+     * Ausente: leitura do contato inteiro ("está com um humano em algum lugar?").
+     */
+    conversationId?: string | null;
+  } = {},
 ): Promise<boolean> {
+  // #4146 — conversa ENCERRADA não cala mais ninguém (antes, o 'infinity' de uma
+  // conversa arquivada vetava as outras do contato para sempre), e com a conversa
+  // do turno em mãos o silêncio se restringe a ela. `force_human` e contato
+  // interno seguem do CONTATO.
+  const conversationId = opcoes.conversationId ?? null;
+  const escopo = conversationId === null ? '' : 'and v.id = $4';
   // Conversa em canal sem IA (Instagram) nasce com bot_silenced_until =
   // 'infinity' para cair na Fila: é ROTEAMENTO, não uma pessoa que assumiu.
   // Esta varredura é do CONTATO inteiro; sem a exclusão, um contato unificado
@@ -345,7 +363,9 @@ export async function isLeadInHandoff(
        or exists (
          select 1 from conversations v
          where v.organization_id = $1 and v.contact_id = c.id
+           and v.status not in (${STATUS_TERMINAIS_EM_SQL})
            and v.bot_silenced_until is not null and v.bot_silenced_until > now()
+           ${escopo}
            and not exists (
              select 1 from channel_sessions s
              where s.organization_id = $1 and s.id = v.channel_session_id and s.provider = any($3::text[])
@@ -354,7 +374,9 @@ export async function isLeadInHandoff(
      ) as handoff
      from contacts c
      where c.organization_id = $1 and c.id = $2`,
-    [tenantId, leadId, PROVIDERS_COM_SILENCIO_DE_ROTEAMENTO],
+    conversationId === null
+      ? [tenantId, leadId, PROVIDERS_COM_SILENCIO_DE_ROTEAMENTO]
+      : [tenantId, leadId, PROVIDERS_COM_SILENCIO_DE_ROTEAMENTO, conversationId],
   );
   return rows[0]?.handoff === true;
 }

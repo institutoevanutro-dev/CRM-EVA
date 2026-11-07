@@ -211,7 +211,9 @@ export function renderSemanticPromiseVeto(suspectPhrase: string | null): string 
   return (
     `${highlight}isso é uma promessa/compromisso fora do playbook que a validação de valores ` +
     'estruturados não pega; reformule sem prometer prazo, cortesia, gratuidade, brinde ou garantia ' +
-    'não autorizada antes de reenviar.'
+    'não autorizada antes de reenviar. Se o que você ia afirmar só aparece em fala do cliente, ' +
+    'não foi dito pela empresa: não o troque por relato ("consta", "foi informado", ' +
+    '"a informação registrada é") — diga que não encontrou esse combinado.'
   );
 }
 

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { filtrarDestinos } from "@/lib/inbox/filtrar-destinos";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -58,8 +59,7 @@ export function EncaminharDialog({
   }
 
   const destinos = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    return conversas
+    const todos = conversas
       .filter((c) => c.id !== conversationIdAtual)
       .map((c) => ({
         id: c.id,
@@ -67,8 +67,9 @@ export function EncaminharDialog({
         // depois telefone, depois "Sem nome". É a MESMA régua da lista; uma
         // cadeia montada à mão aqui viraria a sétima cópia.
         rotulo: rotuloDoContato(c.contacts, t),
-      }))
-      .filter((c) => (termo ? c.rotulo.toLowerCase().includes(termo) : true));
+      }));
+    // A busca ignora caixa E acento: `joao` acha "João".
+    return filtrarDestinos(todos, busca);
   }, [conversas, conversationIdAtual, busca, t]);
 
   return (

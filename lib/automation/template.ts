@@ -1,4 +1,4 @@
-import { resolveField } from "@/lib/automation/conditions";
+import { COLUNAS_DE_CPF_DO_CONTATO, resolveField } from "@/lib/automation/conditions";
 import { nomeDoContato, type ContatoNomeavel } from "@/lib/contacts/rotulo-do-contato";
 import { semAVariavel } from "@/lib/inbox/template-vars";
 import { RESERVA_DA_VARIAVEL } from "@/lib/texto/reserva-da-variavel";
@@ -49,6 +49,8 @@ export function renderTemplate(
       if (valor === "") return reserva ?? NOME_AUSENTE;
       return formatarValor(valor);
     }
+    // As colunas de CPF nunca saem em mensagem, nem com reserva (porte do original #4202).
+    if (COLUNAS_DE_CPF_DO_CONTATO.has(path)) return "";
     const valor = String(resolveField(context, ALIASES[path] ?? path) ?? "");
     // Sem o dado, a reserva que quem escreveu a mensagem deixou. Ela é texto do
     // operador (como o resto do corpo), não valor do contato: não passa por `formatarValor`.

@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
 import type { MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
+import { filtrarRespostas } from "@/components/inbox/composer/TemplateMenu";
 
 /**
  * A barra de respostas rápidas do Inbox (#2833): um botão por TÍTULO cadastrado,
@@ -41,10 +42,7 @@ export function BarraDeRecursos({ respostas: todas, onEscolher, disabled = false
   const [busca, setBusca] = useState("");
   const respostas = respostasDaBarra(todas);
   if (respostas.length === 0) return null;
-  const termo = busca.trim().toLocaleLowerCase("pt-BR");
-  const visiveis = termo
-    ? respostas.filter((r) => r.title.toLocaleLowerCase("pt-BR").includes(termo))
-    : respostas;
+  const visiveis = filtrarRespostas(respostas, busca);
   return (
     <div className="mb-1.5">
       <button

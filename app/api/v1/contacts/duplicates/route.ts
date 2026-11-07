@@ -21,6 +21,12 @@
  * `merge_queue`. Se essa leitura falhar, a rota falha: mostrar a lista sem as
  * dispensas faria um par já dispensado voltar sem aviso.
  *
+ * O CPF (porte do original #4104, com a leitura no servidor do #4225): desde a
+ * 0289 `authenticated` não lê `cpf_hash`, então o índice das fichas varridas é
+ * lido pelo cliente administrador, em lotes de ids, filtrado pela organização
+ * da SESSÃO. Ele entra na comparação e NÃO sai na resposta: o `ok(...)` abaixo é
+ * a lista fechada do que o cliente recebe.
+ *
  * A primeira abertura deixa `contact.listed` na trilha (doutrina A8); a recarga
  * marcada pelo cliente (`?atualizacao=1`) não.
  */
@@ -39,6 +45,7 @@ import {
   type ContatoParaDeduplicar,
 } from "@/lib/contacts/duplicados";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +75,26 @@ const TAMANHO_DA_PAGINA = 1000;
 const COLUNAS_DO_CONTATO =
   "id, name, display_name, email, email_normalized, phone_number, is_merged_into, is_anonymized, source_metadata, created_at, last_activity_at";
 
+/** Cada id custa ~37 caracteres na URL do PostgREST; 100 ficam abaixo do limite comum de 8 KB. */
+const LOTE_DE_IDS = 100;
+
+/** O índice do CPF de cada ficha varrida, lido pelo servidor na organização da sessão. */
+async function hashesDeCpf(orgId: string, ids: string[]): Promise<Map<string, string>> {
+  const admin = createAdminClient();
+  const hashPorId = new Map<string, string>();
+  for (let inicio = 0; inicio < ids.length; inicio += LOTE_DE_IDS) {
+    const { data, error } = await admin
+      .from("contacts")
+      .select("id, cpf_hash")
+      .eq("organization_id", orgId)
+      .in("id", ids.slice(inicio, inicio + LOTE_DE_IDS))
+      .not("cpf_hash", "is", null);
+    if (error) throw new Error(error.message);
+    for (const r of (data ?? []) as { id: string; cpf_hash: string }[]) hashPorId.set(r.id, r.cpf_hash);
+  }
+  return hashPorId;
+}
+
 /** Tamanho da página ao ler identidades do Instagram (o `max-rows` padrão do PostgREST é 1000). */
 const PAGINA_DE_IDENTIDADES = 1000;
 
@@ -88,7 +115,7 @@ export async function GET(req: Request): Promise<Response> {
 
   // Varredura PAGINADA por `range`, em ordem estável (`created_at`, `id`). O
   // `+1` além do teto é o que prova que existia mais do que ela alcança.
-  const lidas: Omit<ContatoParaDeduplicar, "do_instagram">[] = [];
+  const lidas: Omit<ContatoParaDeduplicar, "do_instagram" | "cpf_hash">[] = [];
   let totalDeVivos: number | null = null;
   let acabou = false;
   for (let pagina = 0; lidas.length <= TETO_DE_VARREDURA && !acabou; pagina++) {
@@ -107,7 +134,7 @@ export async function GET(req: Request): Promise<Response> {
       return fail("internal_error", error.message, 500, { requestId });
     }
     if (pagina === 0) totalDeVivos = count ?? null;
-    const lote = (data ?? []) as unknown as Omit<ContatoParaDeduplicar, "do_instagram">[];
+    const lote = (data ?? []) as unknown as Omit<ContatoParaDeduplicar, "do_instagram" | "cpf_hash">[];
     lidas.push(...lote);
     acabou = lote.length === 0 || (totalDeVivos !== null && lidas.length >= totalDeVivos);
   }
@@ -140,8 +167,17 @@ export async function GET(req: Request): Promise<Response> {
     if (pagina.length < PAGINA_DE_IDENTIDADES) break;
   }
 
+  // Sem o CPF a rota falha: listar sem ele faria o par de mesmo documento sumir calado.
+  let cpfPorId: Map<string, string>;
+  try {
+    cpfPorId = await hashesDeCpf(org.orgId, brutas.map((c) => c.id));
+  } catch {
+    return fail("internal_error", "Não foi possível ler os dados de duplicados.", 500, { requestId });
+  }
+
   const linhas: ContatoParaDeduplicar[] = brutas.map((c) => ({
     ...c,
+    cpf_hash: cpfPorId.get(c.id) ?? null,
     do_instagram: doInstagram.has(c.id),
   }));
   const grupos = encontrarContatosDuplicados(linhas);

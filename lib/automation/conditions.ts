@@ -177,6 +177,17 @@ function formaDaRegra(valorDaRegra: string): (valor: unknown) => string {
     : normalizarParaContains;
 }
 
+/**
+ * As colunas de CPF no contexto da automação, que carrega a linha inteira do
+ * contato (`select("*")`). Mensagem nenhuma as renderiza (`lib/automation/template.ts`)
+ * e condição nenhuma compara o valor delas: `is_empty`/`is_not_empty` seguem
+ * valendo (porte do original #4225).
+ */
+export const COLUNAS_DE_CPF_DO_CONTATO: ReadonlySet<string> = new Set([
+  "contact.cpf_hash",
+  "contact.cpf_encrypted",
+]);
+
 export function resolveField(context: Record<string, unknown>, path: string): unknown {
   let cur: unknown = context;
   for (const part of path.split(".")) {
@@ -253,6 +264,8 @@ function matches(cond: RuleCondition, context: Record<string, unknown>): boolean
 
   // Todo o resto exige um valor presente.
   if (ausente) return false;
+  // Coluna de CPF responde só se está preenchida: nenhum comparador a alcança.
+  if (COLUNAS_DE_CPF_DO_CONTATO.has(cond.field)) return false;
 
   switch (cond.op) {
     case "eq":

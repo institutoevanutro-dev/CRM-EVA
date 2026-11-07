@@ -1036,7 +1036,7 @@ async function sendFixedOutbound(
     passoFixoDoFluxo &&
     (await passoFixoIgnoraPausaDaIA(pool, { organizationId: tenantId, contactId: leadId, kind: job.kind, payload: job.payload }));
 
-  if (!ignoraPausa && (await isLeadInHandoff(pool, tenantId, leadId, { ignorarTravaDoContato: passoFixoDoFluxo }))) {
+  if (!ignoraPausa && (await isLeadInHandoff(pool, tenantId, leadId, { ignorarTravaDoContato: passoFixoDoFluxo, conversationId }))) {
     // Três causas no MESMO veto: handoff humano, silêncio da conversa e a
     // etiqueta de contato interno (#2353 do original). O texto nomeia as três.
     runLog.info(

@@ -840,6 +840,7 @@ export type Database = {
           pipeline_ids: string[]
           provider: string
           published_at: string | null
+          reply_min_interval_ms: number | null
           split_max_chars: number
           split_messages: boolean
           status: string
@@ -877,6 +878,7 @@ export type Database = {
           pipeline_ids?: string[]
           provider: string
           published_at?: string | null
+          reply_min_interval_ms?: number | null
           split_max_chars?: number
           split_messages?: boolean
           status?: string
@@ -914,6 +916,7 @@ export type Database = {
           pipeline_ids?: string[]
           provider?: string
           published_at?: string | null
+          reply_min_interval_ms?: number | null
           split_max_chars?: number
           split_messages?: boolean
           status?: string

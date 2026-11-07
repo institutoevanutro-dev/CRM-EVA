@@ -1,5 +1,6 @@
 "use client";
 import { useT } from "@/hooks/i18n/useT";
+import { termoSemAcento } from "@/lib/inbox/termo-de-busca";
 import { rotuloDoAtendente, type Tradutor } from "@/lib/users/rotulo-do-atendente";
 import { cn } from "@/lib/utils";
 
@@ -62,13 +63,16 @@ export function opcoesDeMencao(
   query: string,
   t: Tradutor,
 ): OpcaoDeMencao[] {
-  const q = query.trim().toLowerCase();
+  // `@andreia` acha "Andréia" e `@joão` acha "Joao": os DOIS lados passam por
+  // `termoSemAcento`. O `rotulo` devolvido segue o do cadastro, porque é ele que
+  // a tela mostra e que vai gravado na nota.
+  const q = termoSemAcento(query.trim());
   return membros
     .map((membro) => ({
       membro,
       rotulo: rotuloDoAtendente(membro.full_name, t),
     }))
-    .filter((opcao) => opcao.rotulo.toLowerCase().includes(q));
+    .filter((opcao) => termoSemAcento(opcao.rotulo).includes(q));
 }
 
 interface Props {

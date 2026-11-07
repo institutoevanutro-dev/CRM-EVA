@@ -37,6 +37,8 @@ export interface PublishedAgentConfig {
   handoffToolEnabled: boolean;
   splitMessages: boolean;
   splitMaxChars: number;
+  /** #3940 — intervalo mínimo (ms) entre uma resposta da IA e a próxima à mesma conversa. `null` = sem intervalo. */
+  replyMinIntervalMs: number | null;
   /** input multimodal (imagem/áudio/pdf) habilitado no turno (Onda 3). */
   multimodalInput: boolean;
   /** tools open_human_case/provide_case_update habilitadas no turno (spec 15). */
@@ -126,6 +128,7 @@ interface Row {
   handoff_tool_enabled: boolean;
   split_messages: boolean;
   split_max_chars: number;
+  reply_min_interval_ms: number | null;
   multimodal_input: boolean;
   cases_enabled: boolean;
   tool_ids: string[] | null;
@@ -155,6 +158,7 @@ const SELECT_AGENT_CONFIG_COLUMNS = `a.operation_mode,a.paused_at,a.operation_re
             v.handoff_tool_enabled,
             v.split_messages,
             v.split_max_chars,
+            v.reply_min_interval_ms,
             v.multimodal_input,
             v.cases_enabled,
             v.tool_ids,
@@ -210,6 +214,7 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     handoffToolEnabled: r.handoff_tool_enabled,
     splitMessages: r.split_messages,
     splitMaxChars: r.split_max_chars,
+    replyMinIntervalMs: r.reply_min_interval_ms ?? null,
     multimodalInput: r.multimodal_input,
     casesEnabled: r.cases_enabled,
     toolIds: r.tool_ids ?? [],

@@ -35,6 +35,9 @@ import type * as Repeticao from "@/lib/agent-engine/guardrails/repeticao-na-conv
  * solto ainda pede a correção; o veto que manda parar (opt-out, conversa com a
  * equipe) e o pulo silencioso da guarda de repetição, não.
  *
+ * Correção barrada de novo (porte do upstream #4038): a correção que TENTOU responder
+ * e levou veto outra vez vira aviso na Central; a que escolheu o silêncio, não.
+ *
  * Lembrete do compromisso que o contato tem (revisão do porte do #3596): a leitura da
  * abertura, no relógio do turno, chega ao gate de horário e ao bloco do prompt.
  */
@@ -454,6 +457,50 @@ describe("o turno de resposta que terminou sem mensagem ao cliente", () => {
       prompts[2],
       "tentativa vetada não entregou nada: a correção do turno mudo não foi pedida",
     ).toContain(MARCA_DA_CORRECAO);
+  });
+
+  it("⭐ veto na 1ª chamada e de novo na correção: aviso na Central, em vez de calar o turno (porte do #4038)", async () => {
+    // A correção QUIS responder e a cadeia barrou de novo. Antes o turno acabava sem
+    // mensagem, sem aviso e sem nada na tela da equipe.
+    const conversa = crypto.randomUUID();
+    const { fake, prompts } = modelo([
+      enviar("Seu agendamento está confirmado para amanhã às 9h"),
+      texto("(reformulo mas acabo em texto solto)"),
+      enviar("Seu agendamento está confirmado para amanhã às 9h"),
+      texto("(de novo)"),
+    ]);
+    await turno(fake, { sessao: SESSION_VETO, conversa });
+
+    expect(enviados, "a confirmação passou sem veto — o agenda_stall não estava armado").toEqual([]);
+    expect(prompts[2], "a correção do turno mudo não foi pedida").toContain(MARCA_DA_CORRECAO);
+    const { rows } = await pool.query<{ title: string }>(
+      `select title from agent_inbox_items
+        where organization_id = $1 and ref_kind = 'conversation' and ref_id = $2 and status = 'open'
+          and kind <> 'capabilities_missing'`,
+      [ORG, conversa],
+    );
+    // A fixture SESSION_VETO também abre o aviso de capacidades (kind capabilities_missing),
+    // que não é deste caso.
+    expect(rows).toEqual([{ title: "A IA não respondeu um cliente: as regras de segurança barraram a resposta" }]);
+  });
+
+  it("controle: veto e depois silêncio escolhido na correção não abre aviso", async () => {
+    const conversa = crypto.randomUUID();
+    const { fake, prompts } = modelo([
+      enviar("Seu agendamento está confirmado para amanhã às 9h"),
+      texto("(reformulo mas acabo em texto solto)"),
+      texto("(decido não responder)"),
+    ]);
+    await turno(fake, { sessao: SESSION_VETO, conversa });
+
+    expect(enviados).toEqual([]);
+    expect(prompts[2]).toContain(MARCA_DA_CORRECAO);
+    const { rows } = await pool.query(
+      `select 1 from agent_inbox_items where organization_id = $1 and ref_kind = 'conversation' and ref_id = $2
+          and kind <> 'capabilities_missing'`,
+      [ORG, conversa],
+    );
+    expect(rows).toEqual([]);
   });
 
   it("⭐ veto irrevogável (opt-out) + texto solto: NÃO pede correção nem chamada extra de modelo", async () => {
