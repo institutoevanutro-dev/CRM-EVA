@@ -605,6 +605,9 @@ export function marcoDaDevolucaoManual(v: unknown): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** Teto da rajada lida como sinal: o drain coalesce poucas mensagens por job. */
+const MAXIMO_DE_INBOUNDS_NO_SINAL = 5;
+
 /** One read-only selection before operation policy. A real queue job supplies correlation. */
 export async function resolveConversationTurn(
   db: pg.Pool,
@@ -645,21 +648,36 @@ export async function resolveConversationTurn(
   );
   const marco = marcoDaDevolucaoManual(rows[0]?.marco_da_devolucao);
   const fala = rows[0]?.ultima_fala_da_equipe ?? null;
-  const signalRow = input.inbound
-    ? (await db.query<CorpoDaMensagemRow>(
-        "select body,type,media_url,media_storage_path,media_derived_text from messages where organization_id=$1 and conversation_id=$2 and direction='inbound' order by sent_at desc,created_at desc,id desc limit 1",
+  // As inbounds do TURNO: a mais nova e, antes dela, as que ainda não tiveram
+  // resposta (nenhuma outbound depois delas), da mais nova para a mais antiga.
+  // Ler só a mais nova perdia a rajada que o drain coalesce num job: áudio +
+  // emoji 3 s depois, e o classificador via só o emoji (medido em 06/11: outcome
+  // 'fallback' com 0,99, enquanto o agente escolhido respondia ao áudio).
+  const signalRows = input.inbound
+    ? (await db.query<CorpoDaMensagemRow & { respondida: boolean | null }>(
+        `select body,type,media_url,media_storage_path,media_derived_text,
+                exists(select 1 from messages o where o.organization_id=$1 and o.conversation_id=$2
+                         and o.direction='outbound'
+                         and coalesce(o.sent_at,o.created_at) > coalesce(m.sent_at,m.created_at)) as respondida
+           from messages m where m.organization_id=$1 and m.conversation_id=$2 and m.direction='inbound'
+          order by m.sent_at desc,m.created_at desc,m.id desc limit ${MAXIMO_DE_INBOUNDS_NO_SINAL}`,
         [input.tenantId, input.conversationId],
-      )).rows[0] ?? null
-    : null;
+      )).rows
+    : [];
+  const corte = signalRows.findIndex((r, i) => i > 0 && r.respondida === true);
+  const doTurno = corte === -1 ? signalRows : signalRows.slice(0, corte);
   // signal = o texto EFETIVO do turno, composto pelo mesmo caminho do agente
-  // (#617): o que o cliente digitou OU a transcrição do áudio já pronta. Lido
-  // cru, um áudio (body NULL) virava `null` → regra 6, e a conversa ficava presa
-  // no agente sticky sem o classificador rodar. Áudio AINDA sem transcrição
-  // segue como `null` (mantém o agente atual).
-  const signal =
-    signalRow !== null && (signalRow.body !== null || (signalRow.media_derived_text ?? '').trim() !== '')
-      ? corpoDaMensagem(signalRow)
-      : null;
+  // (#617): o que o cliente digitou OU a transcrição do áudio já pronta, uma
+  // mensagem por linha, da mais antiga para a mais nova. Lido cru, um áudio
+  // (body NULL) virava `null` → regra 6, e a conversa ficava presa no agente
+  // sticky sem o classificador rodar. Áudio AINDA sem transcrição fica de fora
+  // (a espera do handler, `espera-da-midia.ts`, já roda antes deste ponto); sem
+  // nada com texto, o sinal segue `null` (mantém o agente atual).
+  const falas = doTurno
+    .filter((r) => (r.body ?? '').trim() !== '' || (r.media_derived_text ?? '').trim() !== '')
+    .reverse()
+    .map((r) => corpoDaMensagem(r));
+  const signal = falas.length > 0 ? falas.join('\n') : null;
   const resolucao = await resolveTurnAgent(db, llmCfg, {
     ...input,
     signal,

@@ -102,6 +102,8 @@ export async function historicoRecente(
   // mais nova for outbound (o atendimento falou depois do lead), o sinal fica
   // também no histórico, repetido. A correção exata pede o id da mensagem do
   // sinal, que `resolveTurnAgent` hoje não recebe.
+  // O sinal agora é a rajada sem resposta do turno (`resolveConversationTurn`):
+  // as mensagens dela antes da mais nova aparecem também aqui, repetidas.
   const semOSinal = rows[0]?.direction === "inbound" ? rows.slice(1) : rows;
   return semOSinal
     .slice(0, MAXIMO_DE_MENSAGENS_NO_HISTORICO)
