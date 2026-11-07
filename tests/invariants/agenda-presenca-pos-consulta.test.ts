@@ -357,4 +357,36 @@ describe("presença confirmada inicia o acompanhamento pós-consulta", () => {
     // E a falta segue o caminho dela, com o evento dela.
     expect(await eventos(a.id, "appointment.outcome_confirmed")).toHaveLength(1);
   });
+
+  it("0403: a recusa do envio pode ser reativada; outro cancelamento e presença desfeita continuam travados", async () => {
+    await stopFlows();
+    await flow();
+    const a = await fixture();
+    await change(a.id, 1, { status: "completed" });
+    const rec = await recover(a.id);
+    expect(rec.result).toBe("started");
+    const VETO = "O envio foi recusado pelas regras do atendimento.";
+    const volta = () =>
+      pool.query("update followup_enrollments set status='active', cancel_reason=null, completed_at=null where id=$1", [
+        rec.enrollment_id,
+      ]);
+
+    await pool.query("update followup_enrollments set status='cancelled', cancel_reason='Outro motivo' where id=$1", [
+      rec.enrollment_id,
+    ]);
+    await expect(volta()).rejects.toThrow(/followup_stale/);
+
+    await pool.query("update followup_enrollments set cancel_reason=$2 where id=$1", [rec.enrollment_id, VETO]);
+    await volta();
+    expect(
+      (await pool.query("select status from followup_enrollments where id=$1", [rec.enrollment_id])).rows[0].status,
+    ).toBe("active");
+
+    await pool.query("update followup_enrollments set status='cancelled', cancel_reason=$2 where id=$1", [
+      rec.enrollment_id,
+      VETO,
+    ]);
+    await change(a.id, 2, { status: "no_show" });
+    await expect(volta()).rejects.toThrow(/followup_stale/);
+  });
 });
