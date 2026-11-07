@@ -46,4 +46,10 @@ describe("renderTemplate", () => {
     );
     expect(renderTemplate("<p>Olá {{nome}},</p>", {}, html)).toBe("<p>Olá,</p>");
   });
+
+  it("as colunas de CPF do contato não saem em mensagem (porte do original #4202)", () => {
+    expect(renderTemplate("[{{contact.cpf_hash}}]", { contact: { cpf_hash: "valor-interno" } })).toBe("[]");
+    expect(renderTemplate("[{{ contact.cpf_encrypted }}]", { contact: { cpf_encrypted: "valor-interno" } })).toBe("[]");
+    expect(renderTemplate('[{{contact.cpf_hash|"x"}}]', { contact: { cpf_hash: "valor-interno" } })).toBe("[]");
+  });
 });
