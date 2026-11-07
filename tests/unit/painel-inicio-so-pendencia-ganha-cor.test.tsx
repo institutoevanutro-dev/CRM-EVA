@@ -55,7 +55,7 @@ function totalDoCartao(titulo: string): HTMLElement {
   const h = screen.getByText(titulo);
   const cartao = h.closest("section");
   if (!cartao) throw new Error(`cartão «${titulo}» não encontrado`);
-  const p = cartao.querySelector(".numero.text-3xl");
+  const p = cartao.querySelector(".numero-destaque");
   if (!p) throw new Error(`total do cartão «${titulo}» não encontrado`);
   return p as HTMLElement;
 }
@@ -112,6 +112,6 @@ describe("painel Início — só pendência ganha cor", () => {
     ]) {
       expect(screen.getByText(frase).className).toContain("text-success");
     }
-    expect(document.querySelector(".numero.text-3xl")).toBeNull();
+    expect(document.querySelector(".numero-destaque")).toBeNull();
   });
 });

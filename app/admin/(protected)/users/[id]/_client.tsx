@@ -126,7 +126,7 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
 
       {/* Header */}
       <div className="space-y-1">
-        <h1 className="text-[2rem] leading-tight">
+        <h1 className="titulo-tela">
           {user.full_name ?? user.email ?? t("Usuário sem nome")}
         </h1>
         {user.full_name && (

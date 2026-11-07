@@ -78,7 +78,7 @@ export function ImagensDaBiblioteca({
                 <span className="min-w-0 flex-1 truncate">
                   {item ? item.title : t("Mídia da biblioteca")}
                   {item && item.situacao !== "pronta" ? (
-                    <span className="text-xs text-warning"> · {t(SITUACAO_LEGIVEL[item.situacao])}</span>
+                    <span className="text-xs text-warning-fg"> · {t(SITUACAO_LEGIVEL[item.situacao])}</span>
                   ) : null}
                 </span>
                 <button

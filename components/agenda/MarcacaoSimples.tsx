@@ -57,7 +57,7 @@ export type MarcacaoConfirmada = {
 };
 
 const CAMPO =
-  "h-10 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-text outline-hidden transition-colors focus:border-accent disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-text-subtle";
+  "h-10 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-text outline-hidden transition-colors focus:border-accent disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-subtle";
 const ROTULO = "mb-1 block text-xs font-medium text-text-muted";
 
 export function MarcacaoSimples({
@@ -322,14 +322,14 @@ export function MarcacaoSimples({
       </Link>
     </div>
   ) : erroAoCarregar ? (
-    <p data-testid="motivo-do-bloqueio" data-motivo="erro" className="text-xs text-warning">
+    <p data-testid="motivo-do-bloqueio" data-motivo="erro" className="text-xs text-warning-fg">
       {t("Não consegui carregar os horários")}
     </p>
   ) : null;
 
   return (
     <Tabs value={aba} onValueChange={(v) => setAba(v === "bloquear" ? "bloquear" : "marcar")} className="flex min-h-0 flex-col">
-      <TabsList className="mx-5 mt-1 self-start bg-surface-sunken" data-testid="abas-da-marcacao">
+      <TabsList className="mx-5 mt-1 self-start bg-surface-muted" data-testid="abas-da-marcacao">
         <TabsTrigger value="marcar" data-testid="aba-novo-agendamento">
           {t("Novo agendamento")}
         </TabsTrigger>
@@ -584,12 +584,12 @@ export function MarcacaoSimples({
                 </span>
                 {avisoDosHorarios}
                 {googleCoberturaParcial ? (
-                  <p role="status" className="mb-1 text-xs text-warning">
+                  <p role="status" className="mb-1 text-xs text-warning-fg">
                     {t("Ocupação do Google ainda não verificada neste período.")}
                   </p>
                 ) : null}
                 {fontesDefasadas && fontesDefasadas.length > 0 ? (
-                  <p data-testid="fontes-defasadas" className="mb-1 text-xs text-warning">
+                  <p data-testid="fontes-defasadas" className="mb-1 text-xs text-warning-fg">
                     {t("Uma agenda conectada não está atualizando. Os horários dela seguem bloqueados por precaução.")}
                   </p>
                 ) : null}
@@ -692,7 +692,7 @@ export function MarcacaoSimples({
                 <p className="text-text-subtle">{t("Escolha profissional, procedimento, dia e horário.")}</p>
               )}
               {!nomeResolvido ? (
-                <p data-testid="falta-nome-na-marcacao" className="mt-1 text-xs text-warning">
+                <p data-testid="falta-nome-na-marcacao" className="mt-1 text-xs text-warning-fg">
                   {t("Complete o nome do paciente para marcar.")}
                 </p>
               ) : null}

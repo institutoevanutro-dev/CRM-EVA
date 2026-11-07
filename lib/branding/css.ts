@@ -50,7 +50,7 @@
  * que se descobre semanas depois.
  */
 
-import { baseDoDegradeDoMenu, fundoDoMenu } from "./menu";
+import { fundoDoMenu } from "./menu";
 import { ehHexValido, GRAUS, stop } from "./rampa";
 import type { CorResolvida } from "./resolve";
 
@@ -240,7 +240,6 @@ export type EscopoDaMarca = typeof ESCOPO_DA_INSTALACAO | typeof ESCOPO_DA_ORGAN
 function declaracoesDoMenu(menu: string, tema: "claro" | "escuro"): Declaracao[] {
   return [
     ["--color-sidebar-bg", fundoDoMenu(menu, tema)],
-    ["--color-sidebar-tint", baseDoDegradeDoMenu(menu, tema)],
   ];
 }
 

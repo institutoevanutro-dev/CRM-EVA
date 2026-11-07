@@ -19,9 +19,9 @@ export default async function BibliotecaDeMidiasPage() {
   const idioma = user.idioma;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <header>
-        <h1 className="text-[2rem] leading-tight">{traduzir("Biblioteca de mídias", idioma)}</h1>
+        <h1 className="titulo-tela">{traduzir("Biblioteca de mídias", idioma)}</h1>
         <p className="text-sm text-muted-foreground">
           {traduzir(
             "Suba uma vez e o agente e os follow-ups reutilizam. Trocar o arquivo não mexe em nenhuma automação.",

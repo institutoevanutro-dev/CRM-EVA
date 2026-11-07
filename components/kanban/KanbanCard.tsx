@@ -4,6 +4,7 @@ import type { MouseEvent } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types/leads";
+import type { Stage } from "@/lib/kanban/types";
 import { resolveCardState, stageAgeLabel, type CardInput } from "@/lib/kanban/card-state";
 import { KanbanCardActions } from "./KanbanCardActions";
 import { NextActionSlot } from "./NextActionSlot";
@@ -23,6 +24,8 @@ interface KanbanCardProps {
   lead: Lead;
   index: number;
   pipelineId: string;
+  /** As etapas do quadro, para o "Mover para" do menu ⋯. */
+  stages?: Stage[];
   isSelected?: boolean;
   /**
    * Há seleção viva no quadro. Só muda a VISIBILIDADE da caixa (que fora disso
@@ -76,6 +79,7 @@ export function KanbanCard({
   lead,
   index,
   pipelineId,
+  stages,
   isSelected,
   isSelecting = false,
   pulseCount = 0,
@@ -145,7 +149,7 @@ export function KanbanCard({
             "group relative overflow-hidden rounded-md border border-border bg-surface",
             "py-2.5 pl-3 pr-3 shadow-xs transition-colors",
             "hover:border-border-strong",
-            snapshot.isDragging && "rotate-1 shadow-md ring-1 ring-accent/40",
+            snapshot.isDragging && "rotate-1 scale-[1.02] shadow-lg ring-1 ring-accent/40",
             isSelected && "ring-2 ring-accent",
           )}
         >
@@ -239,7 +243,7 @@ export function KanbanCard({
                 </button>
               </h3>
             </div>
-            <KanbanCardActions lead={lead} pipelineId={pipelineId} />
+            <KanbanCardActions lead={lead} pipelineId={pipelineId} stages={stages} />
           </div>
 
           {/* ② valor — altura reservada mesmo sem valor, senão o card encolhe. */}

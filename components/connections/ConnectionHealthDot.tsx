@@ -7,10 +7,12 @@ import {
 } from "@/hooks/channels/useChannelSessions";
 import { useT } from "@/hooks/i18n/useT";
 
+// Mora só no menu lateral (a funda, nos dois temas). Caída em vermelho claro
+// com anel (4,75:1 sobre a funda), para não depender só da cor (D1.4).
 const DOT_COLOR: Record<ConnectionHealth, string> = {
   connected: "bg-success",
   connecting: "bg-warning",
-  down: "bg-error",
+  down: "bg-[#f87171] ring-2 ring-[#f87171]/40",
   none: "bg-muted-foreground/40",
   unknown: "bg-muted-foreground/40",
 };
@@ -39,7 +41,8 @@ export function ConnectionHealthDot({ className }: { className?: string }) {
       className={cn(
         "inline-block h-2 w-2 shrink-0 rounded-full",
         DOT_COLOR[health],
-        health === "down" && "animate-pulse",
+        // Pulsa 3 vezes e para: avisa uma vez, sem piscar para sempre (D1.1).
+        health === "down" && "pulsa-tres-vezes",
         className,
       )}
       title={t(DOT_LABEL[health])}

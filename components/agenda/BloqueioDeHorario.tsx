@@ -28,7 +28,7 @@ import { emMinutos, type Excecao, faixa, type PessoaDaAgenda } from "./DiasBloqu
 const TETO_DO_PERIODO = 62;
 
 const CAMPO =
-  "h-10 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-text outline-hidden focus:border-accent disabled:bg-surface-sunken";
+  "h-10 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-text outline-hidden focus:border-accent disabled:bg-surface-muted";
 const ROTULO = "mb-1 block text-xs font-medium text-text-muted";
 
 export function BloqueioDeHorario({

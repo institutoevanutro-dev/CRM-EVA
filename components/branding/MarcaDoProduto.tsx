@@ -24,6 +24,8 @@ type Props = {
   readonly className?: string;
   /** `true` quando o texto ao lado já nomeia a marca — evita ler duas vezes. */
   readonly decorativo?: boolean;
+  /** Sobre a funda do menu lateral, escura nos dois temas: ignora o tema da página. */
+  readonly sobreFunda?: boolean;
 };
 
 const SIMBOLO_CLARO_ESCURO = "fill-[#506d48] dark:fill-[#82a077]";
@@ -40,6 +42,14 @@ export const CLASSES_DE_COR = {
   sufixo: SUFIXO_CLARO_ESCURO,
 } as const;
 
+export const CLASSES_DE_COR_SOBRE_FUNDA = {
+  simbolo: "fill-[#82a077]",
+  nome: "fill-[#f5efd9]",
+  sufixo: "fill-[#d9b24c]",
+} as const;
+
+const coresDe = (sobreFunda: boolean) => (sobreFunda ? CLASSES_DE_COR_SOBRE_FUNDA : CLASSES_DE_COR);
+
 function acessibilidade(nome: string, decorativo: boolean) {
   return decorativo
     ? ({ "aria-hidden": true } as const)
@@ -47,14 +57,14 @@ function acessibilidade(nome: string, decorativo: boolean) {
 }
 
 /** O símbolo sozinho — para a barra recolhida, avatar e cantos apertados. */
-export function SimboloDoProduto({ nome, className, decorativo = false }: Props) {
+export function SimboloDoProduto({ nome, className, decorativo = false, sobreFunda = false }: Props) {
   return (
     <svg
       viewBox={SIMBOLO.viewBox}
       className={cn("shrink-0", className)}
       {...acessibilidade(nome, decorativo)}
     >
-      <g className={SIMBOLO_CLARO_ESCURO} transform={SIMBOLO.transform}>
+      <g className={coresDe(sobreFunda).simbolo} transform={SIMBOLO.transform}>
         <path d={SIMBOLO.d} />
         <rect {...SIMBOLO.modulo} />
       </g>
@@ -63,23 +73,24 @@ export function SimboloDoProduto({ nome, className, decorativo = false }: Props)
 }
 
 /** Símbolo + nome — para a barra aberta e a fachada de entrada. */
-export function LogotipoDoProduto({ nome, className, decorativo = false }: Props) {
+export function LogotipoDoProduto({ nome, className, decorativo = false, sobreFunda = false }: Props) {
+  const cores = coresDe(sobreFunda);
   return (
     <svg
       viewBox={LOGOTIPO.viewBox}
       className={cn("shrink-0", className)}
       {...acessibilidade(nome, decorativo)}
     >
-      <g className={SIMBOLO_CLARO_ESCURO} transform={LOGOTIPO.simbolo.transform}>
+      <g className={cores.simbolo} transform={LOGOTIPO.simbolo.transform}>
         <path d={LOGOTIPO.simbolo.d} />
         <rect {...LOGOTIPO.simbolo.modulo} />
       </g>
-      <g className={NOME_CLARO_ESCURO}>
+      <g className={cores.nome}>
         {LOGOTIPO.nome.map((g) => (
           <path key={g.transform} transform={g.transform} d={g.d} />
         ))}
       </g>
-      <g className={SUFIXO_CLARO_ESCURO}>
+      <g className={cores.sufixo}>
         {LOGOTIPO.sufixo.map((g) => (
           <path key={g.transform} transform={g.transform} d={g.d} />
         ))}

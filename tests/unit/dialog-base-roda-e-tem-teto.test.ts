@@ -57,7 +57,9 @@ describe("DialogContent base tem teto de altura (DeskcommCRM issue 2044)", () =>
 
   it("mantém o botão de fechar (X) no componente base", () => {
     expect(fonte).toMatch(/DialogPrimitive\.Close/);
-    expect(fonte).toMatch(/right-4 top-4/);
+    // D1.1: o X tem 44px no toque (`size-11`) e 32px no mouse (`lg:size-8`),
+    // com o ícone no mesmo lugar de antes (centro a 24px da borda).
+    expect(fonte).toMatch(/size-11 [^"]*lg:size-8/);
   });
 });
 

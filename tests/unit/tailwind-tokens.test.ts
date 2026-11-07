@@ -86,7 +86,7 @@ describe("Tailwind 4 — a ponte token → utilitário", () => {
     // `<html>` (app/layout.tsx), não pelo `:root` do CSS — por isso não caem na
     // regra acima. A isenção não é um buraco: o teste confere logo abaixo que
     // elas continuam sendo declaradas lá.
-    const DE_FORA_DO_CSS = ["--font-inter", "--font-cormorant", "--font-mono"];
+    const DE_FORA_DO_CSS = ["--font-inter", "--font-lora", "--font-josefin", "--font-mono"];
     const layout = fs.readFileSync(path.join(RAIZ, "app/layout.tsx"), "utf8");
     for (const v of DE_FORA_DO_CSS) {
       expect(layout, `${v} deixou de ser declarada pelo next/font`).toContain(`"${v}"`);
@@ -591,5 +591,82 @@ describe("Tailwind 4 — alpha em cor de texto agora PINTA, então precisa passa
       [...new Set(reprovados)].sort(),
       "o alpha PINTA no v4: ou tire o `/NN` (restaura o que a produção já mostra) ou use um alpha que passe",
     ).toEqual([]);
+  });
+});
+
+/**
+ * D1.3 — três travas de cor, no modelo do `branding.test.ts`.
+ *
+ * 1. Classe de cor montada com nome de token que NÃO existe. Diferente da guarda
+ *    "sem ponte" acima (que só enxerga nomes declarados no `:root`), esta pega o
+ *    nome inventado: `text-accent-strong`, `bg-surface-muted` e
+ *    `border-warning-border` estiveram em 19 classes sem gerar CSS nenhum —
+ *    "Limpar filtros" saía cinza e a caixa do Radar perdia a borda.
+ * 2. `text-success`/`text-warning` (o tom de ícone) em texto pequeno: 3,65 e
+ *    3,37:1 no fundo. Texto usa `-fg` (5,90 e 5,45:1).
+ * 3. Catraca: cor crua da paleta do Tailwind e texto de 8–11 px só podem cair.
+ *    Ao reduzir, baixe o teto para o número novo no mesmo PR.
+ */
+describe("D1.3 — cor só de token, e texto de estado legível", () => {
+  const ARQUIVOS = listarFontes(["app", "components", "lib", "hooks"]);
+  const PREFIXOS = "text|bg|border|ring|outline|fill|stroke|from|via|to|divide|caret|decoration|placeholder";
+
+  it("nenhuma classe de cor usa nome de token que não existe", () => {
+    const tokens = new Set(
+      propsDe(bloco("@theme inline"))
+        .filter((p) => p.startsWith("--color-"))
+        .map((p) => p.replace("--color-", "")),
+    );
+    // Só se cobra o nome cuja RAIZ é de token do produto (`accent-…`,
+    // `surface-…`): `text-sm`, `border-2` e `ring-inset` não têm raiz de token.
+    const raizes = new Set([...tokens].map((n) => n.split("-")[0]!));
+    const rx = new RegExp(`(?<=[\\s"'\`:])(?:${PREFIXOS})-([a-z][a-z0-9-]*)(?=[\\s"'\`/!]|$)`, "g");
+
+    const culpados: string[] = [];
+    let vistos = 0;
+    for (const f of ARQUIVOS) {
+      fs.readFileSync(f, "utf8").split("\n").forEach((linha, i) => {
+        const cru = linha.trimStart();
+        if (cru.startsWith("*") || cru.startsWith("//") || cru.startsWith("/*")) return;
+        for (const m of linha.matchAll(rx)) {
+          const nome = m[1]!;
+          if (!raizes.has(nome.split("-")[0]!)) continue;
+          vistos++;
+          if (!tokens.has(nome)) culpados.push(`${path.relative(RAIZ, f)}:${i + 1}  ${m[0]}`);
+        }
+      });
+    }
+    expect(vistos, "guarda cega: nenhuma classe de token vista").toBeGreaterThan(500);
+    expect(culpados, "classe de cor sem token no `@theme inline` — não gera CSS").toEqual([]);
+  });
+
+  it("`text-success`/`text-warning` não pinta texto — só ícone e ponto", () => {
+    const tom = /(?<=[\s"'`:])text-(?:success|warning)(?=[\s"'`/!]|$)/;
+    const ehTexto = /(?<=[\s"'`:])text-(?:xs|sm|base|\[\d+(?:px|rem)\])(?=[\s"'`!]|$)|<(?:p|span|dd|li|label)[\s>]/;
+    const culpados = ARQUIVOS.flatMap((f) =>
+      fs
+        .readFileSync(f, "utf8")
+        .split("\n")
+        .flatMap((linha, i) =>
+          tom.test(linha) && ehTexto.test(linha) && !linha.includes("aria-hidden")
+            ? [`${path.relative(RAIZ, f)}:${i + 1}`]
+            : [],
+        ),
+    );
+    expect(culpados, "use text-success-fg / text-warning-fg em texto").toEqual([]);
+  });
+
+  it("catraca: cor crua da paleta e texto de 8–11 px só podem cair", () => {
+    // Medido em 06/11/2026, depois da D1.3. Reduziu? Baixe o teto aqui.
+    const TETO_COR_CRUA = 266;
+    const TETO_TEXTO_MINUSCULO = 169;
+    const conta = (rx: RegExp) =>
+      ARQUIVOS.reduce((n, f) => n + (fs.readFileSync(f, "utf8").match(rx)?.length ?? 0), 0);
+    // `globals.css` fica fora (não é .ts/.tsx): a catraca mede componente.
+    const corCrua = conta(/(?:amber|red|emerald|yellow)-\d{2,3}\b/g);
+    const minusculo = conta(/text-\[(?:8|9|10|11)px\]/g);
+    expect(corCrua, "cor crua (amber|red|emerald|yellow-NNN) subiu — use token de estado").toBeLessThanOrEqual(TETO_COR_CRUA);
+    expect(minusculo, "texto de 8–11 px subiu — situação não fica abaixo de 12 px").toBeLessThanOrEqual(TETO_TEXTO_MINUSCULO);
+    expect(corCrua).toBeGreaterThan(0);
   });
 });

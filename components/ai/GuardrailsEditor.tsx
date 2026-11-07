@@ -123,7 +123,7 @@ export function GuardrailsEditor({ value, onChange, disabled }: Props) {
                 className={`rounded-md border p-3 ${invalid ? "border-destructive/60" : ""}`}
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span className="rotulo-secao text-muted-foreground">
                     {t(KIND_LABELS[item.kind])}
                   </span>
                   <Button

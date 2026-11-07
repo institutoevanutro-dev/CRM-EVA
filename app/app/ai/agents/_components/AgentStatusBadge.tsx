@@ -1,5 +1,6 @@
 "use client";
 import { Badge } from "@/components/ui/badge";
+import { Pause } from "@/lib/ui/icons";
 import { estadoDoAgente } from "@/lib/ai/agents/no-ar";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import { useT } from "@/hooks/i18n/useT";
@@ -28,8 +29,9 @@ export type AgentStatus = "published" | "draft" | "paused" | "archived" | "inval
  *      (`loadPublishedAgentConfig`) nem o dispatcher leem `is_active`. Com
  *      versão publicada o agente responde, e o rótulo honesto é "Publicado".
  *
- * `paused` continua no vocabulário do componente porque `AgentRowMenu` e os
- * filtros da lista o consomem; ele deixou de ter emissor aqui.
+ * "Parado" tem duas causas, e a tela as separa: com `paused_at` alguém PAUSOU
+ * o agente ("Pausado"); sem ele, falta publicar ("Rascunho"). Antes as duas
+ * viravam "Rascunho", e o filtro "Pausado" nunca encontrava nada.
  */
 export function deriveAgentStatus(agent: AgentRow): AgentStatus {
   // `AgentRow` traz `paused_at` como opcional (o tipo vem da linha do banco),
@@ -42,7 +44,7 @@ export function deriveAgentStatus(agent: AgentRow): AgentStatus {
     case "no_ar_legado":
       return "published";
     case "parado":
-      return "draft";
+      return agent.paused_at ? "paused" : "draft";
   }
 }
 
@@ -54,10 +56,12 @@ const LABEL: Record<AgentStatus, string> = {
   invalid: "Inválido",
 };
 
-const VARIANT: Record<AgentStatus, "default" | "secondary" | "outline" | "destructive"> = {
-  published: "default",
-  draft: "secondary",
-  paused: "outline",
+// Publicado em sucesso, Pausado em atenção, Rascunho em neutro. O ponto e o
+// ícone de pausa existem para o estado não depender só da cor.
+const VARIANT: Record<AgentStatus, "success" | "warning" | "neutral" | "outline" | "destructive"> = {
+  published: "success",
+  draft: "neutral",
+  paused: "warning",
   archived: "outline",
   invalid: "destructive",
 };
@@ -65,7 +69,9 @@ const VARIANT: Record<AgentStatus, "default" | "secondary" | "outline" | "destru
 export function AgentStatusBadge({ status }: { status: AgentStatus }) {
   const t = useT();
   return (
-    <Badge variant={VARIANT[status]} aria-label={`status: ${t(LABEL[status])}`}>
+    <Badge variant={VARIANT[status]} aria-label={`status: ${t(LABEL[status])}`} className="gap-1">
+      {status === "published" && <span aria-hidden className="size-1.5 rounded-full bg-success" />}
+      {status === "paused" && <Pause aria-hidden size={12} weight="fill" />}
       {t(LABEL[status])}
     </Badge>
   );

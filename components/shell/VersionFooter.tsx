@@ -36,7 +36,7 @@ export function VersionFooter({
     return (
       <p
         className={cn(
-          "px-3 py-1 text-[11px] text-sidebar-muted",
+          "px-3 py-1 text-xs text-sidebar-fg",
           collapsed && "px-0 text-center",
         )}
         title={`${t("Versão")} ${label}`}
@@ -60,10 +60,9 @@ export function VersionFooter({
         collapsed && "justify-center px-2",
       )}
     >
-      <span className="relative flex h-2 w-2 shrink-0">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gold/60" />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-gold" />
-      </span>
+      {/* Ponto fixo, sem `animate-ping`: o aviso fica até alguém atualizar,
+          e um pulso infinito no canto do menu é ruído o dia inteiro (D1.1). */}
+      <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-gold" />
       {!collapsed && (
         <span className="truncate">
           {t("Nova versão")}

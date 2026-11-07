@@ -473,7 +473,7 @@ export function PainelDeMarcacao({
             // Repetido aqui de propósito: o aviso do passo anterior sumiu da
             // tela junto com o formulário, e quem fecha o painel agora não tem
             // como saber que aquele agendamento não terá lembrete.
-            <p data-testid="aviso-sem-lembrete-no-resumo" className="mt-2 text-xs text-warning">
+            <p data-testid="aviso-sem-lembrete-no-resumo" className="mt-2 text-xs text-warning-fg">
               {t("Sem lembrete automático —")} {quemSeraAtendido.nome} {t("pediu para não receber mensagens.")}
             </p>
           )}
@@ -709,7 +709,7 @@ export function PainelDeMarcacao({
           <div
             data-testid="motivo-do-bloqueio"
             data-motivo="sem-vaga"
-            className="mb-3 rounded-sm border border-border bg-surface-sunken p-3"
+            className="mb-3 rounded-sm border border-border bg-surface-muted p-3"
           >
             <p className="text-sm font-semibold text-text">
               {t("Nenhum horário livre em")} {format(mes, "MMMM", { locale: localeDaData })}
@@ -720,7 +720,7 @@ export function PainelDeMarcacao({
           </div>
         )}
 
-        {googleCoberturaParcial && <p role="status" className="mb-2 text-xs text-warning">{t("Ocupação do Google ainda não verificada neste período.")}</p>}
+        {googleCoberturaParcial && <p role="status" className="mb-2 text-xs text-warning-fg">{t("Ocupação do Google ainda não verificada neste período.")}</p>}
         {fusoSuposto && (
           <p data-testid="fuso-suposto" className="mb-2 text-[11px] leading-4 text-text-subtle">
             {t("Estamos supondo o fuso")} <span className="font-mono">{(fuso ?? "").replace("_", " ")}</span> {t("— ninguém escolheu ainda. O agente oferece horário usando ele.")}
@@ -731,7 +731,7 @@ export function PainelDeMarcacao({
           // Falhar fechado na AÇÃO (o horário fica bloqueado de qualquer jeito)
           // e aberto na INFORMAÇÃO (a tela diz desde quando). O contrário —
           // bloquear em silêncio — faz a pessoa achar que a agenda está errada.
-          <p data-testid="fontes-defasadas" className="mb-2 text-[11px] leading-4 text-warning">
+          <p data-testid="fontes-defasadas" className="mb-2 text-[11px] leading-4 text-warning-fg">
             {fontesDefasadas.length === 1
               ? `A agenda conectada ${fontesDefasadas[0]?.nome ?? ""} não atualiza desde ${fontesDefasadas[0]?.desde ?? "algum tempo"}. Os horários dela seguem bloqueados por precaução.`
               : `${fontesDefasadas.length} agendas conectadas não estão atualizando. Os horários delas seguem bloqueados por precaução.`}

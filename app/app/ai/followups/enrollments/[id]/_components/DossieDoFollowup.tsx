@@ -175,7 +175,7 @@ export function DossieDoFollowup({ id, canWrite }: Props) {
   // sumiu pedem ações opostas de quem está olhando.
   if (isError || !data) {
     return (
-      <div className="p-6">
+      <div>
         <p className="text-sm text-warning-fg">
           {t("Não consegui carregar este follow-up. Recarregue a página; se persistir, ele pode ter sido removido.")}
         </p>
@@ -200,7 +200,7 @@ export function DossieDoFollowup({ id, canWrite }: Props) {
   };
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <header className="flex flex-col gap-3">
         <Link
           href="/app/ai/followups"
@@ -209,7 +209,7 @@ export function DossieDoFollowup({ id, canWrite }: Props) {
           <CaretLeft size={14} aria-hidden /> {t("Fila de follow-ups")}
         </Link>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-[2rem] leading-tight">{data.contact.name}</h1>
+          <h1 className="titulo-tela">{data.contact.name}</h1>
           <Badge variant={tomDoStatus(data.status)} data-testid="dossie-status">
             {rotuloDoStatus(data.status, t)}
           </Badge>

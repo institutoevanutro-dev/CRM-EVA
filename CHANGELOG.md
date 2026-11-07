@@ -8,6 +8,18 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.50.0] — 2026-11-07
+
+### Alterado
+
+- **Telas mais legíveis e funil sem precisar arrastar** Revisão visual em todas as telas, sem nada para configurar: diálogos e gavetas abrem com movimento curto (e param quando o sistema pede menos movimento), campos não ampliam a tela do iPhone, campos e botões têm a mesma altura e borda visível, cores de estado e o modo escuro ficaram legíveis, o menu lateral ficou liso, com grupos que só abrem e fecham e recolhem na hora, e os títulos usam a nova tipografia. No funil, o menu ⋯ do card ganhou "Mover para", para mudar a etapa sem arrastar. No Início, as conversas que ficaram sem resposta aparecem com número e link para o Radar. Agente pausado aparece como "Pausado", não "Rascunho". Erros de leitura mostram "Tentar de novo", e a margem das telas e a barra do topo ficaram iguais em todas as páginas.
+
+## [4.49.2] — 2026-11-07
+
+### Corrigido
+
+- **O roteador de agentes lê o áudio que veio antes da última mensagem** Quando o cliente mandava um áudio e, logo depois, um emoji ou um "ok", o roteador escolhia o agente olhando só a última mensagem. O texto do áudio ficava de fora da escolha, e a conversa ia para o agente padrão em vez do assunto certo, mesmo com o agente respondendo depois ao conteúdo do áudio. Agora o roteador lê todas as mensagens do cliente que ainda não tiveram resposta, com a transcrição dos áudios já prontos, da mais antiga para a mais nova. A espera pela transcrição continua a mesma, com o mesmo teto: se o áudio não for transcrito a tempo, o roteador segue com o que tiver.
+
 ## [4.49.1] — 2026-11-06
 
 ### Corrigido
@@ -8800,7 +8812,9 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.49.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.50.0...HEAD
+[4.50.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.49.2...v4.50.0
+[4.49.2]: https://github.com/melgarafael/DeskcommCRM/compare/v4.49.1...v4.49.2
 [4.49.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.49.0...v4.49.1
 [4.49.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.48.0...v4.49.0
 [4.48.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.47.0...v4.48.0

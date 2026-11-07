@@ -4,7 +4,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
 import { Sidebar } from "@/components/shell/Sidebar";
-import { CLASSES_DE_COR, LogotipoDoProduto, SimboloDoProduto } from "@/components/branding/MarcaDoProduto";
+import {
+  CLASSES_DE_COR,
+  CLASSES_DE_COR_SOBRE_FUNDA,
+  LogotipoDoProduto,
+  SimboloDoProduto,
+} from "@/components/branding/MarcaDoProduto";
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
 import { DEFAULT_APP_NAME, marcaEhADoProduto, type Branding } from "@/lib/branding";
 import { MarcaDaInstalacaoProvider } from "@/lib/branding/contexto";
@@ -124,6 +129,16 @@ describe("as cores do desenho", () => {
       expect(classes).toContain(`fill-[${CORES_DA_MARCA.claro[chave]}]`);
       expect(classes).toContain(`dark:fill-[${CORES_DA_MARCA.escuro[chave]}]`);
     }
+  });
+
+  it("sobre a funda do menu, as cores são as da funda, sem `dark:` (o menu é escuro nos dois temas)", () => {
+    for (const [papel, classe] of Object.entries(CLASSES_DE_COR_SOBRE_FUNDA)) {
+      const chave = papel as keyof typeof CORES_DA_MARCA.funda;
+      expect(classe).toBe(`fill-[${CORES_DA_MARCA.funda[chave]}]`);
+    }
+    renderSidebar(PADRAO, false);
+    const fills = [...document.querySelectorAll("svg[role=img] g")].map((g) => g.getAttribute("class"));
+    expect(fills).toEqual(Object.values(CLASSES_DE_COR_SOBRE_FUNDA));
   });
 
   it("decorativo esconde do leitor de tela; sem isso, nomeia a marca", () => {

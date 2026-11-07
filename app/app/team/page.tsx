@@ -46,10 +46,10 @@ export default async function TeamPage({
   const isManager = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-[2rem] leading-tight">{t("Equipe")}</h1>
+          <h1 className="titulo-tela">{t("Equipe")}</h1>
           <p className="text-sm text-muted-foreground">
             {t("Quem trabalha no sistema, o papel de cada um e como os atendimentos são divididos.")}
           </p>

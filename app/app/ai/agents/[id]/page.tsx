@@ -176,7 +176,7 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
   const materiais = [...materiaisVivos, ...materiaisArquivadosMarcados];
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <AgentOperation agent={agent} readOnly={readOnly} />
       {(agent.kind ?? "rag_bot") !== "mcp_agent" && !agent.published_version_id && (
         <LegacyRecovery

@@ -19,9 +19,9 @@ export default async function PerguntasFrequentesPage() {
   const idioma = user.idioma;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <header>
-        <h1 className="text-[2rem] leading-tight">{traduzir("Perguntas frequentes", idioma)}</h1>
+        <h1 className="titulo-tela">{traduzir("Perguntas frequentes", idioma)}</h1>
         <p className="text-sm text-muted-foreground">
           {traduzir(
             "Respostas que você escreveu e que saem sem chamar a IA quando a mensagem é claramente uma destas perguntas. Na dúvida, a IA responde como sempre.",

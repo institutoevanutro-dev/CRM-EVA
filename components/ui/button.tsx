@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 const buttonVariants = cva(
   [
     "inline-flex items-center justify-center gap-2 whitespace-nowrap",
-    "rounded-sm font-medium",
+    "rounded-md font-medium",
     "transition-[background-color,border-color,color,box-shadow,transform]",
     "duration-fast ease-out",
     "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
@@ -40,7 +40,7 @@ const buttonVariants = cva(
         ghost:
           "bg-transparent text-text hover:bg-accent-soft hover:text-accent",
         destructive:
-          "bg-error text-white hover:brightness-95 shadow-xs",
+          "bg-error text-on-error hover:brightness-95 shadow-xs",
         link:
           "bg-transparent text-accent underline underline-offset-4 decoration-1 hover:decoration-2 h-auto p-0",
       },
@@ -52,8 +52,12 @@ const buttonVariants = cva(
       // necessidade nenhuma. `lg` já nascia com 44px e não precisou mudar.
       size: {
         sm: "h-11 px-3 text-xs lg:h-8",
-        default: "h-11 px-4 text-sm lg:h-9",
-        md: "h-11 px-4 text-sm lg:h-9",
+        // D1.8: 40 px no mouse (mesma altura do campo), 44 px no toque. Abaixo
+        // de `lg` continua 44 px mesmo com mouse, como as outras variantes:
+        // tela estreita é celular, e `pointer: coarse` sozinho deixava o botão
+        // em 40 px a 390 px de largura (e2e `inbox-enviar-exame-ao-prontuario`).
+        default: "h-11 lg:h-10 toque:h-11 px-4 text-sm",
+        md: "h-11 lg:h-10 toque:h-11 px-4 text-sm",
         lg: "h-11 px-6 text-sm",
         icon: "h-11 w-11 lg:h-9 lg:w-9",
       },

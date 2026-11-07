@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AuditLoading() {
   return (
-    <div className="p-6 space-y-4">
+    <div className="space-y-4">
       <Skeleton className="h-8 w-48" />
       <div className="flex gap-2">
         <Skeleton className="h-9 w-32" />

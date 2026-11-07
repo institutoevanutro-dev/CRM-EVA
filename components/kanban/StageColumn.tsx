@@ -12,6 +12,8 @@ import { KanbanCard, type GestoDeSelecao } from "./KanbanCard";
 
 interface StageColumnProps {
   stage: Stage;
+  /** Todas as etapas do quadro, para o "Mover para" de cada card. */
+  stages?: Stage[];
   leads: Lead[];
   pipelineId: string;
   /** owner_user_id → nome, resolvido no board. O dono agente vem no lead. */
@@ -50,6 +52,7 @@ function formatBRL(cents: number): string {
 
 export function StageColumn({
   stage,
+  stages,
   leads,
   pipelineId,
   ownerNames,
@@ -171,9 +174,10 @@ export function StageColumn({
             ref={provided.innerRef}
             {...provided.droppableProps}
             className={cn(
-              "flex flex-1 flex-col gap-2 p-2 transition-colors",
-              snapshot.isDraggingOver && "bg-accent/5",
+              "flex flex-1 flex-col gap-2 rounded-b-lg p-2 transition-colors",
+              snapshot.isDraggingOver && "bg-accent-soft/60 ring-2 ring-inset ring-accent/40",
             )}
+            data-destino-do-arraste={snapshot.isDraggingOver || undefined}
           >
             {leads.map((lead, idx) => (
               <KanbanCard
@@ -188,6 +192,7 @@ export function StageColumn({
                 lead={lead}
                 index={idx}
                 pipelineId={pipelineId}
+                stages={stages}
                 isSelected={selectedLeadIds?.has(lead.id)}
                 isSelecting={(selectedLeadIds?.size ?? 0) > 0}
                 pulseCount={pulses?.get(lead.id) ?? 0}
@@ -197,8 +202,8 @@ export function StageColumn({
             ))}
             {provided.placeholder}
             {leads.length === 0 && !snapshot.isDraggingOver && (
-              <div className="flex h-20 items-center justify-center text-[11px] text-text-muted">
-                {t("vazio")}
+              <div className="flex h-20 items-center justify-center rounded-md border border-dashed border-border-strong text-xs text-text-muted">
+                {t("Solte um card aqui")}
               </div>
             )}
           </div>

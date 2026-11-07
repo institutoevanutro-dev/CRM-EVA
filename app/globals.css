@@ -24,6 +24,11 @@
    coisas que no v3 ele não vencia. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/* `toque:` = tela de toque (dedo, não cursor). Decide pelo PONTEIRO e não
+   pela largura: um iPad em paisagem tem largura de notebook e dedo de
+   celular. Usado na altura de campo e botão (D1.8). */
+@custom-variant toque (@media (pointer: coarse));
+
 /* ─────────────────────────────────────────────────────────────────────────
    DeskcommCRM — Design System tokens (Sage palette · density Aerada)
    Source of truth: /app/design/lib/tokens.ts (PALETTES.sage)
@@ -45,6 +50,18 @@
   /* Borders (light) */
   --color-border: #e6e1d3;
   --color-border-strong: #d6cfbd;
+  /* Borda de campo: 3,58:1 no branco e 3,26:1 no fundo — a de cartão (1,31:1)
+     sumia em volta do campo (WCAG 1.4.11). */
+  --color-border-input: #8c877b;
+  /* D1.3: nomes que 19 classes já usavam sem gerar CSS. `accent-strong` é a
+     hover (700 no claro, 300 no escuro), por apelido: a régua de contraste
+     ignora alias e não conta o mesmo pixel duas vezes. */
+  --color-surface-muted: var(--color-surface-elevated);
+  --color-accent-strong: var(--color-accent-hover);
+  --color-warning-border: rgba(176, 122, 43, 0.4);
+  --color-gold-text: color-mix(in srgb, var(--color-gold) 60%, #000);
+  --grafico-equipe: var(--color-gold-text);
+  --grafico-sem-resposta: var(--color-error);
 
   /* Accent — Sage (11 stops) */
   --color-accent-50:  #f3f6f1;
@@ -84,6 +101,7 @@
   --color-warning-bg: rgba(176, 122, 43, 0.12);
   --color-warning-fg: #875a1a;
   --color-error: #a94a3c;
+  --color-on-error: #ffffff;
   --color-error-bg: rgba(169, 74, 60, 0.12);
   --color-error-fg: #8a3a2e;
   --color-info: #4a7a93;
@@ -164,7 +182,7 @@
   --muted-foreground: var(--color-text-muted);
   --accent-foreground: var(--color-accent-fg);
   --destructive: var(--color-error);
-  --destructive-foreground: #ffffff;
+  --destructive-foreground: var(--color-on-error);
   --border: var(--color-border);
   --input: var(--color-border);
   --ring: var(--color-accent-500);
@@ -278,6 +296,18 @@
   --color-text-subtle: #6b6b6b;
   --color-border: #e6e1d3;
   --color-border-strong: #d6cfbd;
+  /* Borda de campo: 3,58:1 no branco e 3,26:1 no fundo — a de cartão (1,31:1)
+     sumia em volta do campo (WCAG 1.4.11). */
+  --color-border-input: #8c877b;
+  /* D1.3: nomes que 19 classes já usavam sem gerar CSS. `accent-strong` é a
+     hover (700 no claro, 300 no escuro), por apelido: a régua de contraste
+     ignora alias e não conta o mesmo pixel duas vezes. */
+  --color-surface-muted: var(--color-surface-elevated);
+  --color-accent-strong: var(--color-accent-hover);
+  --color-warning-border: rgba(176, 122, 43, 0.4);
+  --color-gold-text: color-mix(in srgb, var(--color-gold) 60%, #000);
+  --grafico-equipe: var(--color-gold-text);
+  --grafico-sem-resposta: var(--color-error);
   --color-accent: var(--color-accent-600);
   --color-accent-fg: #ffffff;
   --color-accent-soft: var(--color-accent-100);
@@ -300,6 +330,7 @@
   --color-warning-bg: rgba(176, 122, 43, 0.12);
   --color-warning-fg: #875a1a;
   --color-error: #a94a3c;
+  --color-on-error: #ffffff;
   --color-error-bg: rgba(169, 74, 60, 0.12);
   --color-error-fg: #8a3a2e;
   --color-info: #4a7a93;
@@ -326,7 +357,7 @@
   --muted-foreground: var(--color-text-muted);
   --accent-foreground: var(--color-accent-fg);
   --destructive: var(--color-error);
-  --destructive-foreground: #ffffff;
+  --destructive-foreground: var(--color-on-error);
   --border: var(--color-border);
   --input: var(--color-border);
   --ring: var(--color-accent-500);
@@ -360,11 +391,22 @@
   /* Text (dark) */
   --color-text: #f1ede0;
   --color-text-muted: #b5b09f;
-  --color-text-subtle: #8f8a7a;
+  /* 4,51:1 na superfície elevada (antes #8f8a7a, 4,01:1 — D1.11). */
+  --color-text-subtle: #989385;
 
   /* Borders (dark) */
   --color-border: #24392f;
   --color-border-strong: #2f4a3e;
+  --color-border-input: #6c7871;
+  /* D1.3: nomes que 19 classes já usavam sem gerar CSS. `accent-strong` é a
+     hover (700 no claro, 300 no escuro), por apelido: a régua de contraste
+     ignora alias e não conta o mesmo pixel duas vezes. */
+  --color-surface-muted: var(--color-surface-elevated);
+  --color-accent-strong: var(--color-accent-hover);
+  --color-warning-border: rgba(208, 148, 85, 0.4);
+  --color-gold-text: var(--color-gold);
+  --grafico-equipe: var(--color-gold);
+  --grafico-sem-resposta: var(--color-error);
 
   /* Accent stays same hex stops; default shifts up for dark contrast */
   --color-accent-50:  #f3f6f1;
@@ -404,6 +446,8 @@
   --color-warning-bg: rgba(208, 148, 85, 0.18);
   --color-warning-fg: #e0ad77;
   --color-error: #c87263;
+  /* Texto sobre o vermelho do escuro: tinta, não branco (5,26:1 contra 3,48:1). */
+  --color-on-error: #161510;
   --color-error-bg: rgba(200, 114, 99, 0.18);
   --color-error-fg: #d99182;
   --color-info: #7da9bf;
@@ -434,7 +478,7 @@
   --muted-foreground: var(--color-text-muted);
   --accent-foreground: var(--color-accent-fg);
   --destructive: var(--color-error);
-  --destructive-foreground: #ffffff;
+  --destructive-foreground: var(--color-on-error);
   --border: var(--color-border);
   --input: var(--color-border);
   --ring: var(--color-accent-400);
@@ -540,6 +584,7 @@
   --color-warning-bg: var(--color-warning-bg);
   --color-warning-fg: var(--color-warning-fg);
   --color-error: var(--color-error);
+  --color-on-error: var(--color-on-error);
   --color-error-bg: var(--color-error-bg);
   --color-error-fg: var(--color-error-fg);
   --color-info: var(--color-info);
@@ -555,6 +600,11 @@
      é decisão de design, não de migração. */
   --color-border: var(--color-border);
   --color-border-strong: var(--color-border-strong);
+  --color-border-input: var(--color-border-input);
+  --color-surface-muted: var(--color-surface-muted);
+  --color-accent-strong: var(--color-accent-strong);
+  --color-warning-border: var(--color-warning-border);
+  --color-gold-text: var(--color-gold-text);
   --color-input: var(--color-border);
   --color-ring: var(--color-accent-500);
   --color-background: var(--color-bg);
@@ -564,7 +614,7 @@
   --color-secondary: var(--color-surface-elevated);
   --color-secondary-foreground: var(--color-text);
   --color-destructive: var(--color-error);
-  --color-destructive-foreground: #ffffff;
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-muted: var(--color-surface-elevated);
   --color-muted-foreground: var(--color-text-muted);
   --color-popover: var(--color-surface);
@@ -573,7 +623,8 @@
   --color-card-foreground: var(--color-text);
 
   /* Tipografia */
-  --font-titulo: var(--font-cormorant), Georgia, ui-serif, serif;
+  --font-titulo: var(--font-lora), "Times New Roman", Georgia, ui-serif, serif;
+  --font-secao: var(--font-josefin), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
@@ -627,18 +678,50 @@
    tem equivalente em `@theme`), então o apelido vira utilitário explícito. */
 /* Números de painel: Inter com dígitos de mesma largura e traço firme. O título é
    serifado, mas número em serifa fina fica difícil de ler de relance. */
-/* Fundo do menu lateral: o mesmo degradê do PrecificaEva e do Eva Financeiro (escuro no topo, a
-   cor do menu embaixo). Sem cor de menu, `--color-sidebar-tint` não existe e o fundo mistura com
-   `--color-success`, o verde de fábrica. Com cor de menu da organização, `lib/branding/css.ts` emite
-   `--color-sidebar-bg` e `--color-sidebar-tint`. */
+/* Fundo do menu lateral: a funda LISA (D1.4, decisão do dono em 06/11/2026). O degradê de antes
+   misturava 38% de `--color-success` no pé, e ali o papel em dourado do cartão da conta caía a
+   3,16:1 e o texto secundário a 3,03:1; liso, 4,79 e 4,59. Com cor de menu da organização,
+   `lib/branding/css.ts` emite `--color-sidebar-bg`. */
 @utility fundo-lateral {
   background-color: var(--color-sidebar-bg);
-  background-image: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--color-sidebar-bg) 78%, black) 0%,
-    var(--color-sidebar-bg) 42%,
-    color-mix(in srgb, var(--color-sidebar-bg) 62%, var(--color-sidebar-tint, var(--color-success))) 100%
-  );
+}
+
+/* Papéis de tipografia do contrato visual comum (D1.13). Sem cor: quem usa escolhe,
+   para não depender da ordem em que o Tailwind emite utilitários. */
+@utility titulo-tela {
+  font-size: 27px;
+  line-height: 34px;
+}
+@utility rotulo-secao {
+  font-family: var(--font-secao);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+@utility nome-da-clinica {
+  font-family: var(--font-secao);
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+}
+@utility titulo-cartao {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+}
+/* Número de destaque (cartões): Lora 600 com algarismos alinhados. `numero`
+   continua para tabela, hora e período. */
+@utility numero-destaque {
+  font-family: var(--font-titulo);
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 @utility numero {
@@ -771,12 +854,16 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Títulos de página como no site da clínica e no PrecificaEva: Cormorant
-     Garamond, em caixa normal. A serifa é fina, por isso o peso 600. */
+  /* Título da tela (contrato visual comum, D1.13): Lora 500 na cor principal
+     (5,27:1 no fundo); no escuro, na cor do texto. O tamanho é `titulo-tela`. */
   h1 {
     font-family: var(--font-titulo);
-    font-weight: 600;
-    letter-spacing: -0.01em;
+    font-weight: 500;
+    color: var(--color-accent);
+    text-wrap: balance;
+  }
+  [data-theme="dark"] h1 {
+    color: var(--color-text);
   }
 
   code, kbd, pre, samp {
@@ -794,14 +881,22 @@
     color: var(--color-accent-50);
   }
 
-  /* Focus ring: Sage 500/400, 2px with offset */
+  /* Contorno de foco: a principal (5,27:1 no fundo claro; accent-500 dava 3,63).
+     No escuro a principal já é accent-400. Sobre a funda do menu, dourado: a
+     sálvia ali tinha 2,09:1 (D1.4, WCAG 2.4.7 e 1.4.11). */
+  /* `accent-600` e não `--color-accent`: são o MESMO pixel em toda instalação
+     (`lib/branding/css.ts` emite a rampa já deslocada), e a régua de contraste
+     (`extrairRegua`) só mede referência direta a um grau da rampa. */
   :focus-visible {
-    outline: 2px solid var(--color-accent-500);
+    outline: 2px solid var(--color-accent-600);
     outline-offset: 2px;
     border-radius: var(--radius-sm);
   }
   [data-theme="dark"] :focus-visible {
     outline-color: var(--color-accent-400);
+  }
+  .fundo-lateral :focus-visible {
+    outline-color: var(--color-gold);
   }
 
   /* Modo de alto contraste do sistema (Windows High Contrast / forced-colors).
@@ -957,9 +1052,10 @@
 
    `tailwindcss-animate` NÃO está instalado neste repo (`plugins: []` no
    tailwind.config.ts) — `animate-in`/`slide-in-from-*` são classes que não
-   existem e falham em silêncio. Os seis Sheets em produção abrem sem transição
-   nenhuma por causa disso. Daí este bloco ser CSS à mão, no modelo do
-   `.card-pulse` acima, que é o precedente local. */
+   existem e falham em silêncio (por isso Dialog, AlertDialog e Sheet abriam
+   sem transição até a D1.1, que deu a eles keyframes à mão no fim deste
+   arquivo). Daí este bloco ser CSS à mão, no modelo do `.card-pulse` acima,
+   que é o precedente local. */
 .agenda-coluna-horarios {
   width: 0;
   opacity: 0;
@@ -1051,4 +1147,84 @@
   background-color: var(--conversa-fundo-cor, var(--color-bg));
   background-image: var(--conversa-fundo-imagem, none);
   background-size: 16px 16px;
+}
+
+/* ---- Movimento de diálogo, confirmação e gaveta (D1.1) ------------------
+   Sem biblioteca de animação: o Tailwind 4 descarta `animate-in`,
+   `zoom-in-95` e `slide-in-from-*` sem aviso (não há plugin instalado), e
+   por isso os diálogos abriam em 0 ms. Aqui ficam só os três movimentos que
+   mostram o que mudou: o véu escurece, o diálogo cresce de 95 a 100%, a
+   gaveta entra pelo lado de onde vem. Menus (Select, Dropdown, Popover,
+   Tooltip) abrem na hora, de propósito — não "conserte" isso instalando
+   `tw-animate-css`, que ligaria ~170 animações de uma vez.
+
+   `scale` e `translate` são as propriedades INDIVIDUAIS, e não `transform`:
+   o diálogo é centrado por `translate-x/y-[-50%]` (que o Tailwind 4 escreve
+   na propriedade `translate`); animar `scale` não briga com a centralização.
+   A gaveta não usa `translate` para posicionar, então anima-o à vontade.
+
+   O Radix espera o `animationend` do estado `closed` antes de desmontar; com
+   movimento reduzido a duração vai a 0,01 ms (regra global abaixo) e ele
+   desmonta na hora. */
+@keyframes eva-veu-entra { from { opacity: 0; } }
+@keyframes eva-veu-sai { to { opacity: 0; } }
+@keyframes eva-dialogo-entra { from { opacity: 0; scale: 0.95; } }
+@keyframes eva-dialogo-sai { to { opacity: 0; scale: 0.95; } }
+@keyframes eva-gaveta-entra { from { translate: var(--gaveta-de); } }
+@keyframes eva-gaveta-sai { to { translate: var(--gaveta-de); } }
+
+@utility anima-veu {
+  &[data-state="open"] { animation: eva-veu-entra 200ms var(--ease-out); }
+  &[data-state="closed"] { animation: eva-veu-sai 150ms var(--ease-in-out); }
+}
+@utility anima-dialogo {
+  &[data-state="open"] { animation: eva-dialogo-entra 200ms var(--ease-out); }
+  &[data-state="closed"] { animation: eva-dialogo-sai 150ms var(--ease-in-out); }
+}
+/* `--gaveta-de` diz de onde ela vem: `100% 0` (direita), `-100% 0`
+   (esquerda), `0 -100%` (topo), `0 100%` (base). Posto no `sheet.tsx`. */
+@utility anima-gaveta {
+  &[data-state="open"] { animation: eva-gaveta-entra 300ms var(--ease-out); }
+  &[data-state="closed"] { animation: eva-gaveta-sai 200ms var(--ease-in-out); }
+}
+
+/* Ponto de "conexão caída": pulsa 3 vezes e para (antes, `animate-pulse`
+   infinito). Chamar a atenção uma vez é aviso; piscar para sempre é ruído. */
+@keyframes eva-pulso { 50% { opacity: 0.4; } }
+@utility pulsa-tres-vezes {
+  animation: eva-pulso 2s var(--ease-in-out) 3;
+}
+
+/* ---- Movimento reduzido, global (D1.1) ----------------------------------
+   Fora de `@layer` e com `!important` de propósito: tem de vencer qualquer
+   utilitário (`transition-*`, `animate-*`) e qualquer bloco acima. Quem liga
+   "Reduzir movimento" no Mac ou no iPhone chega ao MESMO estado final, só
+   sem o percurso. 0,01 ms e não `none`: o `animationend` continua disparando,
+   e é dele que o Radix depende para desmontar diálogo e gaveta. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- Campo que não amplia a tela no iPhone (D1.2) -----------------------
+   Com fonte abaixo de 16 px, o Safari do iPhone amplia a página ao focar o
+   campo, e ela não volta sozinha. Em tela de toque, todo campo de texto tem
+   no mínimo 16 px. Fora de `@layer` de propósito: vence o `text-sm` dos
+   campos crus (marcação da Agenda, buscas) sem precisar caçá-los um a um, e
+   vence o `md:text-sm` do Input no iPad. NÃO usar `maximum-scale` no
+   viewport para "resolver" isto: ele bloqueia o zoom de acessibilidade.
+   Controles sem texto digitado (caixa, rádio, faixa, cor, arquivo) ficam de
+   fora — não têm fonte que importe e o Safari não amplia neles. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  select,
+  textarea {
+    font-size: max(16px, 1rem);
+  }
 }

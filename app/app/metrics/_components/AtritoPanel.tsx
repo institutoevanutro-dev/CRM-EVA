@@ -58,7 +58,7 @@ function ParCard({ par }: { par: Par }) {
 
         {/* O custo disso. Mesmo cartão, sempre. */}
         <div className="min-w-0 flex-1 border-t pt-3 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
-          <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+          <p className="rotulo-secao mb-1 text-muted-foreground">
             {t("O que isso custou")}
           </p>
           {par.danos.map((d) => (

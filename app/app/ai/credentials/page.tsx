@@ -48,7 +48,7 @@ export default async function CredentialsPage() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <CabecalhoDaPagina
         titulo={traduzir("Chaves de acesso à IA", idioma)}
         descricao={traduzir(

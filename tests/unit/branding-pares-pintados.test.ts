@@ -243,7 +243,7 @@ describe("o que o produto pinta — todo par, toda semente", () => {
   );
 
   it("a instrumentação vê os papéis frágeis — inclusive o de stop fixo por tema", () => {
-    // O anel de foco usa stop FIXO por tema (500 no claro, 400 no escuro,
+    // O anel de foco usa stop FIXO por tema (600 no claro desde a D1.4, 400 no escuro,
     // globals.css:376 e :381) e não passa por token nenhum — é exatamente a
     // categoria que a régua alcança e que a emissão deixava para trás. Se ele
     // sumir do conjunto medido, os pares acima ficam verdes sem cobri-lo.
@@ -347,9 +347,9 @@ describe("controle positivo — o produto sem marca não pode se mexer", () => {
 
     const p = pintadosDaSemente("#506d48");
     // Re-medidos em 07/10/2026 na paleta do Eva Financeiro (spec 2026-10-07-cores-e-menu); os pisos não mudaram.
-    // Claro: os dois números que `contraste.ts` documenta como medidos à mão.
-    expect(foco(p.claro, "--color-bg")).toBeCloseTo(3.63, 2);
-    expect(foco(p.claro, "--color-surface-elevated")).toBeCloseTo(3.48, 2);
+    // Claro: o anel é a principal (`accent-600`) desde a D1.4; era 3,63 e 3,48 no 500.
+    expect(foco(p.claro, "--color-bg")).toBeCloseTo(5.27, 2);
+    expect(foco(p.claro, "--color-surface-elevated")).toBeCloseTo(5.05, 2);
     // Escuro: 6,30 e 5,22 na rampa DERIVADA da semente; os literais do
     // `globals.css` (`#82a077`) dão 6,31 e 5,23 — a rampa reproduz a Sage com
     // Δ ≤ 2/255 por canal, e a diferença de 0,01 é esse arredondamento.
@@ -378,8 +378,8 @@ describe("a navy #0f172a — o defeito que a prova em tela achou", () => {
     // pintava `--color-accent-400: #545f77`, o stop CRU. O tema escuro anda -1,
     // então o anel agora pinta `#828a9d`, o stop 300 da rampa da marca.
     const p = pintadosDaSemente("#0f172a");
-    expect(foco(p.claro, "--color-bg")).toBeCloseTo(10.31, 2);
-    expect(foco(p.claro, "--color-surface-elevated")).toBeCloseTo(9.87, 2);
+    expect(foco(p.claro, "--color-bg")).toBeCloseTo(16.24, 2);
+    expect(foco(p.claro, "--color-surface-elevated")).toBeCloseTo(15.54, 2);
     expect(foco(p.escuro, "--color-bg")).toBeCloseTo(5.02, 2);
     expect(foco(p.escuro, "--color-surface-elevated")).toBeCloseTo(4.0, 2);
     for (const superficie of ["--color-bg", "--color-surface-elevated"] as const) {

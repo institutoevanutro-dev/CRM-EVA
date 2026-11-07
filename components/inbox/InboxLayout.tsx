@@ -820,8 +820,11 @@ export function InboxLayout({
   }, [faixa, aplicarLarguras]);
 
   // Altura da grade: a conta desconta TUDO que fica acima e abaixo dela.
-  //   3.5rem            TopBar (`h-14`, em components/shell/TopBar.tsx)
-  //   2 * --space-6     padding do <main> do AppShell (`p-6`, em cima e embaixo)
+  //   --altura-do-topo        TopBar (56px no celular, 48px de md em diante)
+  //   2 * --margem-do-conteudo padding do <main> do AppShell (em cima e embaixo)
+  //
+  // As duas variáveis são definidas no AppShell; o resto deste comentário conta
+  // por que a conta é feita em token e não em rem somado à mão.
   //
   // Com `100vh-3.5rem` o padding ficava de fora e a grade media 48px a MAIS que a
   // tela. Quem pagava a diferença era o composer, que fica no rodapé: nascia
@@ -850,7 +853,7 @@ export function InboxLayout({
   // `InboxFilters` segue no topo para poder trocar de aba de volta.
   if (filterValue.tab === "comentarios") {
     return (
-      <div className="flex h-[calc(100dvh-var(--faixas-de-cima,0px)-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full flex-col">
+      <div className="flex h-[calc(100dvh-var(--faixas-de-cima,0px)-var(--altura-do-topo)-var(--altura-das-abas,0px)-2*var(--margem-do-conteudo))] w-full flex-col">
         <InboxFilters value={filterValue} onChange={setFilterValue} />
         <div className="min-h-0 flex-1 overflow-hidden">
           <ComentariosPainel />
@@ -883,7 +886,7 @@ export function InboxLayout({
       ref={gradeRef}
       style={estiloDaGrade}
       className={cn(
-        "relative grid h-[calc(100dvh-var(--faixas-de-cima,0px)-3.5rem-var(--altura-das-abas,0px)-2*var(--space-6))] w-full grid-cols-1 md:grid-cols-[300px_1fr]",
+        "relative grid h-[calc(100dvh-var(--faixas-de-cima,0px)-var(--altura-do-topo)-var(--altura-das-abas,0px)-2*var(--margem-do-conteudo))] w-full grid-cols-1 md:grid-cols-[300px_1fr]",
         // Recolhido (porte do #3043), a terceira trilha vira o trilho do botão
         // de expandir. Literais inteiros: o Tailwind precisa deles para gerar o CSS.
         painelRecolhido

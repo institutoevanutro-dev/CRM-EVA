@@ -116,10 +116,10 @@ export function ContactsListClient() {
   );
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0">
-          <h1 className="text-[2rem] leading-tight">{t("Contatos")}</h1>
+          <h1 className="titulo-tela">{t("Contatos")}</h1>
           <p className="text-sm text-muted-foreground">
             {t("Todos os pacientes e contatos da clínica, num lugar só.")}
           </p>

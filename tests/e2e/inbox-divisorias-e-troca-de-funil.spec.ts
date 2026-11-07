@@ -357,8 +357,10 @@ test.describe("Quadro: troca rápida de funil", () => {
       const s = getComputedStyle(el);
       return { tamanho: s.fontSize, peso: s.fontWeight, familia: s.fontFamily };
     });
-    expect(fonte.tamanho).toBe("32px");
-    expect(fonte.peso).toBe("600");
+    // Escala da D1.13: título de tela em Lora 500, 27/34 px (`titulo-tela`).
+    expect(fonte.tamanho).toBe("27px");
+    expect(fonte.peso).toBe("500");
+    expect(fonte.familia).toMatch(/Lora/i);
     await foto(page, "06-quadro-antes-de-trocar.png");
 
     await seletor.click();
