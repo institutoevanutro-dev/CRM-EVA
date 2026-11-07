@@ -475,9 +475,12 @@ describe("o turno de resposta que terminou sem mensagem ao cliente", () => {
     expect(prompts[2], "a correção do turno mudo não foi pedida").toContain(MARCA_DA_CORRECAO);
     const { rows } = await pool.query<{ title: string }>(
       `select title from agent_inbox_items
-        where organization_id = $1 and ref_kind = 'conversation' and ref_id = $2 and status = 'open'`,
+        where organization_id = $1 and ref_kind = 'conversation' and ref_id = $2 and status = 'open'
+          and kind <> 'capabilities_missing'`,
       [ORG, conversa],
     );
+    // A fixture SESSION_VETO também abre o aviso de capacidades (kind capabilities_missing),
+    // que não é deste caso.
     expect(rows).toEqual([{ title: "A IA não respondeu um cliente: as regras de segurança barraram a resposta" }]);
   });
 
@@ -493,7 +496,8 @@ describe("o turno de resposta que terminou sem mensagem ao cliente", () => {
     expect(enviados).toEqual([]);
     expect(prompts[2]).toContain(MARCA_DA_CORRECAO);
     const { rows } = await pool.query(
-      `select 1 from agent_inbox_items where organization_id = $1 and ref_kind = 'conversation' and ref_id = $2`,
+      `select 1 from agent_inbox_items where organization_id = $1 and ref_kind = 'conversation' and ref_id = $2
+          and kind <> 'capabilities_missing'`,
       [ORG, conversa],
     );
     expect(rows).toEqual([]);

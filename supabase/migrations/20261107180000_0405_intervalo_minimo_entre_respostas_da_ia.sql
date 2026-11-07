@@ -18,10 +18,10 @@ alter table public.ai_agent_versions
 comment on column public.ai_agent_versions.reply_min_interval_ms is
   'Intervalo mínimo em ms entre uma resposta da IA e a próxima à mesma conversa. NULL ou 0 = sem intervalo; teto 600000 (10 min).';
 
+-- Um comando só: derrubar e recriar em dois abriria uma janela sem a cerca
+-- (tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts).
 alter table public.ai_agent_versions
-  drop constraint if exists ai_agent_versions_reply_min_interval_ms_check;
-
-alter table public.ai_agent_versions
+  drop constraint if exists ai_agent_versions_reply_min_interval_ms_check,
   add constraint ai_agent_versions_reply_min_interval_ms_check
   check (reply_min_interval_ms is null or (reply_min_interval_ms >= 0 and reply_min_interval_ms <= 600000));
 
