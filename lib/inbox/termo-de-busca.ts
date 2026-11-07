@@ -69,3 +69,42 @@ export function normalizarTermoDeBusca(bruto: string): string {
 export function buscaValeConsulta(bruto: string): boolean {
   return normalizarTermoDeBusca(bruto.replace(/[()*]/g, " ")).length >= PISO_DA_BUSCA;
 }
+
+/**
+ * Letras que o NFD não decompõe e que o `unaccent` do Postgres mapeia. Sem esta
+ * tabela, "Øyvind" e "Strauß" não seriam achados por quem digita "oyvind" ou
+ * "strauss".
+ */
+const NAO_DECOMPOEM: Record<string, string> = {
+  ß: "ss",
+  æ: "ae",
+  œ: "oe",
+  ø: "o",
+  đ: "d",
+  ð: "d",
+  ł: "l",
+  þ: "th",
+  ı: "i",
+  ħ: "h",
+  ŧ: "t",
+  ĸ: "k",
+};
+
+/**
+ * O texto sem acento e em minúscula, para comparar busca digitada com nome
+ * cadastrado nas buscas feitas na tela (Encaminhar, respostas rápidas, menção).
+ *
+ * `toLowerCase` só resolve caixa: `'andréia'.includes('andreia')` é falso. Os
+ * DOIS lados da comparação passam por aqui; o texto exibido nunca.
+ *
+ * Portado do projeto original (DeskcommCRM, PRs #4078 de @bfs2021 e #4079 de
+ * @webtecnica); lá ela também espelha o `f_unaccent` da busca do Inbox no banco,
+ * que o fork não tem.
+ */
+export function termoSemAcento(bruto: string): string {
+  return bruto
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[ßæœøđðłþıħŧĸ]/gi, (letra) => NAO_DECOMPOEM[letra.toLowerCase()] ?? letra)
+    .toLowerCase();
+}
