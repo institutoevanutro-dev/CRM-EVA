@@ -82,6 +82,7 @@ function makeDeps(overrides: {
   loadPublishedAgentConfig?: ReturnType<typeof vi.fn>;
   classifyIntent?: ReturnType<typeof vi.fn>;
   buildFatosDoContato?: ReturnType<typeof vi.fn>;
+  buildFatosDoCrmDoContato?: ReturnType<typeof vi.fn>;
   historicoRecente?: ReturnType<typeof vi.fn>;
   agenteDaCampanha?: ReturnType<typeof vi.fn>;
   agora?: () => Date;
@@ -91,6 +92,8 @@ function makeDeps(overrides: {
     log: { info: vi.fn(), warn: overrides.warn ?? vi.fn(), error: vi.fn() },
     // Sem banco: o padrão real leria a agenda num `{}` e cairia no aviso.
     buildFatosDoContato: overrides.buildFatosDoContato ?? vi.fn().mockResolvedValue(FATOS),
+    // Idem: funis e etiquetas (#4110). Padrão = contato sem card aberto nem etiqueta.
+    buildFatosDoCrmDoContato: overrides.buildFatosDoCrmDoContato ?? vi.fn().mockResolvedValue(null),
     // Idem: o padrão real consultaria `messages` num `{}`.
     historicoRecente: overrides.historicoRecente ?? vi.fn().mockResolvedValue([]),
     ...(overrides.agenteDaCampanha ? { agenteDaCampanha: overrides.agenteDaCampanha } : {}),
@@ -480,6 +483,37 @@ describe('resolveTurnAgent — fatos do contato para o classificador', () => {
     expect(buildFatosDoContato).toHaveBeenCalledWith(db, 'org-1', 'lead-1', AGORA);
     expect(classifyIntent.mock.calls[0]![2].fatos).toBe(FATOS);
     expect(out.outcome).toBe('classified');
+  });
+
+  it('#4110: funis e etiquetas do contato vão ao classificador DEPOIS da agenda', async () => {
+    const db = { marca: 'db' };
+    const CRM = 'Fatos do CRM sobre este contato (negócios abertos e etiquetas):\n- Funil "Tratamentos", etapa "Avaliação": negócio ABERTO';
+    const buildFatosDoCrmDoContato = vi.fn().mockResolvedValue(CRM);
+    const classifyIntent = vi.fn().mockResolvedValue({ intentName: 'vendas', confidence: 0.9 });
+    await resolveTurnAgent(db as never, {} as never,
+      { ...baseInput, signal: 'bom dia', stickyAgentId: null, stickyIntent: null },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(router({ sticky: false })),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        classifyIntent, buildFatosDoCrmDoContato, agora: () => AGORA,
+      }));
+    expect(buildFatosDoCrmDoContato.mock.calls[0]!.slice(0, 3)).toEqual([db, 'org-1', 'lead-1']);
+    expect(classifyIntent.mock.calls[0]![2].fatos).toBe(`${FATOS}\n\n${CRM}`);
+  });
+
+  it('#4110: só funis e etiquetas (agenda fora do ar) ainda chegam ao classificador', async () => {
+    const CRM = 'Fatos do CRM sobre este contato (negócios abertos e etiquetas):\n- Etiquetas do contato: retorno';
+    const classifyIntent = vi.fn().mockResolvedValue({ intentName: 'vendas', confidence: 0.9 });
+    await resolveTurnAgent({} as never, {} as never,
+      { ...baseInput, signal: 'bom dia', stickyAgentId: null, stickyIntent: null },
+      makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(router({ sticky: false })),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        classifyIntent,
+        buildFatosDoContato: vi.fn().mockRejectedValue(new Error('agenda fora do ar')),
+        buildFatosDoCrmDoContato: vi.fn().mockResolvedValue(CRM),
+      }));
+    expect(classifyIntent.mock.calls[0]![2].fatos).toBe(CRM);
   });
 
   it('leitura dos fatos falha: classifica só com a mensagem, avisa, e o agente é o mesmo', async () => {
@@ -1155,6 +1189,7 @@ describe('resolveTurnAgent: config.so_equipe', () => {
     router?: Partial<LoadedRouter>;
     verdict?: unknown;
     fatos?: string | null;
+    crm?: string | null;
     sticky?: boolean;
     semSaida?: boolean;
     signal?: string;
@@ -1166,6 +1201,7 @@ describe('resolveTurnAgent: config.so_equipe', () => {
       agenteDaCampanha: vi.fn().mockResolvedValue(null),
       classifyIntent,
       buildFatosDoContato: vi.fn().mockResolvedValue(over.fatos === undefined ? FATOS : over.fatos),
+      buildFatosDoCrmDoContato: vi.fn().mockResolvedValue(over.crm ?? null),
     });
     const out = await resolveTurnAgent({} as never, {} as never,
       {
@@ -1184,6 +1220,13 @@ describe('resolveTurnAgent: config.so_equipe', () => {
     expect(out.outcome).toBe('so_equipe');
     expect(out.config).toBeNull();
     expect(out.intentName).toBe('negocio_com_a_empresa');
+  });
+
+  it('#4110: funis e etiquetas no classificador não mudam a régua da agenda da regra 9', async () => {
+    const crm = 'Fatos do CRM sobre este contato (negócios abertos e etiquetas):\n- Etiquetas do contato: fornecedor';
+    const { out, classifyIntent } = await rodar({ crm });
+    expect(out.outcome).toBe('so_equipe');
+    expect(classifyIntent.mock.calls[0]![2].fatos).toBe(`${FATOS}\n\n${crm}`);
   });
 
   it('0,85 (abaixo do corte de 0,9) → agente normal', async () => {

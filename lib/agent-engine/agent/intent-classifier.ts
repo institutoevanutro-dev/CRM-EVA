@@ -55,7 +55,9 @@ const INSTRUCAO_DO_ASSUNTO_ATUAL =
   'Se a mensagem só continua a conversa (resposta curta, confirmação, um dado pedido), responda none. Só escolha outra intenção se a última mensagem do lead mudar claramente de assunto.';
 
 /**
- * `fatos` é o texto de `buildFatosDoContato` (agenda do contato). Entra depois
+ * `fatos` é o texto de `buildFatosDoContato` (agenda do contato), seguido do de
+ * `buildFatosDoCrmDoContato` (negócios abertos e etiquetas, #4110 do original)
+ * quando houver. Entra depois
  * das intenções e antes da mensagem, marcado como dado: o título de um
  * compromisso é texto livre e não pode valer como instrução. Sem fatos, o
  * prompt é byte a byte o de antes.
