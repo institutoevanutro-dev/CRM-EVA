@@ -74,6 +74,11 @@ import { detectUrgencySignal } from '../guardrails/sinal-de-urgencia';
 import { buildNativeMediaParts } from './media-parts';
 import { enqueueJob, rescheduleJob, type JobRow, type Queryable } from '../queue/queue';
 import {
+  intervaloEfetivo,
+  runAfterComIntervalo,
+  ultimaRespostaDaIa,
+} from '../edge/crm/intervalo-entre-respostas';
+import {
   applyLeadStateUpdate,
   getLeadState,
   type LeadStage,
@@ -3104,6 +3109,47 @@ async function executarTurnoDoAgente(
       throw new JobSettledError(
         'fora do horário de funcionamento — job reagendado para a abertura da janela',
       );
+    }
+  }
+
+  // INTERVALO MÍNIMO ENTRE RESPOSTAS (#3940 do original). Depois do pedido de
+  // humano e do opt-out (tratados na hora, nunca segurados pela pausa) e da
+  // janela de horário; antes da resposta pronta e do modelo. Mede a última
+  // resposta da IA nesta conversa e, se ela foi há menos que o intervalo da
+  // versão publicada, adia o job como a janela acima: `rescheduleJob`, sem
+  // gastar tentativa, e o job segue pending para as mensagens do meio-tempo
+  // entrarem de carona (o drain coalesce em job pendente futuro). Campo vazio
+  // ou 0: nenhuma consulta. Falha da consulta degrada para "sem espera".
+  //
+  // ponytail: só aqui, no turno. O original também adia no drain (o job já
+  // nasce no futuro); aqui o job nasce, é reclamado uma vez e volta adiado.
+  // Mesmo efeito, uma consulta a menos por mensagem em quem não usa a pausa.
+  const intervaloMs = intervaloEfetivo(agentConfig?.replyMinIntervalMs ?? null);
+  if (!preview && liveJob().kind === 'inbound_turn' && intervaloMs > 0) {
+    let liberaEm: Date | undefined;
+    try {
+      const ultima = await ultimaRespostaDaIa(pool, {
+        organizationId: tenantId,
+        conversationId: input.conversationId,
+      });
+      liberaEm = runAfterComIntervalo(undefined, ultima, intervaloMs, clock().getTime());
+    } catch (err) {
+      runLog.warn('não consegui medir o intervalo entre respostas — turno sem espera extra', {
+        error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+      });
+    }
+    if (liberaEm !== undefined) {
+      const esperaMs = liberaEm.getTime() - clock().getTime();
+      await rescheduleJob(pool, liveJob().id, ctx.workerId, {
+        acquiredAt: claimOfJob(liveJob())?.acquired_at,
+        delayMs: esperaMs,
+        reason: 'intervalo mínimo entre respostas do agente — turno adiado',
+      });
+      runLog.info('turno adiado — intervalo mínimo entre respostas da versão publicada', {
+        agent_id: agentConfig?.agentId,
+        espera_ms: esperaMs,
+      });
+      throw new JobSettledError('intervalo mínimo entre respostas — job reagendado');
     }
   }
 

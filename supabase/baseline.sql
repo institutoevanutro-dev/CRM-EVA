@@ -7679,6 +7679,13 @@ revoke all on watchdog_cursors from anon;
 -- livres (é o que o RPC fn_publish_ai_agent_version faz).
 -- Idempotente; sem BEGIN/COMMIT; psql puro.
 
+-- A coluna da migration 0408 nasce aqui, antes do primeiro corpo da trava que a
+-- lê: no update.sh de um banco antigo, os UPDATEs de ai_agent_versions mais
+-- abaixo (blocos de pipeline_ids e knowledge_source_ids) disparam a trava, e ela
+-- não pode citar campo que a tabela ainda não tem.
+alter table public.ai_agent_versions
+  add column if not exists reply_min_interval_ms integer;
+
 -- Corpo FINAL, o mesmo do último bloco que redefine esta função: uma
 -- reaplicação do arquivo nunca instala corpo antigo no banco vivo.
 create or replace function fn_ai_agent_version_content_immutable() returns trigger
@@ -7704,6 +7711,7 @@ begin
     or new.video_frames_enabled   is distinct from old.video_frames_enabled
     or new.split_messages         is distinct from old.split_messages
     or new.split_max_chars        is distinct from old.split_max_chars
+    or new.reply_min_interval_ms  is distinct from old.reply_min_interval_ms
     or new.cases_enabled          is distinct from old.cases_enabled
     or new.operator_enabled       is distinct from old.operator_enabled
     or new.operator_model         is distinct from old.operator_model
@@ -17025,6 +17033,7 @@ begin
     or new.video_frames_enabled   is distinct from old.video_frames_enabled
     or new.split_messages         is distinct from old.split_messages
     or new.split_max_chars        is distinct from old.split_max_chars
+    or new.reply_min_interval_ms  is distinct from old.reply_min_interval_ms
     or new.cases_enabled          is distinct from old.cases_enabled
     or new.operator_enabled       is distinct from old.operator_enabled
     or new.operator_model         is distinct from old.operator_model
@@ -38404,6 +38413,26 @@ create or replace trigger trg_contacts_anonimizado_limpa_exames_enviados
   when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)
   execute function public.fn_apaga_exames_enviados_de_contato_anonimizado();
 -- ---- fim: exames do WhatsApp no prontuário (migration 0402) ----
+
+-- ---- intervalo mínimo entre respostas da IA (migration 0408) ----
+-- Derivado de supabase/migrations/20261107180000_0408_intervalo_minimo_entre_respostas_da_ia.sql.
+-- Porte do original #3940 (9101 lá). `ai_agent_versions.reply_min_interval_ms`:
+-- NULL ou 0 = sem intervalo (comportamento de sempre); até 600000 ms. A coluna
+-- também nasce no bloco da 0051, antes do primeiro corpo da trava, que foi trocada
+-- NO LUGAR nas duas definições acima (sem corpo de função aqui).
+alter table public.ai_agent_versions
+  add column if not exists reply_min_interval_ms integer;
+
+comment on column public.ai_agent_versions.reply_min_interval_ms is
+  'Intervalo mínimo em ms entre uma resposta da IA e a próxima à mesma conversa. NULL ou 0 = sem intervalo; teto 600000 (10 min).';
+
+alter table public.ai_agent_versions
+  drop constraint if exists ai_agent_versions_reply_min_interval_ms_check;
+
+alter table public.ai_agent_versions
+  add constraint ai_agent_versions_reply_min_interval_ms_check
+  check (reply_min_interval_ms is null or (reply_min_interval_ms >= 0 and reply_min_interval_ms <= 600000));
+-- ---- fim: intervalo mínimo entre respostas da IA (migration 0408) ----
 
 
 
