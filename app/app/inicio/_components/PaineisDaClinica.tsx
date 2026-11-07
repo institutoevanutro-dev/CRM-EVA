@@ -154,7 +154,7 @@ function Indicador({
   return (
     <div className="flex min-w-0 flex-col rounded-2xl border bg-surface p-4 shadow-sm">
       <dt className="text-sm text-text-muted">{rotulo}</dt>
-      <dd className={`numero mt-1 text-3xl ${alerta ? "text-warning-fg" : "text-text"}`}>{valor}</dd>
+      <dd className={`numero-destaque mt-1 ${alerta ? "text-warning-fg" : "text-text"}`}>{valor}</dd>
       <dd className="mt-1 text-xs text-text-muted">{janela}</dd>
       {extra ? <dd className="mt-1">{extra}</dd> : null}
     </div>
@@ -282,19 +282,19 @@ function PainelConversas({ p }: { p: Conversas }) {
     <>
       <div className="mb-4 grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-4">
         <p>
-          <span className="numero block whitespace-nowrap text-2xl text-text">{total}</span>
+          <span className="numero-destaque block whitespace-nowrap text-text">{total}</span>
           <span className="text-text-muted">{t("conversas novas")}</span>
         </p>
         <p>
-          <span className="numero block whitespace-nowrap text-2xl text-text">{iaSozinha}</span>
+          <span className="numero-destaque block whitespace-nowrap text-text">{iaSozinha}</span>
           <span className="text-text-muted">{t("a IA resolveu sozinha")}</span>
         </p>
         <p>
-          <span className="numero block whitespace-nowrap text-2xl text-text">{comEquipe}</span>
+          <span className="numero-destaque block whitespace-nowrap text-text">{comEquipe}</span>
           <span className="text-text-muted">{t("passaram para a equipe")}</span>
         </p>
         <p>
-          <span className="numero block whitespace-nowrap text-2xl text-text">
+          <span className="numero-destaque block whitespace-nowrap text-text">
             {p.primeiraRespostaMediaS != null ? duracao(p.primeiraRespostaMediaS) : "—"}
           </span>
           <span className="text-text-muted">{t("até a primeira resposta")}</span>
@@ -411,14 +411,14 @@ function PainelFunil({ p, onTrocar }: { p: Funil; onTrocar: (id: string) => void
       ) : null}
       <div className="mb-4 grid grid-cols-3 gap-3 text-sm">
         <p>
-          <span className="numero block whitespace-nowrap text-2xl text-text">{p.mes.ganhos}</span>
+          <span className="numero-destaque block whitespace-nowrap text-text">{p.mes.ganhos}</span>
           <span className="text-text-muted">{t("ganhos no mês")}</span>
           <span className="mt-0.5 block">
             <Variacao atual={p.mes.ganhos} anterior={p.anterior.ganhos} />
           </span>
         </p>
         <p>
-          <span className="numero block whitespace-nowrap text-2xl text-text">{p.mes.perdidos}</span>
+          <span className="numero-destaque block whitespace-nowrap text-text">{p.mes.perdidos}</span>
           <span className="text-text-muted">{t("perdidos no mês")}</span>
         </p>
         <p>

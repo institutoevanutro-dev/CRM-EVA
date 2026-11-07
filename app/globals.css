@@ -613,7 +613,8 @@
   --color-card-foreground: var(--color-text);
 
   /* Tipografia */
-  --font-titulo: var(--font-cormorant), Georgia, ui-serif, serif;
+  --font-titulo: var(--font-lora), "Times New Roman", Georgia, ui-serif, serif;
+  --font-secao: var(--font-josefin), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
@@ -667,12 +668,50 @@
    tem equivalente em `@theme`), então o apelido vira utilitário explícito. */
 /* Números de painel: Inter com dígitos de mesma largura e traço firme. O título é
    serifado, mas número em serifa fina fica difícil de ler de relance. */
-/* Fundo do menu lateral: a funda LISA (D1.4, "sim 2" do André em 06/11/2026). O degradê de antes
+/* Fundo do menu lateral: a funda LISA (D1.4, decisão do dono em 06/11/2026). O degradê de antes
    misturava 38% de `--color-success` no pé, e ali o papel em dourado do cartão da conta caía a
    3,16:1 e o texto secundário a 3,03:1; liso, 4,79 e 4,59. Com cor de menu da organização,
    `lib/branding/css.ts` emite `--color-sidebar-bg`. */
 @utility fundo-lateral {
   background-color: var(--color-sidebar-bg);
+}
+
+/* Papéis de tipografia do contrato visual comum (D1.13). Sem cor: quem usa escolhe,
+   para não depender da ordem em que o Tailwind emite utilitários. */
+@utility titulo-tela {
+  font-size: 27px;
+  line-height: 34px;
+}
+@utility rotulo-secao {
+  font-family: var(--font-secao);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+@utility nome-da-clinica {
+  font-family: var(--font-secao);
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+}
+@utility titulo-cartao {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+}
+/* Número de destaque (cartões): Lora 600 com algarismos alinhados. `numero`
+   continua para tabela, hora e período. */
+@utility numero-destaque {
+  font-family: var(--font-titulo);
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 @utility numero {
@@ -805,12 +844,16 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Títulos de página como no site da clínica e no PrecificaEva: Cormorant
-     Garamond, em caixa normal. A serifa é fina, por isso o peso 600. */
+  /* Título da tela (contrato visual comum, D1.13): Lora 500 na cor principal
+     (5,27:1 no fundo); no escuro, na cor do texto. O tamanho é `titulo-tela`. */
   h1 {
     font-family: var(--font-titulo);
-    font-weight: 600;
-    letter-spacing: -0.01em;
+    font-weight: 500;
+    color: var(--color-accent);
+    text-wrap: balance;
+  }
+  [data-theme="dark"] h1 {
+    color: var(--color-text);
   }
 
   code, kbd, pre, samp {

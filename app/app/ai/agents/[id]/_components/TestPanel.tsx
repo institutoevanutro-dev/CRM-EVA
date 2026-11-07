@@ -204,7 +204,7 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="flex flex-col gap-4">
         <div>
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          <p className="rotulo-secao text-muted-foreground">
             {t("Versão alvo")}
           </p>
           <div className="flex items-center gap-2 text-sm">
@@ -265,7 +265,7 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
       </div>
 
       <div className="flex flex-col gap-3">
-        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        <p className="rotulo-secao text-muted-foreground">
           {t("Resultado")}
         </p>
 

@@ -32,13 +32,12 @@ export default async function InicioPage() {
   return (
     <div className="flex h-full flex-col gap-8 p-6 md:p-8">
       <header>
-        <p className="text-xs font-medium tracking-[0.18em] text-text-muted uppercase">{t("Início")}</p>
-        <h1 className="mt-1 text-[2.25rem] leading-tight">
+        {/* A sobrancelha é a data (D1.13): "Início" já está no menu e na aba. */}
+        <p className="rotulo-secao text-text-muted">{hoje}</p>
+        <h1 className="mt-1 titulo-tela">
           {primeiroNome ? `${saudacao}, ${primeiroNome}` : saudacao}
         </h1>
-        <p className="mt-1 text-sm text-text-muted first-letter:uppercase">
-          {hoje} · {t("O que precisa da sua atenção hoje, num lugar só.")}
-        </p>
+        <p className="mt-1 text-sm text-text-muted">{t("O que precisa da sua atenção hoje, num lugar só.")}</p>
       </header>
       <PainelInicio />
     </div>

@@ -192,7 +192,7 @@ export function SidebarContent({
             type="button"
             onClick={() => alternar(item.id)}
             aria-expanded={expandido}
-            className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-semibold tracking-[0.18em] text-gold uppercase transition-colors hover:bg-sidebar-active lg:min-h-10"
+            className="rotulo-secao flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-gold transition-colors hover:bg-sidebar-active lg:min-h-10"
           >
             <span className="min-w-0 flex-1 truncate">{t(item.label)}</span>
             {temSaude && <ConnectionHealthDot />}
@@ -255,7 +255,7 @@ export function SidebarContent({
                 a faixa duas vezes. Na serifa do site da clínica. */}
             {activeOrg?.marca?.nome ? (
               <span aria-hidden className="flex min-w-0 flex-col">
-                <span className="truncate font-titulo text-xl font-semibold leading-none text-sidebar-fg">{nome}</span>
+                <span className="truncate font-titulo text-[19px] leading-6 font-medium text-sidebar-fg">{nome}</span>
                 <span className="mt-1 text-[10px] font-medium tracking-[0.3em] text-gold uppercase">{t("CRM")}</span>
               </span>
             ) : null}
@@ -267,7 +267,21 @@ export function SidebarContent({
             <LogotipoDoProduto nome={nome} sobreFunda className="h-8 w-auto" />
           )
         ) : (
-          <span className={cn("font-semibold tracking-tight", collapsed && "sr-only")}>{nome}</span>
+          // Sem logo, o nome em texto (contrato visual comum): o nome em creme e "CRM" em
+          // dourado, Lora 500 19/24; embaixo, o nome da clínica quando é outro.
+          <span className={cn("flex min-w-0 flex-col", collapsed && "sr-only")}>
+            <span className="flex min-w-0 items-baseline gap-1.5 font-titulo text-[19px] leading-6 font-medium">
+              <span className="truncate text-sidebar-fg">{nome}</span>
+              {/crm$/i.test(nome.trim()) ? null : (
+                <span className="shrink-0 text-gold">
+                  {t("CRM")}
+                </span>
+              )}
+            </span>
+            {activeOrg?.name && activeOrg.name !== nome ? (
+              <span className="nome-da-clinica mt-0.5 truncate text-gold">{activeOrg.name}</span>
+            ) : null}
+          </span>
         )}
         {collapsed && !marcaDoProduto && (
           <span aria-hidden className="text-lg font-bold text-gold">

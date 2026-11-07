@@ -27,8 +27,8 @@ export function Cartao({
   return (
     <section className={`flex min-w-0 flex-col rounded-2xl border bg-surface p-5 shadow-sm ${className}`}>
       <div className="mb-3 flex items-start justify-between gap-3">
-        <h3 className="flex min-w-0 items-start gap-2 font-titulo text-lg leading-snug font-semibold text-text">
-          {Icone ? <Icone aria-hidden className="mt-1 size-4 shrink-0 text-text-muted" /> : null}
+        <h3 className="flex min-w-0 items-start gap-2 titulo-cartao text-text">
+          {Icone ? <Icone aria-hidden className="mt-[3px] size-4 shrink-0 text-text-muted" /> : null}
           <span className="min-w-0 break-words">{titulo}</span>
         </h3>
         {verTodos ? (

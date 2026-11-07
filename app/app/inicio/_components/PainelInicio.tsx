@@ -106,7 +106,7 @@ function ListaDoBloco({
   return (
     <>
       <p className="mb-2 flex items-baseline gap-2">
-        <span className={`numero text-3xl ${pendencia ? "text-warning-fg" : "text-text"}`}>{bloco.total}</span>
+        <span className={`numero-destaque ${pendencia ? "text-warning-fg" : "text-text"}`}>{bloco.total}</span>
         <span className="text-sm text-text-muted">{t(rotulo)}</span>
       </p>
       <ul className="divide-y divide-border">
@@ -226,7 +226,7 @@ export function PainelInicio() {
             <Cartao titulo={t("Gasto com IA no mês")} verTodos="/app/ai/usage" rotuloVerTodos={t("Abrir")}>
               {gestao.gastoIa?.ok ? (
                 <p className="text-sm text-text-muted">
-                  <b className="numero block text-3xl font-normal text-text">{dolares(gestao.gastoIa.consumidoCents)}</b>
+                  <b className="numero-destaque block text-text">{dolares(gestao.gastoIa.consumidoCents)}</b>
                   {gestao.gastoIa.limiteCents != null
                     ? `${t("de")} ${dolares(gestao.gastoIa.limiteCents)}`
                     : t("sem limite configurado")}

@@ -74,7 +74,7 @@ export function TarefasDoNegocio({ leadId, contactId, podeEditar, aberto }: Prop
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3
           id="dossie-tarefas"
-          className="text-xs font-medium uppercase tracking-wide text-text-muted"
+          className="rotulo-secao text-text-muted"
         >
           {t("Tarefas")}
           {resumo.abertas > 0 ? (

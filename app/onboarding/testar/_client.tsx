@@ -144,7 +144,7 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
 
           {desfecho?.tipo === "resposta" && (
             <div className="space-y-2 rounded-md border bg-muted/40 p-4">
-              <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              <p className="rotulo-secao text-muted-foreground">
                 {funcionario} {t("respondeu")}
               </p>
               <p className="whitespace-pre-wrap text-sm">{desfecho.texto}</p>

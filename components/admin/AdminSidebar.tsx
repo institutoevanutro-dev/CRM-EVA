@@ -89,7 +89,7 @@ export function AdminSidebar({ userEmail, variant = "desktop" }: AdminSidebarPro
           <SimboloDoProduto nome={marca.name} decorativo className="h-8 w-8" />
         )}
         <div className="flex flex-col">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground">
+          <span className="rotulo-secao text-muted-foreground">
             {marca.name}
           </span>
           <span className="text-sm font-semibold tracking-tight">{t("Admin Plataforma")}</span>

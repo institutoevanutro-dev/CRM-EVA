@@ -9,8 +9,10 @@ Até 10/2026 era `next/font/google`, que baixava do Google **durante o
 | Arquivo | Família | Onde | Pesos / eixos | Subset |
 |---|---|---|---|---|
 | `inter.woff2` | Inter | `app/layout.tsx` | wght 100–900 (opsz fixo no default) | latin + latin-ext |
-| `cormorant-garamond.woff2` | Cormorant Garamond | `app/layout.tsx` | wght 500–700 | latin + latin-ext |
-| `ibm-plex-mono-{400,500}.woff2` | IBM Plex Mono | `app/layout.tsx` e `/design` | 400, 500 | completo (ver Plex) |
+| `lora.woff2` | Lora | `app/layout.tsx` (títulos) | wght 400–700 | completo (ver Plex: tem RFN) |
+| `josefin-sans.woff2` | Josefin Sans | `app/layout.tsx` (rótulos de seção) | wght 100–700 | completo (ver Plex: tem RFN) |
+| `inconsolata.woff2` | Inconsolata | `app/layout.tsx` (código e documento) | wght 400–500 (wdth fixo no default) | latin + latin-ext |
+| `ibm-plex-mono-{400,500}.woff2` | IBM Plex Mono | `/design` | 400, 500 | completo (ver Plex) |
 | `bricolage-grotesque.woff2` | Bricolage Grotesque | `/design` | wght 200–800 | latin |
 | `plus-jakarta-sans.woff2` | Plus Jakarta Sans | `/design` | wght 200–800 | latin |
 | `fraunces.woff2` | Fraunces | `/design` | wght, opsz, SOFT, WONK | latin |
@@ -26,9 +28,11 @@ Todas são **SIL Open Font License 1.1**; o texto de cada uma, com o copyright
 dos autores, está em `<família>.OFL.txt` ao lado. A OFL permite embutir e
 redistribuir a fonte com o software, desde que a licença acompanhe.
 
-**Plex** tem *Reserved Font Name* ("Plex"): uma versão modificada não pode
-usar o nome. Por isso os arquivos Plex são o TTF original só trocado de
-formato (WOFF2), sem subset nem instância. As demais foram recortadas aos
+**Plex**, **Lora** e **Josefin Sans** têm *Reserved Font Name*: uma versão
+modificada não pode usar o nome. Por isso esses arquivos são o TTF original só
+trocado de formato (WOFF2), sem subset nem instância. Lora, Josefin Sans e
+Inconsolata entraram em 06/11/2026 (D1.13), baixadas de `google/fonts` (`main`)
+pelo `gerar.sh`; a Cormorant Garamond saiu. As demais foram recortadas aos
 subsets que o Google servia, o que a OFL permite.
 
 ## Regerar

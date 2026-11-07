@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 // Cores medidas no Eva Financeiro (~/eva-financeiro/app/globals.css). Spec:
@@ -36,16 +36,18 @@ describe("cores iguais às do Financeiro", () => {
     expect(ponte).toMatch(/--color-sidebar:\s*var\(--color-sidebar-bg\)/);
     expect(ponte).toMatch(/--color-gold:\s*var\(--color-gold\)/);
   });
-  it("fontes do site da clínica: Inter no texto, Cormorant Garamond nos títulos", () => {
+  it("fontes do contrato visual comum (D1.13): Inter no texto, Lora nos títulos, Josefin nas seções", () => {
     const layout = readFileSync("app/layout.tsx", "utf8");
     expect(layout).toMatch(/import localFont from "next\/font\/local"/);
-    expect(layout).toContain('"./fonts/inter.woff2"');
-    expect(layout).toContain('"./fonts/cormorant-garamond.woff2"');
-    expect(layout).not.toMatch(/josefin/i);
-    expect(layout).not.toMatch(/atkinson/i);
+    for (const arq of ["inter", "lora", "josefin-sans", "inconsolata"]) {
+      expect(layout).toContain(`"./fonts/${arq}.woff2"`);
+      expect(existsSync(`app/fonts/${arq}.woff2`), arq).toBe(true);
+    }
+    expect(layout).not.toMatch(/cormorant|atkinson/i);
     expect(css).toMatch(/--font-sans:\s*var\(--font-inter\)/);
-    expect(css).toMatch(/--font-titulo:\s*var\(--font-cormorant\)/);
-    expect(css).not.toMatch(/--font-atkinson/);
+    expect(css).toMatch(/--font-titulo:\s*var\(--font-lora\)/);
+    expect(css).toMatch(/--font-secao:\s*var\(--font-josefin\)/);
+    expect(css).not.toMatch(/--font-(cormorant|atkinson)/);
   });
 });
 

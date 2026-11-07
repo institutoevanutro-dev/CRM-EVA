@@ -200,7 +200,7 @@ export function PipelinePageClient({
           então o funil escolhido sobrevive a recarregar e a link colado.
         */}
         <h1
-          className={podeTrocar ? "sr-only" : "min-w-0 truncate text-[2rem] leading-tight"}
+          className={podeTrocar ? "sr-only" : "min-w-0 truncate titulo-tela"}
           data-cor-do-funil={corAtual ?? undefined}
         >
           {podeTrocar ? null : <PontoDoFunil cor={corAtual} className="size-3" />}
@@ -218,7 +218,7 @@ export function PipelinePageClient({
               data-testid="trocar-funil"
               // As classes de fonte repetem o `h1` global (`app/globals.css`):
               // o gatilho é um botão e não herda a regra do título.
-              className="h-auto w-auto min-w-0 max-w-full gap-1.5 border-0 bg-transparent p-0 font-[family-name:var(--font-titulo)] text-[2rem] font-semibold leading-tight tracking-[-0.01em] shadow-none focus:ring-1 focus:ring-ring sm:max-w-[60%] [&>span]:truncate"
+              className="h-auto w-auto min-w-0 max-w-full gap-1.5 border-0 bg-transparent p-0 font-titulo titulo-tela font-medium text-accent dark:text-text shadow-none focus:ring-1 focus:ring-ring sm:max-w-[60%] [&>span]:truncate"
             >
               <SelectValue placeholder={nomeAtual} />
             </SelectTrigger>

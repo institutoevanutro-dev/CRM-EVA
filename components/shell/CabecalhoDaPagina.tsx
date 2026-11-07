@@ -24,8 +24,10 @@ export function CabecalhoDaPagina({
   return (
     <header className={cn("flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", className)}>
       <div className="min-w-0">
-        <h1 className="text-[2rem] leading-tight">{titulo}</h1>
-        {descricao ? <p className="mt-1 max-w-2xl text-sm text-text-muted">{descricao}</p> : null}
+        <h1 className="titulo-tela">{titulo}</h1>
+        {/* Traço do contrato visual comum, como nos módulos de finanças e de preços. */}
+        <span aria-hidden className="mt-2 block h-[3px] w-12 rounded-full bg-gradient-to-r from-gold to-gold/30" />
+        {descricao ? <p className="mt-2 max-w-2xl text-sm text-text-muted">{descricao}</p> : null}
       </div>
       {acoes ? <div className="flex shrink-0 flex-wrap items-center gap-2">{acoes}</div> : null}
     </header>

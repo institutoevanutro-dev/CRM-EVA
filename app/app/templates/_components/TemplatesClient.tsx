@@ -184,7 +184,7 @@ export function TemplatesClient({ canShare, currentUserId }: Props) {
             <DragDropContext onDragEnd={aoSoltar}>
               {grupos.map((grupo, g) => (
                 <section key={grupo.assunto ?? "-"} className="space-y-2">
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                  <h2 className="rotulo-secao text-text-muted">
                     {grupo.assunto ?? t("Outras")}
                     <span className="ml-1.5 font-normal normal-case tracking-normal">· {grupo.itens.length}</span>
                   </h2>

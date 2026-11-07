@@ -73,7 +73,7 @@ export default async function ConversoesPage() {
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
       <header className="flex flex-col gap-2">
-        <h1 className="text-[2rem] leading-tight">{t("Conversões")}</h1>
+        <h1 className="titulo-tela">{t("Conversões")}</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
           {t(
             "Quando um paciente agenda, e quando ele paga o sinal, o sistema pode avisar a Meta e o Google Ads. É esse retorno que ensina o anúncio a procurar mais gente parecida com quem agendou e fechou. Cada aviso vem desligado: só sai depois que você ligar abaixo.",

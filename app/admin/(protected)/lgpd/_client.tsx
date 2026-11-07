@@ -73,7 +73,7 @@ export function LgpdAdminClient() {
 
       {/* Header */}
       <div>
-        <h1 className="text-[2rem] leading-tight">{t("LGPD — Cross-tenant")}</h1>
+        <h1 className="titulo-tela">{t("LGPD — Cross-tenant")}</h1>
         <p className="text-sm text-muted-foreground mt-1">
           {isLoading
             ? t("Carregando...")
