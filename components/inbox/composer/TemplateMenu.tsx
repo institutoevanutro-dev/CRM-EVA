@@ -1,6 +1,7 @@
 "use client";
 import { useT } from "@/hooks/i18n/useT";
 import type { MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
+import { termoSemAcento } from "@/lib/inbox/termo-de-busca";
 
 /** Estado do slash-menu a partir do texto do composer. Puro (testável). */
 export function resolveSlash(text: string): { open: boolean; query: string } {
@@ -8,6 +9,23 @@ export function resolveSlash(text: string): { open: boolean; query: string } {
   const rest = text.slice(1);
   if (/\s/.test(rest)) return { open: false, query: "" };
   return { open: true, query: rest };
+}
+
+/**
+ * Respostas rápidas que casam com o termo, pelo título ou pelo atalho, ignorando
+ * caixa e acento dos dois lados (`/orcamento` acha "Orçamento" e vice-versa).
+ * Termo vazio devolve a lista inteira; a ordem não muda; o título exibido também
+ * não. Usada pelo menu do `/` e pela busca da barra de respostas.
+ */
+export function filtrarRespostas<T extends Pick<MessageTemplate, "title" | "shortcut">>(
+  respostas: readonly T[],
+  query: string,
+): T[] {
+  const q = termoSemAcento(query.trim());
+  if (!q) return [...respostas];
+  return respostas.filter(
+    (r) => termoSemAcento(r.title).includes(q) || termoSemAcento(r.shortcut ?? "").includes(q),
+  );
 }
 
 interface Props {
@@ -21,10 +39,7 @@ interface Props {
 export function TemplateMenu({ open, query, templates, onPick, onClose: _onClose }: Props) {
   const t = useT();
   if (!open) return null;
-  const q = query.toLowerCase();
-  const filtered = templates.filter(
-    (tpl) => tpl.title.toLowerCase().includes(q) || (tpl.shortcut ?? "").toLowerCase().includes(q),
-  );
+  const filtered = filtrarRespostas(templates, query);
   return (
     <div
       className="absolute bottom-14 left-3 z-20 max-h-64 w-80 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-lg"
