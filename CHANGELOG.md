@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.51.1] — 2026-11-07
+
+### Corrigido
+
+- **Reativar follow-up pós-consulta encerrado pela recusa do envio não dá mais erro** O botão "Reativar" do follow-up, que chegou na versão anterior, respondia erro interno nas sequências presas a uma consulta (pós-consulta), justamente as que mais precisavam dele. Agora elas voltam a andar. A volta só é aceita quando o encerramento foi a recusa do envio pelas regras do atendimento; se a presença na consulta foi desfeita, a sequência continua encerrada.
+
 ## [4.51.0] — 2026-11-07
 
 ### Adicionado
@@ -8822,7 +8828,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.51.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.51.1...HEAD
+[4.51.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.51.0...v4.51.1
 [4.51.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.50.0...v4.51.0
 [4.50.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.49.2...v4.50.0
 [4.49.2]: https://github.com/melgarafael/DeskcommCRM/compare/v4.49.1...v4.49.2
