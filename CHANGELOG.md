@@ -8,6 +8,16 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [4.52.0] — 2026-11-07
+
+### Alterado
+
+- **Aviso no celular só quando a IA passa a conversa, se a equipe quiser** Configurações › Notificações ganhou a linha "Conversa passada pela IA", com Push ligado por padrão. Ligar essa linha pede a permissão do navegador e inscreve o aparelho sem ligar o aviso de cada mensagem: o passo a passo é ligar a linha, tocar em Permitir e deixar "Nova mensagem" desligado. Desligar "Nova mensagem › Push" agora para de verdade o aviso de cada mensagem recebida, porque a escolha vai para o servidor junto com a inscrição do navegador; antes ficava só naquele navegador. Os avisos da Central que pedem alguém da equipe, como a IA chamando um atendente, e as menções continuam chegando a todos os inscritos. No navegador que não recebe avisos, a tela explica que no iPhone é preciso adicionar o site à Tela de Início e abrir por lá (iOS 16.4 ou mais novo). Quem já estava inscrito segue recebendo tudo até abrir o CRM de novo no navegador, que então sincroniza a escolha sozinho.
+
+### Corrigido
+
+- **Conversa devolvida à IA pelo prazo responde a mensagem que ficou parada** Quando o prazo de Distribuição de atendimento devolve ao agente de IA uma conversa que estava com a equipe, e o cliente escreveu nesse meio-tempo sem ninguém responder, a IA agora responde essa mensagem. Antes a conversa voltava ao agente, mas a mensagem ficava sem resposta até o cliente escrever de novo. Valem os mesmos filtros da retomada por cliente sem resposta: mensagem mais velha que o teto de horas configurado (4 horas por padrão) ou que seja só despedida ("obrigada", figurinha) não é respondida.
+
 ## [4.51.1] — 2026-11-07
 
 ### Corrigido
@@ -8828,7 +8838,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.51.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.52.0...HEAD
+[4.52.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.51.1...v4.52.0
 [4.51.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.51.0...v4.51.1
 [4.51.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.50.0...v4.51.0
 [4.50.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.49.2...v4.50.0

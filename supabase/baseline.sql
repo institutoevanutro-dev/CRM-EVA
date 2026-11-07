@@ -15244,6 +15244,14 @@ create table if not exists public.push_subscriptions (
 create index if not exists push_subscriptions_org_idx
   on public.push_subscriptions (organization_id);
 
+-- Migration 0404: o navegador escolhe se recebe o push de mensagem nova; os
+-- avisos que pedem gente vão a toda inscrição.
+alter table public.push_subscriptions
+  add column if not exists recebe_mensagens boolean not null default true;
+
+comment on column public.push_subscriptions.recebe_mensagens is
+  'false = este navegador não recebe o push de mensagem nova (só os avisos que pedem gente). Migration 0404.';
+
 alter table public.push_subscriptions enable row level security;
 
 do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
@@ -36514,10 +36522,15 @@ notify pgrst, 'reload schema';
 -- O push de `message.received` sai só às inscrições de quem `fn_can_view_conversation`
 -- deixaria abrir a conversa; a função avalia a régua da RLS por inscrito, sem copiá-la.
 -- Entra ANTES da VARREDURA anon porque cria função. Só o service role executa.
+-- A 0404 trocou o corpo AQUI, no lugar: `p_so_quem_recebe_mensagens` filtra
+-- `push_subscriptions.recebe_mensagens` (a de dois argumentos sai antes).
 -- Quem mede a regra: `tests/invariants/push-so-a-quem-ve-a-conversa.test.ts`.
+drop function if exists public.fn_push_inscricoes_que_veem_a_conversa(uuid, uuid);
+
 create or replace function public.fn_push_inscricoes_que_veem_a_conversa(
   p_org uuid,
-  p_conversation uuid
+  p_conversation uuid,
+  p_so_quem_recebe_mensagens boolean default true
 ) returns table (id uuid, user_id uuid, endpoint text, p256dh text, auth text)
 language plpgsql volatile security definer
 set search_path = public
@@ -36541,7 +36554,9 @@ begin
   perform set_config('request.jwt.claim', '', true);
   perform set_config('request.jwt.claim.sub', '', true);
   for v_user in
-    select distinct s.user_id from public.push_subscriptions s where s.organization_id = p_org
+    select distinct s.user_id from public.push_subscriptions s
+     where s.organization_id = p_org
+       and (s.recebe_mensagens or not p_so_quem_recebe_mensagens)
      order by s.user_id
   loop
     perform set_config('request.jwt.claims', jsonb_build_object('sub', v_user)::text, true);
@@ -36549,7 +36564,8 @@ begin
       return query
         select s.id, s.user_id, s.endpoint, s.p256dh, s.auth
           from public.push_subscriptions s
-         where s.organization_id = p_org and s.user_id = v_user;
+         where s.organization_id = p_org and s.user_id = v_user
+           and (s.recebe_mensagens or not p_so_quem_recebe_mensagens);
     end if;
   end loop;
 
@@ -36559,8 +36575,8 @@ begin
 end;
 $$;
 
-revoke execute on function public.fn_push_inscricoes_que_veem_a_conversa(uuid, uuid) from public, anon, authenticated;
-grant execute on function public.fn_push_inscricoes_que_veem_a_conversa(uuid, uuid) to service_role;
+revoke execute on function public.fn_push_inscricoes_que_veem_a_conversa(uuid, uuid, boolean) from public, anon, authenticated;
+grant execute on function public.fn_push_inscricoes_que_veem_a_conversa(uuid, uuid, boolean) to service_role;
 -- ---- fim: o aviso de mensagem nova vai só a quem pode ver a conversa (migration 0378) ----
 
 -- ---- cada agente declara em quais números atende (migration 0380) ----

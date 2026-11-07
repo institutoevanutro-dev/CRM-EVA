@@ -228,6 +228,63 @@ describe("cron handoff-devolucao", () => {
     expect(auditar).toHaveBeenCalledTimes(1);
   });
 
+  describe("primeira passada — o cliente escreveu durante a pausa e ninguém respondeu", () => {
+    const CONTATO = "55555555-5555-4555-8555-555555555555";
+    const comPendente = (minutosDaEntrada: number) =>
+      conversa(90, { contact_id: CONTATO, last_outbound_at: min(100), last_inbound_at: min(minutosDaEntrada) });
+
+    it("devolve pelo prazo E pede o despacho da mensagem pendente", async () => {
+      banco.conversations = [comPendente(30)];
+      const corpo = (await (await chamar()).json()) as { data: { devolvidas: number; despachadas: number } };
+      expect(devolver).toHaveBeenCalledTimes(1);
+      expect(despachar).toHaveBeenCalledTimes(1);
+      expect(despachar.mock.calls[0]?.[1]).toMatchObject({
+        organizationId: ORG,
+        conversationId: VENCIDA,
+        contactId: CONTATO,
+        channelSessionId: SESSAO,
+        messageId: "88888888-8888-4888-8888-888888888888",
+      });
+      expect(corpo.data).toMatchObject({ devolvidas: 1, despachadas: 1 });
+    });
+
+    it("sem mensagem depois da última saída: devolve e não pede despacho", async () => {
+      banco.conversations = [conversa(90, { contact_id: CONTATO, last_outbound_at: min(100), last_inbound_at: min(110) })];
+      await chamar();
+      expect(devolver).toHaveBeenCalledTimes(1);
+      expect(despachar).not.toHaveBeenCalled();
+    });
+
+    it("só despedida: devolve e não pede despacho", async () => {
+      banco.conversations = [comPendente(30)];
+      banco.messages = [{ id: "m1", type: "text", body: "obrigada!" }];
+      await chamar();
+      expect(devolver).toHaveBeenCalledTimes(1);
+      expect(despachar).not.toHaveBeenCalled();
+    });
+
+    it("mensagem mais velha que o teto (4 h padrão): devolve e não pede despacho", async () => {
+      banco.conversations = [conversa(400, { contact_id: CONTATO, last_outbound_at: min(500), last_inbound_at: min(300) })];
+      await chamar();
+      expect(devolver).toHaveBeenCalledTimes(1);
+      expect(despachar).not.toHaveBeenCalled();
+    });
+
+    it("devolução recusada: não pede despacho", async () => {
+      banco.conversations = [comPendente(30)];
+      devolver.mockResolvedValueOnce({ ok: false, erro: "contato_sempre_humano" });
+      await chamar();
+      expect(despachar).not.toHaveBeenCalled();
+    });
+
+    it("despacho falhou: conta como falha", async () => {
+      banco.conversations = [comPendente(30)];
+      despachar.mockResolvedValueOnce(false);
+      const corpo = (await (await chamar()).json()) as { data: { despachadas: number; falhas: number } };
+      expect(corpo.data).toMatchObject({ despachadas: 0, falhas: 1 });
+    });
+  });
+
   describe("segunda passada — cliente sem resposta durante a pausa", () => {
     const CONTATO = "55555555-5555-4555-8555-555555555555";
     function pausada(minutosSemResposta: number, extra: Record<string, unknown> = {}): Record<string, unknown> {

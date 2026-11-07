@@ -23,6 +23,11 @@ const subSchema = z.object({
     p256dh: z.string().min(1),
     auth: z.string().min(1),
   }),
+  /**
+   * O botão "Nova mensagem › Push" deste navegador (migration 0404). `false`
+   * = só os avisos que pedem gente. Ausente = `true` (navegador antigo).
+   */
+  recebe_mensagens: z.boolean().optional().default(true),
 });
 
 export async function GET(): Promise<Response> {
@@ -70,6 +75,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
       endpoint: parsed.data.endpoint,
       p256dh: parsed.data.keys.p256dh,
       auth: parsed.data.keys.auth,
+      recebe_mensagens: parsed.data.recebe_mensagens,
       updated_at: new Date().toISOString(),
     } as never,
     { onConflict: "endpoint" },
@@ -88,7 +94,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
     organizationId: org.orgId,
     resourceType: "push_subscription",
     requestId,
-    metadata: { channel: "web_push" },
+    metadata: { channel: "web_push", recebe_mensagens: parsed.data.recebe_mensagens },
   });
 
   return ok({ ok: true }, { requestId });

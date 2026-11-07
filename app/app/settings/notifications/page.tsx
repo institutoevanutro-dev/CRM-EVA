@@ -62,7 +62,7 @@ export default async function NotificationsPage() {
           className="border-amber-500/40 bg-amber-50/40 p-4 text-sm dark:bg-amber-900/10"
         >
           {t(
-            "Email ainda não está disponível. In-app (toast) e Push (Chrome) já funcionam para as cinco categorias, inclusive com a aba fechada.",
+            "Email ainda não está disponível. In-app (toast) e Push (Chrome) já funcionam, inclusive com a aba fechada.",
           )}
         </Card>
       ) : (

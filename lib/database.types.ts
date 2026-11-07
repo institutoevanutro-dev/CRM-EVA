@@ -6872,6 +6872,7 @@ export type Database = {
           id: string
           organization_id: string
           p256dh: string
+          recebe_mensagens: boolean
           updated_at: string
           user_id: string
         }
@@ -6882,6 +6883,7 @@ export type Database = {
           id?: string
           organization_id: string
           p256dh: string
+          recebe_mensagens?: boolean
           updated_at?: string
           user_id: string
         }
@@ -6892,6 +6894,7 @@ export type Database = {
           id?: string
           organization_id?: string
           p256dh?: string
+          recebe_mensagens?: boolean
           updated_at?: string
           user_id?: string
         }
@@ -8669,7 +8672,11 @@ export type Database = {
         Returns: string
       }
       fn_push_inscricoes_que_veem_a_conversa: {
-        Args: { p_conversation: string; p_org: string }
+        Args: {
+          p_conversation: string
+          p_org: string
+          p_so_quem_recebe_mensagens?: boolean
+        }
         Returns: {
           auth: string
           endpoint: string
