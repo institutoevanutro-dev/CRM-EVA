@@ -24,6 +24,7 @@ import type { NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { podeReativar } from "@/lib/followup/intervencao";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import {
   resumoDoNo,
@@ -69,6 +70,8 @@ export interface DossieDoEnrollment {
   updated_at: string;
   outcome: string | null;
   cancel_reason: string | null;
+  /** Encerrado pela recusa das regras do atendimento: a tela oferece "Reativar". */
+  pode_reativar: boolean;
   last_error: string | null;
   attempts: number;
   max_attempts: number;
@@ -223,6 +226,7 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
     updated_at: row.updated_at,
     outcome: row.outcome,
     cancel_reason: row.cancel_reason,
+    pode_reativar: podeReativar(row.status, row.cancel_reason),
     last_error: row.last_error,
     attempts: row.attempts,
     max_attempts: row.max_attempts,

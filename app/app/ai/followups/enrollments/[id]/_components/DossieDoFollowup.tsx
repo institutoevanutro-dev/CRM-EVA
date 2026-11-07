@@ -360,6 +360,35 @@ export function DossieDoFollowup({ id, canWrite }: Props) {
               <Trash size={14} aria-hidden className="mr-1 text-error" /> {t("Cancelar follow-up")}
             </Button>
           )}
+          {/*
+            Reativar só aparece para o encerramento que não foi decisão de
+            ninguém: o envio recusado pelas regras do atendimento (o servidor
+            decide em `pode_reativar`). Volta no passo recusado ou já no seguinte.
+          */}
+          {data.pode_reativar && (
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="dossie-reativar"
+              disabled={intervir.isPending}
+              onClick={() => intervir.mutate({ id, acao: "reactivate" })}
+            >
+              <Play size={14} aria-hidden className="mr-1" /> {t("Reativar neste passo")}
+            </Button>
+          )}
+          {data.pode_reativar &&
+            data.saidas.map((s) => (
+              <Button
+                key={s.edge_id}
+                variant="outline"
+                size="sm"
+                data-testid="dossie-reativar-seguinte"
+                disabled={intervir.isPending}
+                onClick={() => intervir.mutate({ id, acao: "reactivate", body: { node_id: s.target_id } })}
+              >
+                <SkipForward size={14} aria-hidden className="mr-1" /> {t("Reativar no passo")} {s.target_rotulo}
+              </Button>
+            ))}
         </section>
       )}
 

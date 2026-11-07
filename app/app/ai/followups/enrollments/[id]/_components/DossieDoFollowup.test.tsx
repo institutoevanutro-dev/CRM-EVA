@@ -22,6 +22,7 @@ import type * as DateFnsLocale from "date-fns/locale";
 
 import { DossieDoFollowup } from "./DossieDoFollowup";
 
+const mutate = vi.hoisted(() => vi.fn());
 const dados = vi.hoisted(() => {
   // Anotado com o tipo (não `satisfies`): o `last_error`, `outcome` etc. são
   // `string | null` na interface, e o teste reescreve esses campos entre os
@@ -39,6 +40,7 @@ const dados = vi.hoisted(() => {
     updated_at: "2026-09-01T10:00:00Z",
     outcome: null,
     cancel_reason: null,
+    pode_reativar: false,
     last_error: null,
     attempts: 0,
     max_attempts: 5,
@@ -63,7 +65,7 @@ vi.mock("@/hooks/followup/useFollowupEnrollment", () => ({
     isLoading: false,
     isError: false,
   }),
-  useIntervirNoFollowup: () => ({ mutate: () => {}, isPending: false }),
+  useIntervirNoFollowup: () => ({ mutate: (...a: unknown[]) => mutate(...a), isPending: false }),
 }));
 vi.mock("@/hooks/followup/useFollowupQueue", () => ({
   useCancelFollowupEnrollment: () => ({ mutate: () => {}, isPending: false }),
@@ -108,5 +110,22 @@ describe("o dossiê não lê falha do motor como contato com o cliente (#2014)",
     const desfecho = screen.getByText(/Desfecho/);
     expect(desfecho.textContent).toContain("Encerrado sem conversão");
     expect(desfecho.textContent).not.toContain("exhausted");
+  });
+
+  it("Reativar: só aparece quando o servidor diz que pode, e manda o passo escolhido", () => {
+    dados.data.status = "active";
+    dados.data.pode_reativar = false;
+    const { unmount } = render(<DossieDoFollowup id={dados.data.id} canWrite={true} />);
+    expect(screen.queryByTestId("dossie-reativar")).toBeNull();
+    unmount();
+
+    dados.data.status = "cancelled";
+    dados.data.pode_reativar = true;
+    dados.data.saidas = [{ edge_id: "e1", target_id: "espera15", target_rotulo: "Até o dia 15", quando: "sempre" }];
+    render(<DossieDoFollowup id={dados.data.id} canWrite={true} />);
+    screen.getByTestId("dossie-reativar").click();
+    expect(mutate).toHaveBeenLastCalledWith({ id: dados.data.id, acao: "reactivate" });
+    screen.getByTestId("dossie-reativar-seguinte").click();
+    expect(mutate).toHaveBeenLastCalledWith({ id: dados.data.id, acao: "reactivate", body: { node_id: "espera15" } });
   });
 });

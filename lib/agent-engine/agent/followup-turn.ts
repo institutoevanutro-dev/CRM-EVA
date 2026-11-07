@@ -726,7 +726,7 @@ async function runFlowDrivenTurn(
         runLog.info('passo do fluxo adiado pela trava de repetição', { node_id: nodeId, tentativa: input.tentativaRepetida + 1, ate: until.toISOString() });
         await complete(pool, { jobId: job.id, jobClaim: claimOfJob(job), organizationId: target.tenantId, enrollmentId, nodeId, result: { kind: 'deferred', until, reason: 'mass_identical' } });
       } else if(sent === 'skipped' || sent === 'repetido') {
-        await complete(pool,{jobId:job.id,jobClaim:claimOfJob(job),organizationId:target.tenantId,enrollmentId,nodeId,result:{kind:'skipped',reason:'O envio foi recusado pelas regras do atendimento.'}});
+        await complete(pool,{jobId:job.id,jobClaim:claimOfJob(job),organizationId:target.tenantId,enrollmentId,nodeId,result:{kind:'skipped',reason:MOTIVO_ENVIO_VETADO}});
       }
       return;
     }

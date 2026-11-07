@@ -499,6 +499,12 @@ export function descreveEvento(
       const para = quandoLegivel(p.next_eval_at, idioma);
       return { titulo: "Adiado por uma pessoa da equipe", detalhe: para ? `adiado para ${para}` : null, ...pessoa };
     }
+    case "reactivated_manual":
+      return {
+        titulo: "Reativado por uma pessoa da equipe",
+        detalhe: `voltou em ${refDoNo(texto(p.next_node_id), nos)}`,
+        ...pessoa,
+      };
     case "skipped_manual":
       return {
         titulo: "Passo pulado por uma pessoa da equipe",
