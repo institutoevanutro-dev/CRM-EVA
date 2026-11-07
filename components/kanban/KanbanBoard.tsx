@@ -282,6 +282,7 @@ export function KanbanBoard({
           <StageColumn
             key={stage.id}
             stage={stage}
+            stages={data.stages}
             leads={grouped.get(stage.id) ?? []}
             pipelineId={pipelineId}
             ownerNames={ownerNames}
