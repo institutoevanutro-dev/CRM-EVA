@@ -112,7 +112,7 @@ test.describe("Relatório por etiqueta — pela tela", () => {
     // A PORTA: pelo menu, nunca pela URL.
     const sidebar = page.getByRole("navigation", { name: "Navegação principal" });
     // Menu por área (07/10/2026): Análise → aba Por etiqueta.
-    await sidebar.getByRole("link", { name: "Análise" }).click();
+    await sidebar.getByRole("button", { name: "Análise" }).click();
     await page
       .getByRole("navigation", { name: "Telas de Análise" })
       .getByRole("link", { name: "Por etiqueta" })

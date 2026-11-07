@@ -1297,6 +1297,7 @@ export const DICIONARIO: Traducoes = {
   // esta feature piorar alguma coisa.
   "Buscar...": { es: "Buscar..." },
   "Buscar tela": { es: "Buscar pantalla" },
+  "Pular para o conteúdo": { es: "Saltar al contenido" },
   // Grupos do menu por tarefa (lib/navigation/menu.ts) e o cartão de quem está logado.
   "Assistente": { es: "Asistente" },
   "Clínica": { es: "Clínica" },

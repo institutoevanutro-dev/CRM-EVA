@@ -6,13 +6,15 @@
  *    grupo da tela atual nasce aberto;
  *  - Funis é alcançável sem passar por Configurações, o achado que originou tudo;
  *  - área sem tela visível para o papel não aparece;
- *  - colapsado não renderiza lista nenhuma: só o ícone da área.
+ *  - colapsado não renderiza lista nenhuma: só o ícone da área;
+ *  - aberto, o nome do grupo é um botão que SÓ abre e fecha (D1.10), e o que foi
+ *    aberto fica guardado no navegador.
  *
  * A regra de quem-vê-o-quê é do registro e está coberta em
  * `navegacao-registry.test.ts`; aqui é a superfície.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { Sidebar } from "@/components/shell/Sidebar";
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
@@ -34,8 +36,9 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/connections/ConnectionHealthDot", () => ({
   ConnectionHealthDot: () => <span data-testid="saude-da-conexao" />,
 }));
+const toggleSidebar = vi.fn<(c: boolean) => Promise<void>>(() => Promise.resolve());
 vi.mock("@/app/actions/shell/toggleSidebar", () => ({
-  toggleSidebar: vi.fn(),
+  toggleSidebar: (c: boolean) => toggleSidebar(c),
 }));
 // Busca a versão via react-query; sem QueryClientProvider ele lança, e o
 // rodapé de versão não é o que estes testes examinam.
@@ -57,7 +60,7 @@ afterEach(() => {
 describe("Sidebar por área", () => {
   const nav = () => screen.getByRole("navigation", { name: "Navegação principal" });
   const rotulos = () =>
-    Array.from(nav().querySelectorAll("a")).map((a) => a.textContent?.trim());
+    Array.from(nav().querySelectorAll("a, button")).map((a) => a.textContent?.trim());
 
   it("mostra os grupos na ordem de uso, e só o grupo da tela atual aberto, com todas as telas dele", () => {
     comoPapel("admin");
@@ -93,17 +96,72 @@ describe("Sidebar por área", () => {
     const queRola = nav().querySelector(".overflow-y-auto")!;
     expect(nav().contains(inicio)).toBe(true);
     expect(queRola.contains(inicio)).toBe(false);
-    expect(queRola.contains(screen.getByRole("link", { name: "Vendas" }))).toBe(true);
+    expect(queRola.contains(screen.getByRole("button", { name: "Vendas" }))).toBe(true);
   });
 
-  it("o grupo abre e fecha pela seta, sem navegar; Funis fica a um clique em Vendas", () => {
+  it("o nome do grupo abre e fecha, sem navegar; Funis fica a um clique em Vendas", () => {
     comoPapel("admin");
     render(<Sidebar collapsed={false} />);
-    fireEvent.click(screen.getByRole("button", { name: "Abrir Vendas" }));
-    const vendas = screen.getByRole("navigation", { name: "Telas de Vendas" });
-    expect(within(vendas).getByRole("link", { name: "Funis" })).toHaveAttribute("href", "/app/kanban");
-    fireEvent.click(screen.getByRole("button", { name: "Fechar Vendas" }));
+    const vendas = screen.getByRole("button", { name: "Vendas" });
+    expect(vendas).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(vendas);
+    expect(vendas).toHaveAttribute("aria-expanded", "true");
+    const telas = screen.getByRole("navigation", { name: "Telas de Vendas" });
+    expect(within(telas).getByRole("link", { name: "Funis" })).toHaveAttribute("href", "/app/kanban");
+    fireEvent.click(vendas);
     expect(screen.queryByRole("navigation", { name: "Telas de Vendas" })).toBeNull();
+  });
+
+  it("o grupo da tela atual se comporta igual aos outros: o nome só fecha", () => {
+    comoPapel("admin");
+    render(<Sidebar collapsed={false} />);
+    const atendimento = screen.getByRole("button", { name: "Atendimento" });
+    expect(atendimento).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(atendimento);
+    expect(screen.queryByRole("navigation", { name: "Telas de Atendimento" })).toBeNull();
+  });
+
+  it("os grupos abertos voltam como estavam depois de recarregar", () => {
+    comoPapel("admin");
+    render(<Sidebar collapsed={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Vendas" }));
+    cleanup();
+    render(<Sidebar collapsed={false} />);
+    expect(screen.getByRole("navigation", { name: "Telas de Vendas" })).toBeInTheDocument();
+    // E o grupo da tela atual abre mesmo que tenha sido fechado antes.
+    expect(screen.getByRole("navigation", { name: "Telas de Atendimento" })).toBeInTheDocument();
+  });
+
+  it("armazenamento quebrado não derruba o menu", () => {
+    comoPapel("admin");
+    window.localStorage.setItem("menu:grupos-abertos", "{nao é json");
+    render(<Sidebar collapsed={false} />);
+    expect(screen.getByRole("navigation", { name: "Telas de Atendimento" })).toBeInTheDocument();
+  });
+
+  it("recolher muda o menu no clique, sem esperar o servidor", async () => {
+    comoPapel("admin");
+    const alternar = vi.fn();
+    render(<Sidebar collapsed={false} onAlternarRecolhido={alternar} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Recolher sidebar" }));
+    });
+    expect(alternar).toHaveBeenCalledTimes(1);
+    expect(toggleSidebar).toHaveBeenCalledWith(false);
+  });
+
+  it("a dica da busca diz Ctrl K fora do Mac", () => {
+    comoPapel("admin");
+    render(<Sidebar collapsed={false} />);
+    expect(document.querySelector("kbd")?.textContent).toBe("Ctrl K");
+  });
+
+  it("itens e Sair têm alvo de 44 px no toque", () => {
+    comoPapel("admin");
+    render(<Sidebar collapsed={false} />);
+    expect(screen.getByRole("link", { name: "Início" }).className).toContain("min-h-11");
+    expect(screen.getByRole("button", { name: "Vendas" }).className).toContain("min-h-11");
+    expect(screen.getByRole("button", { name: "Sair" }).className).toContain("min-h-11");
   });
 
   it("a tela atual fica marcada dentro do grupo", () => {
@@ -117,21 +175,24 @@ describe("Sidebar por área", () => {
     comoPapel("admin");
     render(<Sidebar collapsed />);
     expect(screen.queryByRole("navigation", { name: /Telas de/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Abrir|Fechar/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Vendas" })).toBeNull();
   });
 
-  it("marca a área da tela atual, inclusive em tela de detalhe", () => {
+  it("abre a área da tela atual, inclusive em tela de detalhe", () => {
     comoPapel("admin");
     rota.atual = "/app/pipelines/abc";
     render(<Sidebar collapsed={false} />);
-    expect(screen.getByRole("link", { name: "Vendas" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Atendimento" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("button", { name: "Vendas" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Atendimento" })).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("o nome da área leva à primeira tela dela", () => {
+  it("recolhido, o ícone da área leva à primeira tela dela e marca a área atual", () => {
     comoPapel("admin");
-    render(<Sidebar collapsed={false} />);
-    expect(screen.getByRole("link", { name: "Vendas" })).toHaveAttribute("href", "/app/kanban");
+    rota.atual = "/app/pipelines/abc";
+    render(<Sidebar collapsed />);
+    const vendas = nav().querySelector('a[title="Vendas"]');
+    expect(vendas).toHaveAttribute("href", "/app/kanban");
+    expect(vendas).toHaveAttribute("aria-current", "page");
   });
 
   it("colapsado mantém os links com o nome como dica", () => {
