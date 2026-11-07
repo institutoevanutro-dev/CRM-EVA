@@ -163,7 +163,7 @@ export async function pararSeForRoboDoOutroLado(
   }
   if (!sinal.robo) return false;
   // Já em handoff: nada a fazer, e não reabrir aviso que a equipe fechou.
-  if (await isLeadInHandoff(pool, ids.tenantId, ids.leadId)) return true;
+  if (await isLeadInHandoff(pool, ids.tenantId, ids.leadId, { conversationId: ids.conversationId })) return true;
 
   const porque =
     sinal.sinal === 'inbound_repetido'

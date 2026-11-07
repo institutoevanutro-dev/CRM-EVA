@@ -54,7 +54,7 @@ export async function passarTurnoAEquipeSeForOCaso(
   if (resolucao.outcome !== 'bloqueado_apos_equipe' && resolucao.outcome !== 'so_equipe') return false;
   const passagem = PASSAGENS[resolucao.outcome];
   // Já com a equipe: não reabrir aviso que alguém fechou.
-  if (await isLeadInHandoff(pool, ids.tenantId, ids.leadId)) return true;
+  if (await isLeadInHandoff(pool, ids.tenantId, ids.leadId, { conversationId: ids.conversationId })) return true;
   await performHumanHandoff(pool, ids, { ...passagem, log });
   log.info('turno passado à equipe sem resposta da IA', { motivo: resolucao.outcome, intent: resolucao.intentName });
   return true;

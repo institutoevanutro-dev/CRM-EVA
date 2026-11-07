@@ -2402,7 +2402,7 @@ async function executarTurnoDoAgente(
   // F4-06 (acceptance 2): lead em handoff humano → NO-OP no INÍCIO do turno, antes de
   // qualquer chamada de modelo/CRM. O bot silenciou (bot_silenced_until='infinity', cache
   // do force_human do CRM) e só o humano/CRM libera — o agente nunca reassume (regra dura 2).
-  if (!preview && (await isLeadInHandoff(pool, tenantId, leadId))) {
+  if (!preview && (await isLeadInHandoff(pool, tenantId, leadId, { conversationId: input.conversationId }))) {
     runLog.info('turno pulado — lead em handoff humano (bot silenciado)', { kind: liveJob().kind });
     return;
   }
@@ -6280,7 +6280,7 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       // Fica no ramo, não antes dele: o caminho automático já refaz as duas
       // checagens em `runAgentTurn`, e antecipá-las custaria duas queries por
       // turno sem mudar nenhum desfecho.
-      if (await isLeadInHandoff(pool, job.organization_id, job.contact_id)) {
+      if (await isLeadInHandoff(pool, job.organization_id, job.contact_id, { conversationId: payload.conversation_id })) {
         deps.log.info('rascunho pulado — lead em handoff humano (bot silenciado)', {
           job_id: job.id,
           conversation_id: payload.conversation_id,
