@@ -810,6 +810,90 @@ describe('resolveConversationTurn — áudio transcrito chega ao classificador',
   });
 });
 
+describe('resolveConversationTurn — a rajada do turno chega inteira ao classificador', () => {
+  // Medido em produção: áudio (body NULL, texto só depois em media_derived_text)
+  // e, 3 s depois, um emoji. O drain coalesce os dois num job; o roteador lia
+  // só a inbound mais nova e classificava o emoji: outcome 'fallback' com 0,99.
+  const TRANSCRICAO = 'sou paciente antigo do doutor e queria uma teleconsulta';
+  const EMOJI = '🙏';
+  const ORG = 'org-1';
+  const CONV = 'conv-1';
+
+  /**
+   * Banco falso do caminho handler → roteador: a consulta da espera
+   * (`media_derived_status`) acusa o áudio pendente até a consulta `prontaEm`;
+   * a leitura do sinal devolve a rajada DESC, como o banco, com o áudio
+   * transcrito só depois de a derivação terminar.
+   */
+  function fakeDb(prontaEm: number) {
+    let consultasDaEspera = 0;
+    const pronta = () => consultasDaEspera >= prontaEm;
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes('media_derived_status')) {
+        consultasDaEspera += 1;
+        if (pronta()) return { rows: [] };
+        return { rows: [{ type: 'audio', media_derived_status: 'pending', quando: new Date(Date.now() - 5_000) }] };
+      }
+      if (sql.includes('from conversations')) return { rows: [{ active_ai_agent_id: null, active_intent: null }] };
+      if (sql.includes("direction='inbound'")) {
+        return {
+          rows: [
+            { type: 'text', body: EMOJI, media_url: null, media_storage_path: null, media_derived_text: null, respondida: false },
+            { type: 'audio', body: null, media_url: 'https://cdn.example/a.ogg', media_storage_path: 'p0',
+              media_derived_text: pronta() ? TRANSCRICAO : null, respondida: false },
+            { type: 'text', body: 'conversa de ontem', media_url: null, media_storage_path: null, media_derived_text: null, respondida: true },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+    return { query };
+  }
+  function deps() {
+    const classifyIntent = vi.fn().mockResolvedValue({ intentName: 'vendas', confidence: 0.9 });
+    return {
+      classifyIntent,
+      deps: makeDeps({
+        loadActiveRouter: vi.fn().mockResolvedValue(router({ sticky: true })),
+        loadPublishedAgentConfigById: idAwareLoader(),
+        classifyIntent,
+      }),
+    };
+  }
+  /** A ordem do handler de `inbound_turn`: a espera da mídia, depois o roteador. */
+  async function handler(db: ReturnType<typeof fakeDb>, d: never, prazoMs: number) {
+    const { esperarMidiaDerivavel } = await import('./espera-da-midia');
+    const espera = await esperarMidiaDerivavel(db as never, {
+      organizationId: ORG, conversationId: CONV, prazoMs,
+      log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never,
+      sleep: async () => {},
+    });
+    await resolveConversationTurn(db as never, {} as never, { ...baseInput, inbound: true }, d);
+    return espera;
+  }
+
+  it('áudio + emoji, transcrição chega depois: o classificador vê o texto do áudio E o emoji', async () => {
+    const db = fakeDb(3);
+    const { classifyIntent, deps: d } = deps();
+    const espera = await handler(db, d, Date.now() + 120_000);
+    expect(espera.desfecho).toBe('derivacao_concluida');
+    const signal = classifyIntent.mock.calls[0]![2].signal as string;
+    expect(signal).toContain(TRANSCRICAO);
+    expect(signal).toContain(EMOJI);
+    // Mais antiga primeiro, e nada de antes da última resposta.
+    expect(signal.indexOf(TRANSCRICAO)).toBeLessThan(signal.indexOf(EMOJI));
+    expect(signal).not.toContain('conversa de ontem');
+  });
+
+  it('mídia que nunca transcreve: a espera para no teto e o turno segue com o emoji, sem travar', async () => {
+    const db = fakeDb(Number.POSITIVE_INFINITY);
+    const { classifyIntent, deps: d } = deps();
+    const espera = await handler(db, d, Date.now() - 1);
+    expect(espera.desfecho).toBe('teto_da_espera');
+    expect(classifyIntent.mock.calls[0]![2].signal).toBe(EMOJI);
+  });
+});
+
 // ─── Modo `permanencia: 'agente'`: a permanência vence com o tempo ───
 describe("resolveTurnAgent: no modo 'agente' a permanência expira", () => {
   const AGORA = new Date('2026-10-12T15:00:00Z');

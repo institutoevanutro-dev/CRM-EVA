@@ -19,7 +19,7 @@
  *
  * UMA chamada: o handler de `inbound_turn` (`createInboundTurnHandler`, em
  * `inbound-turn.ts`), ANTES de rotear e ANTES de anotar o que o turno viu. O
- * roteador lê a inbound mais nova, e áudio sem transcrição não é sinal nenhum
+ * roteador lê as inbounds sem resposta do turno, e áudio sem transcrição não é sinal nenhum
  * para ele; a anotação já deixa de fora a mídia pendente, então anotar depois da
  * espera promete o que a abertura do turno vai ler (a que vira texto entre a
  * anotação e essa leitura a faz reanotar e reler: `reanotarSeOCorteMudou`; a
