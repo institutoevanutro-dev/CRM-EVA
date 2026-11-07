@@ -36,6 +36,7 @@ import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import type { ActivityType } from "@/lib/leads/activity-vocabulary";
 import { logger } from "@/lib/logger";
+import { MOTIVO_ENVIO_VETADO } from "@/lib/agent-engine/edge/crm/send-ledger";
 
 import { resolveAlvoDoRetorno } from "./retorno-crm";
 import { flowGraphSchema, type FlowEdge, type FlowNode } from "./graph-schema";
@@ -56,6 +57,15 @@ export function podePausar(status: string): boolean {
 }
 export function podeRetomar(status: string): boolean {
   return status === STATUS_PAUSA_MANUAL;
+}
+/**
+ * Reativar desfaz um cancelamento, e SÓ o do envio recusado pelas regras do
+ * atendimento (`MOTIVO_ENVIO_VETADO`) — o desfecho que a trava de repetição
+ * produzia ao vetar texto fixo legítimo. Qualquer outro encerramento foi
+ * decisão (de pessoa, de desfecho do fluxo, de opt-out) e não se desfaz aqui.
+ */
+export function podeReativar(status: string, cancelReason: string | null): boolean {
+  return status === "cancelled" && cancelReason === MOTIVO_ENVIO_VETADO;
 }
 /** Adiar e pular mexem no relógio e no passo: exigem um enrollment que ainda anda. */
 export function podeAdiarOuPular(status: string): boolean {
@@ -200,6 +210,7 @@ export interface EnrollmentParaIntervir {
   next_eval_at: string | null;
   claimed_until: string | null;
   steps_taken: number;
+  cancel_reason: string | null;
 }
 
 const COLUNAS = [
@@ -212,6 +223,7 @@ const COLUNAS = [
   "next_eval_at",
   "claimed_until",
   "steps_taken",
+  "cancel_reason",
 ].join(", ");
 
 export type FalhaDaIntervencao = {
@@ -253,6 +265,9 @@ interface Patch {
   current_node_id?: string;
   steps_taken?: number;
   claimed_until?: null;
+  completed_at?: null;
+  cancel_reason?: null;
+  outcome?: null;
   updated_at: string;
 }
 
@@ -284,6 +299,15 @@ async function aplicaPatchComGuarda(
     .or(`claimed_until.is.null,claimed_until.lt.${agoraIso}`)
     .select("id");
 
+  // Índice único de inscrição viva por contato (ou por reserva): só a
+  // reativação chega aqui, e o contato já anda noutro follow-up.
+  if (error?.code === "23505") {
+    return {
+      ok: false,
+      codigo: "estado_incompativel",
+      mensagem: "Este contato já está em outro follow-up em andamento. Nada foi alterado.",
+    };
+  }
   if (error) return { ok: false, codigo: "erro_interno", mensagem: error.message };
   if ((data ?? []).length > 0) return { ok: true };
 
@@ -633,6 +657,99 @@ export async function pulaPassoDoEnrollment(
     alvo,
     "followup_step_skipped",
     "O fluxo seguiu direto para o passo seguinte",
+    { enrollment_id: alvo.id, de: alvo.current_node_id, para: destino },
+  );
+
+  return { ok: true, enrollment: alvo, status_novo: "active", next_eval_at: agoraIso };
+}
+
+/**
+ * Reativa a MESMA inscrição encerrada pela recusa das regras do atendimento —
+ * mantém `appointment_id` e `version_id`, então a espera ancorada seguinte
+ * recalcula a data a partir da consulta e o envio passa de novo pela janela e
+ * pela cadeia inteira.
+ *
+ * `nodeId` opcional: o nó atual (reenviar o passo vetado) ou um SUCESSOR direto
+ * dele no grafo da versão (pular o passo vetado). O passo é consumido
+ * (`steps_taken + 1`) nos dois casos: no mesmo nó, sem isso, o motor leria o
+ * `turn_skipped` antigo como o turno desta estadia e ficaria rechecando até o
+ * dead-man; no sucessor, é o que o `skip` faz.
+ */
+export async function reativaEnrollment(
+  deps: DepsDaIntervencao,
+  id: string,
+  nodeId?: string | null,
+): Promise<ResultadoDaIntervencao> {
+  const agora = deps.agora ?? new Date();
+  const agoraIso = agora.toISOString();
+  const lido = await carrega(deps, id);
+  if (lido && "ok" in lido) return lido;
+  if (!lido) return { ok: false, codigo: "nao_encontrado", mensagem: "Follow-up não encontrado." };
+  if (!podeReativar(lido.status, lido.cancel_reason)) {
+    return {
+      ok: false,
+      codigo: "estado_incompativel",
+      mensagem: "Só dá para reativar um follow-up encerrado porque o envio foi recusado pelas regras do atendimento.",
+    };
+  }
+  const alvo = lido;
+
+  const { data: versao, error: versaoErr } = await deps.supabase
+    .from("followup_flow_versions")
+    .select("graph")
+    .eq("organization_id", deps.orgId)
+    .eq("id", alvo.version_id)
+    .maybeSingle();
+  if (versaoErr) return { ok: false, codigo: "erro_interno", mensagem: versaoErr.message };
+  const grafo = versao ? flowGraphSchema.safeParse(versao.graph) : null;
+  if (!grafo?.success) {
+    return {
+      ok: false,
+      codigo: "estado_incompativel",
+      mensagem: "A versão do fluxo em que este follow-up andava não existe mais. Inscreva o contato de novo.",
+    };
+  }
+  if (!grafo.data.nodes.some((n) => n.id === alvo.current_node_id)) {
+    return { ok: false, codigo: "estado_incompativel", mensagem: "O passo deste follow-up não existe mais no fluxo." };
+  }
+
+  const destino = nodeId ?? alvo.current_node_id;
+  const valido =
+    destino === alvo.current_node_id ||
+    (grafo.data.edges.some((e) => e.source === alvo.current_node_id && e.target === destino) &&
+      grafo.data.nodes.some((n) => n.id === destino));
+  if (!valido) {
+    return { ok: false, codigo: "caminho_invalido", mensagem: "O passo escolhido não vem logo depois deste no fluxo." };
+  }
+
+  const aplicado = await aplicaPatchComGuarda(
+    deps,
+    alvo,
+    {
+      status: "active",
+      current_node_id: destino,
+      next_eval_at: agoraIso,
+      steps_taken: alvo.steps_taken + 1,
+      claimed_until: null,
+      completed_at: null,
+      cancel_reason: null,
+      outcome: null,
+      updated_at: agoraIso,
+    },
+    agoraIso,
+  );
+  if (!aplicado.ok) return aplicado;
+
+  await registraEvento(deps, alvo, "reactivated_manual", {
+    from_node_id: alvo.current_node_id,
+    next_node_id: destino,
+    prior_cancel_reason: alvo.cancel_reason,
+  });
+  await registraNaTimeline(
+    deps,
+    alvo,
+    "followup_resumed",
+    "O fluxo automático voltou a andar depois de um envio recusado",
     { enrollment_id: alvo.id, de: alvo.current_node_id, para: destino },
   );
 

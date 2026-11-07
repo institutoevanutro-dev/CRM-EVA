@@ -27,6 +27,7 @@ export interface FollowupEnrollmentDossie {
   updated_at: string;
   outcome: string | null;
   cancel_reason: string | null;
+  pode_reativar: boolean;
   last_error: string | null;
   attempts: number;
   max_attempts: number;
@@ -65,7 +66,7 @@ export function useFollowupEnrollment(id: string) {
   });
 }
 
-type Intervencao = "pause" | "resume" | "snooze" | "skip";
+type Intervencao = "pause" | "resume" | "snooze" | "skip" | "reactivate";
 
 interface Variaveis {
   id: string;
@@ -78,6 +79,7 @@ const AVISO: Record<Intervencao, string> = {
   resume: "Follow-up retomado.",
   snooze: "Follow-up adiado.",
   skip: "Passo pulado.",
+  reactivate: "Follow-up reativado.",
 };
 
 /**
