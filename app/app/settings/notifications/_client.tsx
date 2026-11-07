@@ -16,6 +16,7 @@ import {
   type NotifyCategory,
   type NotifyChannelPref,
 } from "@/lib/notifications/prefs";
+import { syncPushSubscription } from "@/lib/notifications/push_client";
 
 const LABELS: Record<NotifyCategory, string> = {
   message: "Nova mensagem",
@@ -40,6 +41,8 @@ export function NotificationPrefsClient() {
       }
     }
     gravarCanal(category, channel, on);
+    // O servidor precisa saber: é ele quem manda (ou não) o push de mensagem.
+    if (category === "message" && channel === "push") void syncPushSubscription();
   }
 
   return (

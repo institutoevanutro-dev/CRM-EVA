@@ -11,6 +11,13 @@
  *
  * Organização sem o prazo ligado: nada acontece.
  *
+ * Devolvida a conversa, se o cliente escreveu durante a pausa e ninguém
+ * respondeu, pede o despacho da mensagem pendente (`pedirDespachoDoAgente`),
+ * com os mesmos filtros da segunda passada: não a mais velha que
+ * `pausa_cliente_sem_resposta_max_horas` nem a que é só despedida. Sem isso a
+ * conversa voltava à IA e a mensagem ficava sem resposta até o cliente
+ * escrever de novo.
+ *
  * SEGUNDA PASSADA — o cliente que escreveu durante a pausa por resposta humana
  * (`bot_silenced_until` finito) e ficou sem resposta: com
  * `settings.atendimento.pausa_cliente_sem_resposta_min` ligado (desligado por
@@ -49,6 +56,9 @@ import {
   lerPrazoDeDevolucaoMinutos,
   numerosComQuemAtenda,
   avaliarRetomadaPorClienteSemResposta,
+  IDADE_MAXIMA_PADRAO_HORAS,
+  motivoDeNaoResponderPendente,
+  todasSaoDespedida,
   selecionarClientesSemResposta,
   selecionarVencidas,
   type AgentePublicado,
@@ -83,6 +93,8 @@ export interface DevolucaoResultado {
   organizacoes: number;
   examinadas: number;
   devolvidas: number;
+  /** Devolvidas com mensagem do cliente pendente: o despacho dela foi pedido. */
+  despachadas: number;
   falhas: number;
 }
 
@@ -117,7 +129,7 @@ function anotarFimDoDiaSeguinte(row: LinhaDaOrganizacao, fusos: Map<string, stri
 
 async function prazosPorOrganizacao(
   admin: SupabaseClient,
-): Promise<{ prazos: Map<string, number>; fusos: Map<string, string> }> {
+): Promise<{ prazos: Map<string, number>; fusos: Map<string, string>; maxHoras: Map<string, number> }> {
   const { data, error } = await admin
     .from("organizations")
     .select("id, settings, timezone")
@@ -125,12 +137,14 @@ async function prazosPorOrganizacao(
   if (error) throw new Error(`organizations: ${error.message}`);
   const prazos = new Map<string, number>();
   const fusos = new Map<string, string>();
+  const maxHoras = new Map<string, number>();
   for (const row of (data ?? []) as LinhaDaOrganizacao[]) {
     const minutos = lerPrazoDeDevolucaoMinutos(row.settings);
     if (minutos !== null) prazos.set(row.id, minutos);
+    maxHoras.set(row.id, lerClienteSemRespostaMaxHoras(row.settings));
     anotarFimDoDiaSeguinte(row, fusos);
   }
-  return { prazos, fusos };
+  return { prazos, fusos, maxHoras };
 }
 
 async function sessoesComAgente(
@@ -232,26 +246,85 @@ async function anotarFalaDaEquipe(
   }
 }
 
+type Pendente = { id: string; type: string | null; body: string | null };
+
+/**
+ * As mensagens do cliente depois da última saída, a mais nova primeiro (a
+ * mesma ordem do anti-backlog do drain, que só aceita o despacho da última).
+ * Teto de `PENDENTES_LIDAS` por conversa.
+ */
+async function lerPendentes(
+  admin: SupabaseClient,
+  conversa: { id: string; organization_id: string; last_outbound_at: string | null },
+): Promise<{ pendentes: Pendente[]; erro: string | null }> {
+  let consulta = admin
+    .from("messages")
+    .select("id, type, body")
+    .eq("organization_id", conversa.organization_id)
+    .eq("conversation_id", conversa.id)
+    .eq("direction", "inbound");
+  if (conversa.last_outbound_at) consulta = consulta.gt("created_at", conversa.last_outbound_at);
+  const { data, error } = await consulta
+    .order("sent_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(PENDENTES_LIDAS);
+  return { pendentes: (data ?? []) as Pendente[], erro: error?.message ?? null };
+}
+
+/**
+ * Pede de novo o despacho da mensagem pendente. Necessário porque o despacho
+ * original dela foi descartado pelo drain (conversa silenciada), e
+ * `devolverAtendimentoAoAgente` só solta as travas, não responde ninguém.
+ */
+async function pedirRespostaDaPendente(
+  admin: SupabaseClient,
+  conversa: { id: string; organization_id: string; contact_id: string | null; channel_session_id: string | null },
+  messageId: string,
+  requestId: string,
+): Promise<boolean> {
+  return (
+    conversa.contact_id !== null &&
+    conversa.channel_session_id !== null &&
+    (await pedirDespachoDoAgente(admin as Parameters<typeof pedirDespachoDoAgente>[0], {
+      organizationId: conversa.organization_id,
+      contactId: conversa.contact_id,
+      conversationId: conversa.id,
+      messageId,
+      channelSessionId: conversa.channel_session_id,
+      texto: null,
+      nomeDoContato: null,
+      requestId,
+      origem: "cron:handoff-devolucao",
+    }))
+  );
+}
+
 export async function devolverHandoffsVencidos(
   admin: SupabaseClient,
   requestId: string,
   agora: Date = new Date(),
 ): Promise<DevolucaoResultado> {
-  const { prazos: prazoPorOrg, fusos: fusoDoFimDoDiaSeguinte } = await prazosPorOrganizacao(admin);
-  if (prazoPorOrg.size === 0) return { organizacoes: 0, examinadas: 0, devolvidas: 0, falhas: 0 };
+  const {
+    prazos: prazoPorOrg,
+    fusos: fusoDoFimDoDiaSeguinte,
+    maxHoras: maxHorasPorOrg,
+  } = await prazosPorOrganizacao(admin);
+  if (prazoPorOrg.size === 0) return { organizacoes: 0, examinadas: 0, devolvidas: 0, despachadas: 0, falhas: 0 };
   const orgIds = [...prazoPorOrg.keys()];
 
   const { data, error } = await admin
     .from("conversations")
     .select(
-      "id, organization_id, channel_session_id, status, assignee_kind, assigned_to_user_id, assigned_at, bot_silenced_until, last_handoff_at, last_outbound_at, status_changed_at, contacts!conversations_contact_id_fkey(is_blocked, ai_opt_out)",
+      "id, organization_id, contact_id, channel_session_id, status, assignee_kind, assigned_to_user_id, assigned_at, bot_silenced_until, last_handoff_at, last_inbound_at, last_outbound_at, status_changed_at, contacts!conversations_contact_id_fkey(is_blocked, ai_opt_out)",
     )
     .in("organization_id", orgIds)
     .in("status", ["open", "pending", "claimed", "ai_handling"])
     .or("bot_silenced_until.eq.infinity,assignee_kind.eq.user,assigned_to_user_id.not.is.null")
     .limit(SCAN_LIMIT);
   if (error) throw new Error(`conversations: ${error.message}`);
-  const conversas = (data ?? []) as unknown as ConversaEmHandoff[];
+  const conversas = (data ?? []) as unknown as Array<
+    ConversaEmHandoff & { contact_id?: string | null; last_inbound_at?: string | null }
+  >;
   await anotarFalaDaEquipe(admin, conversas, fusoDoFimDoDiaSeguinte, requestId);
 
   const vencidas = selecionarVencidas(conversas, {
@@ -262,14 +335,39 @@ export async function devolverHandoffsVencidos(
   });
 
   let devolvidas = 0;
+  let despachadas = 0;
   let falhas = 0;
-  for (const { conversa, minutos } of vencidas) {
+  for (const { conversa: vencida, minutos } of vencidas) {
+    const conversa = vencida as (typeof conversas)[number];
     const r = await devolverAtendimentoAoAgente(
       { supabase: admin, organizationId: conversa.organization_id, actor: ATOR_DO_CRON, requestId },
       { conversationId: conversa.id, origem: { automatica: { minutos } } },
     );
     if (r.ok) {
       devolvidas++;
+      // O cliente escreveu durante a pausa e ninguém respondeu: mesmos filtros
+      // da segunda passada (idade máxima e despedida) antes de pedir resposta.
+      const maxHoras = maxHorasPorOrg.get(conversa.organization_id) ?? IDADE_MAXIMA_PADRAO_HORAS;
+      if (motivoDeNaoResponderPendente(conversa, maxHoras, agora.getTime()) !== null) continue;
+      const { pendentes, erro } = await lerPendentes(admin, conversa);
+      const ultima = pendentes[0];
+      if (!erro && ultima !== undefined && todasSaoDespedida(pendentes)) continue;
+      if (!erro && ultima !== undefined) {
+        const alvo = { ...conversa, contact_id: conversa.contact_id ?? null };
+        if (await pedirRespostaDaPendente(admin, alvo, ultima.id, requestId)) {
+          despachadas++;
+          continue;
+        }
+      }
+      // A conversa JÁ voltou ao agente; a próxima mensagem do cliente será
+      // respondida. Esta ficou sem — é falha, e aparece na rodada.
+      falhas++;
+      logger.error("[handoff-devolucao] devolveu, mas o despacho da mensagem pendente falhou", {
+        conversation_id: conversa.id,
+        organization_id: conversa.organization_id,
+        detalhe: erro ?? (ultima === undefined ? "sem inbound depois da última saída" : "emit falhou"),
+        requestId,
+      });
       continue;
     }
     if (recusaBenigna(r)) continue;
@@ -283,7 +381,7 @@ export async function devolverHandoffsVencidos(
     });
   }
 
-  return { organizacoes: prazoPorOrg.size, examinadas: conversas.length, devolvidas, falhas };
+  return { organizacoes: prazoPorOrg.size, examinadas: conversas.length, devolvidas, despachadas, falhas };
 }
 
 /**
@@ -429,18 +527,7 @@ export async function retomarClientesSemRespostaNaPausa(
     // última). Lidas ANTES de decidir: se TODAS forem despedida ("obrigada",
     // figurinha), a conversa fica na pausa; "qual o horário?" seguido de
     // "obrigada" ainda espera resposta. Teto de 10 por conversa.
-    let consulta = admin
-      .from("messages")
-      .select("id, type, body")
-      .eq("organization_id", conversa.organization_id)
-      .eq("conversation_id", conversa.id)
-      .eq("direction", "inbound");
-    if (conversa.last_outbound_at) consulta = consulta.gt("created_at", conversa.last_outbound_at);
-    const { data: msgs, error: msgErr } = await consulta
-      .order("sent_at", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(PENDENTES_LIDAS);
-    const pendentes = (msgs ?? []) as Array<{ id: string; type: string | null; body: string | null }>;
+    const { pendentes, erro: msgErr } = await lerPendentes(admin, conversa);
     const ultima = pendentes[0];
     // Lista vazia com `last_inbound_at > last_outbound_at` é leitura
     // inconsistente: sem a mensagem não há o que despachar, então é falha e a
@@ -450,7 +537,7 @@ export async function retomarClientesSemRespostaNaPausa(
       logger.error("[handoff-devolucao] mensagem pendente ilegível — conversa segue na pausa", {
         conversation_id: conversa.id,
         organization_id: conversa.organization_id,
-        detalhe: msgErr?.message ?? "sem inbound depois da última saída",
+        detalhe: msgErr ?? "sem inbound depois da última saída",
         requestId,
       });
       continue;
@@ -492,22 +579,7 @@ export async function retomarClientesSemRespostaNaPausa(
       continue;
     }
 
-    const messageId = ultima.id;
-    const pedido =
-      conversa.contact_id !== null &&
-      conversa.channel_session_id !== null &&
-      (await pedirDespachoDoAgente(admin as Parameters<typeof pedirDespachoDoAgente>[0], {
-        organizationId: conversa.organization_id,
-        contactId: conversa.contact_id,
-        conversationId: conversa.id,
-        messageId,
-        channelSessionId: conversa.channel_session_id,
-        texto: null,
-        nomeDoContato: null,
-        requestId,
-        origem: "cron:handoff-devolucao",
-      }));
-    if (pedido) {
+    if (await pedirRespostaDaPendente(admin, conversa, ultima.id, requestId)) {
       retomadas++;
       continue;
     }

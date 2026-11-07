@@ -82,10 +82,9 @@ export function useNotificationPermission(): {
   const setEnabled = useCallback((on: boolean) => {
     setAlertsEnabled(on);
     setEnabledState(on);
-    if (on) {
-      void resumeAudio();
-      void ensureNotifyServiceWorker().then(() => syncPushSubscription());
-    }
+    if (on) void resumeAudio();
+    // Nos dois sentidos: desligar também avisa o servidor (`recebe_mensagens`).
+    void ensureNotifyServiceWorker().then(() => syncPushSubscription());
     confirmOnOs(on);
   }, []);
 
