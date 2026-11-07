@@ -1,4 +1,4 @@
--- Migration 0408 : INTERVALO MÍNIMO ENTRE RESPOSTAS DA IA, por agente.
+-- Migration 0405 : INTERVALO MÍNIMO ENTRE RESPOSTAS DA IA, por agente.
 -- Porte do projeto original (DeskcommCRM, PR #3940 de @vinicoretecnologia-svg; 9101 lá).
 --
 -- Até aqui o agente só tinha a janela de rajada da instalação: ela junta as
