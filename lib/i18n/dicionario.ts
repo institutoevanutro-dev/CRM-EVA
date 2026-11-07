@@ -878,6 +878,7 @@ export const DICIONARIO: Traducoes = {
   "Nenhuma conversa nova nos últimos 30 dias.": { es: "Ninguna conversación nueva en los últimos 30 días." },
   "conversas novas": { es: "conversaciones nuevas" },
   "a IA resolveu sozinha": { es: "la IA resolvió sola" },
+  "ficaram sem resposta": { es: "quedaron sin respuesta" },
   "passaram para a equipe": { es: "pasaron al equipo" },
   "até a primeira resposta": { es: "hasta la primera respuesta" },
   "IA sozinha": { es: "IA sola" },

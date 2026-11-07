@@ -67,12 +67,16 @@ export type NumerosDeHoje =
   | { ok: false }
   | null;
 
-// Verde da marca para a IA, dourado para a equipe e neutro para quem ficou sem resposta.
+// Verde da marca para a IA, dourado para a equipe e erro (com hachura) para quem
+// ficou sem resposta: é a faixa que pede ação, então é a que mais aparece. Os
+// `--grafico-*` mudam no escuro (globals.css); a IA usa `accent-strong`, que já
+// é o 700 no claro e o 300 no escuro, e segue a cor da marca da instalação.
 const CORES = {
-  ia: "var(--color-accent-600)",
-  equipe: "var(--color-gold)",
-  semResposta: "var(--color-neutral-300)",
+  ia: "var(--color-accent-strong)",
+  equipe: "var(--grafico-equipe)",
+  semResposta: "var(--grafico-sem-resposta)",
 };
+const HACHURA = "hachura-sem-resposta";
 
 function Falhou() {
   const t = useT();
@@ -271,12 +275,12 @@ function PainelConversas({ p }: { p: Conversas }) {
   if (!total) return <Vazio texto="Nenhuma conversa nova nos últimos 30 dias." />;
   const soma = (k: keyof Omit<DiaDeConversas, "dia">) => p.dias.reduce((s, d) => s + d[k], 0);
   const dados = p.dias.map((d) => ({ ...d, rotulo: d.dia.slice(8, 10) + "/" + d.dia.slice(5, 7) }));
-  const iaSozinha = soma("ia_sozinha");
+  const semResposta = soma("sem_resposta");
   const comEquipe = soma("com_equipe");
   const legenda = [
-    { cor: CORES.ia, rotulo: t("IA sozinha") },
-    { cor: CORES.equipe, rotulo: t("Com a equipe") },
-    { cor: CORES.semResposta, rotulo: t("Sem resposta") },
+    { cor: CORES.semResposta, rotulo: t("Sem resposta"), hachura: true },
+    { cor: CORES.ia, rotulo: t("IA sozinha"), hachura: false },
+    { cor: CORES.equipe, rotulo: t("Com a equipe"), hachura: false },
   ];
   return (
     <>
@@ -285,9 +289,13 @@ function PainelConversas({ p }: { p: Conversas }) {
           <span className="numero-destaque block whitespace-nowrap text-text">{total}</span>
           <span className="text-text-muted">{t("conversas novas")}</span>
         </p>
+        {/* No lugar de "a IA resolveu sozinha", que já está no topo em %: o
+            paciente sem retorno precisa de número e de porta, não só de cor. */}
         <p>
-          <span className="numero-destaque block whitespace-nowrap text-text">{iaSozinha}</span>
-          <span className="text-text-muted">{t("a IA resolveu sozinha")}</span>
+          <a href="/app/radar" className="text-error-fg hover:underline">
+            <span className="numero-destaque block whitespace-nowrap">{semResposta}</span>
+            <span>{t("ficaram sem resposta")}</span>
+          </a>
         </p>
         <p>
           <span className="numero-destaque block whitespace-nowrap text-text">{comEquipe}</span>
@@ -321,16 +329,32 @@ function PainelConversas({ p }: { p: Conversas }) {
               cursor={{ fill: "var(--color-row-hover)" }}
               contentStyle={{ borderRadius: 10, border: "1px solid var(--color-border)", background: "var(--color-surface)", fontSize: 12 }}
             />
-            <Bar dataKey="ia_sozinha" name={t("IA sozinha")} stackId="c" isAnimationActive={false} fill={CORES.ia} />
-            <Bar dataKey="com_equipe" name={t("Com a equipe")} stackId="c" isAnimationActive={false} fill={CORES.equipe} />
-            <Bar dataKey="sem_resposta" name={t("Sem resposta")} stackId="c" isAnimationActive={false} fill={CORES.semResposta} radius={[3, 3, 0, 0]} />
+            <defs>
+              <pattern id={HACHURA} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <rect width="6" height="6" fill={CORES.semResposta} />
+                <line x1="0" y1="0" x2="0" y2="6" stroke="var(--color-surface)" strokeOpacity="0.45" strokeWidth="2" />
+              </pattern>
+            </defs>
+            {/* Sem resposta na BASE da pilha, onde a altura se compara direto
+                com o eixo; a borda na cor da superfície separa as faixas. */}
+            <Bar dataKey="sem_resposta" name={t("Sem resposta")} stackId="c" isAnimationActive={false} fill={`url(#${HACHURA})`} stroke="var(--color-surface)" strokeWidth={1} />
+            <Bar dataKey="ia_sozinha" name={t("IA sozinha")} stackId="c" isAnimationActive={false} fill={CORES.ia} stroke="var(--color-surface)" strokeWidth={1} />
+            <Bar dataKey="com_equipe" name={t("Com a equipe")} stackId="c" isAnimationActive={false} fill={CORES.equipe} stroke="var(--color-surface)" strokeWidth={1} radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
       <ul className="mt-2 flex flex-wrap gap-4 text-xs text-text-muted">
-        {legenda.map(({ cor, rotulo }) => (
+        {legenda.map(({ cor, rotulo, hachura }) => (
           <li key={rotulo} className="flex items-center gap-1.5">
-            <span aria-hidden className="inline-block size-2.5 rounded-sm" style={{ background: cor }} />
+            <span
+              aria-hidden
+              className="inline-block size-2.5 rounded-sm"
+              style={{
+                background: hachura
+                  ? `repeating-linear-gradient(45deg, ${cor} 0 3px, color-mix(in srgb, ${cor} 55%, var(--color-surface)) 3px 5px)`
+                  : cor,
+              }}
+            />
             {rotulo}
           </li>
         ))}

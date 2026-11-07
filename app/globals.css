@@ -59,6 +59,9 @@
   --color-surface-muted: var(--color-surface-elevated);
   --color-accent-strong: var(--color-accent-hover);
   --color-warning-border: rgba(176, 122, 43, 0.4);
+  --color-gold-text: color-mix(in srgb, var(--color-gold) 60%, #000);
+  --grafico-equipe: var(--color-gold-text);
+  --grafico-sem-resposta: var(--color-error);
 
   /* Accent — Sage (11 stops) */
   --color-accent-50:  #f3f6f1;
@@ -302,6 +305,9 @@
   --color-surface-muted: var(--color-surface-elevated);
   --color-accent-strong: var(--color-accent-hover);
   --color-warning-border: rgba(176, 122, 43, 0.4);
+  --color-gold-text: color-mix(in srgb, var(--color-gold) 60%, #000);
+  --grafico-equipe: var(--color-gold-text);
+  --grafico-sem-resposta: var(--color-error);
   --color-accent: var(--color-accent-600);
   --color-accent-fg: #ffffff;
   --color-accent-soft: var(--color-accent-100);
@@ -398,6 +404,9 @@
   --color-surface-muted: var(--color-surface-elevated);
   --color-accent-strong: var(--color-accent-hover);
   --color-warning-border: rgba(208, 148, 85, 0.4);
+  --color-gold-text: var(--color-gold);
+  --grafico-equipe: var(--color-gold);
+  --grafico-sem-resposta: var(--color-error);
 
   /* Accent stays same hex stops; default shifts up for dark contrast */
   --color-accent-50:  #f3f6f1;
@@ -595,6 +604,7 @@
   --color-surface-muted: var(--color-surface-muted);
   --color-accent-strong: var(--color-accent-strong);
   --color-warning-border: var(--color-warning-border);
+  --color-gold-text: var(--color-gold-text);
   --color-input: var(--color-border);
   --color-ring: var(--color-accent-500);
   --color-background: var(--color-bg);
