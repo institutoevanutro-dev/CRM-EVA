@@ -49,6 +49,8 @@ interface LinhaDeContato {
   phone_number: string | null;
   email: string | null;
   email_normalized: string | null;
+  /** Lido porque `ligadosPorMotivoForte` compara CPF (porte do original #4104). */
+  cpf_hash: string | null;
   source_metadata: Record<string, unknown> | null;
 }
 
@@ -76,7 +78,7 @@ export async function dispensarParDeContatos(
     ]);
 
     const { rows } = await db.query<LinhaDeContato>(
-      `select id, phone_number, email, email_normalized, source_metadata
+      `select id, phone_number, email, email_normalized, cpf_hash, source_metadata
          from public.contacts
         where organization_id = $1
           and id = any($2::uuid[])

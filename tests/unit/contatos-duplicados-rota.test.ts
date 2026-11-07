@@ -85,6 +85,36 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
+/**
+ * O índice do CPF (porte do original #4104/#4225): `authenticated` não lê
+ * `cpf_hash` (0289), então a rota o pede ao cliente administrador, em lotes de
+ * ids e na organização da sessão. O dublê lê `cpf_hash` das próprias linhas.
+ */
+const leiturasDeCpf = vi.hoisted(() => ({ chamadas: [] as { metodo: string; args: unknown[] }[], erro: false }));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    from: () => {
+      const c: Record<string, unknown> = {};
+      let ids: string[] = [];
+      for (const metodo of ["select", "eq", "in", "not"]) {
+        c[metodo] = (...args: unknown[]) => {
+          leiturasDeCpf.chamadas.push({ metodo, args });
+          if (metodo === "in") ids = args[1] as string[];
+          return c;
+        };
+      }
+      c.then = (res: (v: unknown) => unknown) => {
+        if (leiturasDeCpf.erro) return Promise.resolve({ data: null, error: { message: "boom" } }).then(res);
+        const data = contatos
+          .filter((l) => ids.includes(l.id as string) && typeof l.cpf_hash === "string")
+          .map((l) => ({ id: l.id, cpf_hash: l.cpf_hash }));
+        return Promise.resolve({ data, error: null }).then(res);
+      };
+      return c;
+    },
+  }),
+}));
+
 const rota = await import("@/app/api/v1/contacts/duplicates/route");
 const GET = (url = "http://localhost/api/v1/contacts/duplicates") => rota.GET(new Request(url));
 
@@ -133,6 +163,8 @@ beforeEach(() => {
   dispensa.pares.clear();
   dispensa.erro = false;
   dispensa.leituras = 0;
+  leiturasDeCpf.chamadas = [];
+  leiturasDeCpf.erro = false;
   vi.mocked(auditarLeitura).mockClear();
 });
 
@@ -299,5 +331,40 @@ describe("GET /api/v1/contacts/duplicates — nome parecido, só para gestor (po
     contatos = Array.from({ length: 10 }, (_, k) => contato(k + 1));
     await GET();
     expect(auditarLeitura).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/v1/contacts/duplicates — o mesmo CPF (porte do original #4104/#4225)", () => {
+  const HASH = "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00";
+
+  it("une o par pelo CPF lido no servidor, na organização da sessão, e não devolve o hash", async () => {
+    contatos = [
+      contato(1, { name: "Paciente Ficticia Um", cpf_hash: HASH }),
+      contato(2, { name: "Outra Grafia Ficticia", cpf_hash: HASH }),
+      contato(3),
+    ];
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const corpo = (await res.json()) as Corpo;
+    expect(corpo.data).toHaveLength(1);
+    expect(corpo.data[0]!.motivos).toEqual(["cpf"]);
+    expect(JSON.stringify(corpo)).not.toContain(HASH);
+    expect(JSON.stringify(corpo)).not.toContain("cpf_hash");
+    // A sessão não pede a coluna; o administrador pede, filtrado pela org.
+    expect(String(selectsDeContatos()[0]?.args[0])).not.toContain("cpf_hash");
+    expect(leiturasDeCpf.chamadas).toContainEqual({ metodo: "eq", args: ["organization_id", "ORG"] });
+  });
+
+  it("lê o CPF em lotes de até 100 ids", async () => {
+    contatos = Array.from({ length: 250 }, (_, k) => contato(k + 1));
+    await GET();
+    const lotes = leiturasDeCpf.chamadas.filter((c) => c.metodo === "in").map((c) => (c.args[1] as string[]).length);
+    expect(lotes).toEqual([100, 100, 50]);
+  });
+
+  it("falha ao ler o CPF vira 500, não lista sem ele", async () => {
+    leiturasDeCpf.erro = true;
+    const res = await GET();
+    expect(res.status).toBe(500);
   });
 });

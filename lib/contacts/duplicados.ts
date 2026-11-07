@@ -22,7 +22,13 @@
  * `if not exists` e o `update.sh` do clone roda **sem** `ON_ERROR_STOP`: numa
  * instalação onde a criação falhou (dados já duplicados na época), o índice
  * simplesmente não existe e a duplicata exata é possível. Procurar por ela custa
- * seis linhas e é a única coisa que enxerga esse clone.
+ * seis linhas e é a única coisa que enxerga esse clone. Vale igual para o
+ * `uniq_contacts_org_cpf` sobre `cpf_hash` (porte do original #4104): o CPF entra
+ * aqui pelo mesmo argumento do telefone e do e-mail.
+ *
+ * O `cpf_hash` é PII derivada: entra na comparação e NÃO sai na resposta da
+ * rota. Desde a 0289 `authenticated` não lê a coluna; quem a traz é o servidor
+ * (`app/api/v1/contacts/duplicates/route.ts`), filtrado pela organização.
  *
  * ─── Nome parecido: sugestão, não igualdade (porte do #3640) ────────────────
  * Tudo acima é IGUALDADE (o mesmo número, o mesmo e-mail). `nome_parecido` não
@@ -43,6 +49,7 @@ export type MotivoDeDuplicidade =
   | "telefone"
   | "email"
   | "telefone_em_conflito"
+  | "cpf"
   | "mesmo_nome_instagram_whatsapp"
   | "nome_parecido";
 
@@ -57,6 +64,12 @@ export interface ContatoParaDeduplicar {
   email: string | null;
   email_normalized: string | null;
   phone_number: string | null;
+  /**
+   * HMAC do CPF (`lib/contacts/cpf.ts`, 0289). Obrigatório no recorte de
+   * propósito: quem monta um contato para deduplicar tem de dizer o que sabe do
+   * CPF. `null`/vazio nunca casa: vazio não é documento.
+   */
+  cpf_hash: string | null;
   is_merged_into: string | null;
   is_anonymized: boolean;
   source_metadata: Record<string, unknown> | null;
@@ -114,6 +127,15 @@ export function telefoneEmConflito(contato: Pick<ContatoParaDeduplicar, "source_
 }
 
 /**
+ * Chave de agrupamento por CPF: o índice que a gravação calculou. `""` e `null`
+ * são a AUSÊNCIA de documento; tratá-los como chave agruparia todas as fichas sem
+ * CPF numa só. Quem chama descarta a chave vazia.
+ */
+export function chaveDeCpf(contato: Pick<ContatoParaDeduplicar, "cpf_hash">): string {
+  return (contato.cpf_hash ?? "").trim();
+}
+
+/**
  * Um contato só é candidato se está VIVO.
  *
  * `is_merged_into` já resolvido sai porque a fusão dele acabou. Anonimizado sai
@@ -165,11 +187,15 @@ export function encontrarContatosDuplicados(
 
   const porTelefone = new Map<string, string[]>();
   const porEmail = new Map<string, string[]>();
+  const porCpf = new Map<string, string[]>();
   for (const contato of vivos) {
     const telefone = chaveDeTelefone(contato.phone_number);
     if (telefone) porTelefone.set(telefone, [...(porTelefone.get(telefone) ?? []), contato.id]);
     const email = chaveDeEmail(contato);
     if (email) porEmail.set(email, [...(porEmail.get(email) ?? []), contato.id]);
+    // Chave vazia não entra: `null === null` agruparia todas as fichas sem CPF.
+    const cpf = chaveDeCpf(contato);
+    if (cpf) porCpf.set(cpf, [...(porCpf.get(cpf) ?? []), contato.id]);
   }
 
   for (const ids of porTelefone.values()) {
@@ -177,6 +203,9 @@ export function encontrarContatosDuplicados(
   }
   for (const ids of porEmail.values()) {
     for (let i = 1; i < ids.length; i++) unir(ids[0]!, ids[i]!, "email");
+  }
+  for (const ids of porCpf.values()) {
+    for (let i = 1; i < ids.length; i++) unir(ids[0]!, ids[i]!, "cpf");
   }
   for (const contato of vivos) {
     const conflito = telefoneEmConflito(contato);
@@ -300,19 +329,24 @@ export function parDeContatos(a: string, b: string): string {
 }
 
 /**
- * Os dois já estão ligados por motivo FORTE (mesmo telefone, mesmo e-mail, ou o
- * telefone em conflito de um apontando para o outro). Par assim não é sugestão
- * de nome e não se dispensa: junta-se.
+ * Os dois já estão ligados por motivo FORTE (mesmo telefone, mesmo e-mail, mesmo
+ * CPF, ou o telefone em conflito de um apontando para o outro). Par assim não é
+ * sugestão de nome e não se dispensa: junta-se. Quem lê o par do banco tem de
+ * trazer `cpf_hash`; a comparação exige chave não vazia, então a coluna ausente
+ * nunca liga um par por acidente.
  */
-export function ligadosPorMotivoForte(
-  a: Pick<ContatoParaDeduplicar, "phone_number" | "email" | "email_normalized" | "source_metadata">,
-  b: Pick<ContatoParaDeduplicar, "phone_number" | "email" | "email_normalized" | "source_metadata">,
-): boolean {
+type LadoDoPar = Pick<
+  ContatoParaDeduplicar,
+  "phone_number" | "email" | "email_normalized" | "cpf_hash" | "source_metadata"
+>;
+export function ligadosPorMotivoForte(a: LadoDoPar, b: LadoDoPar): boolean {
   const telefoneA = chaveDeTelefone(a.phone_number);
   const telefoneB = chaveDeTelefone(b.phone_number);
   if (telefoneA && telefoneA === telefoneB) return true;
   const emailA = chaveDeEmail(a);
   if (emailA && emailA === chaveDeEmail(b)) return true;
+  const cpfA = chaveDeCpf(a);
+  if (cpfA && cpfA === chaveDeCpf(b)) return true;
   const conflitoA = telefoneEmConflito(a);
   if (conflitoA && conflitoA === telefoneB) return true;
   const conflitoB = telefoneEmConflito(b);

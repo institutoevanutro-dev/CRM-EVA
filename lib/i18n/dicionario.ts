@@ -6675,6 +6675,7 @@ export const DICIONARIO: Traducoes = {
   "Agrupados por": { es: "Agrupados por" },
   "mesmo telefone": { es: "mismo teléfono" },
   "mesmo e-mail": { es: "mismo correo" },
+  "mesmo CPF": { es: "mismo CPF" },
   "telefone que o WhatsApp deixou em conflito": {
     es: "teléfono que WhatsApp dejó en conflicto",
   },
@@ -6788,8 +6789,8 @@ export const DICIONARIO: Traducoes = {
   "Um dos contatos não está disponível — ele pode ter sido anonimizado ou já mesclado em outro.": {
     es: "Uno de los contactos no está disponible — puede haber sido anonimizado o ya fusionado en otro.",
   },
-  "Mesmo telefone ou mesmo e-mail não se dispensa: junte as fichas.": {
-    es: "Mismo teléfono o mismo correo no se descarta: junta las fichas.",
+  "Mesmo telefone, mesmo e-mail ou mesmo CPF não se dispensa: junte as fichas.": {
+    es: "Mismo teléfono, mismo correo o mismo CPF no se descarta: junta las fichas.",
   },
   "Não foi possível dispensar a sugestão agora.": { es: "No se pudo descartar la sugerencia ahora." },
   "A ficha ligada ao prontuário tem de ser a que fica. Se as duas estão ligadas, são pacientes diferentes no prontuário e não se juntam.":
