@@ -121,9 +121,30 @@ describe("push de mensagem recebida: só a quem pode ver a conversa", () => {
   it("só o service role executa", () => {
     const out = sql(`
       select string_agg(r, ',' order by r) from unnest(array['anon','authenticated','service_role']) r
-       where has_function_privilege(r, 'public.fn_push_inscricoes_que_veem_a_conversa(uuid, uuid)', 'execute');
+       where has_function_privilege(r, 'public.fn_push_inscricoes_que_veem_a_conversa(uuid, uuid, boolean)', 'execute');
     `);
     expect(lastLine(out)).toBe("service_role");
+  });
+
+  it("a versão de dois argumentos (antes da 0404) não existe mais", () => {
+    const out = sql(`select count(*) from pg_proc where proname = 'fn_push_inscricoes_que_veem_a_conversa';`);
+    expect(lastLine(out)).toBe("1");
+  });
+
+  // Migration 0404: quem desligou "Nova mensagem › Push" não recebe mensagem
+  // nova; a menção (terceiro argumento false) ainda chega a ele.
+  it("inscrição com recebe_mensagens=false não volta; com o terceiro argumento false, volta", () => {
+    sql(`update public.push_subscriptions set recebe_mensagens = false where endpoint = '${SUB.b}';`);
+    try {
+      expect(inscricoesQueVeem(GOV_ORG, GOV_CONV_AGENT_B)).toEqual([SUB.manager]);
+      const out = sql(
+        `select coalesce(string_agg(endpoint, ',' order by endpoint), '')
+           from public.fn_push_inscricoes_que_veem_a_conversa('${GOV_ORG}', '${GOV_CONV_AGENT_B}', false);`,
+      );
+      expect(lastLine(out).split(",").sort()).toEqual([SUB.b, SUB.manager].sort());
+    } finally {
+      sql(`update public.push_subscriptions set recebe_mensagens = true where endpoint = '${SUB.b}';`);
+    }
   });
 
   // Daqui para baixo muda o visibility_mode do GOV_ORG (cada arquivo tem banco

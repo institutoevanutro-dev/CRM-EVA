@@ -108,13 +108,18 @@ export async function enviarPushAQuemVeAConversa(
   conversationId: string,
   payload: PushPayload,
   admin: Pick<SupabaseClient, "rpc" | "from"> = createAdminClient(),
-  /** Restringe a estes usuários (a menção vai só ao mencionado — se ele vê). */
+  /**
+   * Restringe a estes usuários (a menção vai só ao mencionado — se ele vê).
+   * Com a lista, a escolha "Nova mensagem › Push" (`recebe_mensagens`, 0404)
+   * não se aplica: ser mencionado é pedido de gente, não mensagem nova.
+   */
   soUsuarios?: readonly string[],
 ): Promise<{ sent: number; gone: number }> {
   if (!vapidPronto()) return { sent: 0, gone: 0 };
   const { data, error } = await admin.rpc("fn_push_inscricoes_que_veem_a_conversa", {
     p_org: organizationId,
     p_conversation: conversationId,
+    p_so_quem_recebe_mensagens: soUsuarios === undefined,
   });
   if (error) {
     logger.warn("push_subscriptions_visible_list_failed", { detail: error.message });

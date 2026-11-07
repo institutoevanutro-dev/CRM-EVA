@@ -52,7 +52,10 @@ describe("enviarPushAQuemVeAConversa", () => {
     const { admin, chamadas } = adminFalso([{ id: "s1", user_id: "u-a", endpoint: "https://push/a" }]);
     const r = await enviarPushAQuemVeAConversa("org-1", "conv-1", payload, admin as never);
     expect(chamadas).toEqual([
-      ["fn_push_inscricoes_que_veem_a_conversa", { p_org: "org-1", p_conversation: "conv-1" }],
+      [
+        "fn_push_inscricoes_que_veem_a_conversa",
+        { p_org: "org-1", p_conversation: "conv-1", p_so_quem_recebe_mensagens: true },
+      ],
     ]);
     expect(r).toEqual({ sent: 1, gone: 0 });
     expect(sendNotification.mock.calls.map((c) => (c[0] as { endpoint: string }).endpoint)).toEqual([
@@ -78,5 +81,16 @@ describe("enviarPushAQuemVeAConversa", () => {
     const r = await enviarPushAQuemVeAConversa("org-1", "conv-1", payload, admin as never);
     expect(r).toEqual({ sent: 0, gone: 0 });
     expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it("menção (lista de usuários): pede ao banco também quem desligou 'Nova mensagem › Push' (0404)", async () => {
+    sendNotification.mockResolvedValue(undefined);
+    const { admin, chamadas } = adminFalso([
+      { id: "s1", user_id: "u-a", endpoint: "https://push/a" },
+      { id: "s2", user_id: "u-b", endpoint: "https://push/b" },
+    ]);
+    const r = await enviarPushAQuemVeAConversa("org-1", "conv-1", payload, admin as never, ["u-b"]);
+    expect(chamadas[0]?.[1]).toMatchObject({ p_so_quem_recebe_mensagens: false });
+    expect(r).toEqual({ sent: 1, gone: 0 });
   });
 });

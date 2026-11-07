@@ -10,10 +10,18 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
   return out;
 }
 
-/** Liga a inscrição Web Push depois da permissão. Sem VAPID no servidor, no-op. */
+/**
+ * Liga a inscrição Web Push depois da permissão. Sem VAPID no servidor, no-op.
+ *
+ * Inscreve SEMPRE que o navegador concedeu a permissão, mesmo com "Nova
+ * mensagem › Push" desligado: os avisos que pedem gente (a IA chamando a
+ * equipe) chegam por esta mesma inscrição. O botão vai junto, em
+ * `recebe_mensagens` (migration 0404), e o servidor deixa de mandar mensagem
+ * nova a quem o desligou. Chame de novo quando o botão mudar.
+ */
 export async function syncPushSubscription(): Promise<void> {
   if (typeof window === "undefined") return;
-  if (getPermission() !== "granted" || !areAlertsEnabled()) return;
+  if (getPermission() !== "granted") return;
   const reg = await ensureNotifyServiceWorker();
   if (!reg?.pushManager) return;
 
@@ -38,6 +46,7 @@ export async function syncPushSubscription(): Promise<void> {
     body: JSON.stringify({
       endpoint: json.endpoint,
       keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+      recebe_mensagens: areAlertsEnabled(),
     }),
   });
 }

@@ -1,6 +1,11 @@
 import { setAlertsEnabled } from "./permission";
 
 export const NOTIFY_UI_CATEGORIES = [
+  // A IA passou a conversa para a equipe (aviso `handoff` da Central). Primeira
+  // de propósito: é por ela que o celular pede permissão sem ligar o push de
+  // cada mensagem. O servidor manda esse aviso a toda inscrição; o botão decide
+  // se este navegador se inscreve.
+  "handoff",
   "message",
   "lead_assigned",
   "lead_won",
@@ -25,6 +30,7 @@ export function prefsPadrao(): NotifyPrefs {
     }
   }
   return {
+    handoff: { in_app: true, push: true },
     message: { in_app: true, push: pushMsg },
     lead_assigned: { in_app: true, push: true },
     lead_won: { in_app: true, push: true },
@@ -94,6 +100,7 @@ export function getPrefsSnapshot(): NotifyPrefs {
 }
 
 const PREFS_DO_SERVIDOR: NotifyPrefs = {
+  handoff: { in_app: true, push: true },
   message: { in_app: true, push: true },
   lead_assigned: { in_app: true, push: true },
   lead_won: { in_app: true, push: true },

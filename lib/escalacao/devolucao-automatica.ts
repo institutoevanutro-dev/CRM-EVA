@@ -422,6 +422,24 @@ export function todasSaoDespedida(pendentes: readonly UltimaEntrada[]): boolean 
 }
 
 /**
+ * O cliente tem mensagem sem resposta (entrada depois da última saída) e ela
+ * não passou do teto de idade? `null` = há o que responder. Usada pelas DUAS
+ * passadas do cron `handoff-devolucao`: a conversa devolvida pelo prazo também
+ * pede a resposta da mensagem que ficou parada durante a pausa.
+ */
+export function motivoDeNaoResponderPendente(
+  c: { last_inbound_at?: string | null; last_outbound_at?: string | null },
+  maxHoras: number,
+  agoraMs: number,
+): "sem_mensagem_pendente" | "pendente_antiga" | null {
+  const entrada = epoch(c.last_inbound_at ?? null);
+  const saida = epoch(c.last_outbound_at ?? null) ?? Number.NEGATIVE_INFINITY;
+  if (entrada === null || entrada <= saida) return "sem_mensagem_pendente";
+  if (agoraMs - entrada > maxHoras * 3_600_000) return "pendente_antiga";
+  return null;
+}
+
+/**
  * `pendentes` são as mensagens do cliente depois da última saída (o cron lê
  * até 10, a mais nova primeiro). O cron avalia duas vezes: sem elas
  * (filtro barato, sem consulta) e, para quem passou, com ela — só então decide.
@@ -446,11 +464,11 @@ export function avaliarRetomadaPorClienteSemResposta(
   if (!c.channel_session_id || !sessoes?.has(c.channel_session_id)) {
     return { retomar: false, motivo: "sessao_sem_agente" };
   }
-  const entrada = epoch(c.last_inbound_at);
-  const saida = epoch(c.last_outbound_at) ?? Number.NEGATIVE_INFINITY;
-  if (entrada === null || entrada <= saida) return { retomar: false, motivo: "sem_mensagem_pendente" };
   const maxHoras = sel.maxHorasPorOrg?.get(c.organization_id) ?? IDADE_MAXIMA_PADRAO_HORAS;
-  if (sel.agoraMs - entrada > maxHoras * 3_600_000) return { retomar: false, motivo: "pendente_antiga" };
+  const semPendente = motivoDeNaoResponderPendente(c, maxHoras, sel.agoraMs);
+  if (semPendente !== null) return { retomar: false, motivo: semPendente };
+  const entrada = epoch(c.last_inbound_at)!;
+  const saida = epoch(c.last_outbound_at) ?? Number.NEGATIVE_INFINITY;
   // A espera conta da PRIMEIRA mensagem sem resposta: quem insiste não volta
   // para o fim da fila. `awaiting_since` anterior à última saída é resto do
   // atendimento passado — aí vale a própria última mensagem.
