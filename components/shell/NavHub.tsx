@@ -63,7 +63,7 @@ export function NavHub({
   return (
     <div className="flex h-full flex-col gap-8 p-6">
       <header>
-        <h1 className="text-[2rem] leading-tight">{traduzir(title, locale)}</h1>
+        <h1 className="titulo-tela">{traduzir(title, locale)}</h1>
         {subtitle && <p className="text-sm text-muted-foreground">{traduzir(subtitle, locale)}</p>}
       </header>
 
@@ -75,7 +75,7 @@ export function NavHub({
         >
           <h2
             id={`hub-${group}-${slug(section)}`}
-            className="text-xs font-medium tracking-wider text-muted-foreground uppercase"
+            className="rotulo-secao text-muted-foreground"
           >
             {traduzir(section, locale)}
           </h2>

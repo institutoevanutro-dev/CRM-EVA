@@ -580,9 +580,9 @@ function DetalhesTecnicos({ texto }: { texto: string | undefined }) {
 function Layout({ titulo, children }: { titulo?: string; children: React.ReactNode }) {
   const t = useT();
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
+    <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <header>
-        <h1 className="text-[2rem] leading-tight">
+        <h1 className="titulo-tela">
           {titulo ?? t("Atualização do sistema")}
         </h1>
       </header>

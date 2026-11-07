@@ -58,6 +58,17 @@ describe("deriveAgentStatus", () => {
     ).toBe("published");
   });
 
+  it("pausado pelo dono é PAUSADO, com ou sem versão publicada — não Rascunho", () => {
+    // O selo dizia "Rascunho" para quem foi pausado, e o filtro "Pausado" nunca
+    // encontrava nada (D1.7).
+    expect(
+      deriveAgentStatus({ ...base, published_version_id: "v1", paused_at: "2026-11-06T10:00:00Z" } as AgentRow),
+    ).toBe("paused");
+    expect(
+      deriveAgentStatus({ ...base, kind: "mcp_agent", paused_at: "2026-11-06T10:00:00Z" } as AgentRow),
+    ).toBe("paused");
+  });
+
   it("arquivado vence tudo", () => {
     expect(deriveAgentStatus({ ...base, archived_at: "2026-01-01", published_version_id: "v1" } as AgentRow)).toBe("archived");
   });

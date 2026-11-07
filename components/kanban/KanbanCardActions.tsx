@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useT } from "@/hooks/i18n/useT";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,22 +24,28 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { DotsThree, PencilSimple, Users } from "@/lib/ui/icons";
+import { ArrowRight, DotsThree, PencilSimple, Users } from "@/lib/ui/icons";
 import { useWinLead, useEditLead } from "@/hooks/kanban/useUpdateLead";
 import { useBulkAction } from "@/hooks/kanban/useBulkAction";
+import { useMoveCard } from "@/hooks/kanban/useMoveCard";
+import { chaveDoQuadro } from "@/hooks/kanban/useBoard";
+import { midpoint } from "@/lib/kanban/fractional-indexing";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAssignableAgents } from "@/hooks/kanban/useAssignableAgents";
 import { usePermission } from "@/hooks/auth/AuthProvider";
 import { LoseLeadDialog } from "./LoseLeadDialog";
 import { EditLeadDialog } from "./EditLeadDialog";
 import type { Lead } from "@/lib/types/leads";
+import type { BoardData, Stage } from "@/lib/kanban/types";
 
 interface KanbanCardActionsProps {
   lead: Lead;
   pipelineId: string;
+  /** As etapas do quadro, para "Mover para". Sem elas, o item não aparece. */
+  stages?: Stage[];
 }
 
-export function KanbanCardActions({ lead, pipelineId }: KanbanCardActionsProps) {
+export function KanbanCardActions({ lead, pipelineId, stages }: KanbanCardActionsProps) {
   const t = useT();
   const [loseOpen, setLoseOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -53,6 +61,26 @@ export function KanbanCardActions({ lead, pipelineId }: KanbanCardActionsProps) 
   const { data: members } = useAssignableMembers(canAssign);
   // A rota já devolve só agente ativo e não arquivado — é o picker.
   const { data: agents } = useAssignableAgents(canAssign);
+  // "Mover para" é a alternativa ao arraste (WCAG 2.5.7): a MESMA mutação, com o
+  // card indo para o fim da etapa. O fim é contado na etapa INTEIRA (o cache do
+  // quadro sem filtro), como no arraste, para não empatar com card escondido.
+  const qc = useQueryClient();
+  const moveCard = useMoveCard(pipelineId);
+  const moverPara = (stageId: string) => {
+    if (stageId === lead.stage_id) return;
+    const ultimo = (qc.getQueryData<BoardData>(chaveDoQuadro(pipelineId))?.leads ?? [])
+      .filter((l) => l.stage_id === stageId && l.id !== lead.id)
+      .reduce<number | null>(
+        (max, l) => (max === null || l.position_in_stage > max ? l.position_in_stage : max),
+        null,
+      );
+    moveCard.mutate({
+      leadId: lead.id,
+      stageId,
+      positionInStage: midpoint(ultimo, null),
+      expectedUpdatedAt: lead.updated_at,
+    });
+  };
 
   const reassignToUser = (ownerUserId: string | null) => {
     if (ownerUserId === lead.owner_user_id) return;
@@ -116,6 +144,29 @@ export function KanbanCardActions({ lead, pipelineId }: KanbanCardActionsProps) 
           >
             <PencilSimple size={14} className="mr-2" /> {t("Editar")}
           </DropdownMenuItem>
+          {canAssign && stages && stages.length > 1 && (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <ArrowRight size={14} className="mr-2" /> {t("Mover para")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {stages.map((s) => (
+                  <DropdownMenuItem
+                    key={s.id}
+                    disabled={moveCard.isPending || s.id === lead.stage_id}
+                    onSelect={() => moverPara(s.id)}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn("mr-2 h-2 w-2 shrink-0 rounded-full", !s.color && "bg-text-muted/40")}
+                      style={s.color ? { backgroundColor: s.color } : undefined}
+                    />
+                    {s.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          )}
           {canAssign && (
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>

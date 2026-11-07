@@ -33,7 +33,7 @@ function Preview({ preview }: { preview: TemplatePreview }) {
   const partes = preview.text.split(/(\{\{\w+\}\})/g);
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-xs uppercase tracking-wide text-muted-foreground">
+      <span className="rotulo-secao text-muted-foreground">
         {t(preview.onde)}
       </span>
       <p className="whitespace-pre-wrap text-sm leading-relaxed">
@@ -150,7 +150,7 @@ export function TemplatesClient() {
                     .filter((s) => s.expects !== "text")
                     .map((s, i) => (
                       <div key={`m:${s.onde}:${i}`} className="flex flex-col gap-0.5">
-                        <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                        <span className="rotulo-secao text-muted-foreground">
                           {t(s.onde)} · {s.expects}
                         </span>
                         <span className="text-sm text-muted-foreground">

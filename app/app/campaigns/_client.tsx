@@ -31,7 +31,7 @@ export function ListaDeCampanhas() {
   const campanhas = useMemo(() => q.data?.pages.flatMap((p) => p.data) ?? [], [q.data]);
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4">
       <CabecalhoDaPagina
         titulo={t("Campanhas")}
         descricao={t("Escolha o público, escreva a mensagem e acompanhe quem recebeu.")}

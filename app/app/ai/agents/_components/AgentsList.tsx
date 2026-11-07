@@ -4,8 +4,9 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Robot, Plus } from "@/lib/ui/icons";
+import { Funnel, Robot, Plus } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import { EmptyState } from "@/components/empty/EmptyState";
 import { useAgentsList } from "@/hooks/ai/useAgents";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import { AgentCard } from "./AgentCard";
@@ -48,11 +49,11 @@ export function AgentsList({ initialData, canWrite }: Props) {
           )}
         </p>
         {canWrite && (
-          <Link href="/app/ai/agents/new">
-            <Button className="mt-1">
+          <Button asChild className="mt-1">
+            <Link href="/app/ai/agents/new">
               <Plus size={14} aria-hidden className="mr-2" /> {t("Novo agente")}
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         )}
       </Card>
     );
@@ -70,18 +71,27 @@ export function AgentsList({ initialData, canWrite }: Props) {
           onShowArchivedChange={setShowArchived}
         />
         {canWrite && (
-          <Link href="/app/ai/agents/new">
-            <Button>
+          <Button asChild>
+            <Link href="/app/ai/agents/new">
               <Plus size={14} aria-hidden className="mr-2" /> {t("Novo agente")}
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         )}
       </div>
 
       {filtered.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-muted-foreground">
-          {t("Nenhum agente com esses filtros.")}
-        </Card>
+        <EmptyState
+          icon={Funnel}
+          headline={t("Nenhum agente com esses filtros.")}
+          subcopy={t("Tente outro status ou limpe a busca.")}
+          primary={{
+            label: t("Limpar filtros"),
+            onClick: () => {
+              setStatus("all");
+              setQuery("");
+            },
+          }}
+        />
       ) : (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((agent) => (

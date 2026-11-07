@@ -49,7 +49,7 @@ export function NomeCompletoDoPaciente({
       />
       <p
         id={`${id}-ajuda`}
-        className={cn("mt-1 text-xs", valido ? "text-text-muted" : "text-warning")}
+        className={cn("mt-1 text-xs", valido ? "text-text-muted" : "text-warning-fg")}
       >
         {valido
           ? t("Vai para o cadastro do paciente. Confira nome e sobrenome.")

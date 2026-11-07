@@ -213,7 +213,7 @@ export function LembreteDoCompromisso({ tipo, profissional }: { tipo: TipoRow; p
           {t("{{quando}} vira hoje, amanhã ou o dia da semana com a data. {{unidade}} fica vazia quando o compromisso não tem unidade.")}
         </span>
         {desconhecidas.length > 0 ? (
-          <span data-testid={`aviso-variavel-lembrete-${tipo.id}`} className="text-[11px] text-warning">
+          <span data-testid={`aviso-variavel-lembrete-${tipo.id}`} className="text-[11px] text-warning-fg">
             {t("Variável que não existe: use só as da lista.")} {desconhecidas.join(" ")}
           </span>
         ) : null}
@@ -550,12 +550,12 @@ export function TiposDeAgendamentoClient({
                     type="button"
                     data-testid={`sem-dono-${tipo.id}`}
                     onClick={() => setEditandoId(tipo.id)}
-                    className="text-xs text-warning underline underline-offset-2"
+                    className="text-xs text-warning-fg underline underline-offset-2"
                   >
                     {t("sem responsável — definir quem atende")}
                   </button>
                 ) : (
-                  <span data-testid={`sem-dono-${tipo.id}`} className="text-xs text-warning">
+                  <span data-testid={`sem-dono-${tipo.id}`} className="text-xs text-warning-fg">
                     {t("sem responsável — não aparece para marcar")}
                   </span>
                 )

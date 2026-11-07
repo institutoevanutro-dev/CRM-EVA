@@ -47,6 +47,7 @@ export function AgentsListFilters({
           <SelectItem value="all">{t("Todos")}</SelectItem>
           <SelectItem value="published">{t("Publicado")}</SelectItem>
           <SelectItem value="paused">{t("Pausado")}</SelectItem>
+          <SelectItem value="draft">{t("Rascunho")}</SelectItem>
           <SelectItem value="archived">{t("Arquivado")}</SelectItem>
         </SelectContent>
       </Select>

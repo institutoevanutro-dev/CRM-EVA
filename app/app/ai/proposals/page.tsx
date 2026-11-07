@@ -27,9 +27,9 @@ export default async function ProposalsPage() {
   const idioma = user.idioma;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <header>
-        <h1 className="text-[2rem] leading-tight">{traduzir("Propostas", idioma)}</h1>
+        <h1 className="titulo-tela">{traduzir("Propostas", idioma)}</h1>
         <p className="text-sm text-muted-foreground">
           {traduzir(
             "Próximos passos que o assistente sugeriu e esperam sua decisão. Aprovar e ignorar são registrados — ignorar é uma decisão, não a falta dela.",

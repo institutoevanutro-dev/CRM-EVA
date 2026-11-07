@@ -20,7 +20,7 @@ function formatError(err: unknown, t: (texto: string) => string): string {
   }
   return String(err);
 }
-import { KanbanBoard } from "@/components/kanban/KanbanBoard";
+import { BoardSkeleton, KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { CalendarioDoFunil } from "@/components/kanban/CalendarioDoFunil";
 import { FilterBar } from "@/components/kanban/FilterBar";
 import { BulkActionBar } from "@/components/kanban/BulkActionBar";
@@ -159,13 +159,13 @@ export function PipelinePageClient({
   return (
     <div
       // O QUADRO CABE NA TELA: com a altura da área visível (100dvh menos a
-      // barra do topo, h-14, e o p-6 do <main>), quem rola é o quadro — a barra
+      // barra do topo e a margem do <main>, variáveis do AppShell), quem rola é o quadro — a barra
       // horizontal fica no pé da tela e o nome da etapa preso em cima. Antes a
       // página rolava inteira e era preciso descer até o fim da etapa mais
       // comprida para andar para o lado. Piso de 20rem para tela baixa demais (era 28rem;
       // com as abas da área no topo, 28rem passava da janela de 600px — e2e lote-no-quadro).
       // Porte do original b0ade1e44 (jmpo).
-      className="flex h-[calc(100dvh-3.5rem-var(--altura-das-abas,0px)-3rem)] min-h-[20rem] flex-col gap-4"
+      className="flex h-[calc(100dvh-var(--altura-do-topo)-var(--altura-das-abas,0px)-2*var(--margem-do-conteudo))] min-h-[20rem] flex-col gap-4"
       // OBSERVÁVEL de propósito, e é a razão de existir desta linha: "a
       // assinatura morreu" e "nada aconteceu" produzem o MESMO silêncio na
       // tela, e sem este valor nem o produto nem o teste conseguem separar as
@@ -200,7 +200,7 @@ export function PipelinePageClient({
           então o funil escolhido sobrevive a recarregar e a link colado.
         */}
         <h1
-          className={podeTrocar ? "sr-only" : "min-w-0 truncate text-[2rem] leading-tight"}
+          className={podeTrocar ? "sr-only" : "min-w-0 truncate titulo-tela"}
           data-cor-do-funil={corAtual ?? undefined}
         >
           {podeTrocar ? null : <PontoDoFunil cor={corAtual} className="size-3" />}
@@ -218,7 +218,7 @@ export function PipelinePageClient({
               data-testid="trocar-funil"
               // As classes de fonte repetem o `h1` global (`app/globals.css`):
               // o gatilho é um botão e não herda a regra do título.
-              className="h-auto w-auto min-w-0 max-w-full gap-1.5 border-0 bg-transparent p-0 font-[family-name:var(--font-titulo)] text-[2rem] font-semibold leading-tight tracking-[-0.01em] shadow-none focus:ring-1 focus:ring-ring sm:max-w-[60%] [&>span]:truncate"
+              className="h-auto w-auto min-w-0 max-w-full gap-1.5 border-0 bg-transparent p-0 font-titulo titulo-tela font-medium text-accent dark:text-text shadow-none focus:ring-1 focus:ring-ring sm:max-w-[60%] [&>span]:truncate"
             >
               <SelectValue placeholder={nomeAtual} />
             </SelectTrigger>
@@ -319,9 +319,7 @@ export function PipelinePageClient({
           </Button>
         </div>
       ) : isLoading || !data ? (
-        <div className="flex flex-1 animate-pulse items-center justify-center text-muted-foreground">
-          {t("Carregando…")}
-        </div>
+        <BoardSkeleton />
       ) : noCalendario ? (
         // A MESMA lista filtrada do quadro: as duas visões olham o mesmo funil,
         // e o calendário não tem como mostrar a alguém um negócio que o quadro

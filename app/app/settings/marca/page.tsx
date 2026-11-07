@@ -67,9 +67,9 @@ export default async function MarcaDaOrganizacaoPage() {
   const idioma = user.idioma;
 
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
+    <div className="flex h-full flex-col gap-6 overflow-y-auto">
       <header>
-        <h1 className="text-[2rem] leading-tight">{traduzir("Marca", idioma)}</h1>
+        <h1 className="titulo-tela">{traduzir("Marca", idioma)}</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
           {traduzir("O nome e a cor que a sua empresa mostra para quem trabalha aqui dentro.", idioma)}
         </p>

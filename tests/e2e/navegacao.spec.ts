@@ -90,14 +90,15 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
   test("o menu lateral mostra as áreas na ordem de uso", async ({ page }) => {
     await loginAdmin(page);
     // Grupos pelo que a pessoa veio fazer (11/10/2026); na tela Início nenhum está aberto.
-    await expect(sidebar(page).getByRole("link")).toHaveText(["Início", "Atendimento", "Vendas", "Assistente", "Análise", "Clínica", "Integrações"]);
+    // Desde a D1.10 o nome do grupo é um botão que só abre e fecha; o Início é o único link.
+    await expect(sidebar(page).getByRole("link")).toHaveText(["Início"]);
+    await expect(sidebar(page).getByRole("button")).toHaveText(["Atendimento", "Vendas", "Assistente", "Análise", "Clínica", "Integrações"]);
     await page.screenshot({ path: path.join(EVIDENCE, "nav-sidebar-areas.png"), fullPage: true });
   });
 
   test("chega nas Etapas do funil por Clínica, com um clique no grupo e outro na tela", async ({ page }) => {
     await loginAdmin(page);
-    await sidebar(page).getByRole("link", { name: "Clínica", exact: true }).click();
-    await page.waitForURL(/\/app\/team/);
+    await sidebar(page).getByRole("button", { name: "Clínica", exact: true }).click();
     await abas(page, "Clínica").getByRole("link", { name: "Etapas do funil" }).click();
     await page.waitForURL(/settings\/tenant\/pipelines/);
     await expect(page.getByRole("heading", { name: "Etapas do funil", level: 1 })).toBeVisible();
@@ -105,7 +106,7 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
 
   test("Produtos é tela de Clínica (o preço vem do PrecificaEva, não se vende por ela)", async ({ page }) => {
     await loginAdmin(page);
-    await sidebar(page).getByRole("link", { name: "Clínica", exact: true }).click();
+    await sidebar(page).getByRole("button", { name: "Clínica", exact: true }).click();
     await abas(page, "Clínica").getByRole("link", { name: "Produtos" }).click();
     await page.waitForURL(/\/app\/products/);
     await expect(abas(page, "Vendas")).toHaveCount(0);
@@ -113,7 +114,9 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
 
   test("a lista de funis é a primeira aba de Vendas", async ({ page }) => {
     await loginAdmin(page);
-    await sidebar(page).getByRole("link", { name: "Vendas" }).click();
+    await sidebar(page).getByRole("button", { name: "Vendas" }).click();
+    await expect(abas(page, "Vendas").getByRole("link").first()).toHaveText("Funis");
+    await abas(page, "Vendas").getByRole("link", { name: "Funis" }).click();
     await page.waitForURL(/\/app\/kanban/);
     await expect(abas(page, "Vendas").getByRole("link", { name: "Funis" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("heading", { name: "Funis", level: 1 })).toBeVisible();
@@ -121,8 +124,7 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
 
   test("chega em Conhecimento pelo grupo Assistente", async ({ page }) => {
     await loginAdmin(page);
-    await sidebar(page).getByRole("link", { name: "Assistente", exact: true }).click();
-    await page.waitForURL(/\/app\/ai\/agents/);
+    await sidebar(page).getByRole("button", { name: "Assistente", exact: true }).click();
     await abas(page, "Assistente").getByRole("link", { name: "Conhecimento" }).click();
     await page.waitForURL(/knowledge\/sources/);
     await page.screenshot({ path: path.join(EVIDENCE, "nav-abas-ia.png"), fullPage: true });
@@ -131,7 +133,9 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
   /** Conexões abre o grupo Integrações (11/10/2026). */
   test("chega ao canal oficial por Integrações → Conexões", async ({ page }) => {
     await loginAdmin(page);
-    await sidebar(page).getByRole("link", { name: /^Integrações/ }).click();
+    // Desde a D1.10 o nome do grupo só abre e fecha; a navegação é pela tela dentro dele.
+    await sidebar(page).getByRole("button", { name: /^Integrações/ }).click();
+    await abas(page, "Integrações").getByRole("link", { name: "Conexões" }).click();
     await page.waitForURL(/\/app\/connections/);
     await expect(abas(page, "Integrações").getByRole("link", { name: "Conexões" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("tab", { name: /oficial/i })).toBeVisible();
@@ -181,7 +185,7 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
       const r = nav.getBoundingClientRect();
       return {
         rola: nav.scrollHeight > Math.round(r.height) + 1,
-        titulosFora: [...nav.querySelectorAll("a")].filter(
+        titulosFora: [...nav.querySelectorAll("a, button")].filter(
           (h) => h.getBoundingClientRect().bottom > r.bottom,
         ).length,
       };
@@ -208,7 +212,8 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
         fullPage: true,
       });
 
-      await sidebar(page).getByRole("link", { name: "Vendas" }).click();
+      await sidebar(page).getByRole("button", { name: "Vendas" }).click();
+      await abas(page, "Vendas").getByRole("link", { name: "Funis" }).click();
       await page.waitForURL(/\/app\/kanban/);
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await expectSemOverflowHorizontal(page, "shell mobile após navegar pelo drawer");
@@ -238,8 +243,8 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
   test("um agent não vê grupo nem tela que a permissão fecha", async ({ page }) => {
     await login(page, creds.users.agent!.email);
     // Integrações inteiro é manager+ (Conexões é admin): o grupo não aparece para o agent.
-    await expect(sidebar(page).getByRole("link", { name: /^Integrações/ })).toHaveCount(0);
+    await expect(sidebar(page).getByRole("button", { name: /^Integrações/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Conexões" })).toHaveCount(0);
-    await expect(sidebar(page).getByRole("link", { name: "Atendimento" })).toBeVisible();
+    await expect(sidebar(page).getByRole("button", { name: "Atendimento" })).toBeVisible();
   });
 });

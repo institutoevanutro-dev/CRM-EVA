@@ -8,7 +8,7 @@ import { AgendaCarregando } from "@/components/agenda/estados";
  */
 export default function AgendaLoading() {
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <div className="h-14" />
       <AgendaCarregando />
     </div>

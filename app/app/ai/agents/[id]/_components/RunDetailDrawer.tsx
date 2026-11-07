@@ -116,7 +116,7 @@ export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
             </div>
 
             <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <p className="rotulo-secao mb-2 text-muted-foreground">
                 {t("Trace")}
               </p>
               <RunTrace toolCalls={run.tool_calls} />

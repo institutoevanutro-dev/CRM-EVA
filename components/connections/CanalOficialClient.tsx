@@ -32,7 +32,7 @@ function ParaColar({
   if (!valor) {
     return (
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="rotulo-secao text-muted-foreground">
           {rotulo}
         </span>
         {semValor}
@@ -41,7 +41,7 @@ function ParaColar({
   }
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="rotulo-secao text-muted-foreground">
         {rotulo}
       </span>
       <div className="flex items-center gap-2">
@@ -172,7 +172,7 @@ export function CanalOficialClient() {
             }
           />
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="rotulo-secao text-muted-foreground">
               {t("Campos a assinar")}
             </span>
             <div className="flex flex-wrap gap-1">

@@ -22,7 +22,7 @@ export default async function RadarPage() {
   const t = (texto: string) => traduzir(texto, idioma);
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <CabecalhoDaPagina
         titulo={t("Radar de risco")}
         descricao={t(

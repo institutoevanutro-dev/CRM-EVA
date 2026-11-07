@@ -32,7 +32,7 @@ function KPICard({ label, value, subtitle, Icon, accent, danger }: KPICardProps)
       <CardContent className="pt-6">
         <div className="flex items-start justify-between gap-2">
           <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <p className="rotulo-secao text-muted-foreground">
               {label}
             </p>
             <p className={`text-3xl font-bold tabular-nums ${valueColor}`}>{value}</p>

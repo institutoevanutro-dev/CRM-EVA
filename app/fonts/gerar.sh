@@ -41,11 +41,14 @@ embrulhar() { # <pasta-ofl> <arquivo> <saida.woff2>
 
 # Layout raiz (app/layout.tsx): latin + latin-ext.
 gerar inter "Inter[opsz,wght].ttf" inter.woff2 "$LATIN,$LATIN_EXT" opsz=drop
-gerar cormorantgaramond "CormorantGaramond[wght].ttf" cormorant-garamond.woff2 "$LATIN,$LATIN_EXT" wght=500:700
-embrulhar ibmplexmono IBMPlexMono-Regular.ttf ibm-plex-mono-400.woff2
-embrulhar ibmplexmono IBMPlexMono-Medium.ttf ibm-plex-mono-500.woff2
+# Lora e Josefin Sans têm Reserved Font Name: só troca de formato, como a Plex.
+embrulhar lora "Lora[wght].ttf" lora.woff2
+embrulhar josefinsans "JosefinSans[wght].ttf" josefin-sans.woff2
+gerar inconsolata "Inconsolata[wdth,wght].ttf" inconsolata.woff2 "$LATIN,$LATIN_EXT" wdth=drop wght=400:500
 
 # Vitrine /design (app/design/lib/fonts.ts): latin.
+embrulhar ibmplexmono IBMPlexMono-Regular.ttf ibm-plex-mono-400.woff2
+embrulhar ibmplexmono IBMPlexMono-Medium.ttf ibm-plex-mono-500.woff2
 gerar bricolagegrotesque "BricolageGrotesque[opsz,wdth,wght].ttf" bricolage-grotesque.woff2 "$LATIN" opsz=drop wdth=drop
 gerar plusjakartasans "PlusJakartaSans[wght].ttf" plus-jakarta-sans.woff2 "$LATIN"
 gerar fraunces "Fraunces[SOFT,WONK,opsz,wght].ttf" fraunces.woff2 "$LATIN"

@@ -26,9 +26,11 @@ import { Providers } from "./providers";
 import { PublicEnvScript } from "./public-env-script";
 import "./globals.css";
 
-// Fontes do site da clínica e do PrecificaEva (spec 2026-10-09-visual-clinica):
-// Inter no texto e nos números, Cormorant Garamond nos títulos.
-// Locais (app/fonts/, latin + latin-ext): o build não baixa nada do Google.
+// Fontes do contrato visual comum dos módulos (D1.13, decisão do dono em 06/11/2026), as do
+// Financeiro: Inter no texto e nos números, Lora nos títulos, Josefin Sans nos
+// rótulos de seção e Inconsolata em código e documento. A serifa de antes ficava
+// fina e com acento alto em 1366 px sem retina.
+// Locais (app/fonts/): o build não baixa nada do Google.
 const inter = localFont({
   src: "./fonts/inter.woff2",
   weight: "100 900",
@@ -36,19 +38,24 @@ const inter = localFont({
   variable: "--font-inter",
 });
 
-const cormorant = localFont({
-  src: "./fonts/cormorant-garamond.woff2",
-  weight: "500 700",
+const lora = localFont({
+  src: "./fonts/lora.woff2",
+  weight: "400 700",
   display: "swap",
-  variable: "--font-cormorant",
+  variable: "--font-lora",
   adjustFontFallback: "Times New Roman",
 });
 
-const plexMono = localFont({
-  src: [
-    { path: "./fonts/ibm-plex-mono-400.woff2", weight: "400" },
-    { path: "./fonts/ibm-plex-mono-500.woff2", weight: "500" },
-  ],
+const josefin = localFont({
+  src: "./fonts/josefin-sans.woff2",
+  weight: "100 700",
+  display: "swap",
+  variable: "--font-josefin",
+});
+
+const inconsolata = localFont({
+  src: "./fonts/inconsolata.woff2",
+  weight: "400 500",
   display: "swap",
   variable: "--font-mono",
 });
@@ -295,7 +302,7 @@ export default function RootLayout({
       lang="pt-BR"
       data-theme="light"
       suppressHydrationWarning
-      className={`${inter.variable} ${cormorant.variable} ${plexMono.variable}`}
+      className={`${inter.variable} ${lora.variable} ${josefin.variable} ${inconsolata.variable}`}
     >
       <head>
         {/* Primeiro de tudo: a cor da instalação, antes do CSS e do script de tema. */}

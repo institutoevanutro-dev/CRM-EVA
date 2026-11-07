@@ -104,9 +104,9 @@ export default async function TiposDeAgendamentoPage() {
   const nomes = await nomesDosAtendentes((pessoas ?? []).map((p) => String(p.user_id)));
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <header>
-        <h1 className="text-[2rem] leading-tight">{t("Tipos de agendamento")}</h1>
+        <h1 className="titulo-tela">{t("Tipos de agendamento")}</h1>
         <p className="mt-1 text-sm text-text-muted">
           {t("O que se pode marcar, quanto dura e quem atende. É isto que a tela de marcar e o agente de IA oferecem ao cliente.")}
         </p>

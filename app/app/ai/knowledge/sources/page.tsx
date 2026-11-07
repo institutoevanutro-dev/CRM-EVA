@@ -81,7 +81,7 @@ export default async function AcervoPage() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <CabecalhoDaPagina
         titulo={t("O que o agente sabe")}
         descricao={t(

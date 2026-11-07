@@ -285,7 +285,7 @@ test.describe("Relatório de atividades — o período, pela tela", () => {
     // Menu por área (07/10/2026): a porta é a área Análise → aba Atividades. Estar na
     // aba de Análise (e não de Atendimento) é o "grupo certo" que este teste prendia.
     const sidebar = page.getByRole("navigation", { name: "Navegação principal" });
-    await sidebar.getByRole("link", { name: "Análise" }).click();
+    await sidebar.getByRole("button", { name: "Análise" }).click();
     const item = page
       .getByRole("navigation", { name: "Telas de Análise" })
       .getByRole("link", { name: "Atividades", exact: true });
@@ -427,7 +427,7 @@ test.describe("Relatório de atividades — o período, pela tela", () => {
     // rota é `viewer` de propósito: um piso mais alto esconderia da pessoa as
     // atividades dela mesma.
     const sidebar = page.getByRole("navigation", { name: "Navegação principal" });
-    await sidebar.getByRole("link", { name: "Análise" }).click();
+    await sidebar.getByRole("button", { name: "Análise" }).click();
     await expect(
       page.getByRole("navigation", { name: "Telas de Análise" }).getByRole("link", { name: "Atividades", exact: true }),
     ).toBeVisible({ timeout: 30_000 });

@@ -3,6 +3,8 @@
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useState } from "react";
 import { toast } from "sonner";
+import { EmptyState } from "@/components/empty/EmptyState";
+import { Key } from "@/lib/ui/icons";
 
 import {
   useApiTokens,
@@ -135,7 +137,11 @@ export function ApiTokensClient() {
         // Falha não é "nenhuma chave": quem administra criaria outra à toa.
         <p className="text-sm text-muted-foreground" role="alert">{t("Não foi possível carregar as chaves. Recarregue a página.")}</p>
       ) : tokens.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("Nenhum token criado ainda.")}</p>
+        <EmptyState
+          icon={Key}
+          headline={t("Nenhum token criado ainda.")}
+          subcopy={t("Um token deixa outro sistema ler ou gravar no CRM sem a sua senha.")}
+        />
       ) : (
         <TabelaDeChaves
           tokens={tokens}

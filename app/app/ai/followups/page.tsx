@@ -47,7 +47,7 @@ export default async function FollowupFlowsPage() {
   const canWrite = ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <CabecalhoDaPagina
         titulo="Follow-ups"
         descricao={t("Mensagens automáticas para retomar a conversa — depois de um silêncio, de uma mudança de etapa, de um aviso de outro sistema ou de uma resposta do contato.")}

@@ -127,7 +127,7 @@ export function SecaoDoDossie({
           type="button"
           onClick={() => aoAlternar(id)}
           aria-expanded={!recolhida}
-          className="flex w-full items-center gap-2 text-left text-xs font-medium uppercase tracking-wide text-text-muted hover:text-text"
+          className="rotulo-secao flex w-full items-center gap-2 text-left text-text-muted hover:text-text"
         >
           <span>{titulo}</span>
           {/* `+` fechado, `−` aberto; quem fala a verdade para o leitor de

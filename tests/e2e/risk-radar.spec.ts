@@ -48,7 +48,7 @@ async function login(page: Page, email: string): Promise<void> {
 
 async function gotoRadar(page: Page): Promise<void> {
   // Menu por área (07/10/2026): Atendimento → aba Radar.
-  await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("link", { name: "Atendimento" }).click();
+  await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("button", { name: "Atendimento" }).click();
   await page.getByRole("navigation", { name: "Telas de Atendimento" }).getByRole("link", { name: "Radar" }).click();
   await page.waitForURL(/\/app\/radar/);
   await expect(page.getByRole("heading", { name: "Radar de risco" })).toBeVisible();

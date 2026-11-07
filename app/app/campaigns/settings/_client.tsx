@@ -42,7 +42,7 @@ import { ArrowBendUpLeft } from "@/lib/ui/icons";
 export function ConfiguracaoDeCampanhas() {
   const t = useT();
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-6">
+    <div className="mx-auto max-w-3xl space-y-4">
       <div>
         <Link
           href="/app/campaigns"
@@ -53,7 +53,7 @@ export function ConfiguracaoDeCampanhas() {
         </Link>
       </div>
       <header>
-        <h1 className="text-[2rem] leading-tight">{t("Configuração de campanhas")}</h1>
+        <h1 className="titulo-tela">{t("Configuração de campanhas")}</h1>
         <p className="text-sm text-muted-foreground">
           {t("O que vale para todas as campanhas, e não para uma só.")}
         </p>

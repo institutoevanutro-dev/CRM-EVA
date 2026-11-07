@@ -131,7 +131,7 @@ export function PropostasDeDado({ contactId, podeDecidir, aoDecidir }: Props) {
         {(itens ?? []).map((p) => (
           <li key={p.id} className="rounded-md border bg-background p-3">
             <div className="flex flex-wrap items-baseline gap-2">
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">
+              <span className="rotulo-secao text-muted-foreground">
                 {t(NOME_DO_CAMPO[p.campo] ?? p.campo)}
               </span>
               <span className="font-medium">{valorParaExibir(p.campo, p.valor_proposto)}</span>

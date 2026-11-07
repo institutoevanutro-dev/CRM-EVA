@@ -45,7 +45,7 @@ export default async function RoutersPage() {
   }));
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <CabecalhoDaPagina
         titulo={traduzir("Roteadores", idioma)}
         descricao={traduzir(
