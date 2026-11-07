@@ -133,7 +133,9 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
   /** Conexões abre o grupo Integrações (11/10/2026). */
   test("chega ao canal oficial por Integrações → Conexões", async ({ page }) => {
     await loginAdmin(page);
+    // Desde a D1.10 o nome do grupo só abre e fecha; a navegação é pela tela dentro dele.
     await sidebar(page).getByRole("button", { name: /^Integrações/ }).click();
+    await abas(page, "Integrações").getByRole("link", { name: "Conexões" }).click();
     await page.waitForURL(/\/app\/connections/);
     await expect(abas(page, "Integrações").getByRole("link", { name: "Conexões" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("tab", { name: /oficial/i })).toBeVisible();
