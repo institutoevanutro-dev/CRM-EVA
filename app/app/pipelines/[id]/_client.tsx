@@ -20,7 +20,7 @@ function formatError(err: unknown, t: (texto: string) => string): string {
   }
   return String(err);
 }
-import { KanbanBoard } from "@/components/kanban/KanbanBoard";
+import { BoardSkeleton, KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { CalendarioDoFunil } from "@/components/kanban/CalendarioDoFunil";
 import { FilterBar } from "@/components/kanban/FilterBar";
 import { BulkActionBar } from "@/components/kanban/BulkActionBar";
@@ -319,9 +319,7 @@ export function PipelinePageClient({
           </Button>
         </div>
       ) : isLoading || !data ? (
-        <div className="flex flex-1 animate-pulse items-center justify-center text-muted-foreground">
-          {t("Carregando…")}
-        </div>
+        <BoardSkeleton />
       ) : noCalendario ? (
         // A MESMA lista filtrada do quadro: as duas visões olham o mesmo funil,
         // e o calendário não tem como mostrar a alguém um negócio que o quadro

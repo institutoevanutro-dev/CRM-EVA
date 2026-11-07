@@ -21,6 +21,8 @@ import {
   type MidiaItem,
 } from "@/hooks/ai/useMidias";
 import { useT } from "@/hooks/i18n/useT";
+import { EmptyState } from "@/components/empty/EmptyState";
+import { ImageSquare } from "@/lib/ui/icons";
 import type { SituacaoDaMidia } from "@/lib/midias/termo";
 
 const ACEITA = "image/jpeg,image/png,image/webp,video/mp4,video/3gpp";
@@ -80,7 +82,12 @@ export function BibliotecaDeMidias() {
       </div>
 
       {data.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("Nenhuma mídia cadastrada ainda.")}</p>
+        <EmptyState
+          icon={ImageSquare}
+          headline={t("Nenhuma mídia cadastrada ainda.")}
+          subcopy={t("Suba fotos e vídeos para o agente enviar na hora certa da conversa.")}
+          primary={{ label: t("Nova mídia"), onClick: () => setNovo({ title: "", when: "", tags: "", pessoa: true }) }}
+        />
       ) : (
         <div className="flex flex-col gap-3">
           {data.map((item) => (

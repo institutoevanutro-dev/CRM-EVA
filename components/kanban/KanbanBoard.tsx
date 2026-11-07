@@ -53,9 +53,10 @@ function groupLeadsByStage(stages: Stage[], leads: Lead[]): Map<string, Lead[]> 
   return map;
 }
 
-function BoardSkeleton() {
+/** O quadro antes de chegar: colunas e cards de 120 px, sem salto quando ele entra. */
+export function BoardSkeleton() {
   return (
-    <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4">
+    <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4" aria-busy="true">
       {[0, 1, 2].map((c) => (
         <div
           key={c}
@@ -63,7 +64,7 @@ function BoardSkeleton() {
         >
           <Skeleton className="h-5 w-32" />
           {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-24 w-full animate-pulse" />
+            <Skeleton key={i} className="h-[120px] w-full" />
           ))}
         </div>
       ))}

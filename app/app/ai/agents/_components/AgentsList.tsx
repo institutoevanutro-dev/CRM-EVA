@@ -4,8 +4,9 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Robot, Plus } from "@/lib/ui/icons";
+import { Funnel, Robot, Plus } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import { EmptyState } from "@/components/empty/EmptyState";
 import { useAgentsList } from "@/hooks/ai/useAgents";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import { AgentCard } from "./AgentCard";
@@ -79,9 +80,18 @@ export function AgentsList({ initialData, canWrite }: Props) {
       </div>
 
       {filtered.length === 0 ? (
-        <Card className="p-8 text-center text-sm text-muted-foreground">
-          {t("Nenhum agente com esses filtros.")}
-        </Card>
+        <EmptyState
+          icon={Funnel}
+          headline={t("Nenhum agente com esses filtros.")}
+          subcopy={t("Tente outro status ou limpe a busca.")}
+          primary={{
+            label: t("Limpar filtros"),
+            onClick: () => {
+              setStatus("all");
+              setQuery("");
+            },
+          }}
+        />
       ) : (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((agent) => (

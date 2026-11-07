@@ -23,6 +23,8 @@ import {
 } from "@/hooks/ai/useRespostasProntas";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
+import { EmptyState } from "@/components/empty/EmptyState";
+import { Question } from "@/lib/ui/icons";
 import { LIMITE_MAXIMO, LIMITE_MINIMO, limiteAceito } from "@/lib/respostas-prontas/casamento";
 
 interface Rascunho {
@@ -186,7 +188,12 @@ export function PerguntasFrequentesClient() {
       </div>
 
       {itens.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("Nenhuma pergunta frequente cadastrada ainda.")}</p>
+        <EmptyState
+          icon={Question}
+          headline={t("Nenhuma pergunta frequente cadastrada ainda.")}
+          subcopy={t("Cadastre as perguntas que os pacientes mais fazem; o agente responde com o seu texto.")}
+          primary={{ label: t("Nova pergunta frequente"), onClick: () => abrir() }}
+        />
       ) : (
         <div className="flex flex-col gap-3">
           {itens.map((item) => (

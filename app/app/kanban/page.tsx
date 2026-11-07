@@ -5,6 +5,7 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { FunisClient, type FunilDaLista } from "./_client";
 
@@ -76,9 +77,7 @@ export default async function KanbanPickerPage() {
       {error ? (
         // Falha de leitura não pode cair no "Criar meu primeiro funil": a
         // equipe concluiria que os funis sumiram.
-        <p className="rounded-lg border border-border bg-surface p-6 text-center text-sm text-text-muted" data-testid="funis-erro">
-          {t("Não foi possível carregar os funis. Recarregue a página.")}
-        </p>
+        <ErroDeLeitura testId="funis-erro" texto={t("Não foi possível carregar os funis. Recarregue a página.")} />
       ) : (
 
       <FunisClient
