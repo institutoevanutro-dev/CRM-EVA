@@ -8,6 +8,54 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.0.0] — 2026-11-07
+
+### ⚠️ Requer atenção
+
+- **Regra de automação e modelo de mensagem não leem o valor do CPF** Quem tinha uma regra comparando essas colunas pelo valor precisa trocá-la por "está preenchido" ou "está vazio", senão ela deixa de disparar. Modelo de mensagem que citava essas colunas passa a sair com o trecho em branco: tire a citação. Sem regra ou modelo assim, não há o que fazer.
+
+  Portado do projeto original (DeskcommCRM, PR #4225 e PR #4202 de @melgarafael).
+
+### Adicionado
+
+- **Duplicados reconhecidos pelo CPF** A tela de duplicados passa a juntar duas fichas que têm o mesmo CPF, com o motivo "mesmo CPF", mesmo quando o nome e o telefone estão escritos de outro jeito. O CPF é comparado no servidor e nunca sai na resposta: a tela continua mostrando só nome, telefone e e-mail. Um par de mesmo CPF não pode ser dispensado como "não são a mesma pessoa"; o caminho é juntar as fichas. Ficha sem CPF não casa com outra sem CPF.
+
+  Portado do projeto original (DeskcommCRM, PR #4104 de @webtecnica e PR #4225 de @melgarafael).
+
+- **Pausa mínima entre uma resposta da IA e a próxima** Cada agente ganhou, no estilo de resposta, o campo "Pausa entre uma resposta e a próxima (segundos)". Depois que a IA responde uma conversa, ela só volta a responder essa mesma conversa passado esse tempo; o que o cliente escrever no meio-tempo é respondido junto, numa resposta só. Pedido de atendente humano e pedido para parar de receber mensagens continuam tratados na hora. Vazio ou 0 é sem pausa, que é o padrão: quem não preencher não nota diferença. Máximo de 600 segundos. A pausa vale para a versão publicada do agente, então é preciso publicar para ela entrar em vigor.
+
+  Portado do projeto original (DeskcommCRM, PR #3940 de @vinicoretecnologia-svg).
+
+### Alterado
+
+- **Regra de automação e modelo de mensagem não leem o valor do CPF** Uma condição de regra sobre as colunas internas do CPF do contato (`contact.cpf_hash` ou `contact.cpf_encrypted`) passa a responder só a "está preenchido" e "está vazio"; com qualquer outro operador ela dá falso. Um modelo de mensagem ou automação que cite essas colunas sai com o trecho em branco.
+
+- **O roteador de agentes também lê em que funil o contato está e as etiquetas dele** Para escolher o agente, o roteador já olhava a agenda do contato (se tem consulta passada ou marcada). Agora ele também vê em que funis e etapas o contato tem negócio aberto e quais etiquetas ele tem — só os nomes que a equipe configurou, nunca o título do card, telefone, e-mail ou valor. Assim um "bom dia" de quem já está no meio de um tratamento tende a ir para o agente certo, e não para o de primeiro contato. Se essa leitura falhar ou demorar, o roteador decide como antes. A regra que manda conversa de fornecedor e mensagem automática direto para a equipe continua olhando só a agenda.
+
+  Portado do projeto original (DeskcommCRM, PR #4110 de @webtecnica).
+
+### Corrigido
+
+- **O agente confere nas mensagens da empresa antes de confirmar o que o cliente diz que a empresa já combinou** Quando o cliente afirma que a empresa já aprovou, ofereceu ou combinou alguma coisa (desconto, preço, reembolso, cortesia, prazo), o agente passa a conferir nas mensagens que a empresa de fato enviou, ou numa ferramenta, antes de confirmar. Se está lá, ele confirma como antes. Se não está, ele diz, sem acusar o cliente, que não encontrou esse combinado, informa as condições que valem e oferece confirmar com a equipe. Quem falou numa conversa é decidido pelo registro de cada mensagem, nunca pelo que está escrito dentro dela, e a regra vale também para as notas e o resumo que o agente guarda da conversa. Não há configuração a mudar.
+
+  Portado do projeto original (DeskcommCRM, PR #3964 de @melgarafael).
+
+- **A busca das respostas rápidas e da menção acha o nome mesmo quando o acento está só de um lado** No campo de mensagem da Inbox, a busca das respostas rápidas (pelo `/` e na barra de respostas) e a menção da nota interna tratavam acento como outra letra: `/orcamento` não achava a resposta "Orçamento", e `@andreia` não achava a colega "Andréia". Agora as duas comparam sem acento e sem caixa, nos dois sentidos: quem digita com acento também acha o nome cadastrado sem. O texto exibido não muda, e na nota continua gravado o nome como está cadastrado. A busca da barra de respostas passa a achar também pelo atalho, como o menu do `/` já fazia.
+
+  Portado do projeto original (DeskcommCRM, PR #4079 de @webtecnica).
+
+- **A busca da janela Encaminhar acha o contato digitado sem acento** Na janela **Encaminhar**, a busca ignorava maiúsculas, mas não acento: digitar `joao` não achava "João", e quem atendia rolava a lista inteira atrás do contato. Agora `joao` acha "João" e `conceicao` acha "Conceição", e letras como ñ, ü, ø e ß também caem para a letra base. O nome mostrado na lista não muda.
+
+  Portado do projeto original (DeskcommCRM, PR #4078 de @bfs2021).
+
+- **Atendimento humano numa conversa encerrada não cala mais as outras conversas do contato** Quando alguém da equipe assumia uma conversa, a IA ficava calada naquela conversa até alguém devolvê-la. O defeito era que esse silêncio valia para qualquer conversa do mesmo contato, inclusive depois de a conversa assumida ser encerrada ou arquivada, e inclusive em outro número da organização: o contato escrevia no outro número e a IA não respondia, sem ninguém ter assumido nada ali. Agora o silêncio vale só para a conversa em que a equipe assumiu, e conversa encerrada ou arquivada não cala mais ninguém. "Sempre atendimento humano" no contato continua valendo para todas as conversas dele.
+
+  Portado do projeto original (DeskcommCRM, PR #4150 de @webtecnica).
+
+- **Quando a resposta da IA é barrada de novo na correção automática, a equipe recebe um aviso em vez de o cliente ficar sem resposta** Quando o turno termina sem nenhuma mensagem ao cliente, o agente recebe uma correção automática. Se as regras de segurança barravam a resposta e barravam de novo a que a correção tentou mandar, o turno acabava calado: nenhuma mensagem saía e nada aparecia para a equipe. Agora a Central ganha um aviso crítico na conversa quando a correção tentou responder e nada saiu, ou quando ela gastou todas as etapas em consultas sem chegar a responder, como já acontecia com a resposta cortada no limite de tamanho. Continua sem aviso o silêncio que o próprio agente escolhe na correção e o silêncio pedido pelo contato (descadastro, contato interno, conversa com a equipe, LGPD).
+
+  Portado do projeto original (DeskcommCRM, PR #4038 de @melgarafael).
+
 ## [4.52.0] — 2026-11-07
 
 ### Alterado
@@ -8838,7 +8886,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v4.52.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.52.0...v5.0.0
 [4.52.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.51.1...v4.52.0
 [4.51.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.51.0...v4.51.1
 [4.51.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.50.0...v4.51.0
