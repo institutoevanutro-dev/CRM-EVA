@@ -85,7 +85,7 @@ export function ContactDetailClient({ contactId }: Props) {
 
   if (q.isLoading) {
     return (
-      <div className="space-y-4 p-6">
+      <div className="space-y-4">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -94,7 +94,7 @@ export function ContactDetailClient({ contactId }: Props) {
 
   if (q.isError || !q.data) {
     return (
-      <div className="p-6">
+      <div>
         <Card className="p-6 text-center text-sm text-error-fg">{t("Erro ao carregar contato.")}</Card>
       </div>
     );
@@ -116,7 +116,7 @@ export function ContactDetailClient({ contactId }: Props) {
   const marcadoSempreHumano = contact.ai_opt_out === true;
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4">
       {contact.is_anonymized && (
         <div
           role="alert"

@@ -25,7 +25,13 @@ export function AppShell({ sidebarCollapsed, children }: AppShellProps) {
     // #3190): as faixas do topo ficam ACIMA da casca, e sem o desconto o
     // documento media a tela mais a faixa, rolável justo quando o WhatsApp está
     // desconectado. `dvh` acompanha a barra do navegador do celular.
-    <div className="flex min-h-[calc(100dvh-var(--faixas-de-cima,0px))] w-full bg-background">
+    //
+    // As duas medidas da casca moram AQUI, como variável, e não em cada tela:
+    // `--altura-do-topo` (a TopBar; mais baixa a partir de md) e
+    // `--margem-do-conteudo` (o padding do <main>, a ÚNICA margem das telas).
+    // O Inbox e o quadro do funil descontam as duas da altura da tela; com a
+    // conta lendo a mesma variável, mudar uma não deixa a outra para trás.
+    <div className="flex min-h-[calc(100dvh-var(--faixas-de-cima,0px))] w-full bg-background [--altura-do-topo:3.5rem] [--margem-do-conteudo:var(--space-4)] md:[--altura-do-topo:3rem] md:[--margem-do-conteudo:var(--space-6)]">
       <a
         href="#conteudo"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:rounded-md focus:border focus:border-border focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-text"
@@ -57,7 +63,7 @@ export function AppShell({ sidebarCollapsed, children }: AppShellProps) {
       */}
       <div className="flex min-h-[calc(100dvh-var(--faixas-de-cima,0px))] min-w-0 flex-1 flex-col">
         <TopBar />
-        <main id="conteudo" tabIndex={-1} className="flex-1 overflow-auto p-6 focus:outline-hidden">
+        <main id="conteudo" tabIndex={-1} className="flex-1 overflow-auto p-(--margem-do-conteudo) focus:outline-hidden">
           {children}
         </main>
       </div>

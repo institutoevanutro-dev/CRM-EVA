@@ -30,7 +30,7 @@ export default async function InicioPage() {
     timeZone: "America/Sao_Paulo",
   });
   return (
-    <div className="flex h-full flex-col gap-8 p-6 md:p-8">
+    <div className="flex h-full flex-col gap-8">
       <header>
         {/* A sobrancelha é a data (D1.13): "Início" já está no menu e na aba. */}
         <p className="rotulo-secao text-text-muted">{hoje}</p>

@@ -104,7 +104,7 @@ export default async function TiposDeAgendamentoPage() {
   const nomes = await nomesDosAtendentes((pessoas ?? []).map((p) => String(p.user_id)));
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <header>
         <h1 className="titulo-tela">{t("Tipos de agendamento")}</h1>
         <p className="mt-1 text-sm text-text-muted">

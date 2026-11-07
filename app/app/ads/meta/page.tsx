@@ -51,13 +51,13 @@ export default async function MetaAdsPage() {
 
   return (
     /*
-      Superfície clara — mesmo escopo de Desempenho, a vizinha no menu. `-m-6`
-      cancela o respiro do `<main>` do AppShell para o Paper alcançar a borda, e
-      o `p-6` o repõe.
+      Superfície clara — mesmo escopo de Desempenho, a vizinha no menu. A margem negativa
+      cancela o respiro do `<main>` do AppShell (`--margem-do-conteudo`) para o
+      Paper alcançar a borda, e o padding o repõe.
     */
     <div
       data-superficie="clara"
-      className="-m-6 flex min-h-[calc(100%+3rem)] flex-col gap-6 bg-bg p-6 text-text"
+      className="-m-(--margem-do-conteudo) flex min-h-[calc(100%+2*var(--margem-do-conteudo))] flex-col gap-6 bg-bg p-(--margem-do-conteudo) text-text"
     >
       <header>
         <h1 className="titulo-tela">{t("Meta Ads")}</h1>

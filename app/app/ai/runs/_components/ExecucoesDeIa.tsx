@@ -103,7 +103,7 @@ export function ExecucoesDeIa() {
 
   if (erro) {
     return (
-      <div className="p-6">
+      <div>
         <Card className="border-destructive/40 p-6">
           <h2 className="font-medium">{t("Não consegui carregar as execuções")}</h2>
           <p className="mt-2 text-sm text-muted-foreground">{erro}</p>
@@ -120,7 +120,7 @@ export function ExecucoesDeIa() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl p-6" data-testid="execucoes-de-ia">
+    <div className="mx-auto w-full max-w-5xl" data-testid="execucoes-de-ia">
       <header className="mb-6">
         <h1 className="titulo-tela">{t("Execuções de IA")}</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">

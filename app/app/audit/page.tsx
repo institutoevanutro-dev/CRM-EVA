@@ -20,7 +20,7 @@ export default async function AuditPage() {
   const t = (texto: string) => traduzir(texto, user.idioma);
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <header>
         <h1 className="titulo-tela">{t("Histórico de alterações")}</h1>
         <p className="text-sm text-muted-foreground">

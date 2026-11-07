@@ -114,7 +114,7 @@ export function NovaCampanha() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-6">
+    <div className="mx-auto max-w-3xl space-y-4">
       <header>
         <h1 className="titulo-tela">{t("Nova campanha")}</h1>
         <p className="text-sm text-muted-foreground">

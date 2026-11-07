@@ -52,7 +52,7 @@ export function DetalheDaCampanha({ id }: { id: string }) {
 
   if (campanha.isLoading) {
     return (
-      <div className="space-y-3 p-6">
+      <div className="space-y-3">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-32 w-full" />
       </div>
@@ -60,7 +60,7 @@ export function DetalheDaCampanha({ id }: { id: string }) {
   }
   if (campanha.isError || !campanha.data) {
     return (
-      <div className="p-6">
+      <div>
         <Card className="p-6 text-center">
           <p className="text-sm text-error-fg">{t("Não foi possível carregar a campanha.")}</p>
           <Button size="sm" variant="outline" className="mt-2" onClick={() => campanha.refetch()}>
@@ -90,7 +90,7 @@ export function DetalheDaCampanha({ id }: { id: string }) {
   disponiveis.push("duplicar");
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4">
       <div>
         <Link
           href="/app/campaigns"

@@ -198,7 +198,7 @@ export function ProdutosClient({
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl p-6" data-testid="tela-produtos">
+    <div className="mx-auto w-full max-w-5xl" data-testid="tela-produtos">
       <CabecalhoDaPagina
         className="mb-6"
         titulo={textos.titulo}

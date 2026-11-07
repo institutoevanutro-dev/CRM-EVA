@@ -67,7 +67,7 @@ export default async function KanbanPickerPage() {
   const t = (texto: string) => traduzir(texto, idioma);
 
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
+    <div className="flex h-full flex-col gap-4">
       {/* Era "Pipelines" — nome de quem construiu o sistema, não de quem vende. */}
       <CabecalhoDaPagina
         titulo={t("Funis")}

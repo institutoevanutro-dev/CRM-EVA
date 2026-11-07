@@ -157,7 +157,7 @@ export function PainelDeProvedores() {
 
   if (erro) {
     return (
-      <div className="p-6">
+      <div>
         <Card className="border-destructive/40 p-6">
           <h2 className="font-medium">{t("Não consegui carregar a configuração de IA")}</h2>
           <p className="mt-2 text-sm text-muted-foreground">{erro}</p>
@@ -176,7 +176,7 @@ export function PainelDeProvedores() {
   const semChave = dados.credenciais.length === 0;
 
   return (
-    <div className="mx-auto w-full max-w-5xl p-6" data-testid="painel-de-provedores">
+    <div className="mx-auto w-full max-w-5xl" data-testid="painel-de-provedores">
       <header className="mb-6">
         <h1 className="titulo-tela">{t("Provedores de IA")}</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">

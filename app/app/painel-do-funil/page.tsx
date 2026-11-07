@@ -31,7 +31,7 @@ export default async function PainelDoFunilPage() {
   return (
     <div
       data-superficie="clara"
-      className="-m-6 flex min-h-[calc(100%+3rem)] flex-col gap-6 bg-bg p-6 text-text"
+      className="-m-(--margem-do-conteudo) flex min-h-[calc(100%+2*var(--margem-do-conteudo))] flex-col gap-6 bg-bg p-(--margem-do-conteudo) text-text"
     >
       <header>
         <h1 className="titulo-tela">{t("Painel do funil")}</h1>

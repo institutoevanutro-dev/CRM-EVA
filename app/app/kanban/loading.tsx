@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 // /app/kanban é a LISTA de funis, não o quadro: o esqueleto imita a lista.
 export default function KanbanLoading() {
   return (
-    <div className="flex h-full flex-col gap-4 p-6" aria-busy="true">
+    <div className="flex h-full flex-col gap-4" aria-busy="true">
       <div className="flex flex-col gap-2">
         <Skeleton className="h-8 w-40" />
         <Skeleton className="h-[3px] w-12" />

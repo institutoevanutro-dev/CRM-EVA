@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 // conteúdo não saltar quando ela entra.
 export default function AppLoading() {
   return (
-    <div className="flex flex-col gap-6 p-6" aria-busy="true">
+    <div className="flex flex-col gap-6" aria-busy="true">
       <div className="flex flex-col gap-2">
         <Skeleton className="h-8 w-56" />
         <Skeleton className="h-[3px] w-12" />

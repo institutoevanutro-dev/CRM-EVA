@@ -27,7 +27,7 @@ export default async function ProposalsPage() {
   const idioma = user.idioma;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <header>
         <h1 className="titulo-tela">{traduzir("Propostas", idioma)}</h1>
         <p className="text-sm text-muted-foreground">

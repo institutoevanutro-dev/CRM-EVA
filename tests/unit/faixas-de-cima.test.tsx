@@ -83,7 +83,7 @@ describe("quem desconta as faixas", () => {
     const inbox = readFileSync("components/inbox/InboxLayout.tsx", "utf8");
     // As DUAS caixas da casca: a de fora e a coluna do conteúdo.
     expect(casca.split("min-h-[calc(100dvh-var(--faixas-de-cima,0px))]").length - 1).toBe(2);
-    expect(inbox).toMatch(/h-\[calc\(100dvh-var\(--faixas-de-cima,0px\)-3\.5rem/);
+    expect(inbox).toMatch(/h-\[calc\(100dvh-var\(--faixas-de-cima,0px\)-var\(--altura-do-topo\)/);
   });
 
   it("a barra de cima e a lateral grudam ABAIXO das faixas, sem passar por baixo delas", () => {

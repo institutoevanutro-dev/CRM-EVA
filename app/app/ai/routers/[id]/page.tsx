@@ -65,7 +65,7 @@ export default async function RouterEditorPage({ params }: { params: Promise<{ i
   const agents = agentRows ?? [];
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <div className="flex h-full flex-col gap-6">
       <RouterEditorClient
         routerId={id}
         initialState={initialState}
