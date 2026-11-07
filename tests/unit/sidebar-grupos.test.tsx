@@ -162,6 +162,8 @@ describe("Sidebar por área", () => {
     expect(screen.getByRole("link", { name: "Início" }).className).toContain("min-h-11");
     expect(screen.getByRole("button", { name: "Vendas" }).className).toContain("min-h-11");
     expect(screen.getByRole("button", { name: "Sair" }).className).toContain("min-h-11");
+    // "Buscar tela" também mora na gaveta do iPhone: 40 px ali reprovava a prova da D1.10.
+    expect(screen.getByRole("button", { name: /Buscar tela/ }).className).toMatch(/(^| )h-11( |$)/);
   });
 
   it("a tela atual fica marcada dentro do grupo", () => {

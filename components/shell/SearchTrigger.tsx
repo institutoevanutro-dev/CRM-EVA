@@ -36,7 +36,7 @@ export function SearchTrigger({ recolhida = false, atalho = true }: { naLateral?
         title={recolhida ? t("Buscar tela") : undefined}
         aria-label={recolhida ? t("Buscar tela") : undefined}
         className={cn(
-          "flex h-10 w-full items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-active hover:text-sidebar-fg",
+          "flex h-11 w-full items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-active hover:text-sidebar-fg lg:h-10",
           recolhida && "justify-center px-0",
         )}
       >
