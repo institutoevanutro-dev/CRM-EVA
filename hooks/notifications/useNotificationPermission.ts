@@ -18,9 +18,9 @@ import { resumeAudio } from "@/lib/notifications/sounds";
 function confirmOnOs(on: boolean): void {
   emitNotification({
     kind: "alerts_toggle",
-    title: on ? "Alertas ligados" : "Alertas desligados",
+    title: on ? "Avisos ligados" : "Avisos desligados",
     body: on
-      ? "Novas mensagens aparecem na bandeja do sistema."
+      ? "Este navegador vai mostrar os avisos na bandeja do sistema."
       : "Este navegador não vai mais avisar na bandeja.",
     force: true,
     sound: on ? "success" : "failure",
@@ -71,8 +71,10 @@ export function useNotificationPermission(): {
     await resumeAudio();
     const next = await requestPermission();
     if (next === "granted") {
-      setAlertsEnabled(true);
-      setEnabledState(true);
+      // A permissão NÃO liga "Nova mensagem": quem pede pela linha "Conversa
+      // passada pela IA" quer só os avisos que pedem gente. O botão de mensagem
+      // grava a escolha dele (`gravarCanal`), e a inscrição leva o que estiver lá.
+      setEnabledState(areAlertsEnabled());
       void ensureNotifyServiceWorker().then(() => syncPushSubscription());
       confirmOnOs(true);
     }

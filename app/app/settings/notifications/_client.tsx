@@ -19,6 +19,7 @@ import {
 import { syncPushSubscription } from "@/lib/notifications/push_client";
 
 const LABELS: Record<NotifyCategory, string> = {
+  handoff: "Conversa passada pela IA",
   message: "Nova mensagem",
   lead_assigned: "Lead atribuído a você",
   lead_won: "Lead ganho",
@@ -42,7 +43,10 @@ export function NotificationPrefsClient() {
     }
     gravarCanal(category, channel, on);
     // O servidor precisa saber: é ele quem manda (ou não) o push de mensagem.
-    if (category === "message" && channel === "push") void syncPushSubscription();
+    // A linha da IA inscreve o aparelho, com "Nova mensagem" do jeito que está.
+    if ((category === "message" || category === "handoff") && channel === "push") {
+      void syncPushSubscription();
+    }
   }
 
   return (
@@ -61,7 +65,14 @@ export function NotificationPrefsClient() {
             <tr key={cat} className="border-b last:border-0">
               <td className="px-4 py-3">
                 {t(LABELS[cat])}
-                {cat === "message" && denied ? (
+                {cat === "handoff" && unsupported ? (
+                  <p data-testid="push-sem-suporte" className="mt-1 text-xs text-muted-foreground">
+                    {t(
+                      "Este navegador não recebe avisos. No iPhone, adicione o site à Tela de Início (Compartilhar › Adicionar à Tela de Início) e abra por lá. Precisa do iOS 16.4 ou mais novo.",
+                    )}
+                  </p>
+                ) : null}
+                {(cat === "handoff" || cat === "message") && denied ? (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {t(
                       "O navegador bloqueou as notificações. Libere-as nas configurações do site e recarregue.",
@@ -73,15 +84,19 @@ export function NotificationPrefsClient() {
                 <Switch checked={false} disabled aria-label={`${t(LABELS[cat])} via email`} />
               </td>
               <td className="px-4 py-3 text-center">
+                {/* A conversa passada pela IA já aparece na Central: o in-app daqui não faria nada. */}
                 <Switch
-                  checked={prefs[cat].in_app}
+                  checked={cat === "handoff" ? false : prefs[cat].in_app}
+                  disabled={cat === "handoff"}
                   onCheckedChange={(on) => void onToggle(cat, "in_app", on)}
                   aria-label={`${t(LABELS[cat])} via in_app`}
                 />
               </td>
               <td className="px-4 py-3 text-center">
+                {/* Ligada por padrão, mas só aparece ligada com a permissão do navegador:
+                    é ligando-a que a pessoa chega ao "Permitir". */}
                 <Switch
-                  checked={prefs[cat].push}
+                  checked={cat === "handoff" ? prefs.handoff.push && permission === "granted" : prefs[cat].push}
                   disabled={denied || unsupported}
                   onCheckedChange={(on) => void onToggle(cat, "push", on)}
                   aria-label={`${t(LABELS[cat])} via push`}
