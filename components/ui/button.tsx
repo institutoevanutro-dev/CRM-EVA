@@ -52,9 +52,12 @@ const buttonVariants = cva(
       // necessidade nenhuma. `lg` já nascia com 44px e não precisou mudar.
       size: {
         sm: "h-11 px-3 text-xs lg:h-8",
-        // Mesma altura do campo (D1.8): 40 px no mouse, 44 px no toque.
-        default: "h-10 toque:h-11 px-4 text-sm",
-        md: "h-10 toque:h-11 px-4 text-sm",
+        // D1.8: 40 px no mouse (mesma altura do campo), 44 px no toque. Abaixo
+        // de `lg` continua 44 px mesmo com mouse, como as outras variantes:
+        // tela estreita é celular, e `pointer: coarse` sozinho deixava o botão
+        // em 40 px a 390 px de largura (e2e `inbox-enviar-exame-ao-prontuario`).
+        default: "h-11 lg:h-10 toque:h-11 px-4 text-sm",
+        md: "h-11 lg:h-10 toque:h-11 px-4 text-sm",
         lg: "h-11 px-6 text-sm",
         icon: "h-11 w-11 lg:h-9 lg:w-9",
       },

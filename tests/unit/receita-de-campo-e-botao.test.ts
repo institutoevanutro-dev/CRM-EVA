@@ -21,7 +21,8 @@ describe("D1.8 — campo e botão com a mesma receita", () => {
   it("campo, seletor e botão padrão têm 40 px no mouse e 44 px no toque", () => {
     expect(ler("components/ui/input.tsx")).toMatch(/h-10 toque:h-11/);
     expect(ler("components/ui/select.tsx")).toMatch(/h-10 toque:h-11/);
-    expect(ler("components/ui/button.tsx")).toMatch(/default: "h-10 toque:h-11/);
+    // Botão: 44 px abaixo de `lg` (tela estreita = celular, com ou sem toque).
+    expect(ler("components/ui/button.tsx")).toMatch(/default: "h-11 lg:h-10 toque:h-11/);
   });
 
   it("a variante `toque` e o token de borda de campo existem", () => {
