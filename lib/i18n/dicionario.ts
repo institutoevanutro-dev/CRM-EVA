@@ -939,7 +939,6 @@ export const DICIONARIO: Traducoes = {
   "Todos os números": { es: "Todos los números" },
   "Só Instagram": { es: "Solo Instagram" },
   "Só WhatsApp": { es: "Solo WhatsApp" },
-  "Todas as tags": { es: "Todas las etiquetas" },
   // #1274 — filtro por VÁRIAS etiquetas (E/OU). As duas entradas novas do menu
   // de etiqueta das TRÊS listas (Inbox, funil e contatos); o rótulo do item do
   // menu é a pergunta, e o "✓" que marca o modo corrente é um caractere, não uma
@@ -1064,11 +1063,12 @@ export const DICIONARIO: Traducoes = {
   "LEADS RECENTES": { es: "LEADS RECIENTES" },
   "PEDIDOS RECENTES": { es: "PEDIDOS RECIENTES" },
   ATIVIDADE: { es: "ACTIVIDAD" },
-  "Sem tags.": { es: "Sin etiquetas." },
+  "Sem etiquetas.": { es: "Sin etiquetas." },
   "Sem leads.": { es: "Sin leads." },
+  "Nenhum negócio aberto.": { es: "Ningún negocio abierto." },
   "Sem pedidos.": { es: "Sin pedidos." },
   "Sem atividade.": { es: "Sin actividad." },
-  "Nova tag…": { es: "Nueva etiqueta…" },
+  "Nova etiqueta…": { es: "Nueva etiqueta…" },
   "Sem próximo passo definido": { es: "Sin próximo paso definido" },
   "Marcar próximo passo": { es: "Marcar próximo paso" },
   Lead: { es: "Lead" },
@@ -4424,6 +4424,7 @@ export const DICIONARIO: Traducoes = {
   },
   "Texto da mensagem": { es: "Texto del mensaje" },
   "Tags do contato": { es: "Etiquetas del contacto" },
+  "Etiquetas do contato": { es: "Etiquetas del contacto" },
   "Tag adicionada": { es: "Etiqueta agregada" },
   "Quando entrar um contato novo (webhook)": { es: "Cuando entre un contacto nuevo (webhook)" },
   "Quando um lead mudar de etapa": { es: "Cuando un lead cambie de etapa" },
@@ -5735,10 +5736,9 @@ export const DICIONARIO: Traducoes = {
   "Mostrar atalhos": { es: "Mostrar atajos" },
 
   // ─── Inbox: tags de contato/conversa ───
-  "Sem tags no contato.": { es: "Sin etiquetas en el contacto." },
-  "Adicionar tag ao contato": { es: "Agregar etiqueta al contacto" },
-  "Remover tag": { es: "Quitar etiqueta" },
-  "Tags da conversa": { es: "Etiquetas de la conversación" },
+  "Sem etiquetas no contato.": { es: "Sin etiquetas en el contacto." },
+  "Adicionar etiqueta ao contato": { es: "Agregar etiqueta al contacto" },
+  "Etiquetas da conversa": { es: "Etiquetas de la conversación" },
 
   // ─── Inbox: janela de 24h fechada / seletor de modelo aprovado ───
   "Modelo enviado — a janela reabre quando o cliente responder.": {
@@ -5942,7 +5942,7 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível concluir a organização agora. Tente novamente ou contate o administrador da instalação.": {
     es: "No fue posible completar la organización ahora. Inténtalo de nuevo o contacta al administrador de la instalación.",
   },
-  "Adicionar tag à conversa": { es: "Agregar etiqueta a la conversación" },
+  "Adicionar etiqueta à conversa": { es: "Agregar etiqueta a la conversación" },
   "O cliente ainda não escreveu — a janela de 24h nunca abriu. Só um modelo aprovado sai daqui.": {
     es: "El cliente todavía no escribió — la ventana de 24h nunca se abrió. Solo un modelo aprobado sale de aquí.",
   },
@@ -7469,6 +7469,7 @@ export const DICIONARIO: Traducoes = {
     es: "Esto no tiene vuelta atrás: el embudo y sus etapas desaparecen. Si ya recibió negocio, la eliminación se rechaza y sigue archivado.",
   },
   "Novo Lead": { es: "Nuevo Lead" },
+  "Novo negócio": { es: "Nuevo negocio" },
   "Não consegui carregar este funil:": { es: "No pude cargar este embudo:" },
   "sem responsável.": { es: "sin responsable." },
   "atribuído.": { es: "asignado." },

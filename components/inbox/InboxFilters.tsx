@@ -275,7 +275,7 @@ export function InboxFilters({ value, onChange }: Props) {
    * o vocabulário volte a indefinido ou vazio (chave nova, refetch, organização
    * piscando) não escondia só o controle: DESMONTAVA o Select, e o menu que o
    * operador tinha acabado de abrir fechava sozinho, com o gatilho de volta em
-   * "Todas as tags". Era o filtro fechando na cara de quem ia escolher.
+   * "Todas as etiquetas". Era o filtro fechando na cara de quem ia escolher.
    *
    * Por isso o seletor passa a usar o último vocabulário NÃO-VAZIO que esta
    * tela conheceu: enquanto o de agora oscila, o de antes segura o controle
@@ -525,15 +525,15 @@ export function InboxFilters({ value, onChange }: Props) {
                       <PontoDaEtiqueta tag={etiquetas[0]} className="mr-1.5" />
                     ) : null}
                     {etiquetas.length === 0
-                      ? t("Todas as tags")
+                      ? t("Todas as etiquetas")
                       : etiquetas.length === 1
                         ? etiquetas[0]
                         : `${etiquetas[0]} +${etiquetas.length - 1}`}
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-64">
-                  <DropdownMenuLabel>{t("Todas as tags")}</DropdownMenuLabel>
-                  {/* Acima dos itens: "Todas as tags" (que limpa o filtro) e o
+                  <DropdownMenuLabel>{t("Todas as etiquetas")}</DropdownMenuLabel>
+                  {/* Acima dos itens: "Todas as etiquetas" (que limpa o filtro) e o
                       E/OU continuam alcançáveis com a lista toda filtrada. */}
                   <div className="px-2 pb-1">
                     <Input
@@ -553,7 +553,7 @@ export function InboxFilters({ value, onChange }: Props) {
                   <DropdownMenuItem
                     onClick={() => onChange({ ...value, tag: undefined, tagMode: undefined })}
                   >
-                    {t("Todas as tags")}
+                    {t("Todas as etiquetas")}
                   </DropdownMenuItem>
                   {/*
                     O E/OU só aparece havendo DUAS etiquetas. Com uma só o parâmetro

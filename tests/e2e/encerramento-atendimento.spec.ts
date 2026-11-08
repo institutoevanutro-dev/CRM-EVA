@@ -177,7 +177,7 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     // longo — se ele quebrar a fileira ou sumir, é aqui que aparece. Cabe nesta
     // spec, e não numa nova, porque o painel já está montado neste ponto: spec
     // nova custaria mais um login e mais um seed ao relógio do CI.
-    await expect(page.getByRole("button", { name: "Novo Lead", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Novo negócio", exact: true })).toBeVisible();
     await abrirAcoesDaConversa(page);
     await page.getByRole("button", { name: "Fechar", exact: true }).click();
     // I6: a confirmação é o AlertDialog do sistema, não o confirm() do navegador.

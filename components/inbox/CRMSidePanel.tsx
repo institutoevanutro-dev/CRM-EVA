@@ -936,7 +936,7 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
             onSalvo={recarregar}
           /></fieldset>
         ) : (
-          <SemLista vazio="Sem leads." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
+          <SemLista vazio="Nenhum negócio aberto." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
         )}
       </section>
 
@@ -966,7 +966,7 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
               aria-pressed={tagEditorOpen}
               onClick={() => setTagEditorOpen((v) => !v)}
             >
-              <Tag size={12} className="mr-1" weight="regular" aria-hidden /> {t("Tags do contato")}
+              <Tag size={12} className="mr-1" weight="regular" aria-hidden /> {t("Etiquetas do contato")}
             </Button>
             <Button
               size="sm"
@@ -976,7 +976,7 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
               onClick={() => setLeadDialogOpen(true)}
             >
               <Users size={12} className="mr-1" weight="regular" aria-hidden />
-              {leadDialogOpen && defaultPipeline.isLoading ? t("Carregando…") : t("Novo Lead")}
+              {leadDialogOpen && defaultPipeline.isLoading ? t("Carregando…") : t("Novo negócio")}
             </Button>
             {contactId && (
               <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
@@ -993,6 +993,7 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
 
       {contactId && defaultPipeline.data && (
         <NewLeadDialog
+          titulo={t("Novo negócio")}
           open={leadDialogOpen}
           onOpenChange={setLeadDialogOpen}
           pipelineId={defaultPipeline.data.pipeline.id}

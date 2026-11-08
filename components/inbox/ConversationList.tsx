@@ -122,7 +122,7 @@ export function ConversationList({
   const mostrarAutomatico =
     !(filters.comando?.length === 1 && filters.comando[0] === "automatico");
   // O selo de quem atende some quando a aba já filtra por um comando só: em
-  // "Automático" toda linha diria "IA".
+  // "Automático" toda linha diria "Automático".
   const mostrarComando = !(filters.comando?.length === 1);
 
   useEffect(() => {

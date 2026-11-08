@@ -7,7 +7,8 @@ import { InboxLayout } from "@/components/inbox/InboxLayout";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Inbox" };
+// "Conversas · {marca}" (I11): o `template` do layout raiz acrescenta a marca.
+export const metadata: Metadata = { title: "Conversas" };
 
 export default async function InboxPage({
   searchParams,
