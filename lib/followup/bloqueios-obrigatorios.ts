@@ -33,6 +33,14 @@
  *     levaria junto as mensagens fixas que vêm depois (ex.: a sequência
  *     pós-consulta de 7/15/30/45/75 dias), que é exatamente o que o dono quer
  *     que chegue. Ver `TipoDoPasso`;
+ *   - caso aberto esperando a equipe (`agent_cases` `awaiting_human` NESTA
+ *     conversa) há menos de 2 dias úteis: a IA já disse ao contato que a
+ *     equipe responde, e nenhuma retomada sai por cima disso. O passo de IA é
+ *     PULADO, como o do `force_human`; o de texto fixo é ADIADO para o fim do
+ *     prazo (pular perderia a mensagem do dia). Com prazo porque, na prática,
+ *     caso quase nunca é fechado no CRM: sem ele, um caso esquecido calaria o
+ *     follow-up para sempre. Lembrete de compromisso fica de fora (ver
+ *     `ehLembreteDeCompromisso`). Ver `fimDosDiasUteis`;
  *   - negócio em etapa que invalida follow-up (`crm_stages.blocks_followups`,
  *     ex.: comprovante em conferência);
  *   - resposta do contato depois do último envio, quando o fluxo cancela na
@@ -57,6 +65,7 @@ import { z } from 'zod';
 import { decidirElegibilidade, montarEstadoDeElegibilidade, ttlDaAutorizacaoMs } from '@/lib/ai/elegibilidade/gate';
 import { silencioDoBotEhRoteamento } from '@/lib/channels/capabilities';
 import { fimDaJanelaAutomatica } from '@/lib/channels/janela';
+import { fusoUtilizavel } from '@/lib/tempo/fusos';
 
 // ─── configuração da organização ─────────────────────────────────────────────
 
@@ -166,6 +175,34 @@ function partesLocais(agora: Date, tz: string): { dia: number; minuto: number } 
   return { dia: dias[partes.weekday!]!, minuto: Number(partes.hour) * 60 + Number(partes.minute) };
 }
 
+/**
+ * O instante em que se completam `dias` dias úteis depois de `desde`. Conta só
+ * o tempo corrido de segunda a sexta no fuso dado; sábado e domingo valem zero.
+ * Sexta 20h + 2 dias úteis = terça 20h (4h de sexta, 24h de segunda, 20h de
+ * terça); sábado 10h + 2 = quarta 0h. Feriado conta como dia útil.
+ *
+ * ponytail: anda de meia-noite em meia-noite local lida por `partesLocais`;
+ * no dia de troca de horário de verão erra até 1h. Brasil não tem horário de
+ * verão desde 2019; trocar por aritmética de calendário se um fuso com ele
+ * passar a importar.
+ */
+export function fimDosDiasUteis(desde: Date, dias: number, fuso: string): Date {
+  let restanteMs = dias * 24 * 3_600_000;
+  let t = desde.getTime();
+  for (;;) {
+    const { dia, minuto } = partesLocais(new Date(t), fuso);
+    const meiaNoite = t + (1440 - minuto) * 60_000 - (t % 60_000);
+    if (dia !== 0 && dia !== 6) {
+      if (meiaNoite - t >= restanteMs) return new Date(t + restanteMs);
+      restanteMs -= meiaNoite - t;
+    }
+    t = meiaNoite;
+  }
+}
+
+/** Quantos dias úteis um caso aberto segura as retomadas do follow-up. */
+export const DIAS_UTEIS_DO_CASO_ABERTO = 2;
+
 export function dentroDaJanela(janela: NonNullable<ConfigDosBloqueios['janela']>, agora: Date): boolean {
   const { dia, minuto } = partesLocais(agora, janela.timezone);
   if (!janela.dias.includes(dia)) return false;
@@ -247,10 +284,18 @@ export interface FatosDoEnvio {
    * segue: não há o que adiar, só quem escreve de novo reabre a janela.
    */
   fim_da_janela_automatica: string | null;
+  /**
+   * Início da espera (`espera_desde`, ou `opened_at`) do caso `awaiting_human`
+   * mais recente DESTA conversa. `null`/ausente = nenhum caso esperando a equipe.
+   */
+  caso_aguardando_equipe_desde?: string | null;
+  /** `organizations.timezone`, para contar os dias úteis do caso. Ausente = fuso padrão. */
+  fuso?: string;
 }
 
 export type MotivoDoBloqueio =
   | 'nao_verificavel'
+  | 'caso_aguardando_equipe'
   | 'configuracao_invalida'
   | 'inscricao_encerrada'
   | 'opt_out'
@@ -400,7 +445,7 @@ export async function passoFixoIgnoraPausaDaIA(
 }
 
 /** Motivos que pulam ESTE passo e deixam o fluxo seguir. */
-export type MotivoDoPulo = 'fora_das_24h_do_instagram' | 'atendimento_humano' | 'ia_pausada';
+export type MotivoDoPulo = 'fora_das_24h_do_instagram' | 'atendimento_humano' | 'ia_pausada' | 'caso_aguardando_equipe';
 
 /** O texto do passo pulado, gravado no evento `action_pulado`. */
 export const TEXTO_DO_PULO: Record<MotivoDoPulo, string> = {
@@ -409,24 +454,41 @@ export const TEXTO_DO_PULO: Record<MotivoDoPulo, string> = {
     "Passo pulado: o contato está marcado como 'sempre atendimento humano', e a IA não escreve para ele. As mensagens fixas da sequência seguem.",
   ia_pausada:
     'Passo pulado: a IA está pausada nesta conversa (uma pessoa da equipe está no atendimento). As mensagens fixas da sequência seguem.',
+  caso_aguardando_equipe: 'Passo pulado: a equipe ainda vai responder um caso aberto nesta conversa.',
 };
+
+/** Motivos que não enviam AGORA e reagendam o passo para `adiarPara`. */
+export type MotivoDoAdiamento = 'fora_da_janela' | 'caso_aguardando_equipe';
 
 export type DecisaoDoEnvio =
   | { envia: true }
-  /** Não envia AGORA e reagenda para a abertura da janela. */
-  | { envia: false; motivo: 'fora_da_janela'; adiarPara: Date }
+  /** Não envia AGORA e reagenda: abertura da janela, ou fim do prazo do caso aberto. */
+  | { envia: false; motivo: MotivoDoAdiamento; adiarPara: Date }
   /**
    * Não envia. `invalida`: a sequência não tem mais razão de seguir e é
    * cancelada com o motivo (e o desfecho de `OUTCOME_DO_BLOQUEIO`). Sem
    * `invalida` (não verificável, configuração inválida, inscrição encerrada),
    * nada muda na inscrição.
    */
-  | { envia: false; motivo: Exclude<MotivoDoBloqueio, 'fora_da_janela' | 'fora_das_24h_do_instagram'>; invalida: boolean }
+  | { envia: false; motivo: Exclude<MotivoDoBloqueio, MotivoDoAdiamento | 'fora_das_24h_do_instagram'>; invalida: boolean }
   /**
    * Não envia ESTE passo e o fluxo segue para o próximo nó. Nem cancela (a
    * sequência ainda faz sentido) nem adia (esperar não reabre a janela).
    */
   | { envia: false; motivo: MotivoDoPulo; pula: true };
+
+/**
+ * Lembrete de COMPROMISSO: fluxo amarrado a uma reserva (sinal) ou cujo
+ * gatilho é um evento da agenda (`appointment_*` — hoje presença e falta; o
+ * prefixo pega o gatilho de consulta que vier, sem depender de lembrar desta
+ * lista). Um caso aberto nunca barra isto: não é retomada de conversa, é aviso
+ * sobre um horário marcado.
+ */
+export function ehLembreteDeCompromisso(fatos: Pick<FatosDoEnvio, 'trigger_config' | 'reserva'>): boolean {
+  if (fatos.reserva !== null) return true;
+  const kind = (fatos.trigger_config as { kind?: unknown } | null)?.kind;
+  return typeof kind === 'string' && kind.startsWith('appointment_');
+}
 
 function cancelaNaResposta(triggerConfig: unknown): boolean {
   return (
@@ -543,6 +605,23 @@ export function decidirEnvio(
     });
     if (anterior) return { envia: false, motivo: 'sequencia_concorrente', invalida: true };
   }
+  // Caso aberto esperando a equipe, no prazo: a IA já prometeu que a equipe
+  // responde, e retomada nenhuma desmente isso. Não encerra: a IA é PULADA
+  // (como no `force_human`); o texto fixo é ADIADO para o fim do prazo — se
+  // o prazo cair fora da janela da organização, a janela adia de novo lá.
+  // Lembrete de compromisso não é retomada e passa.
+  if (fatos.caso_aguardando_equipe_desde != null && !ehLembreteDeCompromisso(fatos)) {
+    const fimDoPrazo = fimDosDiasUteis(
+      new Date(fatos.caso_aguardando_equipe_desde),
+      DIAS_UTEIS_DO_CASO_ABERTO,
+      fusoUtilizavel(fatos.fuso),
+    );
+    if (agora.getTime() < fimDoPrazo.getTime()) {
+      return passo === 'ia'
+        ? { envia: false, motivo: 'caso_aguardando_equipe', pula: true }
+        : { envia: false, motivo: 'caso_aguardando_equipe', adiarPara: fimDoPrazo };
+    }
+  }
   // Depois de tudo que encerra a sequência (ela não deve seguir, pulando ou
   // não) e antes da janela da organização: a IA não escreve para quem é
   // "sempre atendimento humano", e adiar não muda isso.
@@ -582,6 +661,7 @@ export const TEXTO_DO_BLOQUEIO: Record<MotivoDoBloqueio, string> = {
   nao_verificavel: 'Envio não feito: não foi possível conferir as regras obrigatórias antes do envio.',
   configuracao_invalida: 'Envio não feito: a configuração de bloqueios de follow-up da organização está inválida.',
   inscricao_encerrada: 'Envio não feito: a sequência já tinha sido encerrada.',
+  caso_aguardando_equipe: 'Envio adiado: a equipe ainda vai responder um caso aberto nesta conversa.',
   opt_out: 'Sequência encerrada: o contato pediu para não receber mensagens.',
   contato_anonimizado: 'Sequência encerrada: o contato foi anonimizado.',
   contato_oculto: 'Sequência encerrada: o contato foi ocultado do Inbox pela equipe.',
@@ -637,7 +717,7 @@ export async function lerFatosDoEnvio(
 ): Promise<LeituraDosBloqueios> {
   const { organizationId: org, contactId, conversationId, enrollmentId } = input;
   try {
-    const [insc, contato, conversa, negocios, recebida, enviada, consultas, outras, organizacao] = await Promise.all([
+    const [insc, contato, conversa, negocios, recebida, enviada, consultas, outras, organizacao, caso] = await Promise.all([
       pool.query<{
         id: string;
         status: string;
@@ -777,7 +857,16 @@ export async function lerFatosDoEnvio(
             and status in ('active', 'waiting_reply', 'paused_handoff')`,
         [org, contactId, enrollmentId],
       ),
-      pool.query<{ settings: unknown }>(`select settings from organizations where id = $1`, [org]),
+      pool.query<{ settings: unknown; timezone: string | null }>(
+        `select settings, timezone from organizations where id = $1`,
+        [org],
+      ),
+      // `agent_cases` não tem contato: o vínculo é a conversa (a da inscrição).
+      pool.query<{ em: Date | null }>(
+        `select max(coalesce(espera_desde, opened_at)) as em from agent_cases
+          where organization_id = $1 and conversation_id = $2 and status = 'awaiting_human'`,
+        [org, conversationId],
+      ),
     ]);
     const e = insc.rows[0];
     const c = contato.rows[0];
@@ -837,6 +926,8 @@ export async function lerFatosDoEnvio(
         outras_inscricoes_vivas: outras.rows.map((r) => ({ id: r.id, started_at: iso(r.started_at)! })),
         reserva,
         fim_da_janela_automatica: fimDaJanelaAutomatica(v.provider, iso(v.last_inbound_at))?.toISOString() ?? null,
+        caso_aguardando_equipe_desde: iso(caso.rows[0]?.em),
+        fuso: fusoUtilizavel(o.timezone),
       },
     };
   } catch {

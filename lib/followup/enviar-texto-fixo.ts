@@ -152,13 +152,13 @@ export async function enviarTextoFixoPendente(
           await settle(job.organization_id,job.id,jobClaim.acquired_at,true);
           continue;
         }
-        if (decisao.motivo === "fora_da_janela") {
+        if ("adiarPara" in decisao) {
           // O adiamento volta para o enrollment ANTES do settle (que solta o
           // job): sem isto o motor lia a espera como worker morto e marcava `dead`.
           await completeTurnForEnrollment(ponte, job.organization_id, enrollmentId, nodeId, {
-            kind: "deferred", until: decisao.adiarPara, reason: "fora_da_janela",
+            kind: "deferred", until: decisao.adiarPara, reason: decisao.motivo,
           },undefined,job.id,jobClaim);
-          await settle(job.organization_id,job.id,jobClaim.acquired_at,false,TEXTO_DO_BLOQUEIO.fora_da_janela,undefined,decisao.adiarPara.toISOString());
+          await settle(job.organization_id,job.id,jobClaim.acquired_at,false,TEXTO_DO_BLOQUEIO[decisao.motivo],undefined,decisao.adiarPara.toISOString());
           continue;
         }
         if (decisao.invalida) {

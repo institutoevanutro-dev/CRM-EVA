@@ -594,7 +594,7 @@ async function runFlowDrivenTurn(
         });
         return;
       }
-      if (b.motivo === 'fora_da_janela') {
+      if ('adiarPara' in b) {
         await rescheduleReentry(pool, {
           tenantId: target.tenantId,
           leadId: target.leadId,
@@ -610,7 +610,7 @@ async function runFlowDrivenTurn(
           organizationId: target.tenantId,
           enrollmentId,
           nodeId,
-          result: { kind: 'deferred', until: b.adiarPara, reason: 'fora_da_janela' },
+          result: { kind: 'deferred', until: b.adiarPara, reason: b.motivo },
         });
         return;
       }
