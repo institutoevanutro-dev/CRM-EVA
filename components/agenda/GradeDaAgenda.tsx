@@ -26,12 +26,13 @@ import {
   type MotivoDaGradeTravada,
 } from "@/lib/agenda/grade-interativa";
 import { inicioDaGradeDoMes, SEMANAS_DA_GRADE_DO_MES } from "@/lib/agenda/recorte-da-grade";
-import { diaLocalISO, instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
+import { dataDeParede, diaLocalISO, instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
 import { Warning } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
 
 import { corDaTrilha, fundoDaTrilha } from "./paleta";
+import { nomeCurto, rotuloDoBloco } from "./rotulo-do-bloco";
 import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
 
 /**
@@ -362,6 +363,7 @@ function BlocoDeAgendamento({
   fuso,
   coluna,
   colunas,
+  visao,
   arraste,
 }: {
   agendamento: Agendamento;
@@ -370,6 +372,8 @@ function BlocoDeAgendamento({
   fuso: string;
   coluna: number;
   colunas: number;
+  /** Semana encurta o nome do paciente ("Maria S."); Dia mostra inteiro. */
+  visao: VisaoDaAgenda;
   /**
    * O gesto de remarcar — ponteiro e teclado pelo MESMO caminho.
    *
@@ -399,6 +403,14 @@ function BlocoDeAgendamento({
   // WhatsApp: o prontuário não abre o atendimento sem o nome completo. O aviso
   // fica no bloco; o clique abre o painel, que tem o campo para completar.
   const faltaNome = agendamento.faltaNomeCompleto === true && !doGoogle && !cancelado;
+  const paciente = agendamento.quemSeraAtendido;
+  const rotulo = rotuloDoBloco({
+    titulo: agendamento.titulo,
+    paciente,
+    hora: rotuloHora(comeca, fuso),
+    duracaoMin: duracao,
+    visao,
+  });
 
   return (
     <button
@@ -430,21 +442,22 @@ function BlocoDeAgendamento({
       onKeyDown={
         arraste && !doGoogle && !cancelado ? (e) => arraste.aoTeclar(e, agendamento) : undefined
       }
-      // "com" nesta tela significa QUEM SERÁ ATENDIDO — é o vocabulário do
-      // próprio subtítulo ("O que está marcado, com quem, e quem atende"). O
-      // rótulo dizia `, com ${pessoa.nome}`, que é o ATENDENTE: quem usa leitor
-      // de tela ouvia os dois papéis trocados, e o card visual não desmente
-      // porque em compromisso de 30min ele nem mostra o contato.
+      // O rótulo COMEÇA PELO PACIENTE (A1), como o bloco visual: quem vem é o
+      // que se procura. O ATENDENTE vem depois, com "atendido por" — os dois
+      // papéis nunca podem soar iguais para quem usa leitor de tela.
       // `titulo` é DADO DO OPERADOR — a rota grava `title ?? tipo.name`, e
       // `tipo.name` é o nome que ele cadastrou em Tipos de agendamento. Passá-lo
       // por `t()` fazia "Retorno" virar "Seguimiento" na leitura de tela.
-      aria-label={`${agendamento.titulo}, ${rotuloHora(comeca, fuso)} ${t("às")} ${rotuloHora(termina, fuso)}${
-        agendamento.quemSeraAtendido ? `, ${t("com")} ${agendamento.quemSeraAtendido}` : ""
-      }${pessoa ? `, ${t("atendido por")} ${pessoa.nome}` : ""}${
+      aria-label={`${paciente ? `${paciente}, ` : ""}${agendamento.titulo}, ${rotuloHora(comeca, fuso)} ${t("às")} ${rotuloHora(termina, fuso)}${
+        pessoa ? `, ${t("atendido por")} ${pessoa.nome}` : ""
+      }${
         doGoogle && !agendamento.bloqueio ? `, ${t("ocupado na agenda do Google")}` : ""
       }${faltaNome ? `, ${t("falta o nome completo")}` : ""}`}
       className={cn(
-        "absolute flex flex-col items-start overflow-hidden rounded-sm px-1.5 py-0.5 text-left",
+        "absolute flex flex-col items-start overflow-hidden rounded-sm px-1.5 text-left",
+        // Uma linha só (15 e 30 min): `py-px` para a linha de 16 px caber nos
+        // 18 px do bloco mínimo.
+        rotulo.apoio === null ? "py-px" : "py-0.5",
         "border border-border/60 transition-colors duration-fast ease-out",
         doGoogle ? "cursor-default" : "cursor-pointer hover:border-border-strong",
         // `grab` só quando remarcar é possível: o cursor é a única pista de que
@@ -503,21 +516,21 @@ function BlocoDeAgendamento({
           className="absolute right-0.5 top-0.5 text-warning"
         />
       ) : null}
-      {/* Com espaço (1h ou mais), o nome do compromisso quebra em duas linhas
-          em vez de virar "Consulta de acomp…" (print de 08/10/2026). */}
+      {/* Linha 1: quem vem (12/16 semibold). Com folga (1h30 ou mais) o nome
+          quebra em duas linhas em vez de cortar (print de 08/10/2026). */}
       <span
         className={cn(
-          "ml-1 text-[11px] font-semibold leading-4 text-text",
-          duracao >= 60 ? "line-clamp-2 break-words" : "truncate",
+          "ml-1 max-w-full text-xs font-semibold leading-4 text-text",
+          duracao >= 90 ? "line-clamp-2 break-words" : "truncate",
+          rotulo.apoio === null && "tabular-nums",
           faltaNome && "pr-3",
         )}
       >
-        {agendamento.titulo}
+        {rotulo.principal}
       </span>
-      {duracao >= 45 && (
-        <span className="ml-1 truncate text-[10px] leading-3 tabular-nums text-text-muted">
-          {rotuloHora(comeca, fuso)}
-          {agendamento.quemSeraAtendido ? ` · ${agendamento.quemSeraAtendido}` : ""}
+      {rotulo.apoio !== null && (
+        <span className="ml-1 max-w-full truncate text-[11px] leading-3.5 tabular-nums text-text-muted">
+          {rotulo.apoio}
         </span>
       )}
     </button>
@@ -586,6 +599,7 @@ function FantasmaDoArraste({
   duracaoMin: number;
   fuso: string;
 }) {
+  const localeDaData = useLocaleDeData();
   const valido = proposta.instante !== null;
   return (
     <div
@@ -604,7 +618,9 @@ function FantasmaDoArraste({
     >
       <span className="truncate text-[10px] font-semibold leading-4 text-text">
         {valido
-          ? rotuloHora(new Date(proposta.instante!), fuso)
+          ? // "→ qui 15:00" (A8): o dia vai junto porque o arraste atravessa
+            // colunas, e a hora sozinha não diz para qual dia ele foi.
+            `→ ${format(dataDeParede(new Date(proposta.instante!), fuso), "EEEEEE", { locale: localeDaData }).replace(".", "")} ${rotuloHora(new Date(proposta.instante!), fuso)}`
           : proposta.razao}
       </span>
     </div>
@@ -623,6 +639,7 @@ function ColunaDeDia({
   interacao,
   proposta,
   arrasteDoCard,
+  visao,
 }: {
   dia: Date;
   agora: Date;
@@ -631,6 +648,7 @@ function ColunaDeDia({
   pessoas: Pessoa[];
   onAbrir?: (id: string) => void;
   destacado: boolean;
+  visao: VisaoDaAgenda;
   /**
    * Some abaixo de `md`. Na semana, o celular mostra UM dia por vez: sete
    * colunas em 360px dão ~44px cada, e a célula de meia hora vira um alvo de
@@ -718,6 +736,7 @@ function ColunaDeDia({
             fuso={fuso}
             coluna={coluna}
             colunas={colunas}
+            visao={visao}
             arraste={
               arrasteDoCard
                 ? { ...arrasteDoCard, ativo: proposta?.id === agendamento.id }
@@ -744,12 +763,16 @@ function VisaoDeMes({
   fuso,
   agendamentos,
   pessoas,
+  onAbrirDia,
+  onAbrirAgendamento,
 }: {
   ancora: Date;
   agora: Date;
   fuso: string;
   agendamentos: Agendamento[];
   pessoas: Pessoa[];
+  onAbrirDia?: (dia: Date) => void;
+  onAbrirAgendamento?: (id: string) => void;
 }) {
   const t = useT();
   const localeDaData = useLocaleDeData();
@@ -778,19 +801,39 @@ function VisaoDeMes({
             (c) => chaveDoDiaDoInstante(new Date(c.comeca), fuso) === chaveDoDia(d),
           );
           const doMes = isSameMonth(d, ancora);
+          const diaPorExtenso = format(d, "d 'de' MMMM", { locale: localeDaData });
           return (
             <div
               key={d.toISOString()}
               data-testid={`celula-mes-${format(d, "yyyy-MM-dd")}`}
               className={cn(
-                "min-h-20 border-b border-r border-border p-1",
+                "relative min-h-20 border-b border-r border-border p-1",
                 !doMes && "bg-surface-elevated/30",
               )}
             >
-              <div className="mb-1 flex items-center justify-between px-0.5">
+              {/* A CÉLULA ABRE O DIA (A7). Botão por baixo de tudo, e não a
+                  célula inteira como `<button>`: os chips dentro dela também são
+                  botões, e botão dentro de botão é HTML inválido — o leitor de
+                  tela engoliria os chips. O número e o "+3 mais" deixam o clique
+                  passar até ele. */}
+              {onAbrirDia ? (
+                <button
+                  type="button"
+                  data-testid={`abrir-dia-${format(d, "yyyy-MM-dd")}`}
+                  aria-label={t("Abrir o dia {dia} · {n} na agenda")
+                    .replace("{dia}", () => diaPorExtenso)
+                    .replace("{n}", () => String(doDia.length))}
+                  onClick={() => onAbrirDia(d)}
+                  className={cn(
+                    "absolute inset-0 z-0 cursor-pointer transition-colors duration-fast ease-out hover:bg-accent-soft",
+                    "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-500",
+                  )}
+                />
+              ) : null}
+              <div className="pointer-events-none relative mb-1 flex items-center justify-between px-0.5">
                 <span
                   className={cn(
-                    "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] tabular-nums",
+                    "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs tabular-nums",
                     chaveDoDia(d) === chaveDoDiaDoInstante(agora, fuso)
                       ? "bg-accent font-semibold text-accent-foreground"
                       : doMes
@@ -801,18 +844,52 @@ function VisaoDeMes({
                   {format(d, "d")}
                 </span>
                 {doDia.length > 2 && (
-                  <span className="text-[10px] tabular-nums text-text-subtle">
-                    +{doDia.length - 2}
+                  <span className="text-xs tabular-nums text-text-muted max-md:hidden">
+                    {t("+{n} mais").replace("{n}", () => String(doDia.length - 2))}
                   </span>
                 )}
               </div>
-              <div className="space-y-0.5">
+              {/* No celular a célula tem uns 48 px de largura: chip não cabe.
+                  Pontos na cor de quem atende e quantos são. */}
+              {doDia.length > 0 && (
+                <div
+                  aria-hidden
+                  data-testid={`pontos-mes-${format(d, "yyyy-MM-dd")}`}
+                  className="pointer-events-none relative flex items-center gap-0.5 px-0.5 md:hidden"
+                >
+                  {doDia.slice(0, 3).map((c) => (
+                    <span
+                      key={c.id}
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{
+                        backgroundColor: corDaTrilha(
+                          pessoas.find((p) => p.id === c.responsavelId)?.trilha ?? 1,
+                        ),
+                      }}
+                    />
+                  ))}
+                  <span className="ml-0.5 text-xs tabular-nums text-text-muted">{doDia.length}</span>
+                </div>
+              )}
+              <div className="pointer-events-none relative space-y-0.5 max-md:hidden">
                 {doDia.slice(0, 2).map((c) => {
                   const trilha = pessoas.find((p) => p.id === c.responsavelId)?.trilha ?? 1;
                   const faltaNome = c.faltaNomeCompleto === true && c.situacao !== "cancelled";
+                  const hora = rotuloHora(new Date(c.comeca), fuso);
+                  // O chip do Google não abre: ele não é compromisso nosso, e
+                  // não há o que editar deste lado (o mesmo do bloco da semana).
+                  const abre = onAbrirAgendamento !== undefined && c.origem !== "google_sync";
+                  const Chip = abre ? "button" : "div";
                   return (
-                    <div
+                    <Chip
                       key={c.id}
+                      {...(abre
+                        ? {
+                            type: "button" as const,
+                            onClick: () => onAbrirAgendamento(c.id),
+                            "aria-label": `${c.quemSeraAtendido ? `${c.quemSeraAtendido}, ` : ""}${c.titulo}, ${hora}`,
+                          }
+                        : {})}
                       data-testid={`chip-mes-${c.id}`}
                       data-falta-nome={faltaNome || undefined}
                       title={faltaNome ? t("Falta o nome completo") : undefined}
@@ -821,7 +898,11 @@ function VisaoDeMes({
                       // derivado de dono + fatia), e é pela origem que se aponta
                       // para ela. Porte de melgarafael/DeskcommCRM 0d1486806.
                       data-origem={c.origem}
-                      className="flex items-center gap-1 rounded-sm px-1 py-0.5"
+                      className={cn(
+                        "flex w-full items-center gap-1 rounded-sm px-1 py-0.5 text-left",
+                        abre &&
+                          "pointer-events-auto cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-1 focus-visible:outline-accent-500",
+                      )}
                       style={{ background: fundoDaTrilha(trilha, 14) }}
                     >
                       <span
@@ -830,12 +911,12 @@ function VisaoDeMes({
                         style={{ backgroundColor: corDaTrilha(trilha) }}
                       />
                       <span className="truncate text-[10px] leading-4 text-text">
-                        {rotuloHora(new Date(c.comeca), fuso)} {c.titulo}
+                        {hora} {c.quemSeraAtendido ? nomeCurto(c.quemSeraAtendido) : c.titulo}
                       </span>
                       {faltaNome ? (
                         <Warning aria-hidden size={10} weight="fill" className="ml-auto shrink-0 text-warning" />
                       ) : null}
-                    </div>
+                    </Chip>
                   );
                 })}
               </div>
@@ -855,6 +936,7 @@ export function GradeDaAgenda({
   pessoas,
   agendamentos,
   onAbrirAgendamento,
+  onAbrirDia,
   interacao,
   className,
 }: {
@@ -881,6 +963,8 @@ export function GradeDaAgenda({
   pessoas: Pessoa[];
   agendamentos: Agendamento[];
   onAbrirAgendamento?: (id: string) => void;
+  /** Mês: tocar na célula abre aquele dia na visão Dia (A7). */
+  onAbrirDia?: (dia: Date) => void;
   /** Ausente = grade só de leitura, como a vitrine a monta. Ver `InteracaoDaGrade`. */
   interacao?: InteracaoDaGrade;
   className?: string;
@@ -1100,6 +1184,8 @@ export function GradeDaAgenda({
           fuso={fuso}
           agendamentos={agendamentos}
           pessoas={pessoas}
+          onAbrirDia={onAbrirDia}
+          onAbrirAgendamento={onAbrirAgendamento}
         />
       ) : (
         // A rolagem mora AQUI dentro, e não na página: `html, body` têm
@@ -1122,6 +1208,7 @@ export function GradeDaAgenda({
                 interacao={interacao}
                 proposta={proposta}
                 arrasteDoCard={arrasteDoCard}
+                visao={visao}
               />
             ))}
           </div>
