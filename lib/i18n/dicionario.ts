@@ -8274,7 +8274,7 @@ export const DICIONARIO: Traducoes = {
   "para": { es: "para" },
   "Remarcar {paciente} ({titulo}) de {de} para {para}?": { es: "¿Reprogramar a {paciente} ({titulo}) de {de} a {para}?" },
   "Remarcar {titulo} de {de} para {para}?": { es: "¿Reprogramar {titulo} de {de} a {para}?" },
-  "O aviso a {paciente} só sai se houver uma automação de remarcação.": { es: "El aviso a {paciente} solo sale si hay una automatización de reprogramación." },
+  "Avise {paciente} do novo horário: a mudança não manda mensagem sozinha, a não ser por uma automação de remarcação.": { es: "Avisa a {paciente} del nuevo horario: el cambio no envía un mensaje solo, salvo con una automatización de reprogramación." },
   "Manter horário": { es: "Mantener horario" },
   "Remarcando": { es: "Reprogramando" },
   "Abrir o dia {dia} · {n} na agenda": { es: "Abrir el día {dia} · {n} en la agenda" },

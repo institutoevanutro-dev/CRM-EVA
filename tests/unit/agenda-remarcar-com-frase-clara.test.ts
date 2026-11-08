@@ -8,7 +8,7 @@ const FUSO = "America/Sao_Paulo";
 const MOLDES = {
   comPaciente: "Remarcar {paciente} ({titulo}) de {de} para {para}?",
   semPaciente: "Remarcar {titulo} de {de} para {para}?",
-  aviso: "O aviso a {paciente} só sai se houver uma automação de remarcação.",
+  aviso: "Avise {paciente} do novo horário: a mudança não manda mensagem sozinha, a não ser por uma automação de remarcação.",
 };
 
 describe("frase de remarcar", () => {
@@ -31,7 +31,7 @@ describe("frase de remarcar", () => {
       }),
     ).toBe(
       "Remarcar Marina Alves (Consulta) de ter 4/11 10:00 para qui 6/11 15:00? " +
-        "O aviso a Marina Alves só sai se houver uma automação de remarcação.",
+        "Avise Marina Alves do novo horário: a mudança não manda mensagem sozinha, a não ser por uma automação de remarcação.",
     );
   });
 

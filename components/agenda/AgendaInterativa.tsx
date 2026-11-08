@@ -251,7 +251,7 @@ export function AgendaInterativa({
           moldes: {
             comPaciente: t("Remarcar {paciente} ({titulo}) de {de} para {para}?"),
             semPaciente: t("Remarcar {titulo} de {de} para {para}?"),
-            aviso: t("O aviso a {paciente} só sai se houver uma automação de remarcação."),
+            aviso: t("Avise {paciente} do novo horário: a mudança não manda mensagem sozinha, a não ser por uma automação de remarcação."),
           },
         })
       : null;
