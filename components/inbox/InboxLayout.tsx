@@ -600,10 +600,10 @@ export function InboxLayout({
   // do MOMENTO do atalho — com o diálogo aberto a seleção não muda (os atalhos
   // ficam desligados), mas a foto não depende disso.
   const [fechandoPeloAtalho, setFechandoPeloAtalho] = useState<string | null>(null);
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     if (!selectedConversation || selectedConversation.status === "closed") return;
     setFechandoPeloAtalho(selectedConversation.id);
-  }, [selectedConversation]);
+  };
 
   // A janela vence SOZINHA com a aba aberta. Sem este relógio, quem deixa o
   // inbox aberto a tarde inteira seguiria com o composer liberado numa conversa
