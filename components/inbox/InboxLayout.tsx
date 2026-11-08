@@ -30,6 +30,7 @@ import { RetentionNotice } from "./RetentionNotice";
 import { CRMSidePanel } from "./CRMSidePanel";
 import type { Message as ConversationMensagem } from "@/lib/types/messaging";
 import { InboxKeyboardShortcuts } from "./InboxKeyboardShortcuts";
+import { ConfirmarNaTela } from "./ConfirmarNaTela";
 import { ComentariosPainel } from "./comentarios/ComentariosPainel";
 
 import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
@@ -594,10 +595,14 @@ export function InboxLayout({
       expected_assignee: selectedConversation.assigned_to_user_id,
     });
   }, [claim, selectedConversation]);
+  // O atalho `e` pede; a confirmação na tela decide (I6). O alvo é a conversa
+  // do MOMENTO do atalho — com o diálogo aberto a seleção não muda (os atalhos
+  // ficam desligados), mas a foto não depende disso.
+  const [fechandoPeloAtalho, setFechandoPeloAtalho] = useState<string | null>(null);
   const handleClose = useCallback(() => {
-    if (!selectedConversation) return;
-    close.mutate({ conversation_id: selectedConversation.id });
-  }, [close, selectedConversation]);
+    if (!selectedConversation || selectedConversation.status === "closed") return;
+    setFechandoPeloAtalho(selectedConversation.id);
+  }, [selectedConversation]);
 
   // A janela vence SOZINHA com a aba aberta. Sem este relógio, quem deixa o
   // inbox aberto a tarde inteira seguiria com o composer liberado numa conversa
@@ -1202,6 +1207,18 @@ export function InboxLayout({
         onClaim={supportReadonly ? () => {} : handleClaim}
         onClose={supportReadonly ? () => {} : handleClose}
         onToggleHelp={() => setHelpOpen((v) => !v)}
+        enabled={fechandoPeloAtalho === null}
+      />
+      <ConfirmarNaTela
+        aberto={fechandoPeloAtalho !== null}
+        onAbertoChange={(aberto) => !aberto && setFechandoPeloAtalho(null)}
+        titulo={t("Fechar esta conversa?")}
+        descricao={t("O atendimento termina. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.")}
+        acao={t("Fechar conversa")}
+        focoNaAcao
+        onConfirmar={() => {
+          if (fechandoPeloAtalho) close.mutate({ conversation_id: fechandoPeloAtalho });
+        }}
       />
       <ShortcutsHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <EncaminharDialog

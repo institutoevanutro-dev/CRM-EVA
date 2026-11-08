@@ -29,6 +29,7 @@ import { comandoDaConversa, ROTULO_DO_MOTIVO } from "@/lib/inbox/comando-da-conv
 import { ExportarConversaEmPdf } from "@/components/inbox/ExportarConversaEmPdf";
 import { OcultarDoInbox, SeloDeOculto } from "@/components/inbox/OcultarDoInbox";
 import { ReassignDialog } from "@/components/inbox/ReassignDialog";
+import { ConfirmarNaTela } from "@/components/inbox/ConfirmarNaTela";
 import { SeloDoCanal } from "@/components/inbox/SeloDoCanal";
 import { SnoozeButton } from "@/components/inbox/SnoozeButton";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
@@ -108,6 +109,12 @@ export function ConversationHeader({
   // atendendo em instalação que nunca configurou agente nenhum.
   const automaticoDaOrg = useAutomaticoAtivo();
   const [reassignOpen, setReassignOpen] = useState(false);
+  // I6 (passo 1): a confirmação guarda a conversa e a revisão do MOMENTO do
+  // clique. Com o diálogo aberto, `j`/`k` ainda trocam a conversa da tela; sem
+  // a foto, o "Fechar conversa" fecharia a que entrou no lugar.
+  const [confirmando, setConfirmando] = useState<
+    { acao: "fechar" | "arquivar"; id: string; revisao: typeof conversation.service_revision } | null
+  >(null);
   // A faixa de ações: escondida até ser pedida, e "em uso" zera ao trocar de conversa.
   const revelacao = useRevelacao({
     chave: conversation.id,
@@ -474,11 +481,9 @@ export function ConversationHeader({
             size="sm"
             variant="outline"
             disabled={close.isPending}
-            onClick={() => {
-              if (confirm(t("Fechar esta conversa?"))) {
-                close.mutate({ conversation_id: conversation.id, expected_revision: conversation.service_revision });
-              }
-            }}
+            onClick={() =>
+              setConfirmando({ acao: "fechar", id: conversation.id, revisao: conversation.service_revision })
+            }
           >
             {t("Fechar")}
           </Button>
@@ -500,26 +505,9 @@ export function ConversationHeader({
             size="sm"
             variant="ghost"
             disabled={arquivar.isPending}
-            onClick={() => {
-              // A confirmação precisa dizer o que ACONTECE, e o que acontece
-              // depende do estado. `fn_conversation_set_status` trata
-              // `archived` como terminal: encerra o atendimento (grava
-              // `service_closed_at`, incrementa a revisão) e, com isso, desfaz
-              // a pausa do automático. Um atendente que leia "arquivar = tirar
-              // da vista, volto depois" encerraria o atendimento sem saber — e
-              // o robô voltaria a responder no próximo "oi" do cliente.
-              const aviso = encerrada
-                ? t("Arquivar esta conversa?")
-                : t(
-                    "Arquivar encerra este atendimento e guarda a conversa no histórico. Se o cliente escrever de novo, ela volta. Arquivar?",
-                  );
-              if (confirm(aviso)) {
-                arquivar.mutate({
-                  conversation_id: conversation.id,
-                  expected_revision: conversation.service_revision,
-                });
-              }
-            }}
+            onClick={() =>
+              setConfirmando({ acao: "arquivar", id: conversation.id, revisao: conversation.service_revision })
+            }
           >
             {arquivar.isPending ? t("Arquivando...") : t("Arquivar")}
           </Button>
@@ -565,6 +553,32 @@ export function ConversationHeader({
         conversationId={conversation.id}
         open={reassignOpen}
         onOpenChange={setReassignOpen}
+      />
+      {/* A confirmação precisa dizer o que ACONTECE, e o que acontece depende do
+          estado. `fn_conversation_set_status` trata `archived` como terminal:
+          encerra o atendimento (grava `service_closed_at`, incrementa a revisão)
+          e, com isso, desfaz a pausa do automático. Um atendente que leia
+          "arquivar = tirar da vista, volto depois" encerraria o atendimento sem
+          saber — e o robô voltaria a responder no próximo "oi" do cliente. */}
+      <ConfirmarNaTela
+        aberto={confirmando !== null}
+        onAbertoChange={(aberto) => !aberto && setConfirmando(null)}
+        titulo={confirmando?.acao === "arquivar" ? t("Arquivar esta conversa?") : t("Fechar esta conversa?")}
+        descricao={
+          confirmando?.acao === "arquivar"
+            ? encerrada
+              ? undefined
+              : t("Arquivar encerra este atendimento e guarda a conversa no histórico. Se o cliente escrever de novo, ela volta.")
+            : t("O atendimento termina. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.")
+        }
+        acao={confirmando?.acao === "arquivar" ? t("Arquivar") : t("Fechar conversa")}
+        focoNaAcao={confirmando?.acao === "fechar"}
+        onConfirmar={() => {
+          if (!confirmando) return;
+          const alvo = { conversation_id: confirmando.id, expected_revision: confirmando.revisao };
+          if (confirmando.acao === "arquivar") arquivar.mutate(alvo);
+          else close.mutate(alvo);
+        }}
       />
     </div>
   );

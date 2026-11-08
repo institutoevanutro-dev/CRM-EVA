@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
@@ -12,6 +13,7 @@ import { ImageMedia } from "@/components/inbox/media/ImageMedia";
 import { VideoMedia } from "@/components/inbox/media/VideoMedia";
 import { kindFromMime } from "@/lib/messaging/media/upload-validation";
 import { partesDoCorpo } from "@/lib/notifications/mentions";
+import { ConfirmarNaTela } from "@/components/inbox/ConfirmarNaTela";
 
 /**
  * O anexo da nota interna (#1863, F3).
@@ -75,6 +77,8 @@ export function NoteCard({ note, onDelete }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const time = format(new Date(note.created_at), "HH:mm", { locale: localeDaData });
+  // A nota some para sempre: pergunta antes (I6).
+  const [confirmando, setConfirmando] = useState(false);
 
   return (
     <div className="group flex w-full min-w-0 justify-center px-4 py-1">
@@ -89,8 +93,13 @@ export function NoteCard({ note, onDelete }: Props) {
           {onDelete && (
             <button
               type="button"
-              onClick={onDelete}
-              className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+              onClick={() => setConfirmando(true)}
+              className={
+                // Visível por padrão e escondida só onde EXISTE hover — no toque
+                // ela não sumia para sempre — e o foco do teclado a revela (I6).
+                "-m-1 rounded-sm p-1 transition-opacity hover:text-destructive " +
+                "opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
+              }
               aria-label={t("Excluir nota")}
             >
               <Trash size={12} weight="bold" />
@@ -118,6 +127,17 @@ export function NoteCard({ note, onDelete }: Props) {
         )}
         <div className="mt-1 text-right text-[10px] opacity-70">{time}</div>
       </div>
+      {onDelete && (
+        <ConfirmarNaTela
+          aberto={confirmando}
+          onAbertoChange={setConfirmando}
+          titulo={t("Excluir esta nota interna?")}
+          descricao={t("Não dá para desfazer.")}
+          acao={t("Excluir")}
+          destrutiva
+          onConfirmar={onDelete}
+        />
+      )}
     </div>
   );
 }

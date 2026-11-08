@@ -5696,9 +5696,14 @@ export const DICIONARIO: Traducoes = {
   "Pausando...": { es: "Pausando..." },
   "Fechar esta conversa?": { es: "¿Cerrar esta conversación?" },
   "Arquivar esta conversa?": { es: "¿Archivar esta conversación?" },
-  "Arquivar encerra este atendimento e guarda a conversa no histórico. Se o cliente escrever de novo, ela volta. Arquivar?": {
-    es: "Archivar cierra esta atención y guarda la conversación en el historial. Si el cliente vuelve a escribir, la conversación regresa. ¿Archivar?",
+  "Arquivar encerra este atendimento e guarda a conversa no histórico. Se o cliente escrever de novo, ela volta.": {
+    es: "Archivar cierra esta atención y guarda la conversación en el historial. Si el cliente vuelve a escribir, la conversación regresa.",
   },
+  "O atendimento termina. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.": {
+    es: "La atención termina. Si el paciente vuelve a escribir, la conversación vuelve a la fila, y el automático puede responder.",
+  },
+  "Excluir esta nota interna?": { es: "¿Eliminar esta nota interna?" },
+  "Não dá para desfazer.": { es: "No se puede deshacer." },
   "Arquivando...": { es: "Archivando..." },
   Automático: { es: "Automático" },
   Alguém: { es: "Alguien" },
@@ -5938,7 +5943,6 @@ export const DICIONARIO: Traducoes = {
     es: "No fue posible completar la organización ahora. Inténtalo de nuevo o contacta al administrador de la instalación.",
   },
   "Adicionar tag à conversa": { es: "Agregar etiqueta a la conversación" },
-  "Fechar conversa?": { es: "¿Cerrar conversación?" },
   "O cliente ainda não escreveu — a janela de 24h nunca abriu. Só um modelo aprovado sai daqui.": {
     es: "El cliente todavía no escribió — la ventana de 24h nunca se abrió. Solo un modelo aprobado sale de aquí.",
   },
