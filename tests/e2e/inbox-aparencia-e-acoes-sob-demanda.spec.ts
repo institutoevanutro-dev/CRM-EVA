@@ -6,9 +6,9 @@
  *   1. Fundo da conversa e cor dos balões escolhidos POR PESSOA, e a escolha
  *      vale em OUTRO computador (aqui: outro contexto de browser, sem nada em
  *      comum com o primeiro além do login).
- *   2. Cabeçalho da conversa com só nome, telefone e responsável fixos; as ações
- *      aparecem com o mouse, com o foco, ou pelo botão "Ações da conversa" — a
- *      porta do toque e do teclado.
+ *   2. Cabeçalho da conversa (I3 do pacote de design 2): o botão principal e
+ *      Transferir/Lembrar/Fechar sempre à vista, sem depender do mouse; o resto
+ *      num menu ⋯ ("Ações da conversa") aberto por clique.
  *   3. A faixa de cima do composer (Responder / Nota interna) recolhida, com o
  *      interruptor alcançável pelo TECLADO; "Sugerir resposta" fica à vista,
  *      como ícone na linha de ações (porte do original #3234).
@@ -190,7 +190,8 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
         const cabecalho = page.locator("[data-cabecalho-da-conversa]");
         const alternador = page.getByRole("button", { name: "Ações da conversa" });
         await expect(alternador).toHaveAttribute("aria-expanded", "false");
-        await expect(page.getByRole("button", { name: "Transferir" })).toBeHidden();
+        // I3: Transferir (e a ação principal, quando há) fica à vista sem passar o mouse.
+        await expect(page.getByRole("button", { name: "Transferir" })).toBeVisible();
 
         const medida = await cabecalho.evaluate((el) => {
           const selo = [...el.querySelectorAll("span,div")].find(
@@ -216,11 +217,12 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
         expect(medida.selo!.linhas, "o texto do selo quebrou em mais de uma linha").toBe(1);
         expect(medida.selo!.altura).toBeLessThanOrEqual(20);
         expect(medida.selo!.cabe, "o texto saiu da pílula").toBe(true);
-        // Antes desta mudança: 152px em 1280, 114px em 1440, 122px em 390 (duas
-        // fileiras de botões). Depois: 81, 63 e 81 — no celular o telefone desce
-        // para uma terceira linha curta de TEXTO. 88px cabe três linhas de texto
-        // e nenhuma de botões (um botão tem 36px).
-        expect(medida.alturaDoCabecalho, "o cabeçalho voltou a ter fileiras de botões").toBeLessThanOrEqual(88);
+        // Antes de 16/10: 152px em 1280, 114px em 1440, 122px em 390 (duas
+        // fileiras de botões). Com a I3 os botões fixos dividem a linha do nome
+        // no computador (88px: texto em duas linhas, nenhuma fileira extra); no
+        // celular eles descem para UMA fileira própria de 44px (alvo de toque).
+        const teto = largura < 768 ? 140 : 88;
+        expect(medida.alturaDoCabecalho, "o cabeçalho voltou a ter fileiras de botões").toBeLessThanOrEqual(teto);
         expect(medida.transbordo, "a página rola de lado").toBeLessThanOrEqual(0);
         // O placeholder do campo vazio numa linha: quebrado, ele empurra o
         // `scrollHeight` acima da altura do campo (e aparece cortado ao meio).
@@ -254,29 +256,29 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
     }
   }
 
-  test("ações: mouse revela, botão fixa, Escape fecha — e nada depende só de hover", async ({ browser }) => {
+  test("ações: à vista sem mouse; o ⋯ abre por clique e o Escape fecha", async ({ browser }) => {
     const page = await novaPagina(browser, "light", 1440);
     await login(page);
     await abrirConversa(page);
     const alternador = page.getByRole("button", { name: "Ações da conversa" });
     const transferir = page.getByRole("button", { name: "Transferir" });
+    const menu = page.getByTestId("menu-da-conversa");
 
-    await page.locator("[data-cabecalho-da-conversa] h2").hover();
-    await expect(transferir).toBeVisible();
+    // Mouse longe do cabeçalho: as ações fixas continuam lá.
     await page.mouse.move(5, 500);
-    await expect(transferir).toBeHidden();
-
-    // Teclado: foco no botão revela; Enter fixa; Escape fecha e devolve o foco.
-    await alternador.focus();
     await expect(transferir).toBeVisible();
+    // Passar o mouse NÃO abre o menu: só o clique (ou Enter) abre.
+    await alternador.hover();
+    await expect(menu).toHaveCount(0);
+
+    // Teclado: Enter abre; Escape fecha e devolve o foco ao ⋯.
+    await alternador.focus();
     await page.keyboard.press("Enter");
     await expect(alternador).toHaveAttribute("aria-expanded", "true");
-    await page.mouse.move(5, 500);
-    await expect(transferir, "fixada pelo botão, a faixa não some sozinha").toBeVisible();
-    await foto(page, "acoes-fixadas");
-    await transferir.focus();
+    await expect(menu.getByRole("button", { name: "Arquivar" })).toBeVisible();
+    await foto(page, "acoes-menu-aberto");
     await page.keyboard.press("Escape");
-    await expect(transferir).toBeHidden();
+    await expect(menu).toHaveCount(0);
     await expect(alternador).toBeFocused();
     await page.context().close();
   });

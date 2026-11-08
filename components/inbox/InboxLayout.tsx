@@ -25,6 +25,7 @@ import { InboxFilters, type InboxFiltersValue, type InboxTab } from "./InboxFilt
 import { ChatThread } from "./ChatThread";
 import { Composer, type ComposerHandle } from "./Composer";
 import { ConversationHeader } from "./ConversationHeader";
+import { BarraDeConversaFechada } from "./BarraDeConversaFechada";
 import { BotaoIniciarConversa } from "./PainelIniciarConversa";
 import { RetentionNotice } from "./RetentionNotice";
 import { CRMSidePanel } from "./CRMSidePanel";
@@ -293,10 +294,6 @@ export function InboxLayout({
   // Fundo e balões que ESTA pessoa escolheu. Nasce do perfil (vale em qualquer
   // computador) e muda aqui na hora; o controle grava e, se falhar, devolve.
   const [aparencia, setAparencia] = useState(user.aparencia_conversa ?? APARENCIA_PADRAO);
-  // A faixa de ações do cabeçalho, quando fixada pelo botão "Ações", continua
-  // fixada ao trocar de conversa e quando o cabeçalho remonta (a conversa que
-  // sai da aba atual depois de "Assumir" ou "Fechar").
-  const [acoesFixadas, setAcoesFixadas] = useState(false);
   const orgId = activeOrg?.orgId ?? null;
 
   const router = useRouter();
@@ -1062,8 +1059,6 @@ export function InboxLayout({
               botaoBuscaRef={botaoBuscaRef}
               aparencia={aparencia}
               onAparenciaChange={setAparencia}
-              acoesFixadas={acoesFixadas}
-              onAcoesFixadasChange={setAcoesFixadas}
             />
             {buscaAberta && busca && (
               <div className="flex items-center gap-2 border-b border-border px-4 py-1.5">
@@ -1110,20 +1105,29 @@ export function InboxLayout({
                 motivo={motivoDaJanela}
               />
             )}
-            <Composer
-              ref={composerRef}
-              conversationId={selectedConversation.id}
-              blockedReason={supportReadonly ? "Acompanhamento somente leitura" : blockedReason}
-              janelaFechada={motivoDaJanela}
-              semEnvio={motivoSemEnvio}
-              limiteDeTexto={caps?.limiteDeTexto ?? null}
-              soFoto={caps?.midiaDeEnvio === "so_foto"}
-              disabled={selectedConversation.status === "closed"}
-              contact={selectedConversation.contacts}
-              respondendo={respondendo}
-              onCancelarResposta={() => setRespondendo(null)}
-              currentContactId={selectedConversation.contact_id}
-            />
+            {/* Conversa fechada (I3): a barra toma o lugar do campo, com o gesto
+                que a pessoa veio fazer — reabrir já como dona e escrever. */}
+            {selectedConversation.status === "closed" && !supportReadonly ? (
+              <BarraDeConversaFechada
+                conversationId={selectedConversation.id}
+                onReaberta={() => requestAnimationFrame(() => composerRef.current?.focus())}
+              />
+            ) : (
+              <Composer
+                ref={composerRef}
+                conversationId={selectedConversation.id}
+                blockedReason={supportReadonly ? "Acompanhamento somente leitura" : blockedReason}
+                janelaFechada={motivoDaJanela}
+                semEnvio={motivoSemEnvio}
+                limiteDeTexto={caps?.limiteDeTexto ?? null}
+                soFoto={caps?.midiaDeEnvio === "so_foto"}
+                disabled={selectedConversation.status === "closed"}
+                contact={selectedConversation.contacts}
+                respondendo={respondendo}
+                onCancelarResposta={() => setRespondendo(null)}
+                currentContactId={selectedConversation.contact_id}
+              />
+            )}
           </>
         ) : selectionNotFound ? (
           // Erro com saída (I12): no celular esta é a tela inteira, e a barra de
