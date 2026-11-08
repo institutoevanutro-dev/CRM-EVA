@@ -921,6 +921,15 @@ export function AgendaClient({
                 }
                 tipo={tipo.nome}
                 duracaoMin={tipo.duracaoMin}
+                // A10: quem pediu para não receber mensagens não recebe o
+                // lembrete do novo horário — o painel avisa para confirmar por
+                // telefone, como a marcação simples.
+                quemSeraAtendido={(() => {
+                  const alvo = todos.find((a) => a.id === remarcandoId);
+                  return alvo?.quemSeraAtendido
+                    ? { nome: alvo.quemSeraAtendido, aceitaMensagem: alvo.naoRecebeMensagens !== true }
+                    : undefined;
+                })()}
                 // O LOCAL e o FUSO de verdade, que a tela tinha e não passava.
                 //
                 // `PainelDeMarcacao` trazia `local = "Presencial · Sala 2"` e

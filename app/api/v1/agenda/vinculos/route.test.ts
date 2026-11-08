@@ -69,10 +69,11 @@ function casaCondicao(linha: Linha, cond: string): boolean {
 
 function makeDb(linhas: Linha[]) {
   const orsRecebidos: string[] = [];
+  const selectsRecebidos: string[] = [];
   const builder = () => {
     const filtros: Array<(l: Linha) => boolean> = [];
     const q = {
-      select: () => q,
+      select: (cols: string) => (selectsRecebidos.push(cols), q),
       eq: (col: string, v: unknown) => (filtros.push((l) => l[col] === v), q),
       is: (col: string, v: unknown) => (filtros.push((l) => (l[col] ?? null) === v), q),
       // A rota antiga filtrava com `.ilike("name", …)`. O dublê o implementa
@@ -92,7 +93,7 @@ function makeDb(linhas: Linha[]) {
     };
     return q;
   };
-  return { db: { from: () => builder() }, orsRecebidos };
+  return { db: { from: () => builder() }, orsRecebidos, selectsRecebidos };
 }
 
 async function buscar(q: string) {
@@ -114,12 +115,14 @@ const BASE: Linha[] = [
 ];
 
 let orsRecebidos: string[];
+let selectsRecebidos: string[];
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(requireRole).mockResolvedValue({ ok: true, user: { id: USER }, org: { orgId: ORG } } as never);
   const fake = makeDb(BASE);
   orsRecebidos = fake.orsRecebidos;
+  selectsRecebidos = fake.selectsRecebidos;
   vi.mocked(createClient).mockResolvedValue(fake.db as never);
 });
 
@@ -150,6 +153,11 @@ describe("GET /api/v1/agenda/vinculos", () => {
       display_name: "Otávio Teste Silva",
       phone_number: "+5527999990001",
     });
+  });
+
+  it("A10: devolve is_blocked para a marcação avisar que o lembrete não sai", async () => {
+    await buscar("Otávio");
+    expect(selectsRecebidos[0]).toContain("is_blocked");
   });
 
   it("termo vazio não manda filtro OR (não é busca)", async () => {

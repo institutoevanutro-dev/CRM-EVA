@@ -17,6 +17,7 @@ import { CaretLeft, CaretRight, CheckCircle, Clock, MapPin, Warning } from "@/li
 import { cn } from "@/lib/utils";
 
 import { AvatarDaPessoa } from "./AvatarDaPessoa";
+import { AvisoSemLembrete } from "./AvisoSemLembrete";
 import type { HorarioLivre, Pessoa } from "./tipos";
 
 /**
@@ -828,21 +829,8 @@ export function PainelDeMarcacao({
             )}
 
             {quemSeraAtendido && !quemSeraAtendido.aceitaMensagem && (
-              // Aviso, não bloqueio: o botão de confirmar continua ativo logo
-              // abaixo. E ele diz o que FAZER no lugar ("combine por telefone"),
-              // porque uma tela que só informa a restrição deixa a pessoa parada
-              // decidindo sozinha o que fazer com a informação.
-              <div
-                data-testid="aviso-sem-lembrete"
-                role="status"
-                className="mt-3 flex gap-2 rounded-sm border border-warning/40 bg-warning-bg p-2.5"
-              >
-                <Warning size={16} weight="fill" className="mt-0.5 shrink-0 text-warning" aria-hidden />
-                <p className="text-xs leading-4 text-text">
-                  <span className="font-semibold">{quemSeraAtendido.nome} {t("pediu para não receber mensagens.")}</span>{" "}
-                  {t("O lembrete não será enviado — combine por telefone.")}
-                </p>
-              </div>
+              // Aviso, não bloqueio: o botão de confirmar continua ativo logo abaixo.
+              <AvisoSemLembrete nome={quemSeraAtendido.nome} className="mt-3" />
             )}
             <div className="mt-3 flex items-center justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => setHorario(null)}>

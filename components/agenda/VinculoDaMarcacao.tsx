@@ -11,6 +11,8 @@ export type ContatoDaMarcacao = {
   name: string | null;
   display_name: string | null;
   phone_number: string | null;
+  /** Pediu para não receber mensagens: o lembrete não sai (A10). Ausente em servidor mais velho. */
+  is_blocked?: boolean;
 };
 type Contato = ContatoDaMarcacao;
 type Vinculos = {

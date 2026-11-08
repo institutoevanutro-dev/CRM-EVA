@@ -579,6 +579,12 @@ export interface AgendamentoListado {
    * recepção; a ferramenta da IA mapeia os campos um a um e não o repassa.
    */
   contatoSemNomeCompleto?: boolean;
+  /**
+   * O contato pediu para não receber mensagens (`is_blocked`): o lembrete não
+   * sai (`cron/agenda-reminder`). A grade mostra o sino cortado (A10). Mesmo
+   * contrato do campo acima: é da TELA, a ferramenta da IA não o repassa.
+   */
+  contatoNaoRecebeMensagens?: boolean;
 }
 
 export interface ParametrosDaLista {
@@ -638,6 +644,11 @@ function contatoDoEmbed(
   c: ContatoNomeavel | ContatoNomeavel[] | null | undefined,
 ): string | null {
   return nomeDoContato(Array.isArray(c) ? (c[0] ?? null) : c);
+}
+
+/** O mesmo embed, para a pergunta do lembrete: o contato pediu para não receber mensagens? */
+function bloqueadoNoEmbed(c: { is_blocked?: boolean | null } | Array<{ is_blocked?: boolean | null }> | null | undefined): boolean {
+  return (Array.isArray(c) ? c[0] : c)?.is_blocked === true;
 }
 
 /** O mesmo embed, para a pergunta do prontuário: o cadastro tem nome completo? */
@@ -728,7 +739,7 @@ export async function listaAgendamentos(
   let q = supabase
     .from("calendar_appointments")
     .select(
-      "id, title, starts_at, ends_at, time_zone, status, revision, meeting_state, meeting_url, owner_user_id, contact_id, contacts(name, display_name)",
+      "id, title, starts_at, ends_at, time_zone, status, revision, meeting_state, meeting_url, owner_user_id, contact_id, contacts(name, display_name, is_blocked)",
     )
     .eq("organization_id", organizationId)
     // Lançado por engano ou de teste (migration 0364): não é compromisso de
@@ -800,6 +811,7 @@ export async function listaAgendamentos(
       // não um precedente copiado de outro arquivo.
       contatoNome: contatoDoEmbed(l.contacts),
       contatoSemNomeCompleto: l.contact_id ? semNomeCompletoNoEmbed(l.contacts) : false,
+      contatoNaoRecebeMensagens: l.contact_id ? bloqueadoNoEmbed(l.contacts) : false,
     })),
   };
 }

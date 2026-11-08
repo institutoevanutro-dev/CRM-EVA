@@ -145,6 +145,10 @@ export const DICIONARIO: Traducoes = {
   "{n} pacientes em horário bloqueado, remarque.": { es: "{n} pacientes en horario bloqueado, reprograma." },
   "Ver {paciente}": { es: "Ver a {paciente}" },
   "Ver o compromisso": { es: "Ver la cita" },
+  // A10: quem pediu para não receber mensagens não recebe o lembrete.
+  "Sem lembrete": { es: "Sin recordatorio" },
+  "sem lembrete": { es: "sin recordatorio" },
+  "O paciente": { es: "El paciente" },
   "Sem o nome completo no cadastro, o prontuário não abre o atendimento.": { es: "Sin el nombre completo en el registro, la historia clínica no abre la atención." },
   "Salvar nome": { es: "Guardar nombre" },
   "Nome completo salvo.": { es: "Nombre completo guardado." },

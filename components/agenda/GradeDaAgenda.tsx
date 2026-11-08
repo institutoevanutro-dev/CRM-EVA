@@ -27,7 +27,7 @@ import {
 } from "@/lib/agenda/grade-interativa";
 import { inicioDaGradeDoMes, SEMANAS_DA_GRADE_DO_MES } from "@/lib/agenda/recorte-da-grade";
 import { dataDeParede, diaLocalISO, instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
-import { CheckCircle, Clock, Warning, XCircle } from "@/lib/ui/icons";
+import { BellSlash, CheckCircle, Clock, Warning, XCircle } from "@/lib/ui/icons";
 import { ROTULO_DA_SITUACAO } from "@/lib/agenda/tipos";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
@@ -421,9 +421,13 @@ function BlocoDeAgendamento({
   const forma = doGoogle ? formaDaSituacao("confirmed") : formaDaSituacao(agendamento.situacao);
   const rotuloDaSituacao = doGoogle ? undefined : ROTULO_DA_SITUACAO[agendamento.situacao];
   const situacao = rotuloDaSituacao ? t(rotuloDaSituacao) : null;
+  // A10: pediu para não receber mensagens — o lembrete não sai, e a recepção
+  // precisa confirmar por telefone.
+  const semLembrete = agendamento.naoRecebeMensagens === true && !doGoogle && !cancelado;
   const avisos = [
     situacao,
     conflito ? t("Conflito de horário") : null,
+    semLembrete ? t("Sem lembrete") : null,
     faltaNome ? t("Falta o nome completo") : null,
   ].filter(Boolean);
 
@@ -469,6 +473,8 @@ function BlocoDeAgendamento({
       }${
         doGoogle && !agendamento.bloqueio ? `, ${t("ocupado na agenda do Google")}` : ""
       }${situacao ? `, ${situacao}` : ""}${conflito ? `, ${t("conflito de horário")}` : ""}${
+        semLembrete ? `, ${t("sem lembrete")}` : ""
+      }${
         faltaNome ? `, ${t("falta o nome completo")}` : ""
       }`}
       className={cn(
@@ -554,6 +560,14 @@ function BlocoDeAgendamento({
           />
         ) : null}
         <IconeDeSituacao icone={forma.icone} id={agendamento.id} />
+        {semLembrete ? (
+          <BellSlash
+            aria-hidden
+            data-testid={`sem-lembrete-${agendamento.id}`}
+            size={12}
+            className="mt-0.5 shrink-0 text-text-muted"
+          />
+        ) : null}
         <span
           className={cn(
             "min-w-0 text-xs font-semibold leading-4",
@@ -1347,6 +1361,10 @@ function LegendaDaGrade() {
       <span className={item}>
         <Warning aria-hidden size={12} weight="fill" className="text-error" />
         {t("Conflito de horário")}
+      </span>
+      <span className={item}>
+        <BellSlash aria-hidden size={12} />
+        {t("Sem lembrete")}
       </span>
     </p>
   );

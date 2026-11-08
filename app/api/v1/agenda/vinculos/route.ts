@@ -16,6 +16,11 @@ import { condicoesDaBuscaDeContato } from "@/lib/contacts/busca";
  * A resposta leva `display_name` e `phone_number` porque a tela precisa deles
  * para chamar a pessoa pelo nome (`rotuloDoContato`); sem isso, um contato sem
  * `name` virava uma opção EM BRANCO no seletor.
+ *
+ * `is_blocked` vai junto (A10 do pacote 2 de design): o paciente que pediu
+ * para não receber mensagens não recebe o lembrete (`cron/agenda-reminder`
+ * pula `contato_bloqueado`), e a marcação avisa a recepção para confirmar por
+ * telefone. O filtro de `organization_id` é o mesmo de sempre.
  */
 export async function GET(req: Request) {
   const requestId = randomUUID();
@@ -28,7 +33,7 @@ export async function GET(req: Request) {
   const db = await createClient();
   let contacts = db
     .from("contacts")
-    .select("id,name,display_name,phone_number")
+    .select("id,name,display_name,phone_number,is_blocked")
     .eq("organization_id", auth.org.orgId)
     .eq("is_anonymized", false)
     // Contato mesclado não é marcável: o vínculo iria para o registro morto,
