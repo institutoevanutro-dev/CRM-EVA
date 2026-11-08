@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
 
 import { corDaTrilha, fundoDaTrilha } from "./paleta";
+import { nomeCurto, rotuloDoBloco } from "./rotulo-do-bloco";
 import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
 
 /**
@@ -362,6 +363,7 @@ function BlocoDeAgendamento({
   fuso,
   coluna,
   colunas,
+  visao,
   arraste,
 }: {
   agendamento: Agendamento;
@@ -370,6 +372,8 @@ function BlocoDeAgendamento({
   fuso: string;
   coluna: number;
   colunas: number;
+  /** Semana encurta o nome do paciente ("Maria S."); Dia mostra inteiro. */
+  visao: VisaoDaAgenda;
   /**
    * O gesto de remarcar — ponteiro e teclado pelo MESMO caminho.
    *
@@ -399,6 +403,14 @@ function BlocoDeAgendamento({
   // WhatsApp: o prontuário não abre o atendimento sem o nome completo. O aviso
   // fica no bloco; o clique abre o painel, que tem o campo para completar.
   const faltaNome = agendamento.faltaNomeCompleto === true && !doGoogle && !cancelado;
+  const paciente = agendamento.quemSeraAtendido;
+  const rotulo = rotuloDoBloco({
+    titulo: agendamento.titulo,
+    paciente,
+    hora: rotuloHora(comeca, fuso),
+    duracaoMin: duracao,
+    visao,
+  });
 
   return (
     <button
@@ -430,21 +442,22 @@ function BlocoDeAgendamento({
       onKeyDown={
         arraste && !doGoogle && !cancelado ? (e) => arraste.aoTeclar(e, agendamento) : undefined
       }
-      // "com" nesta tela significa QUEM SERÁ ATENDIDO — é o vocabulário do
-      // próprio subtítulo ("O que está marcado, com quem, e quem atende"). O
-      // rótulo dizia `, com ${pessoa.nome}`, que é o ATENDENTE: quem usa leitor
-      // de tela ouvia os dois papéis trocados, e o card visual não desmente
-      // porque em compromisso de 30min ele nem mostra o contato.
+      // O rótulo COMEÇA PELO PACIENTE (A1), como o bloco visual: quem vem é o
+      // que se procura. O ATENDENTE vem depois, com "atendido por" — os dois
+      // papéis nunca podem soar iguais para quem usa leitor de tela.
       // `titulo` é DADO DO OPERADOR — a rota grava `title ?? tipo.name`, e
       // `tipo.name` é o nome que ele cadastrou em Tipos de agendamento. Passá-lo
       // por `t()` fazia "Retorno" virar "Seguimiento" na leitura de tela.
-      aria-label={`${agendamento.titulo}, ${rotuloHora(comeca, fuso)} ${t("às")} ${rotuloHora(termina, fuso)}${
-        agendamento.quemSeraAtendido ? `, ${t("com")} ${agendamento.quemSeraAtendido}` : ""
-      }${pessoa ? `, ${t("atendido por")} ${pessoa.nome}` : ""}${
+      aria-label={`${paciente ? `${paciente}, ` : ""}${agendamento.titulo}, ${rotuloHora(comeca, fuso)} ${t("às")} ${rotuloHora(termina, fuso)}${
+        pessoa ? `, ${t("atendido por")} ${pessoa.nome}` : ""
+      }${
         doGoogle && !agendamento.bloqueio ? `, ${t("ocupado na agenda do Google")}` : ""
       }${faltaNome ? `, ${t("falta o nome completo")}` : ""}`}
       className={cn(
-        "absolute flex flex-col items-start overflow-hidden rounded-sm px-1.5 py-0.5 text-left",
+        "absolute flex flex-col items-start overflow-hidden rounded-sm px-1.5 text-left",
+        // Uma linha só (15 e 30 min): `py-px` para a linha de 16 px caber nos
+        // 18 px do bloco mínimo.
+        rotulo.apoio === null ? "py-px" : "py-0.5",
         "border border-border/60 transition-colors duration-fast ease-out",
         doGoogle ? "cursor-default" : "cursor-pointer hover:border-border-strong",
         // `grab` só quando remarcar é possível: o cursor é a única pista de que
@@ -503,21 +516,21 @@ function BlocoDeAgendamento({
           className="absolute right-0.5 top-0.5 text-warning"
         />
       ) : null}
-      {/* Com espaço (1h ou mais), o nome do compromisso quebra em duas linhas
-          em vez de virar "Consulta de acomp…" (print de 08/10/2026). */}
+      {/* Linha 1: quem vem (12/16 semibold). Com folga (1h30 ou mais) o nome
+          quebra em duas linhas em vez de cortar (print de 08/10/2026). */}
       <span
         className={cn(
-          "ml-1 text-[11px] font-semibold leading-4 text-text",
-          duracao >= 60 ? "line-clamp-2 break-words" : "truncate",
+          "ml-1 max-w-full text-xs font-semibold leading-4 text-text",
+          duracao >= 90 ? "line-clamp-2 break-words" : "truncate",
+          rotulo.apoio === null && "tabular-nums",
           faltaNome && "pr-3",
         )}
       >
-        {agendamento.titulo}
+        {rotulo.principal}
       </span>
-      {duracao >= 45 && (
-        <span className="ml-1 truncate text-[10px] leading-3 tabular-nums text-text-muted">
-          {rotuloHora(comeca, fuso)}
-          {agendamento.quemSeraAtendido ? ` · ${agendamento.quemSeraAtendido}` : ""}
+      {rotulo.apoio !== null && (
+        <span className="ml-1 max-w-full truncate text-[11px] leading-3.5 tabular-nums text-text-muted">
+          {rotulo.apoio}
         </span>
       )}
     </button>
@@ -623,6 +636,7 @@ function ColunaDeDia({
   interacao,
   proposta,
   arrasteDoCard,
+  visao,
 }: {
   dia: Date;
   agora: Date;
@@ -631,6 +645,7 @@ function ColunaDeDia({
   pessoas: Pessoa[];
   onAbrir?: (id: string) => void;
   destacado: boolean;
+  visao: VisaoDaAgenda;
   /**
    * Some abaixo de `md`. Na semana, o celular mostra UM dia por vez: sete
    * colunas em 360px dão ~44px cada, e a célula de meia hora vira um alvo de
@@ -718,6 +733,7 @@ function ColunaDeDia({
             fuso={fuso}
             coluna={coluna}
             colunas={colunas}
+            visao={visao}
             arraste={
               arrasteDoCard
                 ? { ...arrasteDoCard, ativo: proposta?.id === agendamento.id }
@@ -830,7 +846,8 @@ function VisaoDeMes({
                         style={{ backgroundColor: corDaTrilha(trilha) }}
                       />
                       <span className="truncate text-[10px] leading-4 text-text">
-                        {rotuloHora(new Date(c.comeca), fuso)} {c.titulo}
+                        {rotuloHora(new Date(c.comeca), fuso)}{" "}
+                        {c.quemSeraAtendido ? nomeCurto(c.quemSeraAtendido) : c.titulo}
                       </span>
                       {faltaNome ? (
                         <Warning aria-hidden size={10} weight="fill" className="ml-auto shrink-0 text-warning" />
@@ -1122,6 +1139,7 @@ export function GradeDaAgenda({
                 interacao={interacao}
                 proposta={proposta}
                 arrasteDoCard={arrasteDoCard}
+                visao={visao}
               />
             ))}
           </div>
