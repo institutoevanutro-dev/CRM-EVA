@@ -250,7 +250,8 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
 
     await itemDaLista.click();
     await abrirAcoesDaConversa(page);
-    await tela().getByTestId("ocultar-do-inbox").click();
+    // O ⋯ (I3) abre num Popover, que o Radix monta no <body>, fora do <main>.
+    await page.getByTestId("menu-da-conversa").getByTestId("ocultar-do-inbox").click();
     const pergunta = page.getByTestId("ocultar-do-inbox-dialogo");
     await expect(pergunta).toContainText(nome);
     await expect(pergunta).toContainText("as mensagens continuam guardadas");
@@ -277,7 +278,7 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
     await foto("08-inbox-aba-ocultos.png");
 
     await abrirAcoesDaConversa(page);
-    await tela().getByTestId("mostrar-no-inbox").click();
+    await page.getByTestId("menu-da-conversa").getByTestId("mostrar-no-inbox").click();
     await expect(itemDaLista).toHaveCount(0);
     await abaTodas.click();
     await expect(itemDaLista).toBeVisible({ timeout: 15_000 });

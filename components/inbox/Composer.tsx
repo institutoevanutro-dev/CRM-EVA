@@ -1,4 +1,5 @@
 "use client";
+import { trazArquivo, useBarrarArquivoSolto } from "@/hooks/inbox/useBarrarArquivoSolto";
 import { useT } from "@/hooks/i18n/useT";
 import {
   forwardRef,
@@ -112,11 +113,6 @@ interface Props {
   currentContactId?: string | null;
 }
 
-/** O arraste traz ARQUIVO? `types` lista o que vem, nunca o conteúdo; texto e link seguem com o navegador (porte do original #3713). */
-function trazArquivo(dt: DataTransfer | null | undefined): boolean {
-  return Array.from(dt?.types ?? []).includes("Files");
-}
-
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   {
     conversationId,
@@ -209,24 +205,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   useEffect(() => {
     respondendoAgora.current = respondendo?.id ?? null;
   }, [respondendo?.id]);
-  // Arquivo solto FORA da caixa (no fio, no cabeçalho, no fundo escuro da prévia
-  // aberta) não troca o atendimento pelo arquivo na aba. Só quando ninguém tratou
-  // antes: o React despacha abaixo da `window`, então o `preventDefault` da caixa já
-  // aparece aqui e ela segue dona do drop dela. Zona de soltar nova nesta tela:
-  // chame `preventDefault` nela, senão esta guarda cancela o padrão dela.
-  useEffect(() => {
-    const barrar = (e: globalThis.DragEvent) => {
-      if (e.defaultPrevented || !trazArquivo(e.dataTransfer)) return;
-      e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = "none";
-    };
-    window.addEventListener("dragover", barrar);
-    window.addEventListener("drop", barrar);
-    return () => {
-      window.removeEventListener("dragover", barrar);
-      window.removeEventListener("drop", barrar);
-    };
-  }, []);
+  // Arquivo solto fora da caixa não troca o atendimento pelo arquivo na aba.
+  useBarrarArquivoSolto();
   const send = useSendMessage();
   const upload = useUploadMedia();
   const createNote = useCreateNote();

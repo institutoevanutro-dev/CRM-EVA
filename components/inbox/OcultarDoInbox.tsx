@@ -41,7 +41,7 @@ interface Props {
   conversationId?: string;
   nome: string;
   oculto: boolean;
-  variante: "icone" | "botao";
+  variante: "icone" | "botao" | "item";
 }
 
 /**
@@ -78,11 +78,11 @@ export function OcultarDoInbox({ contactId, conversationId, nome, oculto, varian
     return (
       <Button
         size="sm"
-        variant="outline"
+        variant={variante === "item" ? "ghost" : "outline"}
         disabled={definir.isPending}
         onClick={() => definir.mutate({ ocultar: false, contactId })}
         data-testid="mostrar-no-inbox"
-        className="shrink-0 gap-1.5"
+        className={variante === "item" ? "w-full justify-start gap-2 px-2" : "shrink-0 gap-1.5"}
       >
         <Eye size={16} aria-hidden />
         {t("Mostrar no Inbox")}
@@ -97,11 +97,11 @@ export function OcultarDoInbox({ contactId, conversationId, nome, oculto, varian
 
   return (
     <>
-      {variante === "icone" ? (
+      {variante !== "botao" ? (
         <Button
           size="sm"
           variant="ghost"
-          className="w-11 px-0 lg:w-8"
+          className={variante === "item" ? "w-full justify-start gap-2 px-2" : "w-11 px-0 lg:w-8"}
           disabled={definir.isPending}
           onClick={() => setPerguntando(true)}
           aria-label={t("Ocultar do Inbox")}
@@ -109,6 +109,7 @@ export function OcultarDoInbox({ contactId, conversationId, nome, oculto, varian
           data-testid="ocultar-do-inbox"
         >
           <EyeSlash size={16} aria-hidden />
+          {variante === "item" && <span>{t("Ocultar do Inbox")}</span>}
         </Button>
       ) : (
         <Button

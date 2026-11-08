@@ -312,6 +312,8 @@ test.describe("Inbox: baixar a conversa em PDF", () => {
     await login(page, creds.users.viewer!.email, creds.password);
     await page.goto(`/app/inbox/${conversaId}`);
     await expect(page.getByText("PACIENTE PERGUNTA DO EXAME").first()).toBeVisible({ timeout: 60_000 });
+    // O PDF mora no menu ⋯ (I3): abrir antes de afirmar a ausência, senão ela é vácua.
+    await abrirAcoesDaConversa(page);
     await expect(page.getByTestId("exportar-conversa-pdf")).toHaveCount(0);
 
     const res = await page.request.get(`/api/v1/conversations/${conversaId}/export?formato=pdf`);

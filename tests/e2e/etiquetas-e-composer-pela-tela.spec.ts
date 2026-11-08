@@ -37,7 +37,6 @@ import { expect, test, type JSHandle, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
-import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), ".superpowers/evidence/etiquetas-e-composer");
@@ -296,33 +295,33 @@ test.describe("Etiquetas e compositor (portes de 15/10)", () => {
     await captura(page, "excluir-uma-etiqueta-preserva-a-outra");
   });
 
-  test("no celular a barra de ações é uma fileira que rola", async ({ page }) => {
+  test("no celular as ações fixas cabem numa fileira, sem rolar de lado", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, creds.users.manager!.email);
     await page.goto(`/app/inbox/${conversaId}`);
     await expect(page.getByText("MENSAGEM DO PACIENTE 1510").first()).toBeVisible({ timeout: 60_000 });
 
-    await abrirAcoesDaConversa(page);
-    const transferir = page.getByRole("button", { name: /Transferir/ }).first();
-    await expect(transferir).toBeAttached();
-    const medida = await transferir.evaluate((botao) => {
-      const barra = botao.parentElement as HTMLElement;
-      const estilo = getComputedStyle(barra);
-      const tops = new Set(
-        [...barra.children].map((filho) => Math.round((filho as HTMLElement).getBoundingClientRect().top)),
-      );
+    // I3: sem faixa a revelar. Principal + Transferir/Lembrar/Fechar (só ícone
+    // no cabeçalho estreito) + ⋯, numa fileira de alvos de 44px.
+    const grupo = page.getByTestId("acoes-fixas-da-conversa");
+    await expect(grupo.getByRole("button", { name: "Transferir" })).toBeVisible();
+    const medida = await grupo.evaluate((barra) => {
+      const filhos = [...barra.children].map((f) => (f as HTMLElement).getBoundingClientRect());
       return {
-        flexWrap: estilo.flexWrap,
-        overflowX: estilo.overflowX,
-        fileiras: tops.size,
+        fileiras: new Set(filhos.map((r) => Math.round(r.top))).size,
+        alturaMinima: Math.min(...filhos.map((r) => Math.round(r.height))),
+        larguraMinima: Math.min(...filhos.map((r) => Math.round(r.width))),
         cabeNaTela: barra.getBoundingClientRect().right <= window.innerWidth + 1,
+        transbordo: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       };
     });
-    expect(medida.flexWrap).toBe("nowrap");
-    expect(medida.overflowX).toBe("auto");
-    expect(medida.fileiras, "a barra voltou a empilhar fileiras").toBe(1);
-    expect(medida.cabeNaTela, "a barra vazou da largura da tela").toBe(true);
-    await captura(page, "barra-de-acoes-no-celular");
+    expect(medida.fileiras, "as ações fixas empilharam fileiras").toBe(1);
+    expect(medida.alturaMinima, "alvo de toque abaixo de 44px").toBeGreaterThanOrEqual(44);
+    // Medido: Transferir, Lembrar e Fechar só com ícone tinham 42px de largura.
+    expect(medida.larguraMinima, "alvo de toque mais estreito que 44px").toBeGreaterThanOrEqual(44);
+    expect(medida.cabeNaTela, "as ações vazaram da largura da tela").toBe(true);
+    expect(medida.transbordo, "a página rola de lado").toBeLessThanOrEqual(0);
+    await captura(page, "acoes-fixas-no-celular");
   });
 
   // ÚLTIMO de propósito: termina encerrando a conversa.
@@ -399,18 +398,25 @@ test.describe("Etiquetas e compositor (portes de 15/10)", () => {
     await expect(realce).toBeVisible();
     await captura(page, "arrastar-arquivo-realce-escuro");
 
-    // Conversa encerrada: a caixa recusa (cursor "proibido"), sem realce nem prévia.
+    // Conversa encerrada: desde a I3 não há caixa de texto — a barra "Reabrir e
+    // responder" toma o lugar dela. O arquivo solto em qualquer ponto continua
+    // recusado (cursor "proibido"), sem realce nem prévia: sem esta guarda, o PDF
+    // abria na aba no lugar do CRM.
     const fechada = await page.request.patch(`/api/v1/conversations/${conversaId}`, {
       data: { status: "closed" },
     });
     expect(fechada.ok(), await fechada.text()).toBe(true);
     await page.reload();
     await expect(doPaciente).toBeVisible({ timeout: 60_000 });
-    expect(await caixa.evaluate(dragoverDeArquivo)).toEqual({ prevented: true, dropEffect: "none" });
+    const barra = page.getByTestId("barra-conversa-fechada");
+    await expect(barra).toBeVisible();
+    await expect(caixa).toHaveCount(0);
+    expect(await barra.evaluate(dragoverDeArquivo)).toEqual({ prevented: true, dropEffect: "none" });
+    expect(await doPaciente.evaluate(dragoverDeArquivo)).toEqual({ prevented: true, dropEffect: "none" });
     const recusado = await arrasteCom(page, "exame-ficticio.pdf", "application/pdf");
-    await caixa.dispatchEvent("dragenter", { dataTransfer: recusado });
-    await caixa.dispatchEvent("dragover", { dataTransfer: recusado });
-    await caixa.dispatchEvent("drop", { dataTransfer: recusado });
+    await barra.dispatchEvent("dragenter", { dataTransfer: recusado });
+    await barra.dispatchEvent("dragover", { dataTransfer: recusado });
+    await barra.dispatchEvent("drop", { dataTransfer: recusado });
     await expect(realce).toHaveCount(0);
     await expect(previa).toHaveCount(0);
   });
