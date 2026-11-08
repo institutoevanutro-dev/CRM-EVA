@@ -26,7 +26,7 @@ import {
   type MotivoDaGradeTravada,
 } from "@/lib/agenda/grade-interativa";
 import { inicioDaGradeDoMes, SEMANAS_DA_GRADE_DO_MES } from "@/lib/agenda/recorte-da-grade";
-import { diaLocalISO, instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
+import { dataDeParede, diaLocalISO, instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
 import { Warning } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
@@ -599,6 +599,7 @@ function FantasmaDoArraste({
   duracaoMin: number;
   fuso: string;
 }) {
+  const localeDaData = useLocaleDeData();
   const valido = proposta.instante !== null;
   return (
     <div
@@ -617,7 +618,9 @@ function FantasmaDoArraste({
     >
       <span className="truncate text-[10px] font-semibold leading-4 text-text">
         {valido
-          ? rotuloHora(new Date(proposta.instante!), fuso)
+          ? // "→ qui 15:00" (A8): o dia vai junto porque o arraste atravessa
+            // colunas, e a hora sozinha não diz para qual dia ele foi.
+            `→ ${format(dataDeParede(new Date(proposta.instante!), fuso), "EEEEEE", { locale: localeDaData }).replace(".", "")} ${rotuloHora(new Date(proposta.instante!), fuso)}`
           : proposta.razao}
       </span>
     </div>

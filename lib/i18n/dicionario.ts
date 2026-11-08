@@ -8272,7 +8272,11 @@ export const DICIONARIO: Traducoes = {
   "Os blocos vazios continuam aqui, e o que estiver publicado fica clicável.": { es: "Los bloques vacíos siguen aquí, y lo que esté publicado queda clicable." },
   "Remarcar": { es: "Reprogramar" },
   "para": { es: "para" },
-  "? Quem foi atendido recebe o aviso da mudança.": { es: "? Quien fue atendido recibe el aviso del cambio." },
+  "Remarcar {paciente} ({titulo}) de {de} para {para}?": { es: "¿Reprogramar a {paciente} ({titulo}) de {de} a {para}?" },
+  "Remarcar {titulo} de {de} para {para}?": { es: "¿Reprogramar {titulo} de {de} a {para}?" },
+  "O aviso a {paciente} só sai se houver uma automação de remarcação.": { es: "El aviso a {paciente} solo sale si hay una automatización de reprogramación." },
+  "Manter horário": { es: "Mantener horario" },
+  "Remarcando": { es: "Reprogramando" },
   "Abrir o dia {dia} · {n} na agenda": { es: "Abrir el día {dia} · {n} en la agenda" },
   "+{n} mais": { es: "+{n} más" },
 
