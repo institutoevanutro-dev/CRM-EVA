@@ -22,7 +22,9 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default:
-          "border-transparent bg-accent-soft text-accent",
+          // No escuro, `accent` (400) sobre o fundo suave fica no limite; o 300
+          // é o que o selo "Confirmado" da Agenda pede (A12).
+          "border-transparent bg-accent-soft text-accent dark:text-accent-300",
         neutral:
           "border-border bg-surface-elevated text-text-muted",
         success:
