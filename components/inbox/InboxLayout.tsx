@@ -40,6 +40,7 @@ import { OpenConversationProvider } from "@/hooks/notifications/OpenConversation
 // ADR-05: ícone de feature sai do mapa canônico, nunca do pacote direto.
 import { CaretLeft, ChatCircle, IdentificationCard, MagnifyingGlass, X } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
@@ -1125,14 +1126,40 @@ export function InboxLayout({
             />
           </>
         ) : selectionNotFound ? (
-          <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
-            {t("Conversa não encontrada ou fora do seu acesso.")}
+          // Erro com saída (I12): no celular esta é a tela inteira, e a barra de
+          // cima pode passar despercebida.
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-sm text-muted-foreground">
+            <p>{t("Conversa não encontrada ou fora do seu acesso.")}</p>
+            <Button variant="outline" size="sm" onClick={() => handleSelect(null)}>
+              {t("Voltar para a lista")}
+            </Button>
+          </div>
+        ) : selectedId && !single.isError ? (
+          // A conversa escolhida ainda vem (deep-link, I12): um esqueleto com a
+          // forma da tela — cabeçalho e três bolhas — em vez da dica de teclado,
+          // que no celular não serve para nada.
+          <div data-testid="conversa-carregando" role="status" aria-busy="true" aria-label={t("Carregando conversa")} className="flex h-full flex-col">
+            <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+              <Skeleton className="size-9 rounded-full" />
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+            <div className="conversa-fundo flex-1 space-y-3 p-4">
+              <Skeleton className="h-12 w-2/3 rounded-2xl" />
+              <Skeleton className="ml-auto h-12 w-1/2 rounded-2xl" />
+              <Skeleton className="h-16 w-3/5 rounded-2xl" />
+            </div>
           </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
             <ChatCircle size={36} weight="thin" className="text-text-subtle" aria-hidden />
             <p className="text-sm font-medium text-text-muted">{t("Selecione uma conversa")}</p>
-            <p className="text-xs text-text-muted">{t("Ou navegue com J e K")}</p>
+            {/* Só com teclado e mouse (I12): no toque, "J e K" é ruído. */}
+            <p className="hidden text-xs text-text-muted [@media(hover:hover)_and_(pointer:fine)]:block">
+              {t("Ou navegue com J e K")}
+            </p>
           </div>
         )}
       </div>
