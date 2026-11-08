@@ -6590,6 +6590,8 @@ export const DICIONARIO: Traducoes = {
   "Segurou o envio até o horário permitido": { es: "Retuvo el envío hasta el horario permitido" },
   "a janela estava fechada": { es: "la ventana estaba cerrada" },
   "a janela estava fechada; envia em {ate}": { es: "la ventana estaba cerrada; envía el {ate}" },
+  "Adiado: a equipe ainda vai responder um caso aberto": { es: "Pospuesto: el equipo aún va a responder un caso abierto" },
+  "envia em {ate}": { es: "envía el {ate}" },
   "Segurou o fluxo por causa de um retorno agendado": { es: "Frenó el flujo por un regreso programado" },
   "volta a andar em {ate}, um dia depois do retorno": { es: "vuelve a avanzar el {ate}, un día después del regreso" },
   "Passo pulado, o fluxo seguiu": { es: "Paso omitido, el flujo siguió" },

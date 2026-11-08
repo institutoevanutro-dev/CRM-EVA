@@ -333,3 +333,87 @@ describe("a mesma decisão para o atalho e o worker — conferirAntesDoEnvio con
     expect(await conferir(c)).toEqual({ envia: true });
   });
 });
+
+describe("caso_aguardando_equipe_desde — a consulta real de agent_cases", () => {
+  async function caso(
+    c: Cenario,
+    o: { status?: string; aberto: Date; esperaDesde?: Date | null; organizationId?: string; conversationId?: string },
+  ): Promise<void> {
+    // O gatilho da 0397 regrava espera_desde com now() ao entrar em
+    // awaiting_human; o update depois fixa o instante que o cenário quer.
+    const { rows } = await pool.query<{ id: string }>(
+      `insert into agent_cases (organization_id, conversation_id, status, title, summary, blocker, opened_at)
+       values ($1, $2, $3, 'Caso', 'Resumo', 'Falta a equipe', $4) returning id`,
+      [o.organizationId ?? c.org, o.conversationId ?? c.conversationId, o.status ?? "awaiting_human", o.aberto.toISOString()],
+    );
+    await pool.query(`update agent_cases set espera_desde = $2 where id = $1`, [
+      rows[0]!.id,
+      o.esperaDesde === undefined ? o.aberto.toISOString() : o.esperaDesde?.toISOString() ?? null,
+    ]);
+  }
+
+  it("sem caso → null; e o fuso vem da organização", async () => {
+    const c = await montar();
+    const f = await fatos(c);
+    expect(f.caso_aguardando_equipe_desde).toBeNull();
+    expect(f.fuso).toBe("America/Sao_Paulo");
+  });
+
+  it("caso awaiting_human NESTA conversa → início da espera; o mais recente vence", async () => {
+    const c = await montar();
+    await caso(c, { aberto: min(-120) });
+    await caso(c, { aberto: min(-60) });
+    expect((await fatos(c)).caso_aguardando_equipe_desde).toBe(min(-60).toISOString());
+  });
+
+  it("espera_desde nulo cai no opened_at", async () => {
+    const c = await montar();
+    await caso(c, { aberto: min(-30), esperaDesde: null });
+    expect((await fatos(c)).caso_aguardando_equipe_desde).toBe(min(-30).toISOString());
+  });
+
+  it("resolvido, cancelado ou esperando o LEAD não contam", async () => {
+    const c = await montar();
+    for (const status of ["resolved", "cancelled", "awaiting_lead", "escalated"]) await caso(c, { status, aberto: min(-10) });
+    expect((await fatos(c)).caso_aguardando_equipe_desde).toBeNull();
+  });
+
+  it("caso de OUTRA conversa do mesmo contato ou de outra organização não vaza", async () => {
+    const c = await montar();
+    const outra = await montar();
+    await caso(outra, { aberto: min(-10) });
+    expect((await fatos(c)).caso_aguardando_equipe_desde).toBeNull();
+    // Segunda conversa do MESMO contato, mesma org (outro número da clínica).
+    const { rows: s2 } = await pool.query<{ id: string }>(
+      `insert into channel_sessions (organization_id, waha_session_name, status, webhook_secret_encrypted)
+       values ($1, gen_random_uuid()::text, 'WORKING', decode('00','hex')) returning id`,
+      [c.org],
+    );
+    const { rows: v2 } = await pool.query<{ id: string }>(
+      `insert into conversations (organization_id, contact_id, channel_session_id, status)
+       values ($1, $2, $3, 'open') returning id`,
+      [c.org, c.contactId, s2[0]!.id],
+    );
+    await caso(c, { aberto: min(-10), conversationId: v2[0]!.id });
+    expect((await fatos(c)).caso_aguardando_equipe_desde).toBeNull();
+  });
+
+  it("de ponta a ponta: caso aberto agora pula o passo de IA e adia o texto fixo, sem encerrar", async () => {
+    const c = await montar({ gatilho: { kind: "silence", params: { threshold_minutes: 30 } } });
+    const agora = new Date();
+    await caso(c, { aberto: new Date(agora.getTime() - 60_000) });
+    const input = { organizationId: c.org, contactId: c.contactId, conversationId: c.conversationId, enrollmentId: c.enrollmentId };
+    expect(await conferirAntesDoEnvio(pool, input, agora, "ia")).toEqual({ envia: false, motivo: "caso_aguardando_equipe", pula: true });
+    expect(await conferirAntesDoEnvio(pool, input, agora, "fixo")).toMatchObject({ envia: false, motivo: "caso_aguardando_equipe" });
+    const { rows } = await pool.query<{ status: string }>(`select status from followup_enrollments where id = $1`, [c.enrollmentId]);
+    expect(rows[0]!.status).toBe("active");
+  });
+
+  it("lembrete de consulta não é barrado pelo caso aberto", async () => {
+    const c = await montar({ gatilho: { kind: "appointment_attended" }, handoffPolicy: "allow" });
+    const agora = new Date();
+    await caso(c, { aberto: new Date(agora.getTime() - 60_000) });
+    const input = { organizationId: c.org, contactId: c.contactId, conversationId: c.conversationId, enrollmentId: c.enrollmentId };
+    expect(await conferirAntesDoEnvio(pool, input, agora, "fixo")).toEqual({ envia: true });
+  });
+});

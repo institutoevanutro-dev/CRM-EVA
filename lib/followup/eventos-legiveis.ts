@@ -420,6 +420,13 @@ export function descreveEvento(
       // Adiar NÃO é falhar: sem esta linha o operador vê o passo parado por
       // horas e lê defeito onde há obediência à janela que ele configurou.
       const ate = quandoLegivel(p.until, idioma);
+      if (p.reason === "caso_aguardando_equipe") {
+        return {
+          titulo: "Adiado: a equipe ainda vai responder um caso aberto",
+          detalhe: ate ? traduzir("envia em {ate}", idioma as Idioma).replace("{ate}", ate) : null,
+          ...motor,
+        };
+      }
       return {
         titulo: "Segurou o envio até o horário permitido",
         // Traduzida AQUI: a tela chama t() com a frase já montada, e uma frase com

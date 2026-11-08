@@ -169,6 +169,23 @@ describe("descreveEvento", () => {
     expect(r.autor).toBe("motor");
   });
 
+  it("adiamento por caso aberto diz que a equipe ainda vai responder (não fala em janela)", () => {
+    for (const idioma of ["pt-BR", "es"] as const) {
+      const r = descreveEvento(
+        evento({
+          event_type: EVENTO_ACAO_ADIADA,
+          payload: { until: "2026-11-10T23:22:00.000Z", reason: "caso_aguardando_equipe" },
+        }),
+        nos,
+        idioma,
+      );
+      expect(r.titulo).toBe("Adiado: a equipe ainda vai responder um caso aberto");
+      expect(DICIONARIO[r.titulo]?.es).toBeTruthy();
+      expect(r.detalhe).not.toContain("{ate}");
+      expect(r.detalhe).not.toContain("janela");
+    }
+  });
+
   it("o adiamento com data sai traduzido em espanhol (a frase interpolada não acha o dicionário na tela)", () => {
     // O dossiê chama t(lido.detalhe) com a frase JÁ montada; uma frase com data
     // nunca bate numa chave do dicionário. A tradução tem de acontecer aqui.
