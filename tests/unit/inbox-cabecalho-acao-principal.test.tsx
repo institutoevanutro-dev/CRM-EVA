@@ -166,17 +166,19 @@ describe("cabeçalho — o menu ⋯", () => {
 describe("barra da conversa fechada — Reabrir e responder", () => {
   it("manda status claimed, sem revisão — nunca status open, que devolve à fila", async () => {
     patchMock.mockClear();
-    const reaberta = vi.fn();
+    const reabrir = vi.fn();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <BarraDeConversaFechada conversationId="cv-9" onReaberta={reaberta} />
+        <BarraDeConversaFechada conversationId="cv-9" onReabrir={reabrir} />
       </QueryClientProvider>,
     );
     expect(screen.getByText("Conversa fechada.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Reabrir e responder" }));
-    await waitFor(() => expect(reaberta).toHaveBeenCalled());
-    expect(patchMock).toHaveBeenCalledTimes(1);
+    // O aviso sai NO CLIQUE: o pedido de foco tem de existir antes de a releitura
+    // trocar a barra pelo campo (o foco em si é do InboxLayout, provado no e2e).
+    expect(reabrir).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1));
     expect(patchMock).toHaveBeenCalledWith("/api/v1/conversations/cv-9", { status: "claimed" });
   });
 

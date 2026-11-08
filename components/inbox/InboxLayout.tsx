@@ -505,6 +505,18 @@ export function InboxLayout({
   const needsFetch = !!selectedId && !inList;
   const single = useConversation(selectedId, needsFetch);
   const selectedConversation: ConversationWithContact | null = inList ?? single.data ?? null;
+  // "Reabrir e responder" (I3): o foco vai ao campo quando ele MONTAR — no
+  // lugar da barra, depois que a conversa voltar aberta. O pedido é marcado no
+  // CLIQUE, não na resposta: a releitura da conversa pode trocar a barra pelo
+  // campo antes do `onSuccess`, e aí ninguém mais focava (medido no WebKit:
+  // o foco ficava no <main>). Guarda o id, para não focar outra conversa.
+  const focarCampoAoReabrir = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedConversation || selectedConversation.status === "closed") return;
+    if (focarCampoAoReabrir.current !== selectedConversation.id) return;
+    focarCampoAoReabrir.current = null;
+    composerRef.current?.focus();
+  }, [selectedConversation]);
   const selectionNotFound =
     needsFetch && !single.isPending && !single.data && isNotFound(single.error);
 
@@ -1110,7 +1122,9 @@ export function InboxLayout({
             {selectedConversation.status === "closed" && !supportReadonly ? (
               <BarraDeConversaFechada
                 conversationId={selectedConversation.id}
-                onReaberta={() => requestAnimationFrame(() => composerRef.current?.focus())}
+                onReabrir={() => {
+                  focarCampoAoReabrir.current = selectedConversation.id;
+                }}
               />
             ) : (
               <Composer

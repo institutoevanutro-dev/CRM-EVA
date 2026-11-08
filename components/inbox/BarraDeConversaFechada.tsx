@@ -9,14 +9,15 @@ import { useBarrarArquivoSolto } from "@/hooks/inbox/useBarrarArquivoSolto";
  *
  * Antes o campo ficava lá, desligado, sem dizer por quê nem o que fazer. Aqui
  * a frase diz o estado e o botão faz o que a pessoa veio fazer: reabre já
- * como dona e devolve o foco ao campo (`onReaberta`).
+ * como dona e devolve o foco ao campo. `onReabrir` avisa NO CLIQUE: quem
+ * monta o campo é que sabe quando ele existe (ver o `InboxLayout`).
  */
 export function BarraDeConversaFechada({
   conversationId,
-  onReaberta,
+  onReabrir,
 }: {
   conversationId: string;
-  onReaberta?: () => void;
+  onReabrir?: () => void;
 }) {
   const t = useT();
   const reabrir = useReabrirEResponder();
@@ -31,7 +32,10 @@ export function BarraDeConversaFechada({
       <Button
         size="sm"
         disabled={reabrir.isPending}
-        onClick={() => reabrir.mutate({ conversation_id: conversationId }, { onSuccess: onReaberta })}
+        onClick={() => {
+          onReabrir?.();
+          reabrir.mutate({ conversation_id: conversationId });
+        }}
       >
         {reabrir.isPending ? t("Reabrindo...") : t("Reabrir e responder")}
       </Button>

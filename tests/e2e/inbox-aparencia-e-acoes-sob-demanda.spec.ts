@@ -295,6 +295,47 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
     await page.context().close();
   });
 
+  test("conversa fechada: a barra reabre com quem clicou como dona e o cursor no campo", async ({ browser }) => {
+    const page = await novaPagina(browser, "light", 1440);
+    await login(page);
+    const fechou = await admin
+      .from("conversations")
+      .update({ status: "closed", assigned_to_user_id: null, assignee_kind: null, assigned_to_user_name: null })
+      .eq("id", conversaId);
+    if (fechou.error) throw new Error(`fechar: ${fechou.error.message}`);
+    await abrirConversa(page);
+    const barra = page.getByTestId("barra-conversa-fechada");
+    await expect(barra).toContainText("Conversa fechada.");
+    await expect(page.getByRole("textbox", { name: "Mensagem", exact: true })).toHaveCount(0);
+    await barra.getByRole("button", { name: "Reabrir e responder" }).click();
+    await expect
+      .poll(async () => {
+        const { data } = await admin
+          .from("conversations")
+          .select("status, assigned_to_user_id")
+          .eq("id", conversaId)
+          .single();
+        return data;
+      })
+      .toEqual({ status: "claimed", assigned_to_user_id: creds.users.manager!.id });
+    // O cursor já no campo: quem clicou veio responder.
+    await expect(page.getByRole("textbox", { name: "Mensagem", exact: true })).toBeFocused();
+    await expect(barra).toHaveCount(0);
+    await foto(page, "conversa-fechada-reaberta");
+    // Devolve ao estado das outras provas desta spec (sem dono).
+    await admin
+      .from("conversations")
+      .update({
+        status: "open",
+        assigned_to_user_id: null,
+        assignee_kind: null,
+        assigned_to_user_name: null,
+        bot_silenced_until: null,
+      })
+      .eq("id", conversaId);
+    await page.context().close();
+  });
+
   test("composer: faixa recolhida, e o teclado chega em Nota interna", async ({ browser }) => {
     const page = await novaPagina(browser, "light", 1440);
     await login(page);
