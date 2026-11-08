@@ -310,12 +310,15 @@ test.describe("Etiquetas e compositor (portes de 15/10)", () => {
       return {
         fileiras: new Set(filhos.map((r) => Math.round(r.top))).size,
         alturaMinima: Math.min(...filhos.map((r) => Math.round(r.height))),
+        larguraMinima: Math.min(...filhos.map((r) => Math.round(r.width))),
         cabeNaTela: barra.getBoundingClientRect().right <= window.innerWidth + 1,
         transbordo: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       };
     });
     expect(medida.fileiras, "as ações fixas empilharam fileiras").toBe(1);
     expect(medida.alturaMinima, "alvo de toque abaixo de 44px").toBeGreaterThanOrEqual(44);
+    // Medido: Transferir, Lembrar e Fechar só com ícone tinham 42px de largura.
+    expect(medida.larguraMinima, "alvo de toque mais estreito que 44px").toBeGreaterThanOrEqual(44);
     expect(medida.cabeNaTela, "as ações vazaram da largura da tela").toBe(true);
     expect(medida.transbordo, "a página rola de lado").toBeLessThanOrEqual(0);
     await captura(page, "acoes-fixas-no-celular");

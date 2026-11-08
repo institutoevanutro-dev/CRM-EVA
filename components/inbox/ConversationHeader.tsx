@@ -410,7 +410,8 @@ export function ConversationHeader({
             <Button
               size="sm"
               variant="outline"
-              className="gap-1"
+              // 44px de largura no toque: só com o ícone, o botão ficava com 42.
+              className="min-w-11 gap-1 lg:min-w-0"
               aria-label={t("Transferir")}
               title={t("Transferir")}
               onClick={() => setReassignOpen(true)}
@@ -429,7 +430,8 @@ export function ConversationHeader({
             <Button
               size="sm"
               variant="outline"
-              className="gap-1"
+              // 44px de largura no toque: só com o ícone, o botão ficava com 42.
+              className="min-w-11 gap-1 lg:min-w-0"
               aria-label={t("Fechar")}
               title={t("Fechar")}
               disabled={close.isPending}
