@@ -394,7 +394,7 @@ export function InboxFilters({ value, onChange }: Props) {
   const abaSecundariaAtiva = secundarias.includes(value.tab);
 
   return (
-    <div className="border-b border-border bg-background">
+    <div className="border-b border-border bg-surface">
       {/* Busca, não-lidos e os seletores de canal/tag são filtros de CONVERSA — a
           aba Comentários troca o corpo inteiro por `ComentariosPainel` (não é
           conversa, não tem busca nem canal), e mostrar esta linha ali prometeria

@@ -781,7 +781,7 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
   if (recolhido && onAlternarRecolhido) {
     return (
       <aside
-        className="flex h-full flex-col items-center border-l border-border bg-background py-2"
+        className="flex h-full flex-col items-center border-l border-border bg-surface py-2"
         data-testid="inbox-painel-recolhido"
       >
         <BotaoDeRecolherDoPainel recolhido onAlternar={onAlternarRecolhido} />
@@ -803,12 +803,12 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
   }
 
   return (
-    <aside className="flex h-full flex-col gap-4 overflow-y-auto border-l border-border bg-background p-4">
+    <aside className="flex h-full flex-col gap-4 overflow-y-auto border-l border-border bg-surface p-4">
       {/* O controle de recolher, no alto (porte do #3043). `sticky` para não
           rolar junto com o conteúdo; `-mx-4 -mt-4` encostam a faixa nas bordas
           cancelando o padding do <aside>. */}
       {onAlternarRecolhido && (
-        <div className="sticky top-0 z-10 -mx-4 -mt-4 flex shrink-0 justify-end border-b border-border bg-background px-2 py-1">
+        <div className="sticky top-0 z-10 -mx-4 -mt-4 flex shrink-0 justify-end border-b border-border bg-surface px-2 py-1">
           <BotaoDeRecolherDoPainel recolhido={false} onAlternar={onAlternarRecolhido} />
         </div>
       )}

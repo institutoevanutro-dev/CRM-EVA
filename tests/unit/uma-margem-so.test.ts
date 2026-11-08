@@ -31,9 +31,16 @@ describe("uma margem só", () => {
     for (const f of ["components/inbox/InboxLayout.tsx", "app/app/pipelines/[id]/_client.tsx"]) {
       const s = readFileSync(f, "utf8");
       expect(s, f).toContain("-var(--altura-do-topo)-");
-      expect(s, f).toContain("2*var(--margem-do-conteudo)");
       expect(s, f).not.toMatch(/100dvh-[^\]]*3\.5rem/);
     }
+    // O funil desconta a margem; o Inbox (I2) vai de ponta a ponta: cancela a
+    // margem com `-m-` e, por isso, NÃO a desconta da altura — senão sobrariam
+    // 48px embaixo.
+    expect(readFileSync("app/app/pipelines/[id]/_client.tsx", "utf8")).toContain("2*var(--margem-do-conteudo)");
+    const inbox = readFileSync("components/inbox/InboxLayout.tsx", "utf8");
+    const raizes = inbox.match(/-m-\(--margem-do-conteudo\) h-\[calc\(100dvh[^\]]*\)\]/g) ?? [];
+    expect(raizes.length, "as duas raízes do Inbox (conversas e comentários)").toBe(2);
+    expect(inbox).not.toContain("2*var(--margem-do-conteudo)");
   });
 
   it("nenhuma página põe margem própria na raiz (p-6 ou md:p-8 logo após o return)", () => {

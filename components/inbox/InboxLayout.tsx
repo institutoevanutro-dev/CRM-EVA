@@ -819,12 +819,19 @@ export function InboxLayout({
     aplicarLarguras(null);
   }, [faixa, aplicarLarguras]);
 
-  // Altura da grade: a conta desconta TUDO que fica acima e abaixo dela.
+  // Altura da grade: a conta desconta TUDO que fica acima dela.
   //   --altura-do-topo        TopBar (56px no celular, 48px de md em diante)
-  //   2 * --margem-do-conteudo padding do <main> do AppShell (em cima e embaixo)
   //
-  // As duas variáveis são definidas no AppShell; o resto deste comentário conta
-  // por que a conta é feita em token e não em rem somado à mão.
+  // DE PONTA A PONTA (I2): o Inbox cancela o padding do <main> do AppShell com
+  // `-m-(--margem-do-conteudo)` — a moldura de 24px só espremia a conversa, e as
+  // três zonas passam a se separar pelo FUNDO (lista e ficha em superfície, a
+  // conversa no creme). Com a margem negativa a grade ocupa a área inteira do
+  // <main>, então a margem sai da conta de altura: o padding de cima e o de
+  // baixo são devolvidos pelas duas margens negativas.
+  //
+  // As variáveis são definidas no AppShell; o resto deste comentário conta
+  // por que a conta é feita em token e não em rem somado à mão (vale para o
+  // topo; antes valia também para a margem).
   //
   // Com `100vh-3.5rem` o padding ficava de fora e a grade media 48px a MAIS que a
   // tela. Quem pagava a diferença era o composer, que fica no rodapé: nascia
@@ -853,7 +860,7 @@ export function InboxLayout({
   // `InboxFilters` segue no topo para poder trocar de aba de volta.
   if (filterValue.tab === "comentarios") {
     return (
-      <div className="flex h-[calc(100dvh-var(--faixas-de-cima,0px)-var(--altura-do-topo)-var(--altura-das-abas,0px)-2*var(--margem-do-conteudo))] w-full flex-col">
+      <div className="flex -m-(--margem-do-conteudo) h-[calc(100dvh-var(--faixas-de-cima,0px)-var(--altura-do-topo)-var(--altura-das-abas,0px))] flex-col">
         <InboxFilters value={filterValue} onChange={setFilterValue} />
         <div className="min-h-0 flex-1 overflow-hidden">
           <ComentariosPainel />
@@ -879,14 +886,15 @@ export function InboxLayout({
   // Duas faixas em vez de uma: compacta onde aperta, generosa onde há espaço.
   // Em 1280 isso dá 424px de conversa em vez de 372 — 54px de folga sobre o
   // piso do composer (370px), em vez dos 2px que a versão de uma faixa só
-  // deixava. Margem de 2px não é margem, é sorte.
+  // deixava. Margem de 2px não é margem, é sorte. Sem a moldura de 24px (I2),
+  // a conversa ganha mais 48px de largura.
   return (
     <OpenConversationProvider conversationId={selectedId}>
     <div
       ref={gradeRef}
       style={estiloDaGrade}
       className={cn(
-        "relative grid h-[calc(100dvh-var(--faixas-de-cima,0px)-var(--altura-do-topo)-var(--altura-das-abas,0px)-2*var(--margem-do-conteudo))] w-full grid-cols-1 md:grid-cols-[300px_1fr]",
+        "relative grid -m-(--margem-do-conteudo) h-[calc(100dvh-var(--faixas-de-cima,0px)-var(--altura-do-topo)-var(--altura-das-abas,0px))] grid-cols-1 md:grid-cols-[300px_1fr]",
         // Recolhido (porte do #3043), a terceira trilha vira o trilho do botão
         // de expandir. Literais inteiros: o Tailwind precisa deles para gerar o CSS.
         painelRecolhido
@@ -932,7 +940,7 @@ export function InboxLayout({
       <div
         ref={listaRef}
         className={cn(
-          "h-full min-h-0 flex-col border-r border-border md:flex",
+          "h-full min-h-0 flex-col border-r border-border bg-surface md:flex",
           colunas.lista,
         )}
       >
