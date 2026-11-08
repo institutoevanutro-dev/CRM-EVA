@@ -1155,6 +1155,13 @@ export function AgendaClient({
           parametros.set("compromisso", id);
           router.push(`/app/agenda?${parametros.toString()}`);
         }}
+        // A7: no Mês, tocar no dia abre aquele dia. A data da célula já é do
+        // calendário da grade; `ancoraLocalDoDia` a põe ao meio-dia, como a
+        // âncora nasce.
+        onAbrirDia={(dia) => {
+          setAncora(ancoraLocalDoDia(format(dia, "yyyy-MM-dd")));
+          setVisao("dia");
+        }}
         className="min-h-0 flex-1"
       />
 

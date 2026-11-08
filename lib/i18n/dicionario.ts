@@ -8273,6 +8273,8 @@ export const DICIONARIO: Traducoes = {
   "Remarcar": { es: "Reprogramar" },
   "para": { es: "para" },
   "? Quem foi atendido recebe o aviso da mudança.": { es: "? Quien fue atendido recibe el aviso del cambio." },
+  "Abrir o dia {dia} · {n} na agenda": { es: "Abrir el día {dia} · {n} en la agenda" },
+  "+{n} mais": { es: "+{n} más" },
 
   // ═══ As telas que só o passe do PR #352 alcançou ═══
   //

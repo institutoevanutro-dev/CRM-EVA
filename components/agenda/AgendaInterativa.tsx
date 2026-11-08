@@ -62,6 +62,7 @@ export function AgendaInterativa({
   onEscolherTipo,
   onMarcarEm,
   onAbrirAgendamento,
+  onAbrirDia,
   className,
 }: {
   visao: VisaoDaAgenda;
@@ -120,6 +121,8 @@ export function AgendaInterativa({
    */
   onMarcarEm?: (instante: string) => void;
   onAbrirAgendamento?: (id: string) => void;
+  /** Mês: a célula abre o dia (A7). */
+  onAbrirDia?: (dia: Date) => void;
   className?: string;
 }) {
   const localeDaData = useLocaleDeData();
@@ -385,6 +388,7 @@ export function AgendaInterativa({
         pessoas={pessoas}
         agendamentos={desenhados}
         onAbrirAgendamento={onAbrirAgendamento}
+        onAbrirDia={onAbrirDia}
         className="min-h-0 flex-1"
         interacao={
           tipo && onMarcarEm

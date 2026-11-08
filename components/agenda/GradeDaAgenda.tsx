@@ -760,12 +760,16 @@ function VisaoDeMes({
   fuso,
   agendamentos,
   pessoas,
+  onAbrirDia,
+  onAbrirAgendamento,
 }: {
   ancora: Date;
   agora: Date;
   fuso: string;
   agendamentos: Agendamento[];
   pessoas: Pessoa[];
+  onAbrirDia?: (dia: Date) => void;
+  onAbrirAgendamento?: (id: string) => void;
 }) {
   const t = useT();
   const localeDaData = useLocaleDeData();
@@ -794,19 +798,39 @@ function VisaoDeMes({
             (c) => chaveDoDiaDoInstante(new Date(c.comeca), fuso) === chaveDoDia(d),
           );
           const doMes = isSameMonth(d, ancora);
+          const diaPorExtenso = format(d, "d 'de' MMMM", { locale: localeDaData });
           return (
             <div
               key={d.toISOString()}
               data-testid={`celula-mes-${format(d, "yyyy-MM-dd")}`}
               className={cn(
-                "min-h-20 border-b border-r border-border p-1",
+                "relative min-h-20 border-b border-r border-border p-1",
                 !doMes && "bg-surface-elevated/30",
               )}
             >
-              <div className="mb-1 flex items-center justify-between px-0.5">
+              {/* A CÉLULA ABRE O DIA (A7). Botão por baixo de tudo, e não a
+                  célula inteira como `<button>`: os chips dentro dela também são
+                  botões, e botão dentro de botão é HTML inválido — o leitor de
+                  tela engoliria os chips. O número e o "+3 mais" deixam o clique
+                  passar até ele. */}
+              {onAbrirDia ? (
+                <button
+                  type="button"
+                  data-testid={`abrir-dia-${format(d, "yyyy-MM-dd")}`}
+                  aria-label={t("Abrir o dia {dia} · {n} na agenda")
+                    .replace("{dia}", () => diaPorExtenso)
+                    .replace("{n}", () => String(doDia.length))}
+                  onClick={() => onAbrirDia(d)}
+                  className={cn(
+                    "absolute inset-0 z-0 cursor-pointer transition-colors duration-fast ease-out hover:bg-accent-soft",
+                    "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-500",
+                  )}
+                />
+              ) : null}
+              <div className="pointer-events-none relative mb-1 flex items-center justify-between px-0.5">
                 <span
                   className={cn(
-                    "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] tabular-nums",
+                    "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs tabular-nums",
                     chaveDoDia(d) === chaveDoDiaDoInstante(agora, fuso)
                       ? "bg-accent font-semibold text-accent-foreground"
                       : doMes
@@ -817,18 +841,52 @@ function VisaoDeMes({
                   {format(d, "d")}
                 </span>
                 {doDia.length > 2 && (
-                  <span className="text-[10px] tabular-nums text-text-subtle">
-                    +{doDia.length - 2}
+                  <span className="text-xs tabular-nums text-text-muted max-md:hidden">
+                    {t("+{n} mais").replace("{n}", () => String(doDia.length - 2))}
                   </span>
                 )}
               </div>
-              <div className="space-y-0.5">
+              {/* No celular a célula tem uns 48 px de largura: chip não cabe.
+                  Pontos na cor de quem atende e quantos são. */}
+              {doDia.length > 0 && (
+                <div
+                  aria-hidden
+                  data-testid={`pontos-mes-${format(d, "yyyy-MM-dd")}`}
+                  className="pointer-events-none relative flex items-center gap-0.5 px-0.5 md:hidden"
+                >
+                  {doDia.slice(0, 3).map((c) => (
+                    <span
+                      key={c.id}
+                      className="h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{
+                        backgroundColor: corDaTrilha(
+                          pessoas.find((p) => p.id === c.responsavelId)?.trilha ?? 1,
+                        ),
+                      }}
+                    />
+                  ))}
+                  <span className="ml-0.5 text-xs tabular-nums text-text-muted">{doDia.length}</span>
+                </div>
+              )}
+              <div className="pointer-events-none relative space-y-0.5 max-md:hidden">
                 {doDia.slice(0, 2).map((c) => {
                   const trilha = pessoas.find((p) => p.id === c.responsavelId)?.trilha ?? 1;
                   const faltaNome = c.faltaNomeCompleto === true && c.situacao !== "cancelled";
+                  const hora = rotuloHora(new Date(c.comeca), fuso);
+                  // O chip do Google não abre: ele não é compromisso nosso, e
+                  // não há o que editar deste lado (o mesmo do bloco da semana).
+                  const abre = onAbrirAgendamento !== undefined && c.origem !== "google_sync";
+                  const Chip = abre ? "button" : "div";
                   return (
-                    <div
+                    <Chip
                       key={c.id}
+                      {...(abre
+                        ? {
+                            type: "button" as const,
+                            onClick: () => onAbrirAgendamento(c.id),
+                            "aria-label": `${c.quemSeraAtendido ? `${c.quemSeraAtendido}, ` : ""}${c.titulo}, ${hora}`,
+                          }
+                        : {})}
                       data-testid={`chip-mes-${c.id}`}
                       data-falta-nome={faltaNome || undefined}
                       title={faltaNome ? t("Falta o nome completo") : undefined}
@@ -837,7 +895,11 @@ function VisaoDeMes({
                       // derivado de dono + fatia), e é pela origem que se aponta
                       // para ela. Porte de melgarafael/DeskcommCRM 0d1486806.
                       data-origem={c.origem}
-                      className="flex items-center gap-1 rounded-sm px-1 py-0.5"
+                      className={cn(
+                        "flex w-full items-center gap-1 rounded-sm px-1 py-0.5 text-left",
+                        abre &&
+                          "pointer-events-auto cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-1 focus-visible:outline-accent-500",
+                      )}
                       style={{ background: fundoDaTrilha(trilha, 14) }}
                     >
                       <span
@@ -846,13 +908,12 @@ function VisaoDeMes({
                         style={{ backgroundColor: corDaTrilha(trilha) }}
                       />
                       <span className="truncate text-[10px] leading-4 text-text">
-                        {rotuloHora(new Date(c.comeca), fuso)}{" "}
-                        {c.quemSeraAtendido ? nomeCurto(c.quemSeraAtendido) : c.titulo}
+                        {hora} {c.quemSeraAtendido ? nomeCurto(c.quemSeraAtendido) : c.titulo}
                       </span>
                       {faltaNome ? (
                         <Warning aria-hidden size={10} weight="fill" className="ml-auto shrink-0 text-warning" />
                       ) : null}
-                    </div>
+                    </Chip>
                   );
                 })}
               </div>
@@ -872,6 +933,7 @@ export function GradeDaAgenda({
   pessoas,
   agendamentos,
   onAbrirAgendamento,
+  onAbrirDia,
   interacao,
   className,
 }: {
@@ -898,6 +960,8 @@ export function GradeDaAgenda({
   pessoas: Pessoa[];
   agendamentos: Agendamento[];
   onAbrirAgendamento?: (id: string) => void;
+  /** Mês: tocar na célula abre aquele dia na visão Dia (A7). */
+  onAbrirDia?: (dia: Date) => void;
   /** Ausente = grade só de leitura, como a vitrine a monta. Ver `InteracaoDaGrade`. */
   interacao?: InteracaoDaGrade;
   className?: string;
@@ -1117,6 +1181,8 @@ export function GradeDaAgenda({
           fuso={fuso}
           agendamentos={agendamentos}
           pessoas={pessoas}
+          onAbrirDia={onAbrirDia}
+          onAbrirAgendamento={onAbrirAgendamento}
         />
       ) : (
         // A rolagem mora AQUI dentro, e não na página: `html, body` têm
