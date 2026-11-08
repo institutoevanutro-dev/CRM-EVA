@@ -67,29 +67,28 @@ describe("MessageBubble — mensagem que falhou", () => {
     expect(document.body.textContent).not.toContain("http://servico-interno");
   });
 
-  // O tooltip do selo "Falhou" conta a MESMA frase da linha visível — antes ele
-  // mostrava o `error_message` cru (porte do DeskcommCRM #3336).
-  it("o tooltip do 'Falhou' diz a mesma frase da linha, sem o texto cru", async () => {
+  // I1: o selo "Falhou" com tooltip saiu. A frase fica FORA da bolha, à vista,
+  // como "Não enviada · {motivo} · Tentar de novo", e a bolha inteira em erro.
+  it("a bolha fica em tons de erro e a linha 'Não enviada' sai fora dela", () => {
     render(<MessageBubble message={msg({
-      status: "failed", error_code: "storage_sign_failed",
+      status: "failed", error_code: "storage_sign_failed", sent_by_user_id: "eu",
       error_message: "fetch failed http://servico-interno:3000/storage/v1/object/sign",
-    })} />);
-    fireEvent.focus(screen.getByText("Falhou"));
-    const dica = await screen.findByRole("tooltip");
-    const frase = "Não conseguimos preparar o arquivo para envio.";
-    expect(dica).toHaveTextContent(frase);
-    expect(screen.getByTestId("motivo-da-falha")).toHaveTextContent(frase);
+    })} viewerUserId="eu" onReenviar={vi.fn(async () => undefined)} />);
+    const bolha = screen.getByTestId("message-bubble");
+    expect(bolha.className).toContain("bg-error-bg");
+    expect(bolha.className).toContain("border-error");
+    const linha = screen.getByTestId("falha-da-mensagem");
+    expect(bolha.contains(linha)).toBe(false);
+    expect(linha).toHaveTextContent("Não enviada · Não conseguimos preparar o arquivo para envio. · Tentar de novo");
+    expect(screen.queryByText("Falhou")).toBeNull();
     expect(document.body.textContent).not.toContain("servico-interno");
   });
 
-  it("código sem frase + texto cru: a genérica no tooltip e na linha, sem o endereço", async () => {
+  it("código sem frase + texto cru: a genérica na linha, sem o endereço", () => {
     render(<MessageBubble message={msg({
       status: "failed", error_code: "canal_x_error",
       error_message: "fetch failed http://servico-interno:3000/api/sendText",
     })} />);
-    fireEvent.focus(screen.getByText("Falhou"));
-    const dica = await screen.findByRole("tooltip");
-    expect(dica).toHaveTextContent("Não foi possível enviar esta mensagem.");
     expect(screen.getByTestId("motivo-da-falha")).toHaveTextContent("Não foi possível enviar esta mensagem.");
     expect(document.body.textContent).not.toContain("servico-interno");
   });
@@ -97,10 +96,8 @@ describe("MessageBubble — mensagem que falhou", () => {
   it.each([
     ["pre_go_live", "Envio automático bloqueado pelo modo de teste do canal."],
     ["channel_archived", "Este número foi excluído da Central de Conexões."],
-  ])("frase nossa gravada no envio (%s) aparece no tooltip e na linha", async (error_code, frase) => {
+  ])("frase nossa gravada no envio (%s) aparece na linha", (error_code, frase) => {
     render(<MessageBubble message={msg({ status: "failed", error_code, error_message: frase })} />);
-    fireEvent.focus(screen.getByText("Falhou"));
-    expect(await screen.findByRole("tooltip")).toHaveTextContent(frase);
     expect(screen.getByTestId("motivo-da-falha")).toHaveTextContent(frase);
     expect(document.body.textContent).not.toContain("automação");
   });

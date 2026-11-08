@@ -21,6 +21,14 @@ import { z } from "zod";
 /** Um par de cores por tema. `var(--token)` acompanha a marca e o tema sozinho. */
 type Par = { fundo: string; texto: string };
 type CoresPorTema = { claro: Par; escuro: Par };
+/**
+ * O balão da equipe leva também a cor do recibo "Lida" (I1): o azul fixo de
+ * antes media 1,24:1 sobre o verde da marca — mais apagado que "Entregue", o
+ * sinal invertido. Cada fundo tem a sua, com pelo menos 3:1 (vigiado em
+ * `aparencia-da-conversa.test.ts`).
+ */
+type ParEnviada = Par & { lida: string };
+type EnviadaPorTema = { claro: ParEnviada; escuro: ParEnviada };
 
 export const FUNDOS = {
   liso: {
@@ -45,25 +53,27 @@ export const FUNDOS = {
 export const ENVIADAS = {
   marca: {
     rotulo: "Cor da marca",
-    claro: { fundo: "var(--primary)", texto: "var(--primary-foreground)" },
-    escuro: { fundo: "var(--primary)", texto: "var(--primary-foreground)" },
+    // No escuro a marca é CLARA (accent-400 com texto escuro): o azul claro
+    // das outras aparências escuras sumiria nela, então leva um azul fundo.
+    claro: { fundo: "var(--primary)", texto: "var(--primary-foreground)", lida: "#bfe3f5" },
+    escuro: { fundo: "var(--primary)", texto: "var(--primary-foreground)", lida: "#1e3a8a" },
   },
   verde: {
     rotulo: "Verde claro",
-    claro: { fundo: "#d9fdd3", texto: "#111b21" },
-    escuro: { fundo: "#144d37", texto: "#e9edef" },
+    claro: { fundo: "#d9fdd3", texto: "#111b21", lida: "#027eb5" },
+    escuro: { fundo: "#144d37", texto: "#e9edef", lida: "#7dd3fc" },
   },
   azul: {
     rotulo: "Azul",
-    claro: { fundo: "#dbeafe", texto: "#172554" },
-    escuro: { fundo: "#1e3a5f", texto: "#e6eef8" },
+    claro: { fundo: "#dbeafe", texto: "#172554", lida: "#1d4ed8" },
+    escuro: { fundo: "#1e3a5f", texto: "#e6eef8", lida: "#7dd3fc" },
   },
   grafite: {
     rotulo: "Grafite",
-    claro: { fundo: "#2f3437", texto: "#f5f5f4" },
-    escuro: { fundo: "#3a4043", texto: "#f4f4f2" },
+    claro: { fundo: "#2f3437", texto: "#f5f5f4", lida: "#7dd3fc" },
+    escuro: { fundo: "#3a4043", texto: "#f4f4f2", lida: "#7dd3fc" },
   },
-} as const satisfies Record<string, { rotulo: string } & CoresPorTema>;
+} as const satisfies Record<string, { rotulo: string } & EnviadaPorTema>;
 
 /** Balões do CLIENTE. */
 export const RECEBIDAS = {
@@ -137,6 +147,8 @@ export function estiloDaAparencia(a: AparenciaDaConversa): CSSProperties {
     "--bolha-enviada-texto-claro": env.claro.texto,
     "--bolha-enviada-fundo-escuro": env.escuro.fundo,
     "--bolha-enviada-texto-escuro": env.escuro.texto,
+    "--bolha-enviada-lida-claro": env.claro.lida,
+    "--bolha-enviada-lida-escuro": env.escuro.lida,
     "--bolha-recebida-fundo-claro": rec.claro.fundo,
     "--bolha-recebida-texto-claro": rec.claro.texto,
     "--bolha-recebida-fundo-escuro": rec.escuro.fundo,

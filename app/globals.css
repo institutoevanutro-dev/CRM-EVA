@@ -1134,12 +1134,14 @@
 [data-aparencia-conversa] {
   --bolha-enviada-fundo: var(--bolha-enviada-fundo-claro);
   --bolha-enviada-texto: var(--bolha-enviada-texto-claro);
+  --bolha-enviada-lida: var(--bolha-enviada-lida-claro);
   --bolha-recebida-fundo: var(--bolha-recebida-fundo-claro);
   --bolha-recebida-texto: var(--bolha-recebida-texto-claro);
 }
 [data-theme="dark"] [data-aparencia-conversa] {
   --bolha-enviada-fundo: var(--bolha-enviada-fundo-escuro);
   --bolha-enviada-texto: var(--bolha-enviada-texto-escuro);
+  --bolha-enviada-lida: var(--bolha-enviada-lida-escuro);
   --bolha-recebida-fundo: var(--bolha-recebida-fundo-escuro);
   --bolha-recebida-texto: var(--bolha-recebida-texto-escuro);
 }

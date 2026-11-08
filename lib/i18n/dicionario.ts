@@ -11588,6 +11588,7 @@ export const DICIONARIO: Traducoes = {
   "A mensagem não saiu de novo.": { es: "El mensaje no salió de nuevo." },
   "Aguardando conexão": { es: "Esperando conexión" },
   "Não enviada: sem conexão": { es: "No enviado: sin conexión" },
+  "Não enviada": { es: "No enviada" },
   "Enviar esta mensagem de novo?": { es: "¿Enviar este mensaje de nuevo?" },
   "Pode ser que esta mensagem já tenha chegado. Confira no WhatsApp do cliente antes de enviar de novo.": {
     es: "Puede que este mensaje ya haya llegado. Verifica en el WhatsApp del cliente antes de enviarlo de nuevo.",
