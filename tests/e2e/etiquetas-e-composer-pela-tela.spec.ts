@@ -269,7 +269,7 @@ test.describe("Etiquetas e compositor (portes de 15/10)", () => {
     await page.goto(`/app/inbox/${conversaId}`);
     await expect(page.getByText("MENSAGEM DO PACIENTE 1510").first()).toBeVisible({ timeout: 60_000 });
 
-    await page.getByRole("button", { name: /Tags do contato/ }).click();
+    await page.getByRole("button", { name: /Etiquetas do contato/ }).click();
     const gatilho = page.getByRole("button", { name: `Cor da etiqueta ${FICA}` }).first();
     await expect(gatilho, "a paleta não apareceu ao lado da etiqueta do contato").toBeVisible();
     await gatilho.click();

@@ -85,7 +85,7 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
                   type="button"
                   onClick={() => remove(tag)}
                   disabled={mutation.isPending}
-                  aria-label={`${t("Remover tag")} ${tag}`}
+                  aria-label={`${t("Remover etiqueta")} ${tag}`}
                   className="rounded-sm hover:text-destructive"
                 >
                   <X size={10} weight="bold" aria-hidden />
@@ -106,7 +106,7 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
             </Fragment>
           ))
         ) : (
-          <span className="text-xs text-muted-foreground">{t("Sem tags no contato.")}</span>
+          <span className="text-xs text-muted-foreground">{t("Sem etiquetas no contato.")}</span>
         )}
       </div>
 
@@ -120,11 +120,11 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
               add(draft);
             }
           }}
-          placeholder={t("Nova tag…")}
+          placeholder={t("Nova etiqueta…")}
           maxLength={TAMANHO_MAXIMO_DA_TAG}
           disabled={mutation.isPending || tags.length >= 20}
           className="h-7 text-xs"
-          aria-label={t("Adicionar tag ao contato")}
+          aria-label={t("Adicionar etiqueta ao contato")}
         />
         <SeletorDeCorDaEtiqueta
           cor={cor}
@@ -138,7 +138,7 @@ export function ContactTagsEditor({ contactId, orgId, tags }: Props) {
           className="h-7 px-2"
           onClick={() => add(draft)}
           disabled={mutation.isPending || !draft.trim() || tags.length >= 20}
-          aria-label={t("Adicionar tag")}
+          aria-label={t("Adicionar etiqueta")}
         >
           <Plus size={12} weight="regular" aria-hidden />
         </Button>

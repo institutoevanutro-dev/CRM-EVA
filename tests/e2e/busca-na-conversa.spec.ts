@@ -134,7 +134,8 @@ function medirBolhas(page: Page): Promise<BolhaMedida[]> {
       const anel = partes.find((p) => /\s0px 0px 0px 4px$/.test(p));
       return {
         texto: el.textContent ?? "",
-        marcada: el.parentElement?.getAttribute("data-search-match") === "true",
+        // A bolha ganhou um invólucro (aviso de falha fora dela, pacote 2a): a marca fica no ancestral da linha.
+        marcada: el.closest("[data-search-match]")?.getAttribute("data-search-match") === "true",
         anel: anel ? anel.replace(/\s+0px 0px 0px 4px$/, "") : null,
         fundo: cs.backgroundColor,
         boxShadow: cs.boxShadow,

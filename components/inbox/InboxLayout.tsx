@@ -30,6 +30,7 @@ import { RetentionNotice } from "./RetentionNotice";
 import { CRMSidePanel } from "./CRMSidePanel";
 import type { Message as ConversationMensagem } from "@/lib/types/messaging";
 import { InboxKeyboardShortcuts } from "./InboxKeyboardShortcuts";
+import { ConfirmarNaTela } from "./ConfirmarNaTela";
 import { ComentariosPainel } from "./comentarios/ComentariosPainel";
 
 import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
@@ -39,6 +40,7 @@ import { OpenConversationProvider } from "@/hooks/notifications/OpenConversation
 // ADR-05: ícone de feature sai do mapa canônico, nunca do pacote direto.
 import { CaretLeft, ChatCircle, IdentificationCard, MagnifyingGlass, X } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { comandosDaFila } from "@/lib/inbox/comando-da-conversa";
@@ -594,10 +596,14 @@ export function InboxLayout({
       expected_assignee: selectedConversation.assigned_to_user_id,
     });
   }, [claim, selectedConversation]);
-  const handleClose = useCallback(() => {
-    if (!selectedConversation) return;
-    close.mutate({ conversation_id: selectedConversation.id });
-  }, [close, selectedConversation]);
+  // O atalho `e` pede; a confirmação na tela decide (I6). O alvo é a conversa
+  // do MOMENTO do atalho — com o diálogo aberto a seleção não muda (os atalhos
+  // ficam desligados), mas a foto não depende disso.
+  const [fechandoPeloAtalho, setFechandoPeloAtalho] = useState<string | null>(null);
+  const handleClose = () => {
+    if (!selectedConversation || selectedConversation.status === "closed") return;
+    setFechandoPeloAtalho(selectedConversation.id);
+  };
 
   // A janela vence SOZINHA com a aba aberta. Sem este relógio, quem deixa o
   // inbox aberto a tarde inteira seguiria com o composer liberado numa conversa
@@ -819,12 +825,19 @@ export function InboxLayout({
     aplicarLarguras(null);
   }, [faixa, aplicarLarguras]);
 
-  // Altura da grade: a conta desconta TUDO que fica acima e abaixo dela.
+  // Altura da grade: a conta desconta TUDO que fica acima dela.
   //   --altura-do-topo        TopBar (56px no celular, 48px de md em diante)
-  //   2 * --margem-do-conteudo padding do <main> do AppShell (em cima e embaixo)
   //
-  // As duas variáveis são definidas no AppShell; o resto deste comentário conta
-  // por que a conta é feita em token e não em rem somado à mão.
+  // DE PONTA A PONTA (I2): o Inbox cancela o padding do <main> do AppShell com
+  // `-m-(--margem-do-conteudo)` — a moldura de 24px só espremia a conversa, e as
+  // três zonas passam a se separar pelo FUNDO (lista e ficha em superfície, a
+  // conversa no creme). Com a margem negativa a grade ocupa a área inteira do
+  // <main>, então a margem sai da conta de altura: o padding de cima e o de
+  // baixo são devolvidos pelas duas margens negativas.
+  //
+  // As variáveis são definidas no AppShell; o resto deste comentário conta
+  // por que a conta é feita em token e não em rem somado à mão (vale para o
+  // topo; antes valia também para a margem).
   //
   // Com `100vh-3.5rem` o padding ficava de fora e a grade media 48px a MAIS que a
   // tela. Quem pagava a diferença era o composer, que fica no rodapé: nascia
@@ -853,7 +866,7 @@ export function InboxLayout({
   // `InboxFilters` segue no topo para poder trocar de aba de volta.
   if (filterValue.tab === "comentarios") {
     return (
-      <div className="flex h-[calc(100dvh-var(--faixas-de-cima,0px)-var(--altura-do-topo)-var(--altura-das-abas,0px)-2*var(--margem-do-conteudo))] w-full flex-col">
+      <div className="flex -m-(--margem-do-conteudo) h-[calc(100dvh-var(--faixas-de-cima,0px)-var(--altura-do-topo)-var(--altura-das-abas,0px))] flex-col">
         <InboxFilters value={filterValue} onChange={setFilterValue} />
         <div className="min-h-0 flex-1 overflow-hidden">
           <ComentariosPainel />
@@ -879,14 +892,15 @@ export function InboxLayout({
   // Duas faixas em vez de uma: compacta onde aperta, generosa onde há espaço.
   // Em 1280 isso dá 424px de conversa em vez de 372 — 54px de folga sobre o
   // piso do composer (370px), em vez dos 2px que a versão de uma faixa só
-  // deixava. Margem de 2px não é margem, é sorte.
+  // deixava. Margem de 2px não é margem, é sorte. Sem a moldura de 24px (I2),
+  // a conversa ganha mais 48px de largura.
   return (
     <OpenConversationProvider conversationId={selectedId}>
     <div
       ref={gradeRef}
       style={estiloDaGrade}
       className={cn(
-        "relative grid h-[calc(100dvh-var(--faixas-de-cima,0px)-var(--altura-do-topo)-var(--altura-das-abas,0px)-2*var(--margem-do-conteudo))] w-full grid-cols-1 md:grid-cols-[300px_1fr]",
+        "relative grid -m-(--margem-do-conteudo) h-[calc(100dvh-var(--faixas-de-cima,0px)-var(--altura-do-topo)-var(--altura-das-abas,0px))] grid-cols-1 md:grid-cols-[300px_1fr]",
         // Recolhido (porte do #3043), a terceira trilha vira o trilho do botão
         // de expandir. Literais inteiros: o Tailwind precisa deles para gerar o CSS.
         painelRecolhido
@@ -932,7 +946,7 @@ export function InboxLayout({
       <div
         ref={listaRef}
         className={cn(
-          "h-full min-h-0 flex-col border-r border-border md:flex",
+          "h-full min-h-0 flex-col border-r border-border bg-surface md:flex",
           colunas.lista,
         )}
       >
@@ -1112,14 +1126,40 @@ export function InboxLayout({
             />
           </>
         ) : selectionNotFound ? (
-          <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
-            {t("Conversa não encontrada ou fora do seu acesso.")}
+          // Erro com saída (I12): no celular esta é a tela inteira, e a barra de
+          // cima pode passar despercebida.
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-sm text-muted-foreground">
+            <p>{t("Conversa não encontrada ou fora do seu acesso.")}</p>
+            <Button variant="outline" size="sm" onClick={() => handleSelect(null)}>
+              {t("Voltar para a lista")}
+            </Button>
+          </div>
+        ) : selectedId && !single.isError ? (
+          // A conversa escolhida ainda vem (deep-link, I12): um esqueleto com a
+          // forma da tela — cabeçalho e três bolhas — em vez da dica de teclado,
+          // que no celular não serve para nada.
+          <div data-testid="conversa-carregando" role="status" aria-busy="true" aria-label={t("Carregando conversa")} className="flex h-full flex-col">
+            <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+              <Skeleton className="size-9 rounded-full" />
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+            <div className="conversa-fundo flex-1 space-y-3 p-4">
+              <Skeleton className="h-12 w-2/3 rounded-2xl" />
+              <Skeleton className="ml-auto h-12 w-1/2 rounded-2xl" />
+              <Skeleton className="h-16 w-3/5 rounded-2xl" />
+            </div>
           </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
             <ChatCircle size={36} weight="thin" className="text-text-subtle" aria-hidden />
             <p className="text-sm font-medium text-text-muted">{t("Selecione uma conversa")}</p>
-            <p className="text-xs text-text-muted">{t("Ou navegue com J e K")}</p>
+            {/* Só com teclado e mouse (I12): no toque, "J e K" é ruído. */}
+            <p className="hidden text-xs text-text-muted [@media(hover:hover)_and_(pointer:fine)]:block">
+              {t("Ou navegue com J e K")}
+            </p>
           </div>
         )}
       </div>
@@ -1194,6 +1234,18 @@ export function InboxLayout({
         onClaim={supportReadonly ? () => {} : handleClaim}
         onClose={supportReadonly ? () => {} : handleClose}
         onToggleHelp={() => setHelpOpen((v) => !v)}
+        enabled={fechandoPeloAtalho === null}
+      />
+      <ConfirmarNaTela
+        aberto={fechandoPeloAtalho !== null}
+        onAbertoChange={(aberto) => !aberto && setFechandoPeloAtalho(null)}
+        titulo={t("Fechar esta conversa?")}
+        descricao={t("O atendimento termina. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.")}
+        acao={t("Fechar conversa")}
+        focoNaAcao
+        onConfirmar={() => {
+          if (fechandoPeloAtalho) close.mutate({ conversation_id: fechandoPeloAtalho });
+        }}
       />
       <ShortcutsHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <EncaminharDialog

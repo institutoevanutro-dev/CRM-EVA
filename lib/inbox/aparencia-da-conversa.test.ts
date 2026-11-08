@@ -42,6 +42,36 @@ describe("aparência da conversa — contraste", () => {
   });
 });
 
+// I1: o recibo "Lida" lê mais que "Entregue" em toda aparência — ícone ≥ 3:1.
+// A marca entra com a cor de fábrica (accent-600 no claro, accent-400 no escuro).
+describe("aparência da conversa — recibo Lida", () => {
+  const MARCA = { claro: "#506d48", escuro: "#82a077" } as const;
+  for (const [nome, p] of Object.entries(ENVIADAS)) {
+    for (const tema of ["claro", "escuro"] as const) {
+      const { fundo, lida } = p[tema];
+      const real = HEX.test(fundo) ? fundo : MARCA[tema];
+      it(`${nome} (${tema}): Lida ≥ 3:1`, () => {
+        expect(razaoDeContraste(real, lida)).toBeGreaterThanOrEqual(3);
+      });
+    }
+  }
+
+  it("as duas versões chegam ao CSS e o globals.css escolhe a do tema", () => {
+    const estilo = estiloDaAparencia({ ...APARENCIA_PADRAO, enviada: "verde" }) as Record<string, string>;
+    expect(estilo["--bolha-enviada-lida-claro"]).toBe("#027eb5");
+    expect(estilo["--bolha-enviada-lida-escuro"]).toBe("#7dd3fc");
+    const css = readFileSync("app/globals.css", "utf8");
+    expect(css).toContain("--bolha-enviada-lida: var(--bolha-enviada-lida-claro)");
+    expect(css).toContain("--bolha-enviada-lida: var(--bolha-enviada-lida-escuro)");
+  });
+
+  it("a marca de fábrica no CSS é a medida acima", () => {
+    const css = readFileSync("app/globals.css", "utf8");
+    expect(css).toContain(`--color-accent-600: ${MARCA.claro}`);
+    expect(css).toContain(`--color-accent-400: ${MARCA.escuro}`);
+  });
+});
+
 describe("aparência da conversa — leitura do metadado (gravável pelo usuário)", () => {
   it("sem nada gravado, é o desenho de antes", () => {
     expect(lerAparencia(undefined)).toEqual(APARENCIA_PADRAO);

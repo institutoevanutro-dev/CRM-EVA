@@ -86,7 +86,7 @@ interface Props {
  * podem ser mantidas em arquivos diferentes.
  */
 const SELO_DO_COMANDO: Record<string, { rotulo: string; classe: string; Icone: typeof Robot } | undefined> = {
-  automatico: { rotulo: "IA", classe: "bg-info-bg text-info-fg", Icone: Robot },
+  automatico: { rotulo: "Automático", classe: "bg-info-bg text-info-fg", Icone: Robot },
   aguardando: { rotulo: "Aguardando", classe: "bg-warning-bg text-warning-fg", Icone: Clock },
   humano: { rotulo: "Equipe", classe: "bg-accent-soft text-accent-hover", Icone: UserCircle },
   encerrada: { rotulo: "Encerrada", classe: "bg-surface-elevated text-text-muted", Icone: Clock },

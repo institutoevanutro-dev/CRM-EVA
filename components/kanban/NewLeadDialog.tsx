@@ -54,6 +54,11 @@ interface Props {
   contactId?: string | null;
   /** Depois do INSERT — o inbox relê o resumo para o lead novo aparecer no formulário. */
   onCreated?: () => void;
+  /**
+   * O título, quando quem abre usa outra palavra no botão (o Inbox diz "Novo
+   * negócio", I11). O título é sempre o rótulo do botão que abriu (#909).
+   */
+  titulo?: string;
 }
 
 function defaultStageId(stages: Stage[]): string {
@@ -68,6 +73,7 @@ export function NewLeadDialog({
   stages,
   contactId,
   onCreated,
+  titulo,
 }: Props) {
   const t = useT();
   const create = useCreateLead(pipelineId);
@@ -213,7 +219,7 @@ export function NewLeadDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t("Novo Lead")}</DialogTitle>
+          <DialogTitle>{titulo ?? t("Novo Lead")}</DialogTitle>
           <DialogDescription>
             {t("Crie um lead manualmente neste pipeline.")}
           </DialogDescription>

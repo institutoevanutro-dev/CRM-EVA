@@ -177,10 +177,11 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     // longo — se ele quebrar a fileira ou sumir, é aqui que aparece. Cabe nesta
     // spec, e não numa nova, porque o painel já está montado neste ponto: spec
     // nova custaria mais um login e mais um seed ao relógio do CI.
-    await expect(page.getByRole("button", { name: "Novo Lead", exact: true })).toBeVisible();
-    page.on("dialog", (dialog) => dialog.accept());
+    await expect(page.getByRole("button", { name: "Novo negócio", exact: true })).toBeVisible();
     await abrirAcoesDaConversa(page);
     await page.getByRole("button", { name: "Fechar", exact: true }).click();
+    // I6: a confirmação é o AlertDialog do sistema, não o confirm() do navegador.
+    await page.getByRole("alertdialog").getByRole("button", { name: "Fechar conversa", exact: true }).click();
     await expect
       .poll(
         async () =>
@@ -239,6 +240,7 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     await page.screenshot({ path: `${evidence}/task4-reaberto-respondido.png`, fullPage: true });
     await abrirAcoesDaConversa(page);
     await page.getByRole("button", { name: "Fechar", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Fechar conversa", exact: true }).click();
     await expect
       .poll(
         async () =>
@@ -272,6 +274,7 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     await page.getByRole("button", { name: "Reabrir", exact: true }).click();
     await expect.poll(async () => (await db.from("conversations").select("status").eq("organization_id",org).eq("id",conversation).single()).data?.status).toBe("open");
     await page.getByRole("button", { name: "Cerrar", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Cerrar conversación", exact: true }).click();
     await expect.poll(async () => (await db.from("conversations").select("status").eq("organization_id",org).eq("id",conversation).single()).data?.status).toBe("closed");
     expect(hits.filter((url) => url.includes("sendText"))).toHaveLength(1);
 

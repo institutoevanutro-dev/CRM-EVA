@@ -939,7 +939,6 @@ export const DICIONARIO: Traducoes = {
   "Todos os números": { es: "Todos los números" },
   "Só Instagram": { es: "Solo Instagram" },
   "Só WhatsApp": { es: "Solo WhatsApp" },
-  "Todas as tags": { es: "Todas las etiquetas" },
   // #1274 — filtro por VÁRIAS etiquetas (E/OU). As duas entradas novas do menu
   // de etiqueta das TRÊS listas (Inbox, funil e contatos); o rótulo do item do
   // menu é a pergunta, e o "✓" que marca o modo corrente é um caractere, não uma
@@ -1064,11 +1063,12 @@ export const DICIONARIO: Traducoes = {
   "LEADS RECENTES": { es: "LEADS RECIENTES" },
   "PEDIDOS RECENTES": { es: "PEDIDOS RECIENTES" },
   ATIVIDADE: { es: "ACTIVIDAD" },
-  "Sem tags.": { es: "Sin etiquetas." },
+  "Sem etiquetas.": { es: "Sin etiquetas." },
   "Sem leads.": { es: "Sin leads." },
+  "Nenhum negócio aberto.": { es: "Ningún negocio abierto." },
   "Sem pedidos.": { es: "Sin pedidos." },
   "Sem atividade.": { es: "Sin actividad." },
-  "Nova tag…": { es: "Nueva etiqueta…" },
+  "Nova etiqueta…": { es: "Nueva etiqueta…" },
   "Sem próximo passo definido": { es: "Sin próximo paso definido" },
   "Marcar próximo passo": { es: "Marcar próximo paso" },
   Lead: { es: "Lead" },
@@ -4424,6 +4424,7 @@ export const DICIONARIO: Traducoes = {
   },
   "Texto da mensagem": { es: "Texto del mensaje" },
   "Tags do contato": { es: "Etiquetas del contacto" },
+  "Etiquetas do contato": { es: "Etiquetas del contacto" },
   "Tag adicionada": { es: "Etiqueta agregada" },
   "Quando entrar um contato novo (webhook)": { es: "Cuando entre un contacto nuevo (webhook)" },
   "Quando um lead mudar de etapa": { es: "Cuando un lead cambie de etapa" },
@@ -5696,9 +5697,14 @@ export const DICIONARIO: Traducoes = {
   "Pausando...": { es: "Pausando..." },
   "Fechar esta conversa?": { es: "¿Cerrar esta conversación?" },
   "Arquivar esta conversa?": { es: "¿Archivar esta conversación?" },
-  "Arquivar encerra este atendimento e guarda a conversa no histórico. Se o cliente escrever de novo, ela volta. Arquivar?": {
-    es: "Archivar cierra esta atención y guarda la conversación en el historial. Si el cliente vuelve a escribir, la conversación regresa. ¿Archivar?",
+  "Arquivar encerra este atendimento e guarda a conversa no histórico. Se o cliente escrever de novo, ela volta.": {
+    es: "Archivar cierra esta atención y guarda la conversación en el historial. Si el cliente vuelve a escribir, la conversación regresa.",
   },
+  "O atendimento termina. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.": {
+    es: "La atención termina. Si el paciente vuelve a escribir, la conversación vuelve a la fila, y el automático puede responder.",
+  },
+  "Excluir esta nota interna?": { es: "¿Eliminar esta nota interna?" },
+  "Não dá para desfazer.": { es: "No se puede deshacer." },
   "Arquivando...": { es: "Archivando..." },
   Automático: { es: "Automático" },
   Alguém: { es: "Alguien" },
@@ -5730,10 +5736,9 @@ export const DICIONARIO: Traducoes = {
   "Mostrar atalhos": { es: "Mostrar atajos" },
 
   // ─── Inbox: tags de contato/conversa ───
-  "Sem tags no contato.": { es: "Sin etiquetas en el contacto." },
-  "Adicionar tag ao contato": { es: "Agregar etiqueta al contacto" },
-  "Remover tag": { es: "Quitar etiqueta" },
-  "Tags da conversa": { es: "Etiquetas de la conversación" },
+  "Sem etiquetas no contato.": { es: "Sin etiquetas en el contacto." },
+  "Adicionar etiqueta ao contato": { es: "Agregar etiqueta al contacto" },
+  "Etiquetas da conversa": { es: "Etiquetas de la conversación" },
 
   // ─── Inbox: janela de 24h fechada / seletor de modelo aprovado ───
   "Modelo enviado — a janela reabre quando o cliente responder.": {
@@ -5937,8 +5942,7 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível concluir a organização agora. Tente novamente ou contate o administrador da instalação.": {
     es: "No fue posible completar la organización ahora. Inténtalo de nuevo o contacta al administrador de la instalación.",
   },
-  "Adicionar tag à conversa": { es: "Agregar etiqueta a la conversación" },
-  "Fechar conversa?": { es: "¿Cerrar conversación?" },
+  "Adicionar etiqueta à conversa": { es: "Agregar etiqueta a la conversación" },
   "O cliente ainda não escreveu — a janela de 24h nunca abriu. Só um modelo aprovado sai daqui.": {
     es: "El cliente todavía no escribió — la ventana de 24h nunca se abrió. Solo un modelo aprobado sale de aquí.",
   },
@@ -7467,6 +7471,7 @@ export const DICIONARIO: Traducoes = {
     es: "Esto no tiene vuelta atrás: el embudo y sus etapas desaparecen. Si ya recibió negocio, la eliminación se rechaza y sigue archivado.",
   },
   "Novo Lead": { es: "Nuevo Lead" },
+  "Novo negócio": { es: "Nuevo negocio" },
   "Não consegui carregar este funil:": { es: "No pude cargar este embudo:" },
   "sem responsável.": { es: "sin responsable." },
   "atribuído.": { es: "asignado." },
@@ -8274,7 +8279,13 @@ export const DICIONARIO: Traducoes = {
   "Os blocos vazios continuam aqui, e o que estiver publicado fica clicável.": { es: "Los bloques vacíos siguen aquí, y lo que esté publicado queda clicable." },
   "Remarcar": { es: "Reprogramar" },
   "para": { es: "para" },
-  "? Quem foi atendido recebe o aviso da mudança.": { es: "? Quien fue atendido recibe el aviso del cambio." },
+  "Remarcar {paciente} ({titulo}) de {de} para {para}?": { es: "¿Reprogramar a {paciente} ({titulo}) de {de} a {para}?" },
+  "Remarcar {titulo} de {de} para {para}?": { es: "¿Reprogramar {titulo} de {de} a {para}?" },
+  "Avise {paciente} do novo horário: a mudança não manda mensagem sozinha, a não ser por uma automação de remarcação.": { es: "Avisa a {paciente} del nuevo horario: el cambio no envía un mensaje solo, salvo con una automatización de reprogramación." },
+  "Manter horário": { es: "Mantener horario" },
+  "Remarcando": { es: "Reprogramando" },
+  "Abrir o dia {dia} · {n} na agenda": { es: "Abrir el día {dia} · {n} en la agenda" },
+  "+{n} mais": { es: "+{n} más" },
 
   // ═══ As telas que só o passe do PR #352 alcançou ═══
   //
@@ -11590,6 +11601,9 @@ export const DICIONARIO: Traducoes = {
   "A mensagem não saiu de novo.": { es: "El mensaje no salió de nuevo." },
   "Aguardando conexão": { es: "Esperando conexión" },
   "Não enviada: sem conexão": { es: "No enviado: sin conexión" },
+  "Não enviada": { es: "No enviada" },
+  "Voltar para a lista": { es: "Volver a la lista" },
+  "Carregando conversa": { es: "Cargando conversación" },
   "Enviar esta mensagem de novo?": { es: "¿Enviar este mensaje de nuevo?" },
   "Pode ser que esta mensagem já tenha chegado. Confira no WhatsApp do cliente antes de enviar de novo.": {
     es: "Puede que este mensaje ya haya llegado. Verifica en el WhatsApp del cliente antes de enviarlo de nuevo.",

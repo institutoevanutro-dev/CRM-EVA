@@ -5,7 +5,7 @@
  * quem tem compromisso marcado, e o pulo sai registrado — `failed` +
  * `error_code = compromisso_na_agenda` — porque era o código que já existia
  * (posto pelo mantenedor no #3840 para a linha não ficar em `queued` e ser
- * reenviada pelo watchdog). A Inbox mostra "Falhou" para esse código, com
+ * reenviada pelo watchdog). A Inbox mostra "Não enviada" para esse código, com
  * "Tentar de novo" — e o reenvio, que não reavalia a agenda, mandaria em
  * silêncio o que a regra decidiu não mandar.
  *
@@ -13,7 +13,7 @@
  *
  *   1. pulada  → selo "Pulada pela agenda", motivo e o compromisso que barrou;
  *   2. pulada  → SEM botão de reenviar, mesmo para quem tem permissão de reenviar;
- *   3. falha   → "Falhou" e botão, como antes.
+ *   3. falha   → "Não enviada" e botão, como antes.
  *
  * Sabotagens que deixam cada caso vermelho (medidas na mão):
  *   - tirar `MOTIVO_DO_PULO` de `FALHA_SEM_REENVIO` (lib/messaging/reenvio.ts):
@@ -95,8 +95,8 @@ describe("MessageBubble — pulo da agenda", () => {
     const selo = screen.getByTestId("selo-pulada-pela-agenda");
     expect(selo).toHaveTextContent("Pulada pela agenda");
     // A moldura de erro diria "falhou" enquanto o selo diz "pulada" (#3850).
-    expect(screen.getByTestId("message-bubble")).not.toHaveClass("border-destructive");
-    expect(screen.queryByText("Falhou")).toBeNull();
+    expect(screen.getByTestId("message-bubble")).not.toHaveClass("bg-error-bg");
+    expect(screen.queryByText("Não enviada")).toBeNull();
     expect(screen.queryByTestId("motivo-da-falha")).toBeNull();
 
     const bloco = screen.getByTestId("pulo-da-agenda");
@@ -130,7 +130,7 @@ describe("MessageBubble — pulo da agenda", () => {
     expect(screen.getByTestId("selo-pulada-pela-agenda")).toHaveTextContent("Pulada pela agenda");
   });
 
-  it("falha de verdade continua com 'Falhou' e com o botão", async () => {
+  it("falha de verdade continua com 'Não enviada' e com o botão", async () => {
     const onReenviar = vi.fn(async () => undefined);
     render(
       <MessageBubble
@@ -148,8 +148,8 @@ describe("MessageBubble — pulo da agenda", () => {
 
     expect(screen.queryByTestId("selo-pulada-pela-agenda")).toBeNull();
     expect(screen.queryByTestId("pulo-da-agenda")).toBeNull();
-    expect(screen.getByText("Falhou")).toBeInTheDocument();
-    expect(screen.getByTestId("message-bubble")).toHaveClass("border-destructive");
+    expect(screen.getByText("Não enviada")).toBeInTheDocument();
+    expect(screen.getByTestId("message-bubble")).toHaveClass("bg-error-bg");
     expect(screen.getByTestId("motivo-da-falha")).toHaveTextContent(
       "Não conseguimos preparar o arquivo para envio.",
     );
@@ -176,7 +176,7 @@ describe("MessageBubble — pulo da agenda", () => {
     expect(screen.getByTestId("selo-pulada-pela-agenda")).toHaveTextContent("Pulada pela agenda");
     expect(screen.getByTestId("pulo-da-agenda")).toHaveTextContent(FRASE_AGENDADO);
     expect(screen.queryByRole("link", { name: "Abrir agenda" })).toBeNull();
-    expect(screen.queryByText("Falhou")).toBeNull();
+    expect(screen.queryByText("Não enviada")).toBeNull();
   });
 
   it("o motivo medido muda a frase: atendimento em curso não é 'horário marcado'", () => {

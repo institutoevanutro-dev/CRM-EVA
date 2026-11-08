@@ -22,6 +22,7 @@ import { useEnviarAoProntuario } from "@/hooks/inbox/useEnviarAoProntuario";
 import { useActiveOrg, useUser } from "@/hooks/auth/AuthProvider";
 import { ROLE_RANK } from "@/lib/auth/types";
 import type { Message, Note } from "@/lib/types/messaging";
+import { posicoesNoTurno } from "@/lib/inbox/turnos";
 
 interface Props {
   conversationId: string | null;
@@ -299,8 +300,11 @@ export function ChatThread({
           </div>
         )}
 
-        {groups.map((g) => (
-          <div key={g.key} className="space-y-1">
+        {groups.map((g) => {
+          // Turnos por dia: o separador de data já quebra a sequência (I8).
+          const turnos = posicoesNoTurno(g.items.map((i) => (i.kind === "message" ? i.data : null)));
+          return (
+          <div key={g.key}>
             <div className="sticky top-0 z-10 flex justify-center py-1">
               {/* Pílula OPACA: ela fica presa no alto enquanto a conversa rola, e
                   a versão translúcida (fundo 80% + blur) deixava a data em cima
@@ -346,11 +350,14 @@ export function ChatThread({
                   enviandoAoProntuario={envioAoProntuario.emVoo.has(item.data.id)}
                   erroAoProntuario={envioAoProntuario.ultimoErro.get(item.data.id) ?? null}
                   quemEnviouAoProntuario={nomePorUsuario.get(item.data.prontuario_exame?.enviado_por_user_id ?? "") ?? null}
+                  inicioDoTurno={turnos.get(item.data.id)?.inicio ?? true}
+                  fimDoTurno={turnos.get(item.data.id)?.fim ?? true}
                 />
               ),
             )}
           </div>
-        ))}
+          );
+        })}
 
         <div ref={bottomRef} />
         </div>

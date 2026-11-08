@@ -31,7 +31,8 @@ import { Button } from "@/components/ui/button";
 import { PainelDeMarcacao } from "@/components/agenda/PainelDeMarcacao";
 import { MarcacaoSimples } from "@/components/agenda/MarcacaoSimples";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { quandoCurto } from "@/components/agenda/rotulo-do-bloco";
 import { useAgendamentos } from "@/hooks/agenda/useAgendamentos";
 import { useHorariosLivres } from "@/hooks/agenda/useHorariosLivres";
 import { useMarcarAgendamento } from "@/hooks/agenda/useMarcarAgendamento";
@@ -833,42 +834,71 @@ export function AgendaClient({
         >
           <SheetHeader>
             <SheetTitle>{t("Remarcar agendamento")}</SheetTitle>
+            {/* A8: o painel começa dizendo QUEM está sendo remarcado. Antes
+                ele abria pelo e-mail do convidado, sem nome nem horário. */}
+            {(() => {
+              const alvo = todos.find((a) => a.id === remarcandoId);
+              if (!alvo) return null;
+              const quando = quandoCurto(
+                new Date(alvo.comeca),
+                fusoDaAgenda,
+                new Date(),
+                localeDaData,
+                t("hoje"),
+              );
+              return (
+                <SheetDescription data-testid="remarcando-quem">
+                  {t("Remarcando")}{" "}
+                  <span className="font-semibold text-text">
+                    {alvo.quemSeraAtendido ?? alvo.titulo}
+                  </span>
+                  {alvo.quemSeraAtendido ? ` · ${alvo.titulo}` : ""} · {quando}
+                </SheetDescription>
+              );
+            })()}
           </SheetHeader>
-          <div className="mt-4">
-            <label
-              className="block text-xs font-medium text-text-muted"
-              htmlFor="email-do-convidado"
-            >
-              {t("E-mail do convidado")}{" "}
-              <span className="font-normal opacity-70">({t("opcional")})</span>
-            </label>
-            <input
-              id="email-do-convidado"
-              data-testid="email-do-convidado"
-              type="email"
-              inputMode="email"
-              autoComplete="off"
-              value={emailConvidado}
-              onChange={(e) => setEmailConvidado(e.target.value)}
-              className={cn(
-                // `outline-hidden`, não `outline-none`: no Tailwind 4 os dois
-                // trocaram de significado, e o `outline-none` do v4 apaga o
-                // contorno que o modo de alto contraste do sistema usa.
-                "mt-1 w-full rounded-md border bg-surface p-2 text-sm outline-hidden",
-                emailConvidadoInvalido
-                  ? "border-danger focus:border-danger"
-                  : "border-border focus:border-border-strong",
-              )}
-              placeholder={t("cliente@empresa.com")}
-              aria-invalid={emailConvidadoInvalido || undefined}
-              aria-describedby="ajuda-do-convidado"
-            />
-            <p id="ajuda-do-convidado" className="mt-1 text-xs text-text-muted">
-              {emailConvidadoInvalido
-                ? t("Endereço inválido — confira antes de marcar.")
-                : t("Preenchido, o Google envia o convite por e-mail para esta pessoa.")}
-            </p>
-          </div>
+          {/* O convite do Google é exceção, não o caminho: fica recolhido (A8).
+              Quem digita já o abriu, então o aviso de e-mail inválido aparece. */}
+          <details className="mt-4">
+            <summary className="cursor-pointer text-xs font-medium text-text-muted hover:text-text">
+              {t("Mais opções")}
+            </summary>
+            <div className="mt-2">
+              <label
+                className="block text-xs font-medium text-text-muted"
+                htmlFor="email-do-convidado"
+              >
+                {t("E-mail do convidado")}{" "}
+                <span className="font-normal opacity-70">({t("opcional")})</span>
+              </label>
+              <input
+                id="email-do-convidado"
+                data-testid="email-do-convidado"
+                type="email"
+                inputMode="email"
+                autoComplete="off"
+                value={emailConvidado}
+                onChange={(e) => setEmailConvidado(e.target.value)}
+                className={cn(
+                  // `outline-hidden`, não `outline-none`: no Tailwind 4 os dois
+                  // trocaram de significado, e o `outline-none` do v4 apaga o
+                  // contorno que o modo de alto contraste do sistema usa.
+                  "mt-1 w-full rounded-md border bg-surface p-2 text-sm outline-hidden",
+                  emailConvidadoInvalido
+                    ? "border-danger focus:border-danger"
+                    : "border-border focus:border-border-strong",
+                )}
+                placeholder={t("cliente@empresa.com")}
+                aria-invalid={emailConvidadoInvalido || undefined}
+                aria-describedby="ajuda-do-convidado"
+              />
+              <p id="ajuda-do-convidado" className="mt-1 text-xs text-text-muted">
+                {emailConvidadoInvalido
+                  ? t("Endereço inválido — confira antes de marcar.")
+                  : t("Preenchido, o Google envia o convite por e-mail para esta pessoa.")}
+              </p>
+            </div>
+          </details>
           {tipo && (
             <div className="mt-4 shrink-0">
               <PainelDeMarcacao
@@ -1154,6 +1184,13 @@ export function AgendaClient({
           if (tipo) parametros.set("tipo", tipo.id);
           parametros.set("compromisso", id);
           router.push(`/app/agenda?${parametros.toString()}`);
+        }}
+        // A7: no Mês, tocar no dia abre aquele dia. A data da célula já é do
+        // calendário da grade; `ancoraLocalDoDia` a põe ao meio-dia, como a
+        // âncora nasce.
+        onAbrirDia={(dia) => {
+          setAncora(ancoraLocalDoDia(format(dia, "yyyy-MM-dd")));
+          setVisao("dia");
         }}
         className="min-h-0 flex-1"
       />

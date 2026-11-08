@@ -1,6 +1,5 @@
 "use client";
 import { useHotkeys } from "react-hotkeys-hook";
-import { useT } from "@/hooks/i18n/useT";
 
 interface Props {
   /** Currently visible conversation ids in the list (for j/k nav). */
@@ -9,6 +8,7 @@ interface Props {
   onSelect: (id: string) => void;
   onFocusReply: () => void;
   onClaim: () => void;
+  /** Pede o fechamento: quem chama abre a confirmação na tela (I6). */
   onClose: () => void;
   onToggleHelp: () => void;
   enabled?: boolean;
@@ -24,7 +24,6 @@ export function InboxKeyboardShortcuts({
   onToggleHelp,
   enabled = true,
 }: Props) {
-  const t = useT();
   function step(delta: number) {
     if (visibleIds.length === 0) return;
     const idx = selectedId ? visibleIds.indexOf(selectedId) : -1;
@@ -46,13 +45,7 @@ export function InboxKeyboardShortcuts({
   ]);
   useHotkeys("r", () => onFocusReply(), { enabled, preventDefault: true });
   useHotkeys("a", () => onClaim(), { enabled, preventDefault: true });
-  useHotkeys(
-    "e",
-    () => {
-      if (confirm(t("Fechar conversa?"))) onClose();
-    },
-    { enabled, preventDefault: true },
-  );
+  useHotkeys("e", () => onClose(), { enabled, preventDefault: true });
   useHotkeys("shift+/", () => onToggleHelp(), { enabled, preventDefault: true });
 
   return null;
