@@ -15,7 +15,9 @@ import {
   TEXTO_DO_BLOQUEIO,
   TEXTO_DO_PULO,
   decidirEnvio,
+  ehLembreteDeCompromisso,
   ehPassoFixoDoFluxo,
+  fimDosDiasUteis,
   tipoDoPassoDoFluxo,
   dentroDaJanela,
   lerConfigDosBloqueios,
@@ -619,6 +621,142 @@ describe('conferirAntesDoEnvio', () => {
       envia: false,
       motivo: 'nao_verificavel',
       invalida: false,
+    });
+  });
+});
+
+// ─── caso aberto esperando a equipe ─────────────────────────────────────────
+//
+// O caso real (anonimizado): a IA abre um caso `awaiting_human` às 20:22 e diz
+// que a equipe responde na segunda; o contato manda "👍" às 20:23; o fluxo de
+// silêncio (30 min, cancel_on_reply, handoff cancel) inscreve e, na manhã
+// seguinte, a IA manda "a equipe já viu seu pedido" — falso.
+describe('caso aberto esperando a equipe (2 dias úteis)', () => {
+  const SP = 'America/Sao_Paulo';
+  // 06/11/2026 é sexta. 20:22 em Brasília = 23:22Z.
+  const CASO_SEXTA_2022 = '2026-11-06T23:22:00.000Z';
+  const TERCA_2022 = new Date('2026-11-10T23:22:00.000Z');
+
+  function doSilencio(p: Partial<FatosDoEnvio> = {}): FatosDoEnvio {
+    return fatos({
+      enrollment: {
+        id: 'e0000000-0000-4000-8000-000000000002',
+        status: 'active',
+        started_at: '2026-11-06T23:53:00.000Z', // 30 min depois do 👍
+        pointer_id: 'c0000000-0000-4000-8000-000000000001',
+      },
+      trigger_config: { kind: 'silence', params: { threshold_minutes: 30 }, cancel_on_reply: true },
+      handoff_policy: 'cancel',
+      negocios_abertos: [],
+      ultima_recebida_em: '2026-11-06T23:23:00.000Z', // o 👍
+      caso_aguardando_equipe_desde: CASO_SEXTA_2022,
+      fuso: SP,
+      ...p,
+    });
+  }
+
+  describe('fimDosDiasUteis', () => {
+    it('sexta 20h → terça 20h (sábado e domingo valem zero)', () => {
+      expect(fimDosDiasUteis(new Date(CASO_SEXTA_2022), 2, SP).toISOString()).toBe(TERCA_2022.toISOString());
+    });
+    it('sábado 10h → quarta 0h (o sábado inteiro conta zero)', () => {
+      expect(fimDosDiasUteis(new Date('2026-11-07T13:00:00.000Z'), 2, SP).toISOString()).toBe('2026-11-11T03:00:00.000Z');
+    });
+    it('domingo 23:59 → quarta 0h', () => {
+      expect(fimDosDiasUteis(new Date('2026-11-09T02:59:00.000Z'), 2, SP).toISOString()).toBe('2026-11-11T03:00:00.000Z');
+    });
+    it('segunda 9h → quarta 9h (sem fim de semana no meio)', () => {
+      expect(fimDosDiasUteis(new Date('2026-11-09T12:00:00.000Z'), 2, SP).toISOString()).toBe('2026-11-11T12:00:00.000Z');
+    });
+    it('quinta 15h → segunda 15h (pula o fim de semana)', () => {
+      expect(fimDosDiasUteis(new Date('2026-11-05T18:00:00.000Z'), 2, SP).toISOString()).toBe('2026-11-09T18:00:00.000Z');
+    });
+    it('o fuso decide o dia: sexta 22h em SP já é sábado em UTC, e ainda conta', () => {
+      // 06/11 22:00 SP = 07/11 01:00Z. Em SP restam 2h de sexta.
+      expect(fimDosDiasUteis(new Date('2026-11-07T01:00:00.000Z'), 2, SP).toISOString()).toBe('2026-11-11T01:00:00.000Z');
+    });
+  });
+
+  it('caso real: passo de IA no sábado 09:00 é PULADO, sem encerrar', () => {
+    const sabado0900 = new Date('2026-11-07T12:00:00.000Z');
+    expect(decidirEnvio(doSilencio(), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, sabado0900, 'ia')).toEqual({
+      envia: false,
+      motivo: 'caso_aguardando_equipe',
+      pula: true,
+    });
+  });
+
+  it('texto fixo de retomada no prazo é ADIADO para o fim do prazo, sem encerrar', () => {
+    const sabado0900 = new Date('2026-11-07T12:00:00.000Z');
+    expect(decidirEnvio(doSilencio(), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, sabado0900, 'fixo')).toEqual({
+      envia: false,
+      motivo: 'caso_aguardando_equipe',
+      adiarPara: TERCA_2022,
+    });
+  });
+
+  it('o pulo vale fora da janela também (não adia para pular depois)', () => {
+    const sexta2055 = new Date('2026-11-06T23:55:00.000Z');
+    expect(decidirEnvio(doSilencio(), TUDO_LIGADO, sexta2055, 'ia')).toMatchObject({ motivo: 'caso_aguardando_equipe', pula: true });
+  });
+
+  it('terça 21:00 (prazo vencido) volta a poder enviar — IA e fixo', () => {
+    const terca2100 = new Date('2026-11-11T00:00:00.000Z');
+    expect(decidirEnvio(doSilencio(), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, terca2100, 'ia')).toEqual({ envia: true });
+    expect(decidirEnvio(doSilencio(), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, terca2100, 'fixo')).toEqual({ envia: true });
+  });
+
+  it('exatamente no fim do prazo já envia', () => {
+    expect(decidirEnvio(doSilencio(), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, TERCA_2022, 'ia')).toEqual({ envia: true });
+  });
+
+  it('controle: sem caso aberto, o mesmo passo envia', () => {
+    const sabado0900 = new Date('2026-11-07T12:00:00.000Z');
+    expect(decidirEnvio(doSilencio({ caso_aguardando_equipe_desde: null }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, sabado0900, 'ia')).toEqual({ envia: true });
+    expect(decidirEnvio(doSilencio({ caso_aguardando_equipe_desde: undefined }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, sabado0900, 'ia')).toEqual({ envia: true });
+  });
+
+  it('o que encerra continua encerrando antes do caso (opt-out vence)', () => {
+    const sabado0900 = new Date('2026-11-07T12:00:00.000Z');
+    expect(
+      decidirEnvio(doSilencio({ contato: { is_blocked: true, force_human: false, is_anonymized: false } }), CONFIG_SEM_BLOQUEIOS_OPCIONAIS, sabado0900, 'ia'),
+    ).toMatchObject({ motivo: 'opt_out', invalida: true });
+  });
+
+  it('textos legíveis: pulo e adiamento dizem que a equipe vai responder o caso', () => {
+    expect(TEXTO_DO_PULO.caso_aguardando_equipe).toBe('Passo pulado: a equipe ainda vai responder um caso aberto nesta conversa.');
+    expect(TEXTO_DO_BLOQUEIO.caso_aguardando_equipe).toContain('caso aberto');
+  });
+
+  describe('lembrete de compromisso NUNCA é barrado por caso aberto', () => {
+    const sabado0900 = new Date('2026-11-07T12:00:00.000Z');
+
+    it.each(['appointment_attended', 'appointment_no_show', 'appointment_reminder_futuro'])(
+      'gatilho %s: fixo e IA seguem como sem o caso',
+      (kind) => {
+        const f = doSilencio({ trigger_config: { kind }, handoff_policy: 'allow' });
+        expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, sabado0900, 'fixo')).toEqual({ envia: true });
+        expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, sabado0900, 'ia')).toEqual({ envia: true });
+      },
+    );
+
+    it('fluxo amarrado a reserva (sinal) segue', () => {
+      const f = doSilencio({
+        trigger_config: { kind: 'manual' },
+        reserva: {
+          criada_em: '2026-11-07T11:40:00.000Z',
+          consulta_em: '2026-11-12T13:00:00.000Z',
+          sujeita_a_sinal: true,
+          status: 'pending',
+        },
+      });
+      expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, sabado0900, 'fixo')).toEqual({ envia: true });
+    });
+
+    it('ehLembreteDeCompromisso: silêncio, etapa e manual sem reserva NÃO são lembrete', () => {
+      for (const kind of ['silence', 'stage_change', 'manual', 'case_opened', 'conversation_end', 'webhook']) {
+        expect(ehLembreteDeCompromisso({ trigger_config: { kind }, reserva: null })).toBe(false);
+      }
     });
   });
 });
