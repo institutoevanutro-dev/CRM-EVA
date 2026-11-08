@@ -254,7 +254,7 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
 
     /**
      * O balão que CONTÉM aquele corpo. Subir do texto para o container é o que
-     * amarra o rótulo à mensagem certa — a asserção solta `getByText("IA")`
+     * amarra o rótulo à mensagem certa — a asserção solta `getByText("Automático")`
      * ficaria verde com os três rótulos na bolha errada.
      *
      * O caminho é `<p>` do corpo → PAI. Em `MessageBubble` o rótulo e o corpo
@@ -274,11 +274,11 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
 
     const esperado: Array<[string, string]> = [
       ["RESPOSTA PELO CELULAR", "Celular"],
-      ["RESPOSTA DO AGENTE", "IA"],
+      ["RESPOSTA DO AGENTE", "Automático"],
       ["RESPOSTA DIGITADA POR MIM", "Você"],
       ["RESPOSTA DIGITADA PELO COLEGA", "Atendente"],
       ["RESPOSTA PRONTA CADASTRADA", "Resposta pronta"],
-      ["RESPOSTA DO AGENTE NOMEADO", `IA · ${NOME_DO_AGENTE}`],
+      ["RESPOSTA DO AGENTE NOMEADO", `Automático · ${NOME_DO_AGENTE}`],
     ];
 
     for (const [corpo, rotulo] of esperado) {
@@ -304,19 +304,19 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
       "o balão do colega não pode dizer 'Você' — sent_via='user' não diz QUAL humano digitou",
     ).not.toContainText("Você");
 
-    // A resposta pronta NÃO diz "IA": o atendente leria o texto da clínica como
+    // A resposta pronta NÃO diz "Automático" (antes "IA", I11): o atendente leria o texto da clínica como
     // algo que o modelo inventou.
     await expect(
-      balaoCom("RESPOSTA PRONTA CADASTRADA").getByText("IA", { exact: true }),
-      "a resposta pronta não pode levar o rótulo 'IA'",
+      balaoCom("RESPOSTA PRONTA CADASTRADA").getByText("Automático", { exact: true }),
+      "a resposta pronta não pode levar o rótulo 'Automático'",
     ).toHaveCount(0);
 
-    // O NOME DO AGENTE (#3665) só aparece onde foi gravado, e só no rótulo "IA".
+    // O NOME DO AGENTE (#3665) só aparece onde foi gravado, e só no rótulo "Automático".
     // A linha antiga não tem nome, e o balão não pode inventar um; a resposta
     // pronta tem o nome gravado e continua dizendo só "Resposta pronta".
     await expect(
       balaoCom("RESPOSTA DO AGENTE"),
-      "a linha sem nome gravado tem de dizer só 'IA'",
+      "a linha sem nome gravado tem de dizer só 'Automático'",
     ).not.toContainText("·");
     await expect(
       balaoCom("RESPOSTA PRONTA CADASTRADA"),
@@ -328,7 +328,7 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
     // um componente que carimbasse "Celular" em toda bolha passaria nos
     // casos acima.
     const bolhaDoCliente = balaoCom("PERGUNTA DO CLIENTE");
-    for (const rotulo of ["Celular", "IA", "Você", "Atendente", "Resposta pronta"]) {
+    for (const rotulo of ["Celular", "Automático", "Você", "Atendente", "Resposta pronta"]) {
       await expect(
         bolhaDoCliente,
         `a mensagem do cliente não pode levar o rótulo "${rotulo}"`,

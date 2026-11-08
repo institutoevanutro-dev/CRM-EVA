@@ -253,7 +253,9 @@ export const MessageBubble = memo(function MessageBubble({
       // Texto escrito pela organização e enviado SEM modelo
       // (`lib/agent-engine/agent/resposta-pronta.ts` carimba a metadata). O
       // atendente precisa saber que não foi a IA nem uma pessoa.
-      return typeof message.metadata?.resposta_pronta_id === "string" ? "Resposta pronta" : "IA";
+      // "Automático", não "IA" (I7/I11): a mesma palavra do selo da lista e do
+      // dono da conversa (OwnerBadge) — uma palavra por coisa.
+      return typeof message.metadata?.resposta_pronta_id === "string" ? "Resposta pronta" : "Automático";
     }
     if (message.sent_via === "external_device") return "Celular";
     if (message.sent_via === "user" || message.sent_via === "crm") {
@@ -269,11 +271,11 @@ export const MessageBubble = memo(function MessageBubble({
   })();
   // #3649 (portado): o nome do agente vem GRAVADO na linha pelo envio, que
   // descarta o que o chamador mandar nessa chave. Só `ai_actor_name`: outro
-  // apelido em metadata é entrada de quem chamou a API. Só no rótulo "IA": a
+  // apelido em metadata é entrada de quem chamou a API. Só no rótulo "Automático": a
   // "Resposta pronta" é texto da clínica, não do modelo. O nome sai como
   // cadastrado, sem t() (#1046).
   const gravado = message.metadata?.ai_actor_name;
-  const nomeDoAgente = senderLabel === "IA" && typeof gravado === "string" ? gravado.trim() : "";
+  const nomeDoAgente = senderLabel === "Automático" && typeof gravado === "string" ? gravado.trim() : "";
 
   const tentarDeNovo = () => (reenvio === "confirmar" ? setConfirmandoReenvio(true) : void reenviar(false));
 
@@ -350,10 +352,14 @@ export const MessageBubble = memo(function MessageBubble({
             ? "px-0 py-0"
             : cn(
                 "rounded-2xl px-3 py-2",
-                // Três vozes, três tons — quem lê a conversa precisa saber de
-                // relance se foi o paciente, o automático ou alguém da equipe:
-                // paciente em branco sobre o fundo creme; automático em verde
-                // claro; equipe no verde da marca.
+                // Três vozes — quem lê a conversa precisa saber de relance se
+                // foi o paciente, o automático ou alguém da equipe: paciente em
+                // branco sobre o fundo creme; equipe CHEIA na cor escolhida; o
+                // automático em ANEL — contorno inteiro na cor da marca, o mesmo
+                // desenho do automático no OwnerBadge (I7). Pela FORMA, e não só
+                // pela cor: com "Verde claro" ou "Azul" a cor da IA ficava quase
+                // igual à da equipe. Nunca tracejado: no produto o tracejado diz
+                // "ainda não" ou "vazio", e esta mensagem foi entregue.
                 //
                 // Paciente e equipe aceitam a cor que CADA PESSOA escolheu em
                 // "Aparência da conversa" (variáveis postas pelo ChatThread); o
@@ -369,7 +375,7 @@ export const MessageBubble = memo(function MessageBubble({
                   : !isOutbound
                   ? "rounded-bl-sm border border-border bg-[var(--bolha-recebida-fundo,var(--color-surface))] text-[var(--bolha-recebida-texto,var(--color-text))]"
                   : message.sent_via === "ai"
-                    ? "rounded-br-sm border border-accent/25 bg-accent-soft text-text"
+                    ? "rounded-br-sm border-[1.5px] border-accent bg-surface text-text"
                     : "rounded-br-sm bg-[var(--bolha-enviada-fundo,var(--primary))] text-[var(--bolha-enviada-texto,var(--primary-foreground))]",
               ),
           // Apagada sai das cores da DIREÇÃO e vai para o CINZA: a diferença
@@ -423,7 +429,7 @@ export const MessageBubble = memo(function MessageBubble({
         )}
         {senderLabel && (
           <div className="mb-0.5 flex items-center gap-1 text-[11px] font-semibold opacity-80">
-            {senderLabel === "IA" ? (
+            {senderLabel === "Automático" ? (
               <Robot size={10} weight="duotone" aria-hidden />
             ) : null}
             {senderLabel && t(senderLabel)}
