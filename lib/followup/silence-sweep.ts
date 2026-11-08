@@ -56,6 +56,11 @@ import { StaleServiceBoundaryError, parseServiceBoundary, assertCurrentServiceBo
  * ABERTA: erro de leitura vira log e a varredura segue como antes. Régua e
  * marcas de autoria em `resposta-a-automacao.ts`.
  *
+ * Reação a caso aberto não abre silêncio novo: quem só mandou emoji, reação ou
+ * figurinha enquanto um caso da conversa esperava a equipe (no prazo de 2 dias
+ * úteis) não é inscrito (`skipped_reacao_a_caso_aberto`). Mesma posição e mesma
+ * falha aberta da guarda acima; régua em `reacao-a-caso-aberto.ts`.
+ *
  * agent_id: cada pointer é gateado por `resolveAgentForAutomaticTrigger`, que
  * devolve o agente publicado que ARMA o pointer (menor uuid se >1) — esse
  * agent_id é PINADO no enrollment (persona + exibição na fila). `null` = gate-out.
@@ -78,6 +83,7 @@ import { triggerConfigSchema } from "./api-schemas";
 import { resolveAgentForAutomaticTrigger, type FollowupGateDb } from "./agent-followup-gate";
 import { contatosQueORetornoSegura } from "./retorno-segura-o-fluxo";
 import { contatosQueSoResponderamAAutomacao, type CandidatoDoSilencio } from "./resposta-a-automacao";
+import { contatosQueSoReagiramACasoAberto } from "./reacao-a-caso-aberto";
 import { logger } from "@/lib/logger";
 
 /**
@@ -154,6 +160,12 @@ export interface SilenceSweepDb {
    */
   loadContatosQueSoResponderamAAutomacao?(orgId: string, contatos: ContatoEmSilencio[]): Promise<Set<string>>;
   /**
+   * Dos contatos que iriam ao insert, os que só reagiram (emoji, reação,
+   * figurinha) enquanto um caso da conversa esperava a equipe (ver
+   * `reacao-a-caso-aberto.ts`). Opcional, pode lançar — como o de cima.
+   */
+  loadContatosQueSoReagiramACasoAberto?(orgId: string, contatos: ContatoEmSilencio[]): Promise<Set<string>>;
+  /**
    * Dentre `contactIds`, quais têm um enrollment TERMINAL (completed,
    * cancelled ou dead) deste pointer CONCLUÍDO depois de `cutoffIso` — ainda
    * em cooldown, não podem ser reinscritos agora. Enrollment VIVO fica de fora
@@ -209,6 +221,8 @@ export interface SilenceSweepSummary {
    * sozinho: a exclusão se repete a cada tick e não é mutação.
    */
   skipped_resposta_a_automacao: number;
+  /** Só reagiu a um caso que esperava a equipe. Não audita sozinho, como o de cima. */
+  skipped_reacao_a_caso_aberto: number;
 }
 
 export interface SilenceSweepDeps {
@@ -229,6 +243,7 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     skipped_cooldown: 0,
     skipped_pending_return: 0,
     skipped_resposta_a_automacao: 0,
+    skipped_reacao_a_caso_aberto: 0,
   };
 
   const pointers = await db.loadActiveSilencePointers();
@@ -316,23 +331,26 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     // e retorno já decidiram os outros, cada pergunta lê mensagens a cada minuto,
     // e a auditoria do cron segue disparando pelos mesmos contadores.
     const vaoAoInsert = new Set(contactIds.filter((id) => !comInscricaoViva.has(id) && !comRetorno.has(id)));
-    let soReagiram = new Set<string>();
-    if (db.loadContatosQueSoResponderamAAutomacao && vaoAoInsert.size > 0) {
+    const guarda = async (
+      nome: string,
+      ler: ((orgId: string, contatos: ContatoEmSilencio[]) => Promise<Set<string>>) | undefined,
+    ): Promise<Set<string>> => {
+      if (!ler || vaoAoInsert.size === 0) return new Set();
       try {
-        soReagiram = await db.loadContatosQueSoResponderamAAutomacao(
-          pointer.organization_id,
-          contatos.filter((c) => vaoAoInsert.has(c.contact_id)),
-        );
+        return await ler(pointer.organization_id, contatos.filter((c) => vaoAoInsert.has(c.contact_id)));
       } catch (err) {
         // Falha ABERTA: sem a guarda é o comportamento de antes. Lançar
         // derrubaria a varredura de todos os ponteiros, e o cron só loga.
-        logger.error("[followup.silence-sweep] resposta_a_automacao falhou; segue sem a guarda", {
+        logger.error(`[followup.silence-sweep] ${nome} falhou; segue sem a guarda`, {
           organization_id: pointer.organization_id,
           pointer_id: pointer.id,
           error: err instanceof Error ? err.message : String(err),
         });
+        return new Set();
       }
-    }
+    };
+    const soReagiram = await guarda("resposta_a_automacao", db.loadContatosQueSoResponderamAAutomacao?.bind(db));
+    const reagiuACaso = await guarda("reacao_a_caso_aberto", db.loadContatosQueSoReagiramACasoAberto?.bind(db));
 
     for (const contactId of contactIds) {
       // O mesmo contador do 23505: quem já está vivo é `skipped_existing`,
@@ -347,6 +365,10 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
       }
       if (soReagiram.has(contactId)) {
         summary.skipped_resposta_a_automacao++;
+        continue;
+      }
+      if (reagiuACaso.has(contactId)) {
+        summary.skipped_reacao_a_caso_aberto++;
         continue;
       }
       const { inserted } = await db.insertEnrollment({
@@ -428,6 +450,8 @@ const LOTE_DE_CONTATOS = 100;
  * contato calado é recalculado uma vez (uma rajada curta de leituras).
  */
 const DECISOES_DA_RESPOSTA_A_AUTOMACAO = new Map<string, boolean>();
+/** Idem, para a reação a caso aberto. */
+const DECISOES_DA_REACAO_A_CASO_ABERTO = new Map<string, boolean>();
 
 /** Production adapter: `SilenceSweepDb` sobre o client service-role real. */
 export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSweepDb {
@@ -680,6 +704,16 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         candidatos.push({ contactId: c.contact_id, conversationId: boundary.conversation_id, inboundAt: c.ultima_entrada_em });
       }
       return contatosQueSoResponderamAAutomacao(admin, orgId, candidatos, DECISOES_DA_RESPOSTA_A_AUTOMACAO);
+    },
+
+    loadContatosQueSoReagiramACasoAberto(orgId, contatos) {
+      const candidatos: CandidatoDoSilencio[] = [];
+      for (const c of contatos) {
+        const boundary = origins.get(`${orgId}:${c.contact_id}`);
+        if (!boundary) continue;
+        candidatos.push({ contactId: c.contact_id, conversationId: boundary.conversation_id, inboundAt: c.ultima_entrada_em });
+      }
+      return contatosQueSoReagiramACasoAberto(admin, orgId, candidatos, DECISOES_DA_REACAO_A_CASO_ABERTO);
     },
 
     async loadTriggerNodeId(orgId, versionId) {

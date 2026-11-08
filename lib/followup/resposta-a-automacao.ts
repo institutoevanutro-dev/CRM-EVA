@@ -102,9 +102,9 @@ const STATUS_ENTREGUE = ["sent", "delivered", "read"];
 const TETO_DE_ENTRADAS = 20;
 
 /** Decisão sobre inbound mais novo que isto não é guardada: linha atrasada ainda pode chegar. */
-const MEMO_SO_DEPOIS_DE_MS = 10 * 60_000;
+export const MEMO_SO_DEPOIS_DE_MS = 10 * 60_000;
 
-const TETO_DO_MEMO = 5_000;
+export const TETO_DO_MEMO = 5_000;
 
 /** Autoria lida por caminho JSON (precedente: `lib/lgpd/export-collector.ts`); `->>` devolve texto. */
 const SELECT_DA_SAIDA = [
@@ -145,7 +145,7 @@ const CONTEUDO_NO_CORPO = /[\p{L}\p{N}]/u;
  * outro tipo (imagem, áudio, figurinha, localização) é envio deliberado e
  * conta. Não confundir com `semConteudoVisivel`, onde o emoji É conteúdo.
  */
-function inboundTemConteudo(linha: { type: string | null; body: string | null }): boolean {
+export function inboundTemConteudo(linha: { type: string | null; body: string | null }): boolean {
   if (linha.type === "reaction") return false;
   if (linha.type !== null && linha.type !== "text") return true;
   return CONTEUDO_NO_CORPO.test(linha.body ?? "");
