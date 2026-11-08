@@ -8,6 +8,16 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.0.1] — 2026-11-08
+
+### Corrigido
+
+- **O follow-up não retoma a conversa enquanto um caso aberto espera a equipe** Quando o agente de IA abre um caso para a equipe e avisa o cliente de que alguém vai responder, o follow-up deixa de falar por cima disso durante 2 dias úteis contados do início da espera (segunda a sexta, no fuso da organização; sábado e domingo não contam). Nesse prazo, o passo em que a IA escreveria é pulado e o fluxo segue; o passo de texto fixo é adiado para o fim do prazo, sem perder a mensagem. A inscrição não é encerrada. Antes, um fluxo de silêncio podia mandar a IA dizer "a equipe já viu seu pedido" sem ninguém ter aberto o caso. No histórico da inscrição aparece "Passo pulado: a equipe ainda vai responder um caso aberto nesta conversa." ou "Adiado: a equipe ainda vai responder um caso aberto".
+
+  Também deixa de abrir um silêncio novo quem só respondeu com emoji, reação ou figurinha (um "👍") enquanto um caso da conversa esperava a equipe: a varredura de silêncio não o inscreve por causa disso.
+
+  Lembretes de compromisso não mudam: fluxos ligados a uma reserva ou disparados por consulta (presença, falta) seguem saindo mesmo com caso aberto. Não há configuração a mudar.
+
 ## [5.0.0] — 2026-11-07
 
 ### ⚠️ Requer atenção
@@ -8886,7 +8896,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.0.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.0.1...HEAD
+[5.0.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.0.0...v5.0.1
 [5.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.52.0...v5.0.0
 [4.52.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.51.1...v4.52.0
 [4.51.1]: https://github.com/melgarafael/DeskcommCRM/compare/v4.51.0...v4.51.1
