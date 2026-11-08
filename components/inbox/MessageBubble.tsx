@@ -80,6 +80,13 @@ interface Props {
   enviandoAoProntuario?: boolean;
   quemEnviouAoProntuario?: string | null;
   erroAoProntuario?: string | null;
+  /**
+   * Posição no turno (I8, `lib/inbox/turnos.ts`): o rótulo de quem falou só na
+   * PRIMEIRA bolha da sequência e a ponta só na ÚLTIMA. Sem quem calcule (a
+   * leitura do super-admin), cada bolha é um turno — o desenho de antes.
+   */
+  inicioDoTurno?: boolean;
+  fimDoTurno?: boolean;
 }
 
 /**
@@ -145,6 +152,8 @@ export const MessageBubble = memo(function MessageBubble({
   enviandoAoProntuario = false,
   quemEnviouAoProntuario = null,
   erroAoProntuario = null,
+  inicioDoTurno = true,
+  fimDoTurno = true,
 }: Props) {
   const [ocupado, setOcupado] = useState(false);
   const [confirmandoReenvio, setConfirmandoReenvio] = useState(false);
@@ -295,7 +304,9 @@ export const MessageBubble = memo(function MessageBubble({
     <div
       data-search-match={searchMatch || undefined}
       className={cn(
-        "group flex w-full min-w-0 items-center gap-1 px-4 py-1",
+        // 12px entre turnos, 2px dentro da sequência (I8).
+        "group flex w-full min-w-0 items-center gap-1 px-4",
+        inicioDoTurno ? "pt-3" : "pt-0.5",
         isOutbound ? "justify-end" : "justify-start",
       )}
     >
@@ -352,6 +363,8 @@ export const MessageBubble = memo(function MessageBubble({
             ? "px-0 py-0"
             : cn(
                 "rounded-2xl px-3 py-2",
+                // A ponta só na última bolha do turno (I8).
+                fimDoTurno && (isOutbound ? "rounded-br-sm" : "rounded-bl-sm"),
                 // Três vozes — quem lê a conversa precisa saber de relance se
                 // foi o paciente, o automático ou alguém da equipe: paciente em
                 // branco sobre o fundo creme; equipe CHEIA na cor escolhida; o
@@ -371,12 +384,12 @@ export const MessageBubble = memo(function MessageBubble({
                 // Falhou (I1): a bolha INTEIRA em tons de erro. A borda fina de
                 // antes media 1,03:1 — falha dita só por cor, e mal.
                 falhou
-                  ? "rounded-br-sm border border-error bg-error-bg text-error-fg"
+                  ? "border border-error bg-error-bg text-error-fg"
                   : !isOutbound
-                  ? "rounded-bl-sm border border-border bg-[var(--bolha-recebida-fundo,var(--color-surface))] text-[var(--bolha-recebida-texto,var(--color-text))]"
+                  ? "border border-border bg-[var(--bolha-recebida-fundo,var(--color-surface))] text-[var(--bolha-recebida-texto,var(--color-text))]"
                   : message.sent_via === "ai"
-                    ? "rounded-br-sm border-[1.5px] border-accent bg-surface text-text"
-                    : "rounded-br-sm bg-[var(--bolha-enviada-fundo,var(--primary))] text-[var(--bolha-enviada-texto,var(--primary-foreground))]",
+                    ? "border-[1.5px] border-accent bg-surface text-text"
+                    : "bg-[var(--bolha-enviada-fundo,var(--primary))] text-[var(--bolha-enviada-texto,var(--primary-foreground))]",
               ),
           // Apagada sai das cores da DIREÇÃO e vai para o CINZA: a diferença
           // entre o que foi apagado e o que está vivo tem de ser vista de
@@ -427,7 +440,7 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           </div>
         )}
-        {senderLabel && (
+        {senderLabel && inicioDoTurno && (
           <div className="mb-0.5 flex items-center gap-1 text-[11px] font-semibold opacity-80">
             {senderLabel === "Automático" ? (
               <Robot size={10} weight="duotone" aria-hidden />
