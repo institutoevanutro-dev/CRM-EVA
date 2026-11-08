@@ -225,6 +225,11 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     expect(current.data?.status).toBe("open");
     // I3: "Assumir" é o botão principal, à vista; "Liberar" mora no ⋯.
     await page.getByRole("button", { name: "Assumir", exact: true }).click();
+    // Espera o "Assumir" sair ANTES de abrir o ⋯: a conversa assumida deixa a
+    // aba Fila, a tela relê a conversa sozinha e o cabeçalho remonta — com o
+    // menu aberto antes disso, ele fecha junto (medido localmente: o menu abria,
+    // fechava sozinho, e "Liberar" nunca aparecia).
+    await expect(page.getByRole("button", { name: "Assumir", exact: true })).toHaveCount(0);
     await abrirAcoesDaConversa(page);
     await expect(page.getByRole("button", { name: "Liberar", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
