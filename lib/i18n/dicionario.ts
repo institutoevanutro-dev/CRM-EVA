@@ -138,6 +138,13 @@ export const DICIONARIO: Traducoes = {
   "Complete o nome do paciente para marcar.": { es: "Complete el nombre del paciente para agendar." },
   "Falta o nome completo": { es: "Falta el nombre completo" },
   "falta o nome completo": { es: "falta el nombre completo" },
+  // A2 (pacote 2 de design): situação e conflito no próprio bloco da grade.
+  "Conflito de horário": { es: "Conflicto de horario" },
+  "conflito de horário": { es: "conflicto de horario" },
+  "1 paciente em horário bloqueado, remarque.": { es: "1 paciente en horario bloqueado, reprograma." },
+  "{n} pacientes em horário bloqueado, remarque.": { es: "{n} pacientes en horario bloqueado, reprograma." },
+  "Ver {paciente}": { es: "Ver a {paciente}" },
+  "Ver o compromisso": { es: "Ver la cita" },
   "Sem o nome completo no cadastro, o prontuário não abre o atendimento.": { es: "Sin el nombre completo en el registro, la historia clínica no abre la atención." },
   "Salvar nome": { es: "Guardar nombre" },
   "Nome completo salvo.": { es: "Nombre completo guardado." },

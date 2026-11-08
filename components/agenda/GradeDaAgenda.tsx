@@ -27,12 +27,14 @@ import {
 } from "@/lib/agenda/grade-interativa";
 import { inicioDaGradeDoMes, SEMANAS_DA_GRADE_DO_MES } from "@/lib/agenda/recorte-da-grade";
 import { dataDeParede, diaLocalISO, instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
-import { Warning } from "@/lib/ui/icons";
+import { CheckCircle, Clock, Warning, XCircle } from "@/lib/ui/icons";
+import { ROTULO_DA_SITUACAO } from "@/lib/agenda/tipos";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
 
 import { corDaTrilha, fundoDaTrilha } from "./paleta";
 import { nomeCurto, rotuloDoBloco } from "./rotulo-do-bloco";
+import { conflitosDaGrade, formaDaSituacao, type IconeDaSituacao } from "./situacao-do-bloco";
 import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
 
 /**
@@ -365,9 +367,12 @@ function BlocoDeAgendamento({
   colunas,
   visao,
   arraste,
+  conflito = false,
 }: {
   agendamento: Agendamento;
   pessoa: Pessoa | undefined;
+  /** Cai em cima de bloqueio, "Ocupado" do Google ou outro compromisso do mesmo profissional (A2). */
+  conflito?: boolean;
   onAbrir?: (id: string) => void;
   fuso: string;
   coluna: number;
@@ -411,6 +416,16 @@ function BlocoDeAgendamento({
     duracaoMin: duracao,
     visao,
   });
+  // A2: a forma diz a situação. Ocupação do Google e bloqueio não têm situação
+  // de verdade (chegam "confirmed" só para caber no tipo) e ficam como são.
+  const forma = doGoogle ? formaDaSituacao("confirmed") : formaDaSituacao(agendamento.situacao);
+  const rotuloDaSituacao = doGoogle ? undefined : ROTULO_DA_SITUACAO[agendamento.situacao];
+  const situacao = rotuloDaSituacao ? t(rotuloDaSituacao) : null;
+  const avisos = [
+    situacao,
+    conflito ? t("Conflito de horário") : null,
+    faltaNome ? t("Falta o nome completo") : null,
+  ].filter(Boolean);
 
   return (
     <button
@@ -418,7 +433,8 @@ function BlocoDeAgendamento({
       data-testid={`agendamento-${agendamento.id}`}
       data-origem={agendamento.origem}
       data-falta-nome={faltaNome || undefined}
-      title={faltaNome ? t("Falta o nome completo") : undefined}
+      title={avisos.length ? avisos.join(" · ") : undefined}
+      data-conflito={conflito || undefined}
       data-trilha={trilha}
       data-situacao={agendamento.situacao}
       data-colunas={colunas}
@@ -452,13 +468,20 @@ function BlocoDeAgendamento({
         pessoa ? `, ${t("atendido por")} ${pessoa.nome}` : ""
       }${
         doGoogle && !agendamento.bloqueio ? `, ${t("ocupado na agenda do Google")}` : ""
-      }${faltaNome ? `, ${t("falta o nome completo")}` : ""}`}
+      }${situacao ? `, ${situacao}` : ""}${conflito ? `, ${t("conflito de horário")}` : ""}${
+        faltaNome ? `, ${t("falta o nome completo")}` : ""
+      }`}
       className={cn(
         "absolute flex flex-col items-start overflow-hidden rounded-sm px-1.5 text-left",
         // Uma linha só (15 e 30 min): `py-px` para a linha de 16 px caber nos
         // 18 px do bloco mínimo.
         rotulo.apoio === null ? "py-px" : "py-0.5",
-        "border border-border/60 transition-colors duration-fast ease-out",
+        "border transition-colors duration-fast ease-out",
+        // Tracejado = "ainda não" (aguardando confirmação), como em toda a base.
+        // Na cor do texto de apoio, e não na borda clara de sempre: tracejado
+        // em border/60 some no tema escuro.
+        forma.tracejado ? "border-dashed border-text-muted" : "border-border/60",
+        conflito && "ring-2 ring-error",
         doGoogle ? "cursor-default" : "cursor-pointer hover:border-border-strong",
         // `grab` só quando remarcar é possível: o cursor é a única pista de que
         // o card se move, e prometê-la num card que não se move (ocupação do
@@ -517,16 +540,30 @@ function BlocoDeAgendamento({
         />
       ) : null}
       {/* Linha 1: quem vem (12/16 semibold). Com folga (1h30 ou mais) o nome
-          quebra em duas linhas em vez de cortar (print de 08/10/2026). */}
-      <span
-        className={cn(
-          "ml-1 max-w-full text-xs font-semibold leading-4 text-text",
-          duracao >= 90 ? "line-clamp-2 break-words" : "truncate",
-          rotulo.apoio === null && "tabular-nums",
-          faltaNome && "pr-3",
-        )}
-      >
-        {rotulo.principal}
+          quebra em duas linhas em vez de cortar (print de 08/10/2026). Os
+          ícones de conflito e de situação vão na frente, só ícone: o nome da
+          situação está no title e no aria-label. */}
+      <span className={cn("ml-1 flex max-w-full items-start gap-0.5", faltaNome && "pr-3")}>
+        {conflito ? (
+          <Warning
+            aria-hidden
+            data-testid={`conflito-${agendamento.id}`}
+            size={12}
+            weight="fill"
+            className="mt-0.5 shrink-0 text-error"
+          />
+        ) : null}
+        <IconeDeSituacao icone={forma.icone} id={agendamento.id} />
+        <span
+          className={cn(
+            "min-w-0 text-xs font-semibold leading-4",
+            forma.tituloDeApoio ? "text-text-muted" : "text-text",
+            duracao >= 90 ? "line-clamp-2 break-words" : "truncate",
+            rotulo.apoio === null && "tabular-nums",
+          )}
+        >
+          {rotulo.principal}
+        </span>
       </span>
       {rotulo.apoio !== null && (
         <span className="ml-1 max-w-full truncate text-[11px] leading-3.5 tabular-nums text-text-muted">
@@ -534,6 +571,24 @@ function BlocoDeAgendamento({
         </span>
       )}
     </button>
+  );
+}
+
+const ICONE_DA_SITUACAO = { relogio: Clock, realizado: CheckCircle, falta: XCircle } as const;
+
+/** O ícone da situação (A2). Decorativo: quem nomeia a situação é o rótulo do bloco. */
+function IconeDeSituacao({ icone, id }: { icone: IconeDaSituacao; id: string }) {
+  if (!icone) return null;
+  const Icone = ICONE_DA_SITUACAO[icone];
+  return (
+    <Icone
+      aria-hidden
+      data-testid={`situacao-${id}`}
+      data-icone={icone}
+      size={12}
+      weight={icone === "relogio" ? "regular" : "fill"}
+      className={cn("mt-0.5 shrink-0", icone === "falta" ? "text-error" : "text-text-muted")}
+    />
   );
 }
 
@@ -640,7 +695,9 @@ function ColunaDeDia({
   proposta,
   arrasteDoCard,
   visao,
+  conflitos,
 }: {
+  conflitos: ReadonlySet<string>;
   dia: Date;
   agora: Date;
   fuso: string;
@@ -737,6 +794,7 @@ function ColunaDeDia({
             coluna={coluna}
             colunas={colunas}
             visao={visao}
+            conflito={conflitos.has(agendamento.id)}
             arraste={
               arrasteDoCard
                 ? { ...arrasteDoCard, ativo: proposta?.id === agendamento.id }
@@ -969,7 +1027,17 @@ export function GradeDaAgenda({
   interacao?: InteracaoDaGrade;
   className?: string;
 }) {
+  const t = useT();
   const dias = visao === "dia" ? [ancora] : diasDaSemanaDe(ancora);
+  const conflitos = React.useMemo(() => conflitosDaGrade(agendamentos), [agendamentos]);
+  // O primeiro do período, em ordem de horário: é para ele que o link leva.
+  const primeiroConflito = React.useMemo(
+    () =>
+      agendamentos
+        .filter((a) => conflitos.has(a.id))
+        .sort((a, b) => new Date(a.comeca).getTime() - new Date(b.comeca).getTime())[0],
+    [agendamentos, conflitos],
+  );
 
   const gradeRef = React.useRef<HTMLDivElement>(null);
   const [proposta, setProposta] = React.useState<PropostaDeRemarcacao | null>(null);
@@ -1177,6 +1245,36 @@ export function GradeDaAgenda({
         className,
       )}
     >
+      {primeiroConflito ? (
+        // A2: o conflito é avisado ANTES de alguém dar com ele no dia. Fica
+        // acima da grade, em texto, porque o anel no bloco só aparece para
+        // quem rola até ele.
+        <div
+          data-testid="faixa-de-conflito"
+          role="status"
+          className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-error/40 bg-error-bg px-3 py-2 text-sm text-error-fg"
+        >
+          <Warning aria-hidden size={16} weight="fill" className="shrink-0 text-error" />
+          <span>
+            {(conflitos.size === 1
+              ? t("1 paciente em horário bloqueado, remarque.")
+              : t("{n} pacientes em horário bloqueado, remarque.")
+            ).replace("{n}", String(conflitos.size))}
+          </span>
+          {onAbrirAgendamento ? (
+            <button
+              type="button"
+              data-testid="ver-conflito"
+              onClick={() => onAbrirAgendamento(primeiroConflito.id)}
+              className="font-semibold underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
+            >
+              {primeiroConflito.quemSeraAtendido
+                ? t("Ver {paciente}").replace("{paciente}", () => primeiroConflito.quemSeraAtendido!)
+                : t("Ver o compromisso")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {visao === "mes" ? (
         <VisaoDeMes
           ancora={ancora}
@@ -1209,12 +1307,48 @@ export function GradeDaAgenda({
                 proposta={proposta}
                 arrasteDoCard={arrasteDoCard}
                 visao={visao}
+                conflitos={conflitos}
               />
             ))}
           </div>
         </div>
       )}
+      {visao !== "mes" ? <LegendaDaGrade /> : null}
     </div>
+  );
+}
+
+/**
+ * A legenda de uma linha no rodapé da grade (A2): os ícones do bloco e o que
+ * eles querem dizer. Sem ela, o ícone só se explica passando o mouse — e o
+ * toque não passa o mouse.
+ */
+function LegendaDaGrade() {
+  const t = useT();
+  const item = "inline-flex items-center gap-1 whitespace-nowrap";
+  return (
+    <p
+      data-testid="legenda-da-grade"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-3 py-1.5 text-xs text-text-muted"
+    >
+      <span className={item}>
+        <span aria-hidden className="inline-block h-3 w-4 rounded-sm border border-dashed border-text-muted" />
+        <Clock aria-hidden size={12} />
+        {t(ROTULO_DA_SITUACAO.pending)}
+      </span>
+      <span className={item}>
+        <CheckCircle aria-hidden size={12} weight="fill" />
+        {t(ROTULO_DA_SITUACAO.completed)}
+      </span>
+      <span className={item}>
+        <XCircle aria-hidden size={12} weight="fill" className="text-error" />
+        {t(ROTULO_DA_SITUACAO.no_show)}
+      </span>
+      <span className={item}>
+        <Warning aria-hidden size={12} weight="fill" className="text-error" />
+        {t("Conflito de horário")}
+      </span>
+    </p>
   );
 }
 
