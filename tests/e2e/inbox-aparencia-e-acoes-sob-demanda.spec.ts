@@ -205,8 +205,11 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
             linhas = new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size;
           }
           const doc = document.documentElement;
+          const nome = el.querySelector("h2") as HTMLElement;
           return {
             alturaDoCabecalho: el.getBoundingClientRect().height,
+            // Largura que o NOME tem na tela (a caixa), contra a que o texto pede.
+            nome: { visivel: nome.getBoundingClientRect().width, inteiro: nome.scrollWidth },
             selo: selo
               ? { altura: selo.getBoundingClientRect().height, linhas, cabe: selo.scrollWidth <= selo.clientWidth + 1 }
               : null,
@@ -217,11 +220,20 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
         expect(medida.selo!.linhas, "o texto do selo quebrou em mais de uma linha").toBe(1);
         expect(medida.selo!.altura).toBeLessThanOrEqual(20);
         expect(medida.selo!.cabe, "o texto saiu da pílula").toBe(true);
+        // O NOME NÃO SOME (I3). Com o piso fixo de 8rem o selo da janela comia
+        // o nome inteiro: 0px de largura em 1280 com "Assumir" ao lado. Agora,
+        // sem espaço para os dois, as ações descem e o nome fica com ≥7,5rem.
+        expect(
+          medida.nome.visivel,
+          "o nome do contato encolheu até sumir ao lado das ações",
+        ).toBeGreaterThanOrEqual(Math.min(medida.nome.inteiro, 120) - 1);
         // Antes de 16/10: 152px em 1280, 114px em 1440, 122px em 390 (duas
-        // fileiras de botões). Com a I3 os botões fixos dividem a linha do nome
-        // no computador (88px: texto em duas linhas, nenhuma fileira extra); no
-        // celular eles descem para UMA fileira própria de 44px (alvo de toque).
-        const teto = largura < 768 ? 140 : 88;
+        // fileiras de botões). Com a I3: UMA fileira de botões no máximo. Quando
+        // nome e ações cabem lado a lado, ela divide a linha do nome (1440:
+        // 81px); quando não cabem (1280 e 1366 neste canal, que mostra o selo
+        // da janela), ela desce sozinha: medido 103px. No celular a fileira tem
+        // alvos de 44px.
+        const teto = largura < 768 ? 140 : 108;
         expect(medida.alturaDoCabecalho, "o cabeçalho voltou a ter fileiras de botões").toBeLessThanOrEqual(teto);
         expect(medida.transbordo, "a página rola de lado").toBeLessThanOrEqual(0);
         // O placeholder do campo vazio numa linha: quebrado, ele empurra o

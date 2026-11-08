@@ -259,7 +259,13 @@ export function ConversationHeader({
       className="@container relative flex flex-wrap items-center gap-2 border-b border-border bg-background px-3 py-2 md:px-4"
     >
       <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="flex min-w-[8rem] flex-1 items-center gap-3">
+        {/* O NOME NUNCA SOME. `min-w-min` faz o bloco do nome pedir a largura
+            mínima do PRÓPRIO conteúdo (avatar, selo do canal, 7,5rem de nome e
+            o selo da janela, quando há); se nome e ações não cabem lado a lado,
+            são as AÇÕES que descem para a linha de baixo. Com um piso fixo de
+            8rem, o selo da janela comia o nome inteiro: medido em 1280px num
+            canal oficial, o nome tinha 0px de largura com "Assumir" ao lado. */}
+        <div className="flex min-w-min flex-1 items-center gap-3">
           <AvatarDoContato contato={c} nome={displayName} reserva={phone ?? displayName} className="h-9 w-9 shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
@@ -267,7 +273,12 @@ export function ConversationHeader({
                 canal={conversation.channel === "instagram" ? "instagram" : "whatsapp"}
                 tamanho="grande"
               />
-              <h2 className="min-w-0 truncate text-[15px] font-semibold leading-5">{displayName}</h2>
+              {/* `[contain:inline-size]` tira o comprimento do nome da conta da
+                  largura mínima (senão nome longo nunca truncaria); o piso de
+                  7,5rem é o que entra no lugar. */}
+              <h2 className="min-w-[7.5rem] flex-1 truncate text-[15px] font-semibold leading-5 [contain:inline-size]">
+                {displayName}
+              </h2>
               {/* Ao lado do nome, não escondido num painel: a pergunta "dá para
                   escrever agora?" se faz ANTES de digitar, não depois de receber um
                   `failed` com um código de cinco dígitos. */}
