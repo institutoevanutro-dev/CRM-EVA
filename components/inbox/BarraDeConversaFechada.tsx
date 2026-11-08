@@ -2,6 +2,7 @@
 import { useT } from "@/hooks/i18n/useT";
 import { Button } from "@/components/ui/button";
 import { useReabrirEResponder } from "@/hooks/inbox/useReabrirEResponder";
+import { useBarrarArquivoSolto } from "@/hooks/inbox/useBarrarArquivoSolto";
 
 /**
  * Conversa fechada: esta barra ocupa o lugar do campo de texto (I3).
@@ -19,6 +20,8 @@ export function BarraDeConversaFechada({
 }) {
   const t = useT();
   const reabrir = useReabrirEResponder();
+  // Sem a caixa de texto montada, ninguém mais segura o arquivo solto na tela.
+  useBarrarArquivoSolto();
   return (
     <div
       data-testid="barra-conversa-fechada"

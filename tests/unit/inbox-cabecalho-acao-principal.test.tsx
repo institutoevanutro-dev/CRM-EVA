@@ -179,4 +179,27 @@ describe("barra da conversa fechada — Reabrir e responder", () => {
     expect(patchMock).toHaveBeenCalledTimes(1);
     expect(patchMock).toHaveBeenCalledWith("/api/v1/conversations/cv-9", { status: "claimed" });
   });
+
+  it("conversa fechada: arquivo solto na tela continua recusado, sem a caixa de texto montada", () => {
+    // A guarda que impede o PDF de abrir na aba no lugar do CRM morava só no
+    // Composer — e a barra toma o lugar dele. Sem ela, soltar um arquivo no fio
+    // de uma conversa fechada trocava o atendimento pelo arquivo.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <BarraDeConversaFechada conversationId="cv-9" />
+      </QueryClientProvider>,
+    );
+    const soltar = (tipos: string[]) => {
+      const ev = new Event("dragover", { bubbles: true, cancelable: true }) as Event & { dataTransfer: unknown };
+      ev.dataTransfer = { types: tipos, dropEffect: "copy" };
+      screen.getByTestId("barra-conversa-fechada").dispatchEvent(ev);
+      return ev;
+    };
+    const comArquivo = soltar(["Files"]);
+    expect(comArquivo.defaultPrevented).toBe(true);
+    expect((comArquivo.dataTransfer as { dropEffect: string }).dropEffect).toBe("none");
+    // Texto e link seguem com o navegador.
+    expect(soltar(["text/plain"]).defaultPrevented).toBe(false);
+  });
 });

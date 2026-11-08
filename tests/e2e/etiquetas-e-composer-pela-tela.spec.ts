@@ -395,18 +395,25 @@ test.describe("Etiquetas e compositor (portes de 15/10)", () => {
     await expect(realce).toBeVisible();
     await captura(page, "arrastar-arquivo-realce-escuro");
 
-    // Conversa encerrada: a caixa recusa (cursor "proibido"), sem realce nem prévia.
+    // Conversa encerrada: desde a I3 não há caixa de texto — a barra "Reabrir e
+    // responder" toma o lugar dela. O arquivo solto em qualquer ponto continua
+    // recusado (cursor "proibido"), sem realce nem prévia: sem esta guarda, o PDF
+    // abria na aba no lugar do CRM.
     const fechada = await page.request.patch(`/api/v1/conversations/${conversaId}`, {
       data: { status: "closed" },
     });
     expect(fechada.ok(), await fechada.text()).toBe(true);
     await page.reload();
     await expect(doPaciente).toBeVisible({ timeout: 60_000 });
-    expect(await caixa.evaluate(dragoverDeArquivo)).toEqual({ prevented: true, dropEffect: "none" });
+    const barra = page.getByTestId("barra-conversa-fechada");
+    await expect(barra).toBeVisible();
+    await expect(caixa).toHaveCount(0);
+    expect(await barra.evaluate(dragoverDeArquivo)).toEqual({ prevented: true, dropEffect: "none" });
+    expect(await doPaciente.evaluate(dragoverDeArquivo)).toEqual({ prevented: true, dropEffect: "none" });
     const recusado = await arrasteCom(page, "exame-ficticio.pdf", "application/pdf");
-    await caixa.dispatchEvent("dragenter", { dataTransfer: recusado });
-    await caixa.dispatchEvent("dragover", { dataTransfer: recusado });
-    await caixa.dispatchEvent("drop", { dataTransfer: recusado });
+    await barra.dispatchEvent("dragenter", { dataTransfer: recusado });
+    await barra.dispatchEvent("dragover", { dataTransfer: recusado });
+    await barra.dispatchEvent("drop", { dataTransfer: recusado });
     await expect(realce).toHaveCount(0);
     await expect(previa).toHaveCount(0);
   });
