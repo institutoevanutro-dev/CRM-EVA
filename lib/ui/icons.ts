@@ -70,6 +70,8 @@ export {
   Copy,
   DownloadSimple,
   Archive,
+  // "Transferir" no cabeçalho da conversa (I3)
+  ArrowsLeftRight,
   // origem de uma captação de formulário (página, IP, link para o lead)
   Globe,
   ArrowSquareOut,

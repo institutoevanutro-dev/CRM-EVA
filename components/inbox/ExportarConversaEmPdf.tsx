@@ -20,7 +20,8 @@ import { CircleNotch, FilePdf } from "@/lib/ui/icons";
  * (`requireRole("agent")` + RLS); esconder aqui é só não oferecer o que seria
  * recusado.
  */
-export function ExportarConversaEmPdf({ conversationId }: { conversationId: string }) {
+/** `comNome`: item do menu ⋯ do cabeçalho (I3) — ícone e nome, na largura do menu. */
+export function ExportarConversaEmPdf({ conversationId, comNome = false }: { conversationId: string; comNome?: boolean }) {
   const t = useT();
   const { user, activeOrg } = useAuth();
   const [baixando, setBaixando] = useState(false);
@@ -64,7 +65,7 @@ export function ExportarConversaEmPdf({ conversationId }: { conversationId: stri
     <Button
       size="sm"
       variant="ghost"
-      className="w-11 px-0 lg:w-8"
+      className={comNome ? "w-full justify-start gap-2 px-2" : "w-11 px-0 lg:w-8"}
       onClick={baixar}
       disabled={baixando}
       aria-busy={baixando}
@@ -73,6 +74,7 @@ export function ExportarConversaEmPdf({ conversationId }: { conversationId: stri
       data-testid="exportar-conversa-pdf"
     >
       {baixando ? <CircleNotch size={16} className="animate-spin" aria-hidden /> : <FilePdf size={16} aria-hidden />}
+      {comNome && <span>{t("Baixar a conversa em PDF")}</span>}
     </Button>
   );
 }

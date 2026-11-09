@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { ConversationHeader } from "@/components/inbox/ConversationHeader";
@@ -82,98 +82,59 @@ function renderHeader() {
 }
 
 describe("header do inbox — não trava a largura da tela", () => {
-  it("a barra de ações NÃO é shrink-0 — era isso que impunha o piso de 707px", () => {
-    const { container } = renderHeader();
-    const header = container.firstElementChild as HTMLElement;
-    // Guarda de vacuidade: sem header renderizado, todas as asserções abaixo
-    // passariam por não haver o que verificar.
-    expect(header, "o header não renderizou").toBeTruthy();
+  const acoes = () => screen.getByTestId("acoes-fixas-da-conversa");
 
-    const acoes = header.children[1] as HTMLElement;
-    expect(acoes, "a barra de ações não renderizou").toBeTruthy();
+  it("o grupo de ações NÃO é shrink-0 — era isso que impunha o piso de 707px", () => {
+    const { container } = renderHeader();
+    // Guarda de vacuidade: sem header renderizado, as asserções passariam por
+    // não haver o que verificar.
+    expect(container.firstElementChild, "o header não renderizou").toBeTruthy();
     expect(
-      acoes.className.split(/\s+/),
-      "`shrink-0` de volta na barra de ações: o header volta a travar em 707px e o painel de CRM sai da tela em 1280px",
+      acoes().className.split(/\s+/),
+      "`shrink-0` de volta no grupo de ações: o header volta a travar em 707px e o painel de CRM sai da tela em 1280px",
     ).not.toContain("shrink-0");
   });
 
   it("o header pode reorganizar em vez de esconder ação", () => {
     const { container } = renderHeader();
     const header = container.firstElementChild as HTMLElement;
-    const acoes = header.children[1] as HTMLElement;
-    // As duas pontas: o container quebra E a barra quebra internamente. Só uma
-    // das duas não basta — sem a de dentro, a barra desce inteira e continua
-    // pedindo a largura toda.
+    // As duas pontas: a linha quebra (os botões descem para baixo do nome) E o
+    // grupo quebra por dentro. Só uma das duas não basta.
     expect(header.className).toContain("flex-wrap");
-    expect(acoes.className).toContain("flex-wrap");
-    expect(acoes.className).toContain("min-w-0");
+    expect((acoes().parentElement as HTMLElement).className).toContain("flex-wrap");
+    expect(acoes().className).toContain("flex-wrap");
+    expect(acoes().className).toContain("min-w-0");
   });
 
-  it("as ações continuam TODAS no header — reorganizar não é esconder", () => {
+  it("Assumir, Transferir e Fechar continuam À VISTA — fora do menu ⋯ (I3)", () => {
     renderHeader();
-    // Se um dia alguém "resolver" o aperto colapsando ações num menu, este caso
-    // reprova. Esconder ação de quem atende é pior que uma segunda linha.
+    // O menu ⋯ fica fechado: o que se acha aqui está no grupo fixo.
     for (const rotulo of ["Assumir", "Transferir", "Fechar"]) {
-      expect(screen.getByText(rotulo), `a ação "${rotulo}" sumiu do header`).toBeTruthy();
+      expect(within(acoes()).getByRole("button", { name: rotulo }), `a ação "${rotulo}" saiu da vista`).toBeTruthy();
     }
+    // O rótulo do principal não muda: o atalho `a` e o dicionário o citam.
+    expect(within(acoes()).getByRole("button", { name: "Assumir" }).textContent).toBe("Assumir");
   });
 
-  it("no celular a barra é UMA fileira que rola, não três ou quatro que comem a conversa", () => {
-    // Relato de quem atende pelo telefone: com ~390px a barra quebrava em várias
-    // fileiras e sobrava pouca altura para as mensagens. Abaixo do `md` ela não
-    // quebra — rola na horizontal — e nenhum botão encolhe até virar ilegível.
-    const { container } = renderHeader();
-    const header = container.firstElementChild as HTMLElement;
-    const classes = (header.children[1] as HTMLElement).className.split(/\s+/);
-    for (const c of ["max-md:flex-nowrap", "max-md:overflow-x-auto", "max-md:[&>*]:shrink-0"]) {
-      expect(classes, `sem \`${c}\` a barra volta a empilhar fileiras no celular`).toContain(c);
-    }
-  });
-
-  it("no celular Assumir vem primeiro, a fileira mostra que rola e some com o teclado (porte do #3190)", () => {
-    // Só CSS: a ordem do DOM (a do computador e a do teclado) não muda.
-    const { container } = renderHeader();
-    const assumir = screen.getByRole("button", { name: "Assumir" });
-    expect(assumir.className.split(/\s+/)).toContain("max-md:order-first");
-
-    const header = container.firstElementChild as HTMLElement;
-    const faixa = header.children[1] as HTMLElement;
-    const classes = faixa.className.split(/\s+/);
-    expect(faixa.className, "sem a máscara nada indica que há botões à direita").toMatch(
-      /max-md:\[mask-image:linear-gradient\(/,
-    );
-    expect(classes).toContain("max-md:pr-8");
-    // Com o teclado aberto a faixa sai e o fio fica com a altura. `max-md:` é
-    // obrigatório: no computador encolher a janela não é teclado.
-    expect(classes).toContain("max-md:group-data-[teclado-aberto]/conversa:hidden");
-    expect(faixa.className).not.toMatch(/(?:^|\s)group-data-\[teclado-aberto\]/);
-  });
-
-  it("no celular o telefone sai do cabeçalho (continua na Ficha) e a porta das ações tem 44px (porte do #3190)", () => {
+  it("no celular o telefone sai do cabeçalho (continua na Ficha) e o ⋯ tem 44px (porte do #3190)", () => {
     renderHeader();
     const telefone = screen.getByText(/5511999|\+55/).closest("p") as HTMLElement;
     expect(telefone.className.split(/\s+/)).toContain("max-md:hidden");
     // `size="sm"` dá `h-11` (44px) abaixo do `lg`; o `md:h-9` devolve os 36px
     // a partir do `md`. Um `h-9` sem prefixo voltaria a 36px no toque.
-    const portaDasAcoes = screen.getByRole("button", { name: "Ações da conversa" });
-    const classesDaPorta = portaDasAcoes.className.split(/\s+/);
-    expect(classesDaPorta).toContain("h-11");
-    expect(classesDaPorta).toContain("md:h-9");
-    expect(classesDaPorta).not.toContain("h-9");
+    const classes = screen.getByRole("button", { name: "Ações da conversa" }).className.split(/\s+/);
+    expect(classes).toContain("h-11");
+    expect(classes).toContain("md:h-9");
+    expect(classes).not.toContain("h-9");
   });
 
-  it('"Ver contato" existe no DOM e só se cala onde há outra porta', () => {
+  it('"Ver contato" mora no ⋯ e só se cala onde há outra porta', () => {
     renderHeader();
-    // Ele NÃO sai do markup: some por CSS a partir de `xl`, exatamente a largura
-    // em que o painel lateral entra na tela com um "Ver contato" próprio. A
-    // distinção importa — remover do DOM tiraria a ação de quem usa 1024px, que
-    // é onde o painel não existe e esta é a única porta para o contato.
+    fireEvent.click(screen.getByRole("button", { name: "Ações da conversa" }));
+    // Some por CSS a partir de `xl`, a largura em que o painel lateral entra com
+    // um "Ver contato" próprio. Remover do DOM tiraria a ação de quem usa 1024px.
     const link = screen.getByText("Ver contato").closest("a, button") as HTMLElement;
     expect(link, "o link para o contato sumiu do markup").toBeTruthy();
-    const classes = `${link.className} ${link.parentElement?.className ?? ""}`;
-    expect(
-      classes,
-      "sem `xl:hidden`, a duplicata volta e o header ganha uma segunda linha em 1280px",
-    ).toContain("xl:hidden");
+    expect(link.className).toContain("xl:hidden");
   });
 });

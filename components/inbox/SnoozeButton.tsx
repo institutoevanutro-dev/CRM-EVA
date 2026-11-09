@@ -31,6 +31,7 @@ export function SnoozeButton({ conversationId, snoozeUntil, disabled }: Props) {
   const { snooze, cancel } = useSnoozeConversation();
   const isActive = isSnoozeActive(snoozeUntil);
   const isPending = snooze.isPending || cancel.isPending;
+  const rotulo = isActive ? t("Lembrete ativo") : t("Lembrar");
 
   return (
     <DropdownMenu>
@@ -39,10 +40,15 @@ export function SnoozeButton({ conversationId, snoozeUntil, disabled }: Props) {
           size="sm"
           variant="outline"
           disabled={disabled || isPending}
-          className="flex items-center gap-1"
+          // 44px de largura no toque: só com o ícone (cabeçalho estreito), ficava com 42.
+          className="flex min-w-11 items-center gap-1 lg:min-w-0"
+          // No cabeçalho estreito o nome sai (consulta de contêiner, I3) e fica
+          // aqui: na dica e no nome que o leitor de tela anuncia.
+          aria-label={rotulo}
+          title={rotulo}
         >
-          <Clock size={12} weight="regular" aria-hidden />
-          {isActive ? t("Lembrete ativo") : t("Lembrar")}
+          <Clock size={16} weight="regular" aria-hidden />
+          <span className="hidden @[40rem]:inline">{rotulo}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

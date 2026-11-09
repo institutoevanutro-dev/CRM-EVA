@@ -11,9 +11,10 @@ import {
 /**
  * UMA FAIXA DE FERRAMENTAS QUE SÓ APARECE QUANDO SE PEDE — sem depender de mouse.
  *
- * Usada pelo cabeçalho da conversa (Transferir, Lembrar, Fechar…) e pela faixa
- * de assistência do composer. As duas estavam sempre à vista e comiam a altura
- * da conversa; esconder atrás de `:hover` resolveria no notebook e sumiria com
+ * Usada pela faixa de assistência do composer. (O cabeçalho da conversa também
+ * a usava até a I3 do pacote de design 2: ação principal não pode depender de
+ * passar o mouse, e ele trocou a faixa por botões fixos e um menu ⋯.) A faixa
+ * comia a altura da conversa; esconder atrás de `:hover` resolveria no notebook e sumiria com
  * as ações no celular e para quem usa teclado — a lição que o botão "Responder"
  * da bolha já pagou (ver o comentário em `MessageBubble`).
  *
@@ -42,28 +43,13 @@ import {
 export function useRevelacao({
   forcado = false,
   chave,
-  fixado: fixadoDeFora,
-  onFixadoChange,
 }: {
   forcado?: boolean;
   chave?: string;
-  /**
-   * "Fixada" controlada por quem chama. O cabeçalho da conversa REMONTA quando
-   * a conversa sai da aba atual (assumir tira da Fila, fechar tira de Minhas) e
-   * o estado local se perderia no meio do gesto — medido no e2e: depois de
-   * "Assumir", o "Liberar" nascia escondido. O Inbox guarda o valor acima dele.
-   */
-  fixado?: boolean;
-  onFixadoChange?: (fixado: boolean) => void;
 } = {}) {
   const [hover, setHover] = useState(false);
   const [foco, setFoco] = useState(false);
-  const [fixadoLocal, setFixadoLocal] = useState(false);
-  const fixado = fixadoDeFora ?? fixadoLocal;
-  const setFixado = (v: boolean) => {
-    setFixadoLocal(v);
-    onFixadoChange?.(v);
-  };
+  const [fixado, setFixado] = useState(false);
   const [emUso, setEmUso] = useState(false);
   const [dispensado, setDispensado] = useState(false);
   const [chaveVista, setChaveVista] = useState(chave);

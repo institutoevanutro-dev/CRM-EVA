@@ -1,21 +1,20 @@
 import { expect, type Page } from "@playwright/test";
 
 /**
- * Abre (e fixa) a faixa de ações do cabeçalho da conversa — Transferir,
- * Lembrar, Fechar, Arquivar, Assumir, Liberar, PDF, busca…
+ * Abre o menu ⋯ do cabeçalho da conversa ("Ações da conversa").
  *
- * Desde 16/10/2026 a faixa nasce recolhida (pedido do dono: fixo no cabeçalho
- * só nome, telefone e responsável). O caminho que as specs usam é o mesmo de
- * quem atende pelo toque ou pelo teclado: o botão "Ações da conversa". Clicar
- * nele FIXA a faixa, então as asserções seguintes não dependem de onde o mouse
- * do Playwright ficou. Idempotente: com a faixa já aberta, não fecha.
- * Aceita o rótulo em espanhol: há specs que trocam o idioma no meio.
+ * Desde a I3 do pacote de design 2 o cabeçalho tem três camadas, todas sem
+ * depender do mouse: o botão principal (Assumir / Devolver ao automático /
+ * Reabrir), Transferir-Lembrar-Fechar fixos — esses NÃO precisam deste helper —
+ * e o menu ⋯, aberto por clique, com Liberar, Pausar, a volta quando não é a
+ * principal, Buscar, PDF, Aparência, Ficha, Ver contato, Ocultar e Arquivar.
+ *
+ * Idempotente: com o menu já aberto, não fecha. Aceita o rótulo em espanhol.
  */
 export async function abrirAcoesDaConversa(page: Page): Promise<void> {
   const botao = page.getByRole("button", { name: /^(Ações da conversa|Acciones de la conversación)$/ });
   await expect(botao).toBeVisible({ timeout: 30_000 });
-  // Tira o mouse de cima: aberta só pelo hover, a faixa sumiria no próximo passo.
-  await page.mouse.move(0, 0);
   if ((await botao.getAttribute("aria-expanded")) !== "true") await botao.click();
   await expect(botao).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByTestId("menu-da-conversa")).toBeVisible();
 }
