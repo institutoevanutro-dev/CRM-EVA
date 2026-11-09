@@ -8,7 +8,7 @@
  * mesmo espírito de `/api/v1/team/assignable`: a recepção precisa ver de quem
  * é a agenda em que está marcando, e com `/api/v1/team` ela tomava 403 — a
  * barra vinha vazia e o painel dizia "Você" sobre a jornada da médica. Sai só o
- * irredutível: id, papel e nome. Sem e-mail, sem último acesso (gerente sem
+ * irredutível: id, papel, nome e a trilha de cor escolhida. Sem e-mail, sem último acesso (gerente sem
  * `full_name` cadastrado recebe no nome a parte do e-mail antes do @).
  *
  * O Prestador (`provider`) lê a lista, mas recebe só a si mesmo: ele trabalha
@@ -35,6 +35,7 @@ interface PessoaDaAgenda {
   user_id: string;
   role: string;
   full_name: string | null;
+  calendar_trilha: number | null;
 }
 
 export async function GET(_req: NextRequest): Promise<Response> {
@@ -46,7 +47,7 @@ export async function GET(_req: NextRequest): Promise<Response> {
   const client = isServiceRoleConfigured() ? createAdminClient() : await createClient();
   let consulta = client
     .from("user_organizations")
-    .select("user_id, role")
+    .select("user_id, role, calendar_trilha")
     .eq("organization_id", orgId);
   if (authz.org.role === "provider") consulta = consulta.eq("user_id", authz.user.id);
   // Revogado não tem agenda para mostrar hoje (diferente de `/api/v1/team`,
@@ -57,7 +58,7 @@ export async function GET(_req: NextRequest): Promise<Response> {
 
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
-  const membros = (rows ?? []) as Array<{ user_id: string; role: string }>;
+  const membros = (rows ?? []) as Array<{ user_id: string; role: string; calendar_trilha: number | null }>;
   if (!isServiceRoleConfigured() || membros.length === 0) {
     return ok(membros.map((m) => ({ ...m, full_name: null })), { requestId });
   }

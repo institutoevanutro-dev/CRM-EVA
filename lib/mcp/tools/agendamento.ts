@@ -36,7 +36,8 @@ import {
   registrarRealizadoPelaIntegracaoHandler,
 } from "@/app/api/v1/agenda/agendamentos/_handler";
 import { ApiError } from "@/lib/api/types";
-import { SITUACOES_DO_AGENDAMENTO } from "@/lib/agenda/tipos";
+import { SITUACOES_DO_AGENDAMENTO, trilhasEfetivasDaEquipe } from "@/lib/agenda/tipos";
+import { resolveUserNames } from "@/lib/mcp/tools/_users";
 import type { McpContext, McpToolDefinition } from "@/lib/mcp/types";
 import { foraDaConversa, foraDoContatoDoTurno } from "@/lib/mcp/fora-da-conversa";
 
@@ -532,6 +533,43 @@ export function periodoDaLista(input: {
   };
 }
 
+/**
+ * Nome e trilha de cor de quem atende, para o Prontuário desenhar a agenda com a
+ * mesma cor da grade do CRM.
+ *
+ * - Trilha: `trilhasEfetivasDaEquipe` sobre a equipe ATIVA da organização (o mesmo
+ *   roster de `GET /api/v1/agenda/pessoas`), numa consulta só. Dono fora da equipe
+ *   (revogado) fica na trilha 1, como `GradeDaAgenda` o desenha.
+ * - Nome: só `full_name` (`resolveUserNames`, dedupe por id), nunca e-mail.
+ *
+ * `ctx.supabase` é service role: o filtro de organização é explícito e vem do ctx.
+ * Nome e cor não são críticos: falha aqui devolve null, e a lista segue.
+ */
+async function atendentesDaAgenda(
+  ctx: McpContext,
+  donoIds: Array<string | null | undefined>,
+): Promise<Map<string, { nome: string | null; trilha: number | null }>> {
+  const ids = [...new Set(donoIds.filter((id): id is string => Boolean(id)))];
+  const resultado = new Map<string, { nome: string | null; trilha: number | null }>();
+  if (ids.length === 0) return resultado;
+  let trilhas: Map<string, number> | null = null;
+  try {
+    const { data, error } = await ctx.supabase
+      .from("user_organizations")
+      .select("user_id, calendar_trilha")
+      .eq("organization_id", ctx.organizationId)
+      .is("revoked_at", null);
+    if (!error) trilhas = trilhasEfetivasDaEquipe(data ?? []);
+  } catch {
+    trilhas = null;
+  }
+  const nomes = await resolveUserNames(ctx.supabase, ids);
+  for (const id of ids) {
+    resultado.set(id, { nome: nomes.get(id) ?? null, trilha: trilhas ? (trilhas.get(id) ?? 1) : null });
+  }
+  return resultado;
+}
+
 export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
   name: "crm_list_appointments",
   description:
@@ -583,6 +621,7 @@ export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
       return { compromissos: [], motivo: r.codigo, mensagem: r.motivoParaCliente };
     }
 
+    const atendentes = await atendentesDaAgenda(ctx, r.agendamentos.map((a) => a.donoId));
     return {
       compromissos: r.agendamentos.map((a) => ({
         id: a.id,
@@ -598,6 +637,8 @@ export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
         contato_id: a.contatoId,
         contato_nome: a.contatoNome,
         atendente_id: a.donoId,
+        atendente_nome: atendentes.get(a.donoId ?? "")?.nome ?? null,
+        atendente_trilha: atendentes.get(a.donoId ?? "")?.trilha ?? null,
       })),
     };
   },
