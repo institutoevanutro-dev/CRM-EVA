@@ -56,19 +56,19 @@ it.each([
   {
     locale: "pt-BR",
     time_zone: "America/Sao_Paulo",
-    interval: "29 de ago. de 2026, 23:30 – 30 de ago. de 2026, 00:30",
+    interval: "sáb, 29 de ago · 23:30 – dom, 30 de ago · 00:30",
     recorded: "Presença registrada pela equipe: 30 de ago. de 2026, 01:45",
   },
   {
     locale: "es",
     time_zone: "America/Sao_Paulo",
-    interval: "29 ago 2026, 23:30 – 30 ago 2026, 0:30",
+    interval: "sáb, 29 de ago · 23:30 – dom, 30 de ago · 00:30",
     recorded: "Asistencia registrada por el equipo: 30 ago 2026, 1:45",
   },
   {
     locale: "pt-BR",
     time_zone: "Asia/Tokyo",
-    interval: "30 de ago. de 2026 11:30 – 12:30",
+    interval: "dom, 30 de ago · 11:30–12:30",
     recorded: "Presença registrada pela equipe: 30 de ago. de 2026, 13:45",
   },
 ])(

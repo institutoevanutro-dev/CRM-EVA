@@ -192,7 +192,7 @@ async function evidence(
 async function detail(page: Page, id: string) {
   await page.goto(`/app/agenda?compromisso=${id}`);
   await expect(
-    page.getByRole("dialog").getByRole("heading", { name: "Consulta sincronizada", exact: true }),
+    page.getByRole("dialog").getByText("Consulta sincronizada", { exact: true }),
   ).toBeVisible();
 }
 async function row(f: Fixture, id: string) {

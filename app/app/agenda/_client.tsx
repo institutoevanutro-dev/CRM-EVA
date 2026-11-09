@@ -571,7 +571,7 @@ export function AgendaClient({
       */}
       <React.Suspense fallback={null}>
         <AvisoDaConexaoGoogle />
-        <EntradaDaAgenda onContext={onContext} />
+        <EntradaDaAgenda onContext={onContext} pessoas={pessoas} />
       </React.Suspense>
 
 

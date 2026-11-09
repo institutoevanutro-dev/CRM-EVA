@@ -208,7 +208,7 @@ const meet = (page: Page) => page.locator('section[aria-label="Google Meet"]');
 async function detail(page: Page, id: string) {
   await page.goto(`/app/agenda?compromisso=${id}`);
   await expect(
-    page.getByRole("dialog").getByRole("heading", { name: "Consulta Meet", exact: true }),
+    page.getByRole("dialog").getByText("Consulta Meet", { exact: true }),
   ).toBeVisible();
   await expect(meet(page)).toBeVisible();
 }

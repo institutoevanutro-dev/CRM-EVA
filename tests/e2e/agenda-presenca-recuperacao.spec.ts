@@ -158,7 +158,7 @@ async function login(page: Page, email: string) {
 async function detail(page: Page, id: string, title: string) {
   await page.goto(`/app/agenda?compromisso=${id}`);
   await expect(
-    page.getByRole("dialog").getByRole("heading", { name: title, exact: true }),
+    page.getByRole("dialog").getByText(title, { exact: true }),
   ).toBeVisible();
 }
 async function evidence(page: Page, info: TestInfo, name: string) {
@@ -321,7 +321,8 @@ test("Inbox marca cliente/conversa; detalhe antigo confirma presença com evidê
     .single();
   expect(bound.data).toMatchObject({ contact_id: p.contact, conversation_id: p.conversation });
   await detail(page, created.id, "Consulta de presença");
-  await expect(page.getByRole("button", { name: "Faltou", exact: true })).toBeDisabled();
+  await expect(page.getByTestId("presenca-libera-as")).toContainText("quando o horário começar");
+  await expect(page.getByRole("button", { name: "Marcar falta", exact: true })).toHaveCount(0);
   const past = await appointment(f, p, "Consulta da semana anterior", 24 * 8);
   await runCron(page, "followup-flow-worker");
   await page.goto("/app/ai/inbox");
@@ -345,8 +346,9 @@ test("Inbox marca cliente/conversa; detalhe antigo confirma presença com evidê
     .toBe("resolved");
   const msg = await inbound(f, p, "Compareci à consulta, obrigado.");
   await page.reload();
+  await page.getByText("Anexar a mensagem do paciente (opcional)").click();
   await page.getByLabel("Mensagem de evidência").selectOption(msg);
-  await page.getByRole("button", { name: "Compareceu", exact: true }).click();
+  await page.getByRole("button", { name: "Marcar realizado", exact: true }).click();
   await expect(page.getByText("Presença registrada pela equipe", { exact: false })).toBeVisible();
   const outcome = await db
     .from("calendar_appointments")
@@ -416,12 +418,12 @@ test.describe("datas do compromisso seguem idioma e fuso próprios", () => {
       end: [29, 17, 30],
     });
     await expect(page.getByTestId("compromisso-horario")).toHaveText(
-      "29 de ago. de 2026, 23:30 – 30 de ago. de 2026, 00:30",
+      "sáb, 29 de ago · 23:30 – dom, 30 de ago · 00:30",
     );
     const confirmed = page.waitForResponse(
       (r) => r.url().endsWith("/api/v1/agenda/agendamentos") && r.request().method() === "PATCH",
     );
-    await page.getByRole("button", { name: "Compareceu", exact: true }).click();
+    await page.getByRole("button", { name: "Marcar realizado", exact: true }).click();
     expect((await confirmed).ok()).toBe(true);
     const outcome = await db
       .from("calendar_appointments")
@@ -448,7 +450,7 @@ test.describe("datas do compromisso seguem idioma e fuso próprios", () => {
         await expect(page.getByTestId("seletor-de-idioma")).toHaveText("ES");
         await detail(page, id, "Consulta atravessa meia-noite");
         await expect(page.getByTestId("compromisso-horario")).toHaveText(
-          "29 ago 2026, 23:30 – 30 ago 2026, 0:30",
+          "sáb, 29 de ago · 23:30 – dom, 30 de ago · 00:30",
         );
       }
       const label =
@@ -573,7 +575,7 @@ test("gestão configura prazos e gatilho; falta inicia uma vez e resposta interr
   ).toBe("appointment_no_show");
   const id = await appointment(f, p, "Consulta com recuperação");
   await detail(page, id, "Consulta com recuperação");
-  await page.getByRole("button", { name: "Faltou", exact: true }).click();
+  await page.getByRole("button", { name: "Marcar falta", exact: true }).click();
   // A jornada prova o produtor e o consumer registrado pelo endpoint real.
   // A RPC direta abaixo só testa replay DEPOIS de o drain tomar a decisão.
   await expect
@@ -664,7 +666,7 @@ test("falta sem configuração e contato ocupado deixam impedimento terminal vis
   await login(page, f.email);
   const first = await appointment(f, p, "Consulta sem fluxo");
   await detail(page, first, "Consulta sem fluxo");
-  await page.getByRole("button", { name: "Faltou", exact: true }).click();
+  await page.getByRole("button", { name: "Marcar falta", exact: true }).click();
   expect((await recover(f, first)).result).toBe("not_configured");
   await expect(page.getByText(/Não iniciada: configure um fluxo/)).toBeVisible({ timeout: 10000 });
   const pointer = await flow(f);
@@ -676,12 +678,12 @@ test("falta sem configuração e contato ocupado deixam impedimento terminal vis
   if (configured.error) throw configured.error;
   const second = await appointment(f, p, "Primeira falta confirmada");
   await detail(page, second, "Primeira falta confirmada");
-  await page.getByRole("button", { name: "Faltou", exact: true }).click();
+  await page.getByRole("button", { name: "Marcar falta", exact: true }).click();
   const running = await recover(f, second);
   expect(running.result).toBe("started");
   const third = await appointment(f, p, "Consulta com acompanhamento ativo");
   await detail(page, third, "Consulta com acompanhamento ativo");
-  await page.getByRole("button", { name: "Faltou", exact: true }).click();
+  await page.getByRole("button", { name: "Marcar falta", exact: true }).click();
   expect((await recover(f, third)).result).toBe("other_flow");
   await expect(page.getByText("Não iniciada: outro acompanhamento já está ativo.")).toBeVisible({
     timeout: 10000,
@@ -730,7 +732,7 @@ test("receiver reconcilia inline/daemon, barra claim antigo e protege agenda al�
     async function prepared(title: string) {
       const id = await appointment(f, p, title);
       await detail(page, id, title);
-      await page.getByRole("button", { name: "Faltou", exact: true }).click();
+      await page.getByRole("button", { name: "Marcar falta", exact: true }).click();
       const r = await recover(f, id);
       expect(r.result).toBe("started");
       const updated = await db

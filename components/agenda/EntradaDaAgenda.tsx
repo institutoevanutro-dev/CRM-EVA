@@ -3,10 +3,14 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { usePermission } from "@/hooks/auth/AuthProvider";
 import { useEffect } from "react";
 import { DetalheDoCompromisso } from "./DetalheDoCompromisso";
+import type { Pessoa } from "./tipos";
 export function EntradaDaAgenda({
   onContext,
+  pessoas,
 }: {
   onContext: (contact: string, conversation: string) => void;
+  /** A equipe já carregada pela Agenda: o detalhe diz "com {profissional}". */
+  pessoas?: Pessoa[];
 }) {
   const podeEditar = usePermission("inbox.reply");
   const podeExcluir = usePermission("agenda.appointment.exclude");
@@ -33,6 +37,7 @@ export function EntradaDaAgenda({
       podeEditar={podeEditar}
       podeExcluir={podeExcluir}
       podeCompletarNome={podeCompletarNome}
+      pessoas={pessoas}
       id={params.get("compromisso")}
       onClose={() => {
         // O `?tipo=` escolhido na grade ATRAVESSA o fecho do detalhe: sem
