@@ -33,9 +33,12 @@ type Campo = keyof AparenciaDaConversa;
 export function AparenciaDaConversa({
   valor,
   onChange,
+  comNome = false,
 }: {
   valor: AparenciaDaConversa;
   onChange: (proximo: AparenciaDaConversa) => void;
+  /** Item do menu ⋯ do cabeçalho (I3): ícone e nome, na largura do menu. */
+  comNome?: boolean;
 }) {
   const t = useT();
   const [salvando, setSalvando] = useState(false);
@@ -64,11 +67,12 @@ export function AparenciaDaConversa({
           type="button"
           size="sm"
           variant="ghost"
-          className="w-11 px-0 lg:w-8"
+          className={comNome ? "w-full justify-start gap-2 px-2" : "w-11 px-0 lg:w-8"}
           aria-label={t("Aparência da conversa")}
           title={t("Aparência da conversa")}
         >
           <Palette size={16} aria-hidden />
+          {comNome && <span>{t("Aparência da conversa")}</span>}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[min(20rem,calc(100vw-2rem))] space-y-4 p-4">

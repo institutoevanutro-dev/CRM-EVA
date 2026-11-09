@@ -69,7 +69,7 @@ export function ConversationTagsEditor({ conversationId, orgId, tags }: Props) {
   return (
     <section>
       <h3 className="text-xs font-semibold text-text">
-        {t("Tags da conversa")}
+        {t("Etiquetas da conversa")}
       </h3>
 
       <div className="mt-2 flex flex-wrap gap-1">
@@ -81,7 +81,7 @@ export function ConversationTagsEditor({ conversationId, orgId, tags }: Props) {
                   type="button"
                   onClick={() => remove(tag)}
                   disabled={mutation.isPending}
-                  aria-label={`${t("Remover tag")} ${tag}`}
+                  aria-label={`${t("Remover etiqueta")} ${tag}`}
                   className="rounded-sm hover:text-destructive"
                 >
                   <X size={10} weight="bold" aria-hidden />
@@ -98,7 +98,7 @@ export function ConversationTagsEditor({ conversationId, orgId, tags }: Props) {
             </Fragment>
           ))
         ) : (
-          <span className="text-xs text-muted-foreground">{t("Sem tags.")}</span>
+          <span className="text-xs text-muted-foreground">{t("Sem etiquetas.")}</span>
         )}
       </div>
 
@@ -112,11 +112,11 @@ export function ConversationTagsEditor({ conversationId, orgId, tags }: Props) {
               add(draft);
             }
           }}
-          placeholder={t("Nova tag…")}
+          placeholder={t("Nova etiqueta…")}
           maxLength={40}
           disabled={mutation.isPending || tags.length >= 20}
           className="h-7 text-xs"
-          aria-label={t("Adicionar tag à conversa")}
+          aria-label={t("Adicionar etiqueta à conversa")}
         />
         <SeletorDeCorDaEtiqueta
           cor={cor}
@@ -130,7 +130,7 @@ export function ConversationTagsEditor({ conversationId, orgId, tags }: Props) {
           className="h-7 px-2"
           onClick={() => add(draft)}
           disabled={mutation.isPending || !draft.trim() || tags.length >= 20}
-          aria-label={t("Adicionar tag")}
+          aria-label={t("Adicionar etiqueta")}
         >
           <Plus size={12} weight="regular" aria-hidden />
         </Button>

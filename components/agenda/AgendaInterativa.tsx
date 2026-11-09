@@ -14,6 +14,7 @@ import type { MotivoDaGradeTravada } from "@/lib/agenda/grade-interativa";
 import { cn } from "@/lib/utils";
 
 import { GradeDaAgenda } from "./GradeDaAgenda";
+import { fraseDaRemarcacao, quandoCurto } from "./rotulo-do-bloco";
 import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
 import { dataDeParede, diaLocalISO } from "@/lib/agenda/fuso";
 
@@ -62,6 +63,7 @@ export function AgendaInterativa({
   onEscolherTipo,
   onMarcarEm,
   onAbrirAgendamento,
+  onAbrirDia,
   className,
 }: {
   visao: VisaoDaAgenda;
@@ -120,6 +122,8 @@ export function AgendaInterativa({
    */
   onMarcarEm?: (instante: string) => void;
   onAbrirAgendamento?: (id: string) => void;
+  /** Mês: a célula abre o dia (A7). */
+  onAbrirDia?: (dia: Date) => void;
   className?: string;
 }) {
   const localeDaData = useLocaleDeData();
@@ -236,9 +240,21 @@ export function AgendaInterativa({
     });
   }, [agendamentos, pendente, remarcar, localeDaData, fuso]);
 
-  const nomeDoPendente = pendente
-    ? (agendamentos.find((a) => a.id === pendente.id)?.titulo ?? "o compromisso")
-    : "";
+  const alvoPendente = pendente ? agendamentos.find((a) => a.id === pendente.id) : undefined;
+  const frasePendente =
+    pendente && alvoPendente
+      ? fraseDaRemarcacao({
+          paciente: alvoPendente.quemSeraAtendido,
+          titulo: alvoPendente.titulo,
+          de: quandoCurto(new Date(alvoPendente.comeca), fuso, agora, localeDaData, t("hoje")),
+          para: quandoCurto(new Date(pendente.instante), fuso, agora, localeDaData, t("hoje")),
+          moldes: {
+            comPaciente: t("Remarcar {paciente} ({titulo}) de {de} para {para}?"),
+            semPaciente: t("Remarcar {titulo} de {de} para {para}?"),
+            aviso: t("Avise {paciente} do novo horário: a mudança não manda mensagem sozinha, a não ser por uma automação de remarcação."),
+          },
+        })
+      : null;
 
   return (
     <div className={cn("flex min-h-0 flex-col gap-2", className)}>
@@ -333,28 +349,25 @@ export function AgendaInterativa({
         </div>
       )}
 
-      {/* A CONFIRMAÇÃO, antes de consumar. Remarcar avisa o cliente do outro
-          lado — a regra do tempo da doutrina do Sistema Vivo pede que a ação
-          que sai para fora aconteça no tempo do humano, não no do gesto. */}
-      {pendente && (
+      {/* A CONFIRMAÇÃO, antes de consumar. Remarcar pode avisar o cliente do
+          outro lado (pela automação de remarcação, quando a clínica tem uma) —
+          a regra do tempo da doutrina do Sistema Vivo pede que a ação que sai
+          para fora aconteça no tempo do humano, não no do gesto.
+          "Manter horário" e não "Cancelar": numa agenda, "Cancelar" ao lado de
+          "Remarcar" se lê como desmarcar a paciente (A8). */}
+      {pendente && frasePendente && (
         <div
           data-testid="confirmar-remarcacao"
           role="status"
           className="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-accent/50 bg-accent-soft px-3 py-2"
         >
-          <p className="text-xs leading-4 text-text">
-            {t("Remarcar")} <span className="font-semibold">{nomeDoPendente}</span> {t("para")}{" "}
-            <span className="font-semibold">
-              {format(dataDeParede(new Date(pendente.instante), fuso), "EEEE, d 'de' MMMM 'às' HH:mm", { locale: localeDaData })}
-            </span>
-            {t("? Quem foi atendido recebe o aviso da mudança.")}
-          </p>
+          <p className="text-xs leading-4 text-text">{frasePendente}</p>
           <div className="flex shrink-0 gap-2">
             <Button variant="ghost" size="sm" onClick={() => setPendente(null)}>
-              Cancelar
+              {t("Manter horário")}
             </Button>
             <Button size="sm" data-testid="confirmar-remarcacao-botao" onClick={confirmar}>
-              Remarcar
+              {t("Remarcar")}
             </Button>
           </div>
         </div>
@@ -385,6 +398,7 @@ export function AgendaInterativa({
         pessoas={pessoas}
         agendamentos={desenhados}
         onAbrirAgendamento={onAbrirAgendamento}
+        onAbrirDia={onAbrirDia}
         className="min-h-0 flex-1"
         interacao={
           tipo && onMarcarEm

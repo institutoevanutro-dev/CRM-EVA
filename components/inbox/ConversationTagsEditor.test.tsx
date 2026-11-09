@@ -56,8 +56,8 @@ describe("ConversationTagsEditor — cor na criação (#2718)", () => {
   it("sem cor: o “+” só anexa a tag (nenhum POST de vocabulário)", async () => {
     const user = userEvent.setup();
     renderEditor();
-    await user.type(screen.getByLabelText("Adicionar tag à conversa"), "vip");
-    await user.click(screen.getByRole("button", { name: "Adicionar tag" }));
+    await user.type(screen.getByLabelText("Adicionar etiqueta à conversa"), "vip");
+    await user.click(screen.getByRole("button", { name: "Adicionar etiqueta" }));
     expect(mutateSpy).toHaveBeenCalledWith({ conversation_id: "c1", tags: ["vip"] });
     expect(apiClient.post).not.toHaveBeenCalled();
   });
@@ -67,8 +67,8 @@ describe("ConversationTagsEditor — cor na criação (#2718)", () => {
     renderEditor();
     await user.click(screen.getByRole("button", { name: "Cor da etiqueta" }));
     await user.click(screen.getByRole("button", { name: "Roxo" }));
-    await user.type(screen.getByLabelText("Adicionar tag à conversa"), "VIP");
-    await user.click(screen.getByRole("button", { name: "Adicionar tag" }));
+    await user.type(screen.getByLabelText("Adicionar etiqueta à conversa"), "VIP");
+    await user.click(screen.getByRole("button", { name: "Adicionar etiqueta" }));
     expect(mutateSpy).toHaveBeenCalledWith({ conversation_id: "c1", tags: ["vip"] });
     expect(apiClient.post).toHaveBeenCalledWith("/api/v1/tags/vocabulario", {
       acao: "definir_cor",
@@ -116,7 +116,7 @@ describe("ConversationTagsEditor — sugestões filtram pelo digitado (#3180)", 
   });
   afterEach(() => cleanup());
 
-  const campo = () => screen.getByLabelText("Adicionar tag à conversa");
+  const campo = () => screen.getByLabelText("Adicionar etiqueta à conversa");
   const sugestao = (tag: string) => screen.queryByRole("button", { name: `+ ${tag}` });
 
   it("digitar “carteira” acha carteira-* com hífen e acento fora da conta", async () => {

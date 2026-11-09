@@ -195,7 +195,7 @@ test.describe("Lote 12 — painel do contato no Inbox", () => {
     registra(`#944 · GET /crm-summary = ${rr.status()}`);
 
     // ── #909: o rótulo do botão é o TÍTULO do diálogo que ele abre ─────────
-    const botao = page.getByRole("button", { name: "Novo Lead" });
+    const botao = page.getByRole("button", { name: "Novo negócio" });
     await expect(botao).toBeVisible({ timeout: 30_000 });
     registra(`#909 · rótulo do botão = "${await botao.innerText()}"`);
     await captura(page, "909-01-painel-com-botao-novo-lead");
@@ -204,7 +204,7 @@ test.describe("Lote 12 — painel do contato no Inbox", () => {
     await expect(dialogo).toBeVisible();
     const titulo = await dialogo.getByRole("heading").first().innerText();
     registra(`#909 · título do diálogo = "${titulo}"`);
-    expect(titulo.trim()).toBe("Novo Lead");
+    expect(titulo.trim()).toBe("Novo negócio");
     await captura(page, "909-02-dialogo-mesmo-nome");
     await page.keyboard.press("Escape");
     await expect(dialogo).toHaveCount(0);
@@ -249,13 +249,13 @@ test.describe("Lote 12 — painel do contato no Inbox", () => {
     await abreConversa(page, conversaId);
     await expect(page.getByText(`Cliente L12 ${SUFIXO}`).first()).toBeVisible({ timeout: 60_000 });
 
-    await page.getByRole("button", { name: "Tags do contato", exact: true }).click();
+    await page.getByRole("button", { name: "Etiquetas do contato", exact: true }).click();
     const rt = await respostaTags;
     const corpoTags = await rt.text();
     registra(`L12.G2.1 · GET /api/v1/contact-tags = ${rt.status()} · corpo = ${corpoTags.slice(0, 400)}`);
     expect(rt.status(), "a org tem contato SEM tag e contato COM tag").toBe(200);
 
-    const campo = page.getByLabel("Adicionar tag ao contato");
+    const campo = page.getByLabel("Adicionar etiqueta ao contato");
     await expect(campo).toBeVisible();
 
     const chips = await page.getByRole("button", { name: /^\+ / }).allInnerTexts();

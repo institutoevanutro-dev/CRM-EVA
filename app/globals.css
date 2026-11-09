@@ -238,6 +238,9 @@
   --agenda-pessoa-6: #608bda;   /* índigo */
   --agenda-pessoa-7: #7b5bad;   /* violeta */
   --agenda-pessoa-8: #cc77b1;   /* framboesa */
+  /* Iniciais sobre as trilhas claras (2, 4, 6, 8): branco ali fica entre
+     3,07 e 3,46:1; escuro passa de 4,5:1 (A12 do pacote 2a de design). */
+  --agenda-iniciais-escuras: #171717;
 
   /* Menu lateral e tabelas no padrão do Eva Financeiro (spec 2026-10-07-cores-e-menu).
      O menu é verde nos DOIS temas; o dourado só aparece sobre ele ou como traço.
@@ -376,6 +379,9 @@
   --agenda-pessoa-6: #608bda;   /* índigo */
   --agenda-pessoa-7: #7b5bad;   /* violeta */
   --agenda-pessoa-8: #cc77b1;   /* framboesa */
+  /* Iniciais sobre as trilhas claras (2, 4, 6, 8): branco ali fica entre
+     3,07 e 3,46:1; escuro passa de 4,5:1 (A12 do pacote 2a de design). */
+  --agenda-iniciais-escuras: #171717;
   --color-table-head: #efece3;
   --color-row-hover: #fbf9f4;
   --color-sidebar-bg: #1d352c;
@@ -494,6 +500,7 @@
   --agenda-pessoa-6: #6c97e7;
   --agenda-pessoa-7: #be9ef6;
   --agenda-pessoa-8: #cc77b1;
+  --agenda-iniciais-escuras: #161510;
 
   /* Escuro em verde fechado, desenhado à parte (não invertido). */
   --color-table-head: #1b3129;
@@ -1134,12 +1141,14 @@
 [data-aparencia-conversa] {
   --bolha-enviada-fundo: var(--bolha-enviada-fundo-claro);
   --bolha-enviada-texto: var(--bolha-enviada-texto-claro);
+  --bolha-enviada-lida: var(--bolha-enviada-lida-claro);
   --bolha-recebida-fundo: var(--bolha-recebida-fundo-claro);
   --bolha-recebida-texto: var(--bolha-recebida-texto-claro);
 }
 [data-theme="dark"] [data-aparencia-conversa] {
   --bolha-enviada-fundo: var(--bolha-enviada-fundo-escuro);
   --bolha-enviada-texto: var(--bolha-enviada-texto-escuro);
+  --bolha-enviada-lida: var(--bolha-enviada-lida-escuro);
   --bolha-recebida-fundo: var(--bolha-recebida-fundo-escuro);
   --bolha-recebida-texto: var(--bolha-recebida-texto-escuro);
 }

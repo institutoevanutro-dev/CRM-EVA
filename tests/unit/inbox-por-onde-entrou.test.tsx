@@ -122,7 +122,7 @@ describe("selo de canal no avatar", () => {
       <ConversationListItem conversation={base} isSelected={false} onSelect={() => {}} automaticoDaOrg />,
     );
     expect(container.querySelector('[aria-hidden][class*="-right-0.5"][class*="rounded-full"]')).toBeNull();
-    expect(container.querySelector("[data-selo-do-comando]")?.textContent).toMatch(/IA|Aguardando|Equipe|Encerrada/);
+    expect(container.querySelector("[data-selo-do-comando]")?.textContent).toMatch(/Automático|Aguardando|Equipe|Encerrada/);
   });
 
   it("o selo some quando a lista pede para não repetir", () => {

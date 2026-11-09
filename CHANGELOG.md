@@ -8,6 +8,18 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.2.0] — 2026-11-08
+
+### Alterado
+
+- **Botões do cabeçalho da conversa mudam de lugar** No Inbox, os botões do cabeçalho da conversa mudam de lugar, sem nada para configurar. Ao lado do nome do contato fica um botão principal que muda com a situação: "Assumir" quando a conversa está sem dono, "Devolver ao automático" quando o automático está pausado e "Reabrir" quando a conversa está fechada (nenhum quando a conversa já é sua). Transferir, Lembrar e Fechar ficam sempre à vista, sem precisar passar o mouse; em tela estreita aparecem só como ícone, com o nome na dica. Buscar, PDF, Ocultar, Arquivar, Aparência, Ficha, Liberar e Pausar o automático passaram para o menu ⋯, que abre com um clique. Em conversa fechada, o campo de texto dá lugar a "Conversa fechada." com o botão "Reabrir e responder", que reabre a conversa já com quem clicou como responsável. Os atalhos do Inbox continuam os mesmos.
+
+## [5.1.0] — 2026-11-08
+
+### Alterado
+
+- **Inbox e Agenda mais fáceis de ler** Revisão visual do Inbox e da Agenda, sem nada para configurar e sem mudar nada de lugar. No Inbox, "Lida" tem cor própria e a mensagem que falhou fica toda em vermelho, com "Não enviada · motivo · Tentar de novo"; o Inbox ocupa a tela de ponta a ponta, com a conversa mais larga; as mensagens seguidas da mesma pessoa ficam agrupadas; a resposta automática tem contorno na cor da marca e o rótulo "Automático"; fechar e arquivar perguntam numa janela do próprio sistema (Enter continua confirmando) e excluir nota interna pede confirmação; "tag" virou "Etiqueta" e "IA" virou "Automático" no selo da lista; no celular, a conversa aberta por link mostra um esqueleto enquanto carrega. Na Agenda, o bloco mostra o nome do paciente (nos de 15 e 30 minutos, numa linha só com o horário); no Mês, clicar no dia abre o Dia e o chip abre o compromisso; ao remarcar, a pergunta diz quem, de quando para quando, e lembra de avisar o paciente quando não há automação de remarcação; as iniciais dos profissionais ficaram legíveis.
+
 ## [5.0.1] — 2026-11-08
 
 ### Corrigido
@@ -8896,7 +8908,9 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.0.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.2.0...HEAD
+[5.2.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.1.0...v5.2.0
+[5.1.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.0.1...v5.1.0
 [5.0.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.0.0...v5.0.1
 [5.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.52.0...v5.0.0
 [4.52.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.51.1...v4.52.0

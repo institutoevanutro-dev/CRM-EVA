@@ -80,6 +80,13 @@ interface Props {
   enviandoAoProntuario?: boolean;
   quemEnviouAoProntuario?: string | null;
   erroAoProntuario?: string | null;
+  /**
+   * Posição no turno (I8, `lib/inbox/turnos.ts`): o rótulo de quem falou só na
+   * PRIMEIRA bolha da sequência e a ponta só na ÚLTIMA. Sem quem calcule (a
+   * leitura do super-admin), cada bolha é um turno — o desenho de antes.
+   */
+  inicioDoTurno?: boolean;
+  fimDoTurno?: boolean;
 }
 
 /**
@@ -93,8 +100,8 @@ const GESTO_AO_LADO_DA_BOLHA = cn(
   "[@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100",
 );
 
-function AckIndicator({ status, paradaSemConexao, saiSozinha, t }: {
-  status: string; paradaSemConexao: boolean; saiSozinha: boolean; t: (texto: string) => string;
+function AckIndicator({ status, paradaSemConexao, saiSozinha, corDaLida, t }: {
+  status: string; paradaSemConexao: boolean; saiSozinha: boolean; corDaLida: string; t: (texto: string) => string;
 }) {
   // Só a linha que o envio PAROU por falta de conexão (`queued_reason`). Todo
   // envio nasce `queued` por um instante; mostrar o relógio nele diria
@@ -113,7 +120,7 @@ function AckIndicator({ status, paradaSemConexao, saiSozinha, t }: {
     );
   }
   if (status === "read") {
-    return <Checks size={12} weight="bold" className="text-info" aria-label={t("Lida")} />;
+    return <Checks size={12} weight="bold" className={corDaLida} aria-label={t("Lida")} />;
   }
   if (status === "delivered") {
     return <Checks size={12} weight="bold" className="text-current/70" aria-label={t("Entregue")} />;
@@ -145,6 +152,8 @@ export const MessageBubble = memo(function MessageBubble({
   enviandoAoProntuario = false,
   quemEnviouAoProntuario = null,
   erroAoProntuario = null,
+  inicioDoTurno = true,
+  fimDoTurno = true,
 }: Props) {
   const [ocupado, setOcupado] = useState(false);
   const [confirmandoReenvio, setConfirmandoReenvio] = useState(false);
@@ -203,6 +212,13 @@ export const MessageBubble = memo(function MessageBubble({
   // com "Falhou" e botão; pulo ganha selo próprio e NÃO oferece reenvio (a
   // regra é `reenvioDaMensagem`, a mesma da rota).
   const pulo = puloDaAgendaDaMensagem(message);
+  // O pulo da agenda não é falha: o vermelho diria o contrário.
+  const falhou = isFailed && !pulo;
+  // "Lida" com cor própria por aparência (I1). O balão do automático e o
+  // apagado não usam a cor da equipe: são claros, e o tom de info lê neles.
+  const corDaLida = message.sent_via === "ai" || apagada
+    ? "text-info"
+    : "text-[var(--bolha-enviada-lida,currentColor)]";
   const puloHref = pulo ? hrefDoCompromisso(pulo) : null;
   const fraseDoPulo =
     pulo?.motivo === "em_atendimento"
@@ -246,7 +262,9 @@ export const MessageBubble = memo(function MessageBubble({
       // Texto escrito pela organização e enviado SEM modelo
       // (`lib/agent-engine/agent/resposta-pronta.ts` carimba a metadata). O
       // atendente precisa saber que não foi a IA nem uma pessoa.
-      return typeof message.metadata?.resposta_pronta_id === "string" ? "Resposta pronta" : "IA";
+      // "Automático", não "IA" (I7/I11): a mesma palavra do selo da lista e do
+      // dono da conversa (OwnerBadge) — uma palavra por coisa.
+      return typeof message.metadata?.resposta_pronta_id === "string" ? "Resposta pronta" : "Automático";
     }
     if (message.sent_via === "external_device") return "Celular";
     if (message.sent_via === "user" || message.sent_via === "crm") {
@@ -262,11 +280,13 @@ export const MessageBubble = memo(function MessageBubble({
   })();
   // #3649 (portado): o nome do agente vem GRAVADO na linha pelo envio, que
   // descarta o que o chamador mandar nessa chave. Só `ai_actor_name`: outro
-  // apelido em metadata é entrada de quem chamou a API. Só no rótulo "IA": a
+  // apelido em metadata é entrada de quem chamou a API. Só no rótulo "Automático": a
   // "Resposta pronta" é texto da clínica, não do modelo. O nome sai como
   // cadastrado, sem t() (#1046).
   const gravado = message.metadata?.ai_actor_name;
-  const nomeDoAgente = senderLabel === "IA" && typeof gravado === "string" ? gravado.trim() : "";
+  const nomeDoAgente = senderLabel === "Automático" && typeof gravado === "string" ? gravado.trim() : "";
+
+  const tentarDeNovo = () => (reenvio === "confirmar" ? setConfirmandoReenvio(true) : void reenviar(false));
 
   async function reenviar(confirmado: boolean) {
     if (!onReenviar || ocupado) return;
@@ -284,7 +304,9 @@ export const MessageBubble = memo(function MessageBubble({
     <div
       data-search-match={searchMatch || undefined}
       className={cn(
-        "group flex w-full min-w-0 items-center gap-1 px-4 py-1",
+        // 12px entre turnos, 2px dentro da sequência (I8).
+        "group flex w-full min-w-0 items-center gap-1 px-4",
+        inicioDoTurno ? "pt-3" : "pt-0.5",
         isOutbound ? "justify-end" : "justify-start",
       )}
     >
@@ -329,20 +351,28 @@ export const MessageBubble = memo(function MessageBubble({
           <ArrowBendUpLeft size={14} />
         </button>
       )}
+      {/* Coluna da bolha: a linha "Não enviada" (I1) fica FORA da bolha, logo abaixo. */}
+      <div className={cn("flex min-w-0 max-w-[75%] flex-col gap-1", isOutbound ? "items-end" : "items-start")}>
       <div
         // Identidade, não aparência: specs contam bolhas por este id, não pela classe.
         data-testid="message-bubble"
         data-message-id={message.id}
         className={cn(
-          "max-w-[75%] min-w-0 text-sm",
+          "max-w-full min-w-0 text-sm",
           isBareSticker
             ? "px-0 py-0"
             : cn(
                 "rounded-2xl px-3 py-2",
-                // Três vozes, três tons — quem lê a conversa precisa saber de
-                // relance se foi o paciente, o automático ou alguém da equipe:
-                // paciente em branco sobre o fundo creme; automático em verde
-                // claro; equipe no verde da marca.
+                // A ponta só na última bolha do turno (I8).
+                fimDoTurno && (isOutbound ? "rounded-br-sm" : "rounded-bl-sm"),
+                // Três vozes — quem lê a conversa precisa saber de relance se
+                // foi o paciente, o automático ou alguém da equipe: paciente em
+                // branco sobre o fundo creme; equipe CHEIA na cor escolhida; o
+                // automático em ANEL — contorno inteiro na cor da marca, o mesmo
+                // desenho do automático no OwnerBadge (I7). Pela FORMA, e não só
+                // pela cor: com "Verde claro" ou "Azul" a cor da IA ficava quase
+                // igual à da equipe. Nunca tracejado: no produto o tracejado diz
+                // "ainda não" ou "vazio", e esta mensagem foi entregue.
                 //
                 // Paciente e equipe aceitam a cor que CADA PESSOA escolheu em
                 // "Aparência da conversa" (variáveis postas pelo ChatThread); o
@@ -350,14 +380,17 @@ export const MessageBubble = memo(function MessageBubble({
                 // nunca escolheu e para onde a bolha é usada fora do Inbox. O
                 // automático fica fixo: é a terceira voz, e trocá-lo junto
                 // apagaria a diferença entre robô e gente.
-                !isOutbound
-                  ? "rounded-bl-sm border border-border bg-[var(--bolha-recebida-fundo,var(--color-surface))] text-[var(--bolha-recebida-texto,var(--color-text))]"
+                //
+                // Falhou (I1): a bolha INTEIRA em tons de erro. A borda fina de
+                // antes media 1,03:1 — falha dita só por cor, e mal.
+                falhou
+                  ? "border border-error bg-error-bg text-error-fg"
+                  : !isOutbound
+                  ? "border border-border bg-[var(--bolha-recebida-fundo,var(--color-surface))] text-[var(--bolha-recebida-texto,var(--color-text))]"
                   : message.sent_via === "ai"
-                    ? "rounded-br-sm border border-accent/25 bg-accent-soft text-text"
-                    : "rounded-br-sm bg-[var(--bolha-enviada-fundo,var(--primary))] text-[var(--bolha-enviada-texto,var(--primary-foreground))]",
+                    ? "border-[1.5px] border-accent bg-surface text-text"
+                    : "bg-[var(--bolha-enviada-fundo,var(--primary))] text-[var(--bolha-enviada-texto,var(--primary-foreground))]",
               ),
-          // O pulo da agenda não é falha: a moldura de erro diria o contrário.
-          isFailed && !pulo && "border border-destructive",
           // Apagada sai das cores da DIREÇÃO e vai para o CINZA: a diferença
           // entre o que foi apagado e o que está vivo tem de ser vista de
           // relance, e o fundo é justamente o que diz de quem é a mensagem —
@@ -407,9 +440,9 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           </div>
         )}
-        {senderLabel && (
+        {senderLabel && inicioDoTurno && (
           <div className="mb-0.5 flex items-center gap-1 text-[11px] font-semibold opacity-80">
-            {senderLabel === "IA" ? (
+            {senderLabel === "Automático" ? (
               <Robot size={10} weight="duotone" aria-hidden />
             ) : null}
             {senderLabel && t(senderLabel)}
@@ -473,9 +506,11 @@ export const MessageBubble = memo(function MessageBubble({
             "mt-1 flex items-center justify-end gap-1 text-[10px]",
             // Só o balão da equipe é escuro; o do automático é claro e pede texto escuro.
             // A apagada é cinza: o carimbo claro da equipe sumiria nela.
-            !apagada && isOutbound && message.sent_via !== "ai"
-              ? "text-[var(--bolha-enviada-texto,var(--primary-foreground))]"
-              : "text-muted-foreground",
+            falhou
+              ? "text-error-fg"
+              : !apagada && isOutbound && message.sent_via !== "ai"
+                ? "text-[var(--bolha-enviada-texto,var(--primary-foreground))]"
+                : "text-muted-foreground",
           )}
         >
           {editada && (
@@ -490,22 +525,7 @@ export const MessageBubble = memo(function MessageBubble({
             <CitationButton citations={citations} messageId={message.id} />
           )}
           {isOutbound && !isFailed && <AckIndicator status={message.status} paradaSemConexao={paradaSemConexao}
-            saiSozinha={message.sent_via === "ai"} t={t} />}
-          {isFailed && !pulo && (
-            // Provider local: o painel do inbox não tem TooltipProvider ancestral e
-            // este Tooltip só monta em mensagem failed — sem o provider, abrir uma
-            // conversa com falha de envio derrubava o painel inteiro (error boundary).
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex items-center gap-0.5 font-semibold text-destructive">
-                    <WarningOctagon size={10} weight="fill" aria-hidden /> {t("Falhou")}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{motivoDaFalha}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+            saiSozinha={message.sent_via === "ai"} corDaLida={corDaLida} t={t} />}
           {pulo && (
             <TooltipProvider delayDuration={200}>
               <Tooltip>
@@ -522,9 +542,8 @@ export const MessageBubble = memo(function MessageBubble({
             </TooltipProvider>
           )}
         </div>
-        {(isFailed || reenvio !== "nenhum" || pulo) && (
+        {(pulo || (reenvio !== "nenhum" && !falhou)) && (
           <div className="mt-1.5 space-y-1.5 border-t border-current/20 pt-1.5">
-            {isFailed && !pulo && <p data-testid="motivo-da-falha" className="text-xs leading-snug">{motivoDaFalha}</p>}
             {pulo && (
               // Sem botão de reenvio: quem decidiu não enviar foi a escolha do
               // fluxo. A saída é abrir a agenda, mudar a escolha do fluxo ou
@@ -547,13 +566,33 @@ export const MessageBubble = memo(function MessageBubble({
               </div>
             )}
             {reenvio !== "nenhum" && (
-              <Button size="sm" variant="secondary" disabled={ocupado}
-                onClick={() => (reenvio === "confirmar" ? setConfirmandoReenvio(true) : void reenviar(false))}>
+              <Button size="sm" variant="secondary" disabled={ocupado} onClick={tentarDeNovo}>
                 {t("Tentar de novo")}
               </Button>
             )}
           </div>
         )}
+      </div>
+      {falhou && (
+        // FORA da bolha (I1): o motivo à vista — o dedo não abre Tooltip — e a
+        // saída na mesma linha. O texto cru do canal nunca chega aqui
+        // (`motivoDaFalhaDaMensagem`).
+        <p data-testid="falha-da-mensagem" className="flex flex-wrap items-center gap-x-1 px-1 text-xs leading-snug text-error-fg">
+          <WarningOctagon size={14} weight="fill" className="shrink-0 text-error" aria-hidden />
+          <span className="font-semibold">{t("Não enviada")}</span>
+          <span aria-hidden>{" · "}</span>
+          <span data-testid="motivo-da-falha">{motivoDaFalha}</span>
+          {reenvio !== "nenhum" && (
+            <>
+              <span aria-hidden>{" · "}</span>
+              <button type="button" disabled={ocupado} onClick={tentarDeNovo}
+                className="-my-1 py-1 font-semibold underline underline-offset-2 hover:no-underline disabled:opacity-60">
+                {t("Tentar de novo")}
+              </button>
+            </>
+          )}
+        </p>
+      )}
       </div>
       {onResponder && !isOutbound && (
         <button

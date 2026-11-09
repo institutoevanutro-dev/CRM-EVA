@@ -134,7 +134,8 @@ function medirBolhas(page: Page): Promise<BolhaMedida[]> {
       const anel = partes.find((p) => /\s0px 0px 0px 4px$/.test(p));
       return {
         texto: el.textContent ?? "",
-        marcada: el.parentElement?.getAttribute("data-search-match") === "true",
+        // A bolha ganhou um invólucro (aviso de falha fora dela, pacote 2a): a marca fica no ancestral da linha.
+        marcada: el.closest("[data-search-match]")?.getAttribute("data-search-match") === "true",
         anel: anel ? anel.replace(/\s+0px 0px 0px 4px$/, "") : null,
         fundo: cs.backgroundColor,
         boxShadow: cs.boxShadow,
@@ -173,7 +174,7 @@ test.afterAll(async () => {
 test.describe("busca dentro da conversa", () => {
   test.describe.configure({ timeout: 180_000 });
 
-  test("marca as bolhas certas, Esc devolve o foco à lupa, e a busca não vaza para outra conversa", async ({
+  test("marca as bolhas certas, Esc devolve o foco ao ⋯, e a busca não vaza para outra conversa", async ({
     page,
   }) => {
     const [conversaA, conversaB] = conversas as [string, string];
@@ -183,29 +184,17 @@ test.describe("busca dentro da conversa", () => {
     await page.goto(`/app/inbox?id=${conversaA}&filter=all`);
     await expect(bolhas(page)).toHaveCount(MENSAGENS_A.length, { timeout: 30_000 });
 
-    // ── abrir a busca pela lupa
+    // ── abrir a busca pela lupa — desde a I3 ela mora no menu ⋯ do cabeçalho
     await abrirAcoesDaConversa(page);
-    const lupa = page.getByRole("button", { name: "Buscar nesta conversa" });
+    const lupa = page.getByTestId("menu-da-conversa").getByRole("button", { name: "Buscar nesta conversa" });
     await expect(lupa).toHaveAttribute("aria-expanded", "false");
-    const barra = await lupa.evaluate((b) => {
-      const filhos = [...(b.parentElement?.children ?? [])].map((c) => c.getBoundingClientRect());
-      return {
-        viewport: window.innerWidth,
-        botoes: filhos.length,
-        fileiras: new Set(filhos.map((r) => Math.round(r.top + r.height / 2))).size,
-        // Primeira FILHA da barra: a barra deste fork centraliza botões de alturas
-        // diferentes, então comparar o topo do retângulo mede o alinhamento, não a posição.
-        lupaNaPrimeiraFileira: b.parentElement?.firstElementChild === b,
-      };
-    });
-    console.info(`busca-na-conversa · barra de ações: ${JSON.stringify(barra)}`);
-    expect(barra.lupaNaPrimeiraFileira, "a lupa é a primeira da barra").toBe(true);
-
     await lupa.click();
     const campo = page.getByRole("searchbox", { name: "Buscar nas mensagens carregadas" });
     await expect(campo).toBeVisible();
     await expect(campo, "o campo abre com o foco").toBeFocused();
-    await expect(lupa).toHaveAttribute("aria-expanded", "true");
+    // O menu fecha ao escolher; o ⋯ é quem recebe o foco quando a busca fecha.
+    await expect(page.getByTestId("menu-da-conversa")).toHaveCount(0);
+    const menu = page.getByRole("button", { name: "Ações da conversa" });
 
     // ── digitar o termo: contador e marca
     await campo.fill(TERMO);
@@ -240,7 +229,8 @@ test.describe("busca dentro da conversa", () => {
     await expect(campo).toHaveCount(0);
     await expect(contador).toHaveCount(0);
     await expect(page.locator('[data-search-match="true"]')).toHaveCount(0);
-    await expect(lupa, "o Esc devolve o foco à lupa").toBeFocused();
+    await expect(menu, "o Esc devolve o foco ao ⋯, onde a lupa mora").toBeFocused();
+    await abrirAcoesDaConversa(page);
     await expect(lupa).toHaveAttribute("aria-expanded", "false");
 
     // ── reabrir com o termo, trocar de conversa PELA LISTA (sem recarregar)
@@ -262,7 +252,7 @@ test.describe("busca dentro da conversa", () => {
       "a conversa B tem o termo e ganhou a marca da busca feita em A",
     ).toHaveCount(0);
     await abrirAcoesDaConversa(page);
-    const lupaB = page.getByRole("button", { name: "Buscar nesta conversa" });
+    const lupaB = page.getByTestId("menu-da-conversa").getByRole("button", { name: "Buscar nesta conversa" });
     await expect(lupaB).toHaveAttribute("aria-expanded", "false");
     await page.screenshot({ path: path.join(EVIDENCE, "2-outra-conversa-sem-busca.png") });
 

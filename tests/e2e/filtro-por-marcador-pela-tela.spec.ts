@@ -151,12 +151,12 @@ test.describe("filtro por marcador, pela tela", () => {
     await page.getByRole("tab", { name: /^Todas/ }).click();
 
     // 1. Caixa da CONVERSA, pelo editor da conversa.
-    await marcar(page, "Adicionar tag à conversa", `/conversations/${a.conversa}`, tagDaConversa);
+    await marcar(page, "Adicionar etiqueta à conversa", `/conversations/${a.conversa}`, tagDaConversa);
 
     // 2. Caixa do CONTATO, noutra conversa — sem recarregar.
     await irPelaLista(page, nomeContato, b.conversa);
-    await page.getByRole("button", { name: "Tags do contato", exact: true }).click();
-    await marcar(page, "Adicionar tag ao contato", "/contacts/", tagDoContato);
+    await page.getByRole("button", { name: "Etiquetas do contato", exact: true }).click();
+    await marcar(page, "Adicionar etiqueta ao contato", "/contacts/", tagDoContato);
 
     // 3. O seletor oferece a UNIÃO dos dois vocabulários.
     const seletor = page.getByRole("button", { name: "Filtrar por tag" });
@@ -229,12 +229,12 @@ test.describe("filtro por marcador, pela tela", () => {
       });
     }
 
-    // Marca pelo Inbox: a PESSOA em "Tags do contato", e a CONVERSA à parte.
+    // Marca pelo Inbox: a PESSOA em "Etiquetas do contato", e a CONVERSA à parte.
     await login(page, c.users.manager!.email, c.password);
     await abreConversa(page, alvo.conversa);
-    await page.getByRole("button", { name: "Tags do contato", exact: true }).click();
-    await marcar(page, "Adicionar tag ao contato", "/contacts/", tagDoContato);
-    await marcar(page, "Adicionar tag à conversa", `/conversations/${alvo.conversa}`, soNaConversa);
+    await page.getByRole("button", { name: "Etiquetas do contato", exact: true }).click();
+    await marcar(page, "Adicionar etiqueta ao contato", "/contacts/", tagDoContato);
+    await marcar(page, "Adicionar etiqueta à conversa", `/conversations/${alvo.conversa}`, soNaConversa);
 
     // O quadro, com os dois cards.
     await abreQuadro(page, funil, cardMarcado);

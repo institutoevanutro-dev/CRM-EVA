@@ -61,6 +61,9 @@ const { ORG, CONVERSA, CONTATO, CONVERSA_ROW } = vi.hoisted(() => {
   };
 });
 
+/** I12: como a busca única responde neste caso — o padrão é achar a conversa. */
+let busca: "acha" | "pendente" | "404" = "acha";
+
 const get = vi.fn(async (bruta?: string): Promise<unknown> => {
   // `?? ""` porque sob concorrência de CPU um hook fora do escopo deste teste
   // chegou a chamar o cliente já desmontado, sem URL. Coagir é melhor que
@@ -71,6 +74,8 @@ const get = vi.fn(async (bruta?: string): Promise<unknown> => {
     return new Promise(() => {});
   }
   if (url === `/api/v1/conversations/${CONVERSA}`) {
+    if (busca === "pendente") return new Promise(() => {});
+    if (busca === "404") throw new ApiError(404, "not_found", undefined, "r", "Não encontrada.");
     return { data: CONVERSA_ROW };
   }
   if (url === "/api/v1/ai/automatico-ativo") return { data: { ativo: false } };
@@ -124,6 +129,7 @@ vi.mock("@/components/inbox/ShortcutsHelpDialog", () => ({ ShortcutsHelpDialog: 
 vi.mock("@/components/inbox/JanelaFechadaAviso", () => ({ JanelaFechadaAviso: () => null }));
 
 import { InboxLayout } from "@/components/inbox/InboxLayout";
+import { ApiError } from "@/lib/api/types";
 
 function montar() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -135,7 +141,10 @@ function montar() {
 }
 
 describe("deep-link para conversa fora do filtro", () => {
-  beforeEach(() => get.mockClear());
+  beforeEach(() => {
+    get.mockClear();
+    busca = "acha";
+  });
 
   it("pede a conversa por id SEM esperar a lista responder", async () => {
     montar();
@@ -152,5 +161,23 @@ describe("deep-link para conversa fora do filtro", () => {
   it("entrega a conversa ao painel do contato com a lista ainda no ar", async () => {
     montar();
     await waitFor(() => expect(screen.getByTestId("painel")).toHaveTextContent(CONVERSA));
+  });
+
+  // I12: no celular a conversa do link é a tela inteira — enquanto ela vem, a
+  // forma da tela (e não a dica de teclado); se não vier, uma saída.
+  it("enquanto a conversa vem, um esqueleto com aria-busy, sem a dica 'J e K'", async () => {
+    busca = "pendente";
+    montar();
+    const esqueleto = await screen.findByTestId("conversa-carregando");
+    expect(esqueleto).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByText("Ou navegue com J e K")).toBeNull();
+  });
+
+  it("conversa não encontrada oferece 'Voltar para a lista'", async () => {
+    busca = "404";
+    montar();
+    expect(await screen.findByText("Conversa não encontrada ou fora do seu acesso.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Voltar para a lista" })).toBeInTheDocument();
+    expect(screen.queryByTestId("conversa-carregando")).toBeNull();
   });
 });

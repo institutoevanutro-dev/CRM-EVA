@@ -64,12 +64,12 @@ describe("MessageBubble — rótulo de origem", () => {
     expect(screen.getByText("Celular")).toBeInTheDocument();
   });
 
-  it("resposta pronta (ai + metadata.resposta_pronta_id) mostra 'Resposta pronta', não 'IA'", () => {
+  it("resposta pronta (ai + metadata.resposta_pronta_id) mostra 'Resposta pronta', não 'Automático'", () => {
     render(
       <MessageBubble message={msg({ sent_via: "ai", metadata: { resposta_pronta_id: "item-1" } })} />,
     );
     expect(screen.getByText("Resposta pronta")).toBeInTheDocument();
-    expect(screen.queryByText("IA")).not.toBeInTheDocument();
+    expect(screen.queryByText("Automático")).not.toBeInTheDocument();
   });
 
   it("a marca só vale para o que saiu pelo motor: digitado por humano continua 'Atendente'", () => {
@@ -124,20 +124,28 @@ describe("MessageBubble — rótulo de origem", () => {
     expect(screen.getByText("Você")).toBeInTheDocument();
   });
 
-  it("IA continua mostrando 'IA' (comportamento preservado)", () => {
+  // I7/I11: a IA se diz "Automático" (a palavra do OwnerBadge) e a bolha é ANEL:
+  // contorno inteiro na cor da marca, nunca tracejado.
+  it("IA mostra 'Automático', com o robô, numa bolha em anel", () => {
     render(<MessageBubble message={msg({ sent_via: "ai" })} />);
-    expect(screen.getByText("IA")).toBeInTheDocument();
+    expect(screen.getByText("Automático").querySelectorAll("svg")).toHaveLength(1);
+    expect(screen.queryByText("IA")).not.toBeInTheDocument();
+    const bolha = screen.getByTestId("message-bubble");
+    expect(bolha.className).toContain("border-[1.5px]");
+    expect(bolha.className).toContain("border-accent");
+    expect(bolha.className).toContain("bg-surface");
+    expect(bolha.className).not.toContain("border-dashed");
   });
 
   // Portado do projeto original (DeskcommCRM, PR #3665 de @webtecnica).
-  it("#3649: IA com o nome do agente gravado mostra 'IA · <nome>', com o robô", () => {
+  it("#3649: IA com o nome do agente gravado mostra 'Automático · <nome>', com o robô", () => {
     render(<MessageBubble message={msg({ sent_via: "ai", metadata: { ai_actor_name: " Bia da Locação " } })} />);
-    expect(screen.getByText("IA · Bia da Locação").querySelectorAll("svg")).toHaveLength(1);
+    expect(screen.getByText("Automático · Bia da Locação").querySelectorAll("svg")).toHaveLength(1);
   });
 
   it("#3649: só `ai_actor_name` vale — apelido em metadata é entrada do cliente e não vira nome", () => {
     render(<MessageBubble message={msg({ sent_via: "ai", metadata: { agent_name: "Forjado", ai_agent_name: "Forjado" } })} />);
-    expect(screen.getByText("IA")).toBeInTheDocument();
+    expect(screen.getByText("Automático")).toBeInTheDocument();
     expect(screen.queryByText(/Forjado/)).not.toBeInTheDocument();
   });
 
@@ -156,7 +164,7 @@ describe("MessageBubble — rótulo de origem", () => {
 
   it("system não inventa rótulo", () => {
     render(<MessageBubble message={msg({ sent_via: "system" })} />);
-    for (const rotulo of ["Celular", "Automação", "Você", "Atendente", "IA"]) {
+    for (const rotulo of ["Celular", "Automação", "Você", "Atendente", "Automático"]) {
       expect(screen.queryByText(rotulo)).not.toBeInTheDocument();
     }
   });

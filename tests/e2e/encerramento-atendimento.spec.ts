@@ -177,10 +177,11 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     // longo — se ele quebrar a fileira ou sumir, é aqui que aparece. Cabe nesta
     // spec, e não numa nova, porque o painel já está montado neste ponto: spec
     // nova custaria mais um login e mais um seed ao relógio do CI.
-    await expect(page.getByRole("button", { name: "Novo Lead", exact: true })).toBeVisible();
-    page.on("dialog", (dialog) => dialog.accept());
-    await abrirAcoesDaConversa(page);
+    await expect(page.getByRole("button", { name: "Novo negócio", exact: true })).toBeVisible();
+    // "Fechar" é fixo no cabeçalho desde a I3 — sem menu.
     await page.getByRole("button", { name: "Fechar", exact: true }).click();
+    // I6: a confirmação é o AlertDialog do sistema, não o confirm() do navegador.
+    await page.getByRole("alertdialog").getByRole("button", { name: "Fechar conversa", exact: true }).click();
     await expect
       .poll(
         async () =>
@@ -222,9 +223,16 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
       .single();
     expect(current.data?.current_demanda_id).not.toBe(demand);
     expect(current.data?.status).toBe("open");
-    await abrirAcoesDaConversa(page);
+    // I3: "Assumir" é o botão principal, à vista; "Liberar" mora no ⋯.
     await page.getByRole("button", { name: "Assumir", exact: true }).click();
+    // Espera o "Assumir" sair ANTES de abrir o ⋯: a conversa assumida deixa a
+    // aba Fila, a tela relê a conversa sozinha e o cabeçalho remonta — com o
+    // menu aberto antes disso, ele fecha junto (medido localmente: o menu abria,
+    // fechava sozinho, e "Liberar" nunca aparecia).
+    await expect(page.getByRole("button", { name: "Assumir", exact: true })).toHaveCount(0);
+    await abrirAcoesDaConversa(page);
     await expect(page.getByRole("button", { name: "Liberar", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(page.getByText("Sem responsável", { exact: true })).toHaveCount(0);
     await page
       .getByRole("textbox", { name: "Mensagem", exact: true })
@@ -237,8 +245,9 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     const box = await page.getByTestId("inbox-demandas").boundingBox();
     expect(box?.width).toBeGreaterThan(150);
     await page.screenshot({ path: `${evidence}/task4-reaberto-respondido.png`, fullPage: true });
-    await abrirAcoesDaConversa(page);
+    // "Fechar" é fixo no cabeçalho desde a I3 — sem menu.
     await page.getByRole("button", { name: "Fechar", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Fechar conversa", exact: true }).click();
     await expect
       .poll(
         async () =>
@@ -268,10 +277,11 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     await expect(page.getByTestId("inbox-memoria")).toContainText("Historial cerrado — sin tareas pendientes");
     await expect(page.getByTestId("inbox-memoria")).toContainText("Resuelta");
     await page.screenshot({ path: `${evidence}/task4-historico-es.png`, fullPage: true });
-    await abrirAcoesDaConversa(page);
+    // "Reabrir" é o botão principal da conversa encerrada (I3) — sem menu.
     await page.getByRole("button", { name: "Reabrir", exact: true }).click();
     await expect.poll(async () => (await db.from("conversations").select("status").eq("organization_id",org).eq("id",conversation).single()).data?.status).toBe("open");
     await page.getByRole("button", { name: "Cerrar", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Cerrar conversación", exact: true }).click();
     await expect.poll(async () => (await db.from("conversations").select("status").eq("organization_id",org).eq("id",conversation).single()).data?.status).toBe("closed");
     expect(hits.filter((url) => url.includes("sendText"))).toHaveLength(1);
 

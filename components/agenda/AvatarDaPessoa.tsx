@@ -45,7 +45,13 @@ export function AvatarDaPessoa({
       )}
       style={{
         backgroundColor: ativo ? corDaTrilha(pessoa.trilha) : "var(--color-surface-elevated)",
-        color: ativo ? "var(--color-accent-fg)" : "var(--color-text-muted)",
+        // Trilhas pares (âmbar, turquesa, índigo, framboesa) são claras: branco
+        // por cima não passa de 3,5:1. Ali a inicial é escura (A12).
+        color: !ativo
+          ? "var(--color-text-muted)"
+          : pessoa.trilha % 2 === 0
+            ? "var(--agenda-iniciais-escuras)"
+            : "var(--color-accent-fg)",
       }}
     >
       {iniciaisDe(pessoa.nome)}

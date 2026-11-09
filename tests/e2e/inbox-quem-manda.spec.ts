@@ -285,7 +285,7 @@ test.describe("Inbox — quem manda nesta conversa", () => {
       if (error) throw new Error(`conferir comando: ${error.message}`);
       return data;
     }
-    await abrirAcoesDaConversa(page);
+    // "Assumir" é o botão principal, à vista sem passar o mouse (I3).
     await page.getByRole("button", { name: /^Assumir$/i }).click();
 
     // -----------------------------------------------------------------
