@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.2.0] — 2026-11-08
+
+### Alterado
+
+- **Botões do cabeçalho da conversa mudam de lugar** No Inbox, os botões do cabeçalho da conversa mudam de lugar, sem nada para configurar. Ao lado do nome do contato fica um botão principal que muda com a situação: "Assumir" quando a conversa está sem dono, "Devolver ao automático" quando o automático está pausado e "Reabrir" quando a conversa está fechada (nenhum quando a conversa já é sua). Transferir, Lembrar e Fechar ficam sempre à vista, sem precisar passar o mouse; em tela estreita aparecem só como ícone, com o nome na dica. Buscar, PDF, Ocultar, Arquivar, Aparência, Ficha, Liberar e Pausar o automático passaram para o menu ⋯, que abre com um clique. Em conversa fechada, o campo de texto dá lugar a "Conversa fechada." com o botão "Reabrir e responder", que reabre a conversa já com quem clicou como responsável. Os atalhos do Inbox continuam os mesmos.
+
 ## [5.1.0] — 2026-11-08
 
 ### Alterado
@@ -8902,7 +8908,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.1.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.2.0...HEAD
+[5.2.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.1.0...v5.2.0
 [5.1.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.0.1...v5.1.0
 [5.0.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.0.0...v5.0.1
 [5.0.0]: https://github.com/melgarafael/DeskcommCRM/compare/v4.52.0...v5.0.0
