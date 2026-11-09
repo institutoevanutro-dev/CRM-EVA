@@ -969,9 +969,14 @@ export function InboxLayout({
         {/* O título da coluna e a ação de criar na MESMA linha: hierarquia
             (o que é esta coluna → o que se faz nela) sem gastar uma faixa
             inteira com um botão. */}
-        <div className="flex min-h-11 items-center justify-between gap-2 px-3 pt-2">
-          <h2 className="text-sm font-semibold">{t("Conversas")}</h2>
-          <div className="flex items-center gap-1">
+        {/* Na coluna estreita do computador (~272px) "Conversas", "Selecionar" e
+            "Iniciar conversa" não cabem juntos: o "Iniciar conversa" vazava da
+            coluna (e2e inbox-aparencia, 1280 e 1440). O título é o que menos
+            diz — a tela já é o Inbox —, então é ele que sai da vista (fica para
+            o leitor de tela); as duas ações mantêm o rótulo escrito. */}
+        <div className="@container flex min-h-11 items-center justify-between gap-2 px-3 pt-2">
+          <h2 className="sr-only text-sm font-semibold @[20rem]:not-sr-only">{t("Conversas")}</h2>
+          <div className="ml-auto flex items-center gap-1">
             {podeAgirEmLote && (
               <Button
                 type="button"
