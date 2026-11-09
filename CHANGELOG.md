@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.4.0] — 2026-11-09
+
+### Alterado
+
+- **Agenda mostra a situação, o conflito e quem não recebe lembrete** Na grade da Agenda, a cor continua dizendo quem atende, e a forma do bloco passa a dizer a situação: "Aguardando confirmação" tem borda tracejada e relógio, "Realizado" tem o ícone de confirmação e o nome em cinza, "Não compareceu" tem um X; o nome da situação aparece ao passar o mouse e é lido pelo leitor de tela. Compromisso que cai em cima de um bloqueio, de um "Ocupado" do Google ou de outro compromisso do mesmo profissional ganha contorno vermelho e um aviso, e uma faixa acima da grade diz quantos pacientes precisam ser remarcados, com link para o primeiro. Uma legenda no rodapé da grade explica os ícones.
+
+  Paciente que pediu para não receber mensagens ganha um sino cortado no bloco, e ao marcar ou remarcar para ele a tela avisa que o lembrete não será enviado e que é preciso combinar por telefone. Marcar continua permitido.
+
 ## [5.3.0] — 2026-11-09
 
 ### Adicionado
@@ -8918,7 +8926,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.3.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.4.0...HEAD
+[5.4.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.3.0...v5.4.0
 [5.3.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.2.0...v5.3.0
 [5.2.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.1.0...v5.2.0
 [5.1.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.0.1...v5.1.0
