@@ -437,3 +437,22 @@ export function trilhasDaEquipe(userIds: readonly string[]): Map<string, TrilhaD
   }
   return resultado;
 }
+
+/**
+ * A trilha EFETIVA de cada pessoa da equipe: `user_organizations.calendar_trilha`
+ * quando escolhida, senão a derivada por `trilhasDaEquipe` sobre a equipe inteira.
+ *
+ * É a única regra da cor por pessoa, e mora aqui para a tela de Agenda
+ * (`usePessoasDaAgenda`) e o MCP (`crm_list_appointments`, lido pelo Prontuário)
+ * nunca discordarem. Valor fora de 1..8 é tratado como não escolhido.
+ */
+export function trilhasEfetivasDaEquipe(
+  membros: ReadonlyArray<{ user_id: string; calendar_trilha?: number | null }>,
+): Map<string, TrilhaDaAgenda> {
+  const derivadas = trilhasDaEquipe(membros.map((m) => m.user_id));
+  for (const m of membros) {
+    const escolhida = TRILHAS_DA_AGENDA.find((t) => t === m.calendar_trilha);
+    if (escolhida !== undefined) derivadas.set(m.user_id, escolhida);
+  }
+  return derivadas;
+}

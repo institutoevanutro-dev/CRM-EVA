@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { showApiError } from "@/components/feedback/ApiErrorToast";
-import { trilhasDaEquipe } from "@/lib/agenda/tipos";
+import { trilhasEfetivasDaEquipe } from "@/lib/agenda/tipos";
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -16,16 +16,17 @@ interface MembroDto {
   user_id: string;
   role: string;
   full_name: string | null;
+  calendar_trilha?: number | null;
   revoked_at?: string | null;
 }
 
 /**
  * As pessoas da equipe, com a trilha de cor de cada uma.
  *
- * A cor NÃO vem da API: vem de `trilhaPadraoDoMembro(user_id)`, que deriva do id de
- * forma estável. É por isso que a pessoa não troca de cor entre um carregamento
- * e outro, nem quando alguém novo entra na equipe — e é o motivo de este hook
- * não precisar de nenhuma coluna de cor no banco.
+ * A cor é a trilha escolhida (`calendar_trilha`, quando há) ou a derivada de
+ * `trilhaPadraoDoMembro(user_id)`, estável pelo id: a pessoa não troca de cor entre
+ * um carregamento e outro, nem quando alguém novo entra na equipe. A regra é
+ * `trilhasEfetivasDaEquipe`, a mesma que o MCP entrega ao Prontuário.
  *
  * Quem foi revogado sai da lista: o filtro por pessoa é para quem atende hoje, e
  * uma agenda com ex-funcionário na barra confunde sem informar.
@@ -46,7 +47,9 @@ export function usePessoasDaAgenda() {
         // única forma de garantir que duas pessoas não caiam na mesma cor. O
         // hash sozinho dá estabilidade e não dá distinção — medido, duas caíram
         // na trilha 7 nesta organização.
-        const trilhas = trilhasDaEquipe(ativos.map((m) => m.user_id));
+        // A trilha escolhida (`calendar_trilha`) vence a derivada — mesma regra do
+        // MCP `crm_list_appointments`, que o Prontuário lê.
+        const trilhas = trilhasEfetivasDaEquipe(ativos);
         return ativos
           .map((m) => ({
             id: m.user_id,
