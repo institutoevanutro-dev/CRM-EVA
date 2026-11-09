@@ -105,7 +105,7 @@ export function useRegistrarDesfecho() {
           ? t("Horário confirmado.")
           : entrada.status === "completed"
             ? t("Marcado como realizado.")
-            : t("Marcado como falta — o horário volta a ficar livre."),
+            : t("Falta registrada. O horário volta a ficar livre."),
       );
       void qc.invalidateQueries({ queryKey: ["agenda"] });
     },

@@ -5,7 +5,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import { useT } from "@/hooks/i18n/useT";
 
-import { format, isBefore } from "date-fns";
+import { format, isBefore, isSameDay } from "date-fns";
 import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,10 @@ import { dataDeParede } from "@/lib/agenda/fuso";
  */
 const ABAS = [
   { id: "proximos", rotulo: "Próximos" },
+  // "Hoje" é RECORTE, não divisão: a mesma linha também está na sua aba de
+  // origem. Fica DEPOIS de "Próximos" porque a aba que abre não muda (A3) —
+  // trocar a aba padrão mudaria a rotina de quem já usa.
+  { id: "hoje", rotulo: "Hoje" },
   { id: "aguardando", rotulo: "Aguardando confirmação" },
   { id: "passados", rotulo: "Passados" },
   { id: "cancelados", rotulo: "Cancelados" },
@@ -47,7 +51,7 @@ export type AbaDoHistorico = (typeof ABAS)[number]["id"];
  *
  * O que é da TELA e fica: qual cor de selo cada situação recebe.
  */
-const VARIANTE_DA_SITUACAO: Record<
+export const VARIANTE_DA_SITUACAO: Record<
   SituacaoDoAgendamento,
   "default" | "neutral" | "success" | "warning" | "error"
 > = {
@@ -58,9 +62,15 @@ const VARIANTE_DA_SITUACAO: Record<
   no_show: "error",
 };
 
-function separar(agendamentos: Agendamento[], agora: Date): Record<AbaDoHistorico, Agendamento[]> {
+function separar(
+  agendamentos: Agendamento[],
+  agora: Date,
+  fuso: string,
+): Record<AbaDoHistorico, Agendamento[]> {
+  const hojeNaParede = dataDeParede(agora, fuso);
   const vazio: Record<AbaDoHistorico, Agendamento[]> = {
     proximos: [],
+    hoje: [],
     aguardando: [],
     passados: [],
     cancelados: [],
@@ -73,13 +83,40 @@ function separar(agendamentos: Agendamento[], agora: Date): Record<AbaDoHistoric
       vazio.cancelados.push(a);
       continue;
     }
+    // O dia é o da ORGANIZAÇÃO (o mesmo fuso da grade), não o do navegador.
+    if (isSameDay(dataDeParede(new Date(a.comeca), fuso), hojeNaParede)) vazio.hoje.push(a);
     if (a.situacao === "pending") {
       vazio.aguardando.push(a);
       continue;
     }
     (isBefore(new Date(a.comeca), agora) ? vazio.passados : vazio.proximos).push(a);
   }
+  const quando = (a: Agendamento) => new Date(a.comeca).getTime();
+  // "Hoje" na ordem do relógio; "Passados" do mais recente ao mais antigo — o
+  // que se procura ali é o atendimento de ontem, não o do mês retrasado.
+  vazio.hoje.sort((x, y) => quando(x) - quando(y));
+  vazio.passados.sort((x, y) => quando(y) - quando(x));
   return vazio;
+}
+
+type Acao = "confirmar" | "remarcar" | "cancelar" | "realizado" | "faltou";
+
+/**
+ * A próxima ação de cada linha. Nas abas fixas a ação é a da aba; em "Hoje" é
+ * a da LINHA: aguardando → Confirmar; antes do início → Remarcar ou Cancelar;
+ * depois do início → Marcar realizado ou Marcar falta (A3).
+ *
+ * Desfecho só enquanto não foi registrado: oferecer "Marcar realizado" num que
+ * já está realizado seria pedir de novo o que a pessoa já respondeu.
+ */
+export function acoesDaLinha(aba: AbaDoHistorico, a: Agendamento, agora: Date): Acao[] {
+  const desfechoAberto = a.situacao !== "completed" && a.situacao !== "no_show";
+  if (aba === "aguardando") return ["confirmar", "remarcar", "cancelar"];
+  if (aba === "proximos") return ["remarcar", "cancelar"];
+  if (aba === "passados") return desfechoAberto ? ["realizado", "faltou"] : [];
+  if (aba !== "hoje" || !desfechoAberto) return [];
+  if (a.situacao === "pending") return ["confirmar"];
+  return isBefore(agora, new Date(a.comeca)) ? ["remarcar", "cancelar"] : ["realizado", "faltou"];
 }
 
 /**
@@ -141,7 +178,7 @@ export function HistoricoDaAgenda({
   const localeDaData = useLocaleDeData();
   const t = useT();
   const [aba, setAba] = React.useState<AbaDoHistorico>("proximos");
-  const grupos = React.useMemo(() => separar(agendamentos, agora), [agendamentos, agora]);
+  const grupos = React.useMemo(() => separar(agendamentos, agora, fuso), [agendamentos, agora, fuso]);
   const daAba = grupos[aba];
 
   return (
@@ -195,6 +232,7 @@ export function HistoricoDaAgenda({
         {daAba.length === 0 ? (
           <p data-testid="historico-vazio" className="p-8 text-center text-sm text-text-muted">
             {aba === "proximos" && t("Nada marcado daqui para a frente.")}
+            {aba === "hoje" && t("Nada marcado para hoje.")}
             {aba === "aguardando" && t("Ninguém esperando confirmação.")}
             {aba === "passados" && t("Ainda não há atendimentos concluídos.")}
             {aba === "cancelados" && t("Nenhum cancelamento.")}
@@ -238,7 +276,9 @@ export function HistoricoDaAgenda({
                       {a.quemSeraAtendido ?? a.titulo}
                     </Link>
                     <div className="truncate text-[11px] text-text-muted">
-                      {a.tipo || t("Agendamento")}
+                      {/* O procedimento: sem `tipo`, o título do compromisso
+                          quando o nome do paciente ocupa a linha de cima. */}
+                      {a.tipo || (a.quemSeraAtendido ? a.titulo : t("Agendamento"))}
                       {pessoa ? ` · ${t("com")} ${pessoa.nome}` : ""}
                     </div>
                   </div>
@@ -248,98 +288,76 @@ export function HistoricoDaAgenda({
                   </Badge>
                   <div className="flex shrink-0 items-center gap-1">
                     {/*
-                      Ação por aba, e a lista de CADA aba tem razão própria.
-                      A primeira versão disto oferecia ação só em "próximos" e
-                      "aguardando", com o argumento de que remarcar o que já
-                      passou é ação sem sentido. O argumento vale para REMARCAR
-                      e eu o generalizei para todas — errado: o passado tem as
-                      duas ações mais importantes do histórico.
+                      Ação por aba — e, em "Hoje", por linha (`acoesDaLinha`).
+                      O passado tem as duas ações mais importantes do histórico.
+
+                      SEM `title` DE DESCULPA nos botões de desfecho: diziam
+                      "Disponível quando a agenda estiver conectada" — falso, o
+                      PATCH de status não toca o Google. Se um dia o botão puder
+                      ficar cinza de novo, o motivo tem de ser verdadeiro.
                     */}
-                    {aba === "aguardando" && (
-                      // PRIMEIRO na ordem, e é deliberado: confirmar é o que se
-                      // faz com a maioria dos pedidos, e o que a pessoa procura
-                      // ao abrir esta aba. Remarcar e cancelar são a exceção.
-                      <Button
-                        variant="default"
-                        size="sm"
-                        data-testid={`confirmar-${a.id}`}
-                        disabled={!onConfirmar}
-                        onClick={() => onConfirmar?.(a.id)}
-                      >
-                        {t("Confirmar")}
-                      </Button>
-                    )}
-                    {(aba === "proximos" || aba === "aguardando") && (
-                      <>
+                    {acoesDaLinha(aba, a, agora).map((acao) =>
+                      acao === "confirmar" ? (
+                        // PRIMEIRO na ordem: confirmar é o que se faz com a
+                        // maioria dos pedidos. Remarcar e cancelar são a exceção.
                         <Button
+                          key={acao}
+                          variant="default"
+                          size="sm"
+                          data-testid={`confirmar-${a.id}`}
+                          disabled={!onConfirmar}
+                          onClick={() => onConfirmar?.(a.id)}
+                        >
+                          {t("Confirmar")}
+                        </Button>
+                      ) : acao === "remarcar" ? (
+                        <Button
+                          key={acao}
                           variant="ghost"
                           size="sm"
                           data-testid={`remarcar-${a.id}`}
                           disabled={!onRemarcar}
-                          title={
-                            onRemarcar
-                              ? undefined
-                              : t("Disponível quando a agenda estiver conectada")
-                          }
+                          title={onRemarcar ? undefined : t("Disponível quando a agenda estiver conectada")}
                           onClick={() => onRemarcar?.(a.id)}
                         >
                           {t("Remarcar")}
                         </Button>
+                      ) : acao === "cancelar" ? (
                         <Button
+                          key={acao}
                           variant="ghost"
                           size="sm"
                           data-testid={`cancelar-${a.id}`}
                           disabled={!onCancelar}
-                          title={
-                            onCancelar
-                              ? undefined
-                              : t("Disponível quando a agenda estiver conectada")
-                          }
+                          title={onCancelar ? undefined : t("Disponível quando a agenda estiver conectada")}
                           onClick={() => onCancelar?.(a.id)}
                         >
                           {t("Cancelar")}
                         </Button>
-                      </>
+                      ) : acao === "realizado" ? (
+                        <Button
+                          key={acao}
+                          variant="ghost"
+                          size="sm"
+                          data-testid={`realizado-${a.id}`}
+                          disabled={!onRealizado}
+                          onClick={() => onRealizado?.(a.id)}
+                        >
+                          {t("Marcar realizado")}
+                        </Button>
+                      ) : (
+                        <Button
+                          key={acao}
+                          variant="ghost"
+                          size="sm"
+                          data-testid={`faltou-${a.id}`}
+                          disabled={!onFaltou}
+                          onClick={() => onFaltou?.(a.id)}
+                        >
+                          {t("Marcar falta")}
+                        </Button>
+                      ),
                     )}
-                    {aba === "passados" &&
-                      a.situacao !== "completed" &&
-                      a.situacao !== "no_show" && (
-                        // Decisão 17. Só enquanto o desfecho NÃO foi registrado:
-                        // oferecer "Realizado" num que já está realizado seria
-                        // pedir de novo o que a pessoa já respondeu.
-                        <>
-                          {/*
-                          SEM `title` DE DESCULPA. Os dois diziam "Disponível
-                          quando a agenda estiver conectada" — falso, e pior que
-                          o silêncio: o PATCH de status não toca o Google. Quem
-                          lia acreditava que faltava conectar a agenda, quando
-                          faltava a fiação. A mesma frase já tinha sido removida
-                          de remarcar/cancelar, no mesmo componente; ficou nestes
-                          dois porque o conserto foi por instância.
-
-                          Se um dia o botão puder ficar cinza de novo, o motivo
-                          tem de ser verdadeiro.
-                        */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            data-testid={`realizado-${a.id}`}
-                            disabled={!onRealizado}
-                            onClick={() => onRealizado?.(a.id)}
-                          >
-                            {t("Realizado")}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            data-testid={`faltou-${a.id}`}
-                            disabled={!onFaltou}
-                            onClick={() => onFaltou?.(a.id)}
-                          >
-                            {t("Faltou")}
-                          </Button>
-                        </>
-                      )}
                   </div>
                 </li>
               );

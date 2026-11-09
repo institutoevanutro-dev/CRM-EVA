@@ -125,7 +125,7 @@ test("excluir pela tela: some da grade e de todas as listas, o horário volta, e
   await expect(page.getByTestId(`agendamento-${id}`), "o card continuou na grade").toHaveCount(0, {
     timeout: 20_000,
   });
-  for (const aba of ["proximos", "aguardando", "passados", "cancelados"]) {
+  for (const aba of ["proximos", "hoje", "aguardando", "passados", "cancelados"]) {
     await historico.getByTestId(`aba-${aba}`).click();
     await expect(historico.getByTestId(`linha-${id}`), `ainda aparece na aba ${aba}`).toHaveCount(0);
   }

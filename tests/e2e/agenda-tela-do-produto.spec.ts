@@ -129,7 +129,7 @@ test.describe("a Agenda como o dono do produto a usa", () => {
     // contador zero respondem "não há nada" sem gastar um clique.
     const hist = page.getByTestId("historico-da-agenda");
     await expect(hist).toBeVisible({ timeout: ESPERA });
-    for (const aba of ["proximos", "aguardando", "passados", "cancelados"]) {
+    for (const aba of ["proximos", "hoje", "aguardando", "passados", "cancelados"]) {
       await expect(page.getByTestId(`aba-${aba}`)).toBeVisible();
     }
   });
