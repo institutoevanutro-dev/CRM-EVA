@@ -11572,8 +11572,8 @@ export const DICIONARIO: Traducoes = {
   "Conversa fechada.": { es: "Conversación cerrada." },
   "Reabrir e responder": { es: "Reabrir y responder" },
   "Reabrindo...": { es: "Reabriendo..." },
-  "Assistência do agente e nota interna": { es: "Asistencia del agente y nota interna" },
-  "Opções de resposta": { es: "Opciones de respuesta" },
+  // I4: a primeira linha do compositor (Responder | Nota interna).
+  "Modo do compositor": { es: "Modo del editor" },
   "Nome, telefone ou última msg.": { es: "Nombre, teléfono o último msj." },
   "Suas organizações": { es: "Tus organizaciones" },
   // Portes 23/10, grupo A (PR #3043): recolher o painel do contato no Inbox.

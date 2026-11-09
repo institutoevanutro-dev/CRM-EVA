@@ -114,8 +114,6 @@ describe("a assistência do agente só ocupa a tela com sugestão (#3234)", () =
     expect(screen.getByRole("button", { name: "Rejeitar" })).toBeTruthy();
     // Um só: o do bloco; o ícone saiu de cena.
     expect(botoesDeSugerir()).toHaveLength(1);
-    // E com sugestão na tela a faixa fica presa aberta (o alternador trava).
-    expect(screen.getByRole("button", { name: "Opções de resposta" })).toBeDisabled();
     // Com o teclado do celular aberto, o bloco sai da frente (#3191): a regra é
     // CSS do marcador da camada da conversa, só abaixo do `md`, e não quando o
     // teclado abriu para editar a própria sugestão (foco dentro do bloco).

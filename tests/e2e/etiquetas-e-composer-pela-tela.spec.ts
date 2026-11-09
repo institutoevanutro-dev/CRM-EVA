@@ -370,7 +370,7 @@ test.describe("Etiquetas e compositor (portes de 15/10)", () => {
     expect(await mensagensDaConversa(), "cancelar criou mensagem").toBe(mensagensAntes);
 
     // Em Nota interna, o arquivo vira anexo da nota e nada vai ao paciente.
-    await page.getByRole("button", { name: "Opções de resposta" }).click();
+    // I4: o modo está sempre à vista na primeira linha do compositor.
     await page.getByRole("button", { name: "Nota interna", exact: true }).click();
     await expect(page.getByRole("textbox", { name: "Mensagem", exact: true })).toHaveAttribute(
       "placeholder",

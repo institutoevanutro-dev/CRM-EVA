@@ -47,6 +47,13 @@ describe("D1.11 — modo escuro legível", () => {
     expect(CSS).toMatch(/^\s*--destructive-foreground: var\(--color-on-error\);/m);
   });
 
+  it("texto da pílula \"Nota interna\" ativa (on-warning sobre warning-fg) tem 4,5:1", () => {
+    for (const b of [":root", '[data-theme="light"]', '[data-theme="dark"]']) {
+      const t = bloco(b);
+      expect(contraste(hex(t, "--color-on-warning"), hex(t, "--color-warning-fg")), b).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("borda de campo tem 3:1 na superfície", () => {
     for (const b of [":root", '[data-theme="dark"]']) {
       const t = bloco(b);

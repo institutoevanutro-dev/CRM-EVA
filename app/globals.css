@@ -100,6 +100,8 @@
   --color-warning: #b07a2b;
   --color-warning-bg: rgba(176, 122, 43, 0.12);
   --color-warning-fg: #875a1a;
+  /* Texto sobre o warning-fg (pílula "Nota interna" ativa, I4): branco, 5,99:1. */
+  --color-on-warning: #ffffff;
   --color-error: #a94a3c;
   --color-on-error: #ffffff;
   --color-error-bg: rgba(169, 74, 60, 0.12);
@@ -332,6 +334,8 @@
   --color-warning: #b07a2b;
   --color-warning-bg: rgba(176, 122, 43, 0.12);
   --color-warning-fg: #875a1a;
+  /* Texto sobre o warning-fg (pílula "Nota interna" ativa, I4): branco, 5,99:1. */
+  --color-on-warning: #ffffff;
   --color-error: #a94a3c;
   --color-on-error: #ffffff;
   --color-error-bg: rgba(169, 74, 60, 0.12);
@@ -451,6 +455,8 @@
   --color-warning: #d09455;
   --color-warning-bg: rgba(208, 148, 85, 0.18);
   --color-warning-fg: #e0ad77;
+  /* No escuro o warning-fg é claro: tinta, não branco. */
+  --color-on-warning: #161510;
   --color-error: #c87263;
   /* Texto sobre o vermelho do escuro: tinta, não branco (5,26:1 contra 3,48:1). */
   --color-on-error: #161510;
@@ -590,6 +596,7 @@
   --color-warning: var(--color-warning);
   --color-warning-bg: var(--color-warning-bg);
   --color-warning-fg: var(--color-warning-fg);
+  --color-on-warning: var(--color-on-warning);
   --color-error: var(--color-error);
   --color-on-error: var(--color-on-error);
   --color-error-bg: var(--color-error-bg);

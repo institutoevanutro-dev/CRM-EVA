@@ -9,9 +9,9 @@
  *   2. Cabeçalho da conversa (I3 do pacote de design 2): o botão principal e
  *      Transferir/Lembrar/Fechar sempre à vista, sem depender do mouse; o resto
  *      num menu ⋯ ("Ações da conversa") aberto por clique.
- *   3. A faixa de cima do composer (Responder / Nota interna) recolhida, com o
- *      interruptor alcançável pelo TECLADO; "Sugerir resposta" fica à vista,
- *      como ícone na linha de ações (porte do original #3234).
+ *   3. Compositor (I4): a primeira linha [Responder | Nota interna] e, à
+ *      direita, "Respostas rápidas" e "Sugerir resposta", sempre à vista; o
+ *      ⋯ do compositor saiu e o campo ganhou a largura.
  *   4. "Janela 23h 59m" numa linha só, dentro da pílula, em 1280, 1440 e 390.
  *   5. Nenhum transbordo horizontal da página nessas três larguras.
  *
@@ -336,27 +336,45 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
     await page.context().close();
   });
 
-  test("composer: faixa recolhida, e o teclado chega em Nota interna", async ({ browser }) => {
-    const page = await novaPagina(browser, "light", 1440);
+  test("composer (I4): primeira linha à vista, campo largo, e o teclado chega em Nota interna", async ({ browser }) => {
+    const page = await novaPagina(browser, "light", 1280);
     await login(page);
     await abrirConversa(page);
-    const opcoes = page.getByRole("button", { name: "Opções de resposta" });
-    const nota = page.getByRole("button", { name: "Nota interna", exact: true });
-    // Sem rascunho, "Sugerir resposta" é o ícone da linha de ações: à vista e
-    // único, sem abrir faixa nenhuma (#3234).
+    const modo = page.getByRole("group", { name: "Modo do compositor" });
+    const nota = modo.getByRole("button", { name: "Nota interna", exact: true });
+    const campo = page.getByRole("textbox", { name: "Mensagem", exact: true });
+    // Sem gesto nenhum: o modo, "Respostas rápidas" e "Sugerir resposta" estão à
+    // vista, e o ⋯ do compositor não existe mais.
+    await expect(nota).toBeVisible();
     await expect(page.getByRole("button", { name: "Sugerir resposta" })).toHaveCount(1);
     await expect(page.getByRole("button", { name: "Sugerir resposta" })).toBeVisible();
-    await expect(nota).toBeHidden();
-    await foto(page, "composer-recolhido");
+    await expect(page.getByRole("button", { name: "Opções de resposta" })).toHaveCount(0);
+    // A linha tem 28 px, fica DENTRO do compositor (não cobre a conversa), e o
+    // campo ganhou a largura do ⋯ e do "Sugerir resposta" que saíram da fileira.
+    // Antes da I4: ~164 px em 1280 sem a I2; a meta é 252 + 48 da I2.
+    const medida = await page.getByTestId("composer").evaluate((caixa) => {
+      const linha = caixa.querySelector('[role="group"][aria-label="Modo do compositor"]')!.parentElement!;
+      const r = linha.getBoundingClientRect();
+      const c = caixa.getBoundingClientRect();
+      const ta = caixa.querySelector("textarea")!.getBoundingClientRect();
+      return { alturaDaLinha: r.height, dentro: r.top >= c.top - 0.5, campo: ta.width };
+    });
+    expect(medida.alturaDaLinha, "a primeira linha passou de 28 px").toBeLessThanOrEqual(28.5);
+    expect(medida.dentro, "a primeira linha saiu do compositor e cobre a conversa").toBe(true);
+    expect(medida.campo, "o campo de texto não ganhou largura").toBeGreaterThanOrEqual(240);
+    await foto(page, "composer-primeira-linha");
 
-    await opcoes.focus();
-    await page.keyboard.press("Enter");
-    await expect(nota).toBeVisible();
-    await nota.focus();
-    await page.keyboard.press("Enter");
-    await expect(page.getByRole("textbox", { name: "Mensagem", exact: true })).toHaveAttribute("placeholder", /nota/i);
+    // Só o teclado: no campo, Shift+Tab volta pelos botões da linha até "Nota interna"; Espaço troca.
+    await campo.focus();
+    for (let i = 0; i < 6 && !(await nota.evaluate((el) => el === document.activeElement)); i++) {
+      await page.keyboard.press("Shift+Tab");
+    }
+    await expect(nota).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect(nota).toHaveAttribute("aria-pressed", "true");
+    await expect(campo).toHaveAttribute("placeholder", /nota/i);
     await page.mouse.move(5, 500);
-    await expect(nota, "em Nota interna a faixa não pode sumir").toBeVisible();
+    await expect(nota, "em Nota interna o modo não pode sumir").toBeVisible();
     await foto(page, "composer-nota-interna");
     await page.context().close();
   });

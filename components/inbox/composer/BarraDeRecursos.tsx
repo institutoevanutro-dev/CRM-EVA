@@ -2,6 +2,8 @@
 import { useState } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { FileText } from "@/lib/ui/icons";
 import type { MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
 import { filtrarRespostas } from "@/components/inbox/composer/TemplateMenu";
 
@@ -20,7 +22,8 @@ import { filtrarRespostas } from "@/components/inbox/composer/TemplateMenu";
  *
  * Nasce FECHADA: com dezenas de respostas cadastradas, a barra aberta ocupava o
  * Inbox inteiro (relato da clínica, 22/10). Aberta, tem busca e altura limitada
- * com rolagem; escolher uma resposta fecha de novo.
+ * com rolagem; escolher uma resposta fecha de novo. Desde a I4 abre por cima da
+ * conversa, a partir do gatilho na primeira linha do compositor.
  *
  * Só entram as respostas marcadas "Mostrar na barra do Inbox" (migration 0398,
  * porte do original #3311): a AUSÊNCIA da marcação conta como ligada, e o `/`
@@ -43,57 +46,69 @@ export function BarraDeRecursos({ respostas: todas, onEscolher, disabled = false
   const respostas = respostasDaBarra(todas);
   if (respostas.length === 0) return null;
   const visiveis = filtrarRespostas(respostas, busca);
+  // I4: o gatilho mora na primeira linha do compositor, à direita, e a lista abre
+  // POR CIMA da conversa (Popover), em vez de empurrar o campo para baixo. A
+  // contagem fica no nome acessível e na dica; no texto visível ela disputava
+  // largura com "Sugerir resposta" numa linha de 28 px.
+  const nome = `${t("Respostas rápidas")} (${respostas.length})`;
   return (
-    <div className="mb-1.5">
-      <button
-        type="button"
-        aria-expanded={aberta}
-        aria-controls="barra-de-recursos"
-        onClick={() => setAberta((v) => !v)}
-        className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
-      >
-        {t("Respostas rápidas")} ({respostas.length}) {aberta ? "▴" : "▾"}
-      </button>
-      {aberta && (
-        <div className="mt-1.5 flex flex-col gap-1.5">
-          <input
-            type="search"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder={t("Buscar resposta")}
-            aria-label={t("Buscar resposta")}
-            className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm"
-          />
-          <div
-            id="barra-de-recursos"
-            data-testid="barra-de-recursos"
-            role="toolbar"
-            aria-label={t("Respostas rápidas")}
-            className="flex max-h-24 flex-wrap gap-1 overflow-y-auto"
-          >
-            {visiveis.map((resposta) => (
-              <button
-                key={resposta.id}
-                type="button"
-                disabled={disabled}
-                data-recurso-id={resposta.id}
-                onClick={() => {
-                  onEscolher(resposta);
-                  setAberta(false);
-                  setBusca("");
-                }}
-                title={t("Prepara no compositor: você revisa e envia")}
-                className="rounded-full border border-border bg-muted/60 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-50"
-              >
-                {resposta.title}
-              </button>
-            ))}
-            {visiveis.length === 0 && (
-              <p className="text-xs text-muted-foreground">{t("Nenhuma resposta com esse nome.")}</p>
-            )}
-          </div>
+    <Popover
+      open={aberta}
+      onOpenChange={(v) => {
+        setAberta(v);
+        if (!v) setBusca("");
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={nome}
+          title={nome}
+          className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-md px-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:h-7 lg:min-h-0 lg:min-w-0"
+        >
+          <FileText size={14} aria-hidden className="shrink-0 @[26rem]:hidden" />
+          <span className="hidden truncate @[26rem]:inline">{t("Respostas rápidas")}</span>
+          <span aria-hidden className="shrink-0">{aberta ? "▴" : "▾"}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" className="flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-1.5 p-2">
+        <input
+          type="search"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder={t("Buscar resposta")}
+          aria-label={t("Buscar resposta")}
+          className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm"
+        />
+        <div
+          id="barra-de-recursos"
+          data-testid="barra-de-recursos"
+          role="toolbar"
+          aria-label={t("Respostas rápidas")}
+          className="flex max-h-48 flex-wrap gap-1 overflow-y-auto"
+        >
+          {visiveis.map((resposta) => (
+            <button
+              key={resposta.id}
+              type="button"
+              disabled={disabled}
+              data-recurso-id={resposta.id}
+              onClick={() => {
+                onEscolher(resposta);
+                setAberta(false);
+                setBusca("");
+              }}
+              title={t("Prepara no compositor: você revisa e envia")}
+              className="rounded-full border border-border bg-muted/60 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-50"
+            >
+              {resposta.title}
+            </button>
+          ))}
+          {visiveis.length === 0 && (
+            <p className="text-xs text-muted-foreground">{t("Nenhuma resposta com esse nome.")}</p>
+          )}
         </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }

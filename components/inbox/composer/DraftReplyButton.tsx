@@ -18,11 +18,13 @@ export function DraftReplyButton({ conversationId, onDraft, disabled }: Props) {
   return (
     <Button
       type="button"
-      size="icon"
+      size="sm"
       variant="ghost"
-      // Sem altura fixa: o `size="icon"` dá 44px no toque e 36px no computador,
-      // como o anexar e o emoji ao lado (porte do #3191).
-      className="shrink-0"
+      // I4: mora na primeira linha do compositor, com texto. 44 px no toque e
+      // abaixo do `lg` (o `size="sm"`, porte do #3191); 28 px no computador, a
+      // altura da linha. Em compositor estreito sobra o ícone, e o nome fica no
+      // `aria-label`.
+      className="min-w-11 gap-1 px-1.5 text-muted-foreground hover:text-foreground lg:h-7 lg:min-w-0 [&_svg]:size-3.5"
       aria-label={t("Sugerir resposta")}
       aria-busy={mutation.isPending}
       disabled={disabled || mutation.isPending}
@@ -32,7 +34,8 @@ export function DraftReplyButton({ conversationId, onDraft, disabled }: Props) {
         });
       }}
     >
-      <Sparkle size={18} weight={mutation.isPending ? "duotone" : "regular"} aria-hidden />
+      <Sparkle size={14} weight={mutation.isPending ? "duotone" : "regular"} aria-hidden />
+      <span className="hidden truncate @[26rem]:inline">{t("Sugerir resposta")}</span>
     </Button>
   );
 }

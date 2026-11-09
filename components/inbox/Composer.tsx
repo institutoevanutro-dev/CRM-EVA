@@ -12,7 +12,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { toast } from "sonner";
-import { DotsThree, PaperPlaneTilt } from "@/lib/ui/icons";
+import { PaperPlaneTilt } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
 import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentPreviewDialog";
@@ -51,7 +51,6 @@ import {
 import { ApiError } from "@/lib/api/types";
 import { embutirMencoes, podarMencoes, type MencaoEscolhida } from "@/lib/notifications/mentions";
 import { cn } from "@/lib/utils";
-import { classeDaFaixa, useRevelacao } from "@/hooks/inbox/useRevelacao";
 import { resolveSharedContact } from "@/lib/messaging/contact-card";
 
 export interface ComposerHandle {
@@ -175,16 +174,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [mencoes, setMencoes] = useState<MencaoEscolhida[]>([]);
   const [mencaoDispensada, setMencaoDispensada] = useState(false);
   const [mencaoIndice, setMencaoIndice] = useState(0);
-  /**
-   * A FAIXA DE CIMA DO CAMPO (assistência do agente + Responder/Nota interna)
-   * fica recolhida até ser pedida — pelo mouse, pelo foco ou pelo botão de
-   * faísca ao lado do emoji. Ela comia ~70px da conversa o tempo todo, e no
-   * celular empurrava o campo para baixo da dobra.
-   *
-   * Recolher NUNCA esconde estado: em "Nota interna" ou com sugestão para
-   * revisar ela fica aberta e no fluxo (`forcado`), porque escrever achando que
-   * é nota quando é resposta ao cliente é o erro que não tem volta.
-   */
   // "Há sugestão" é a MESMA consulta que o `ReplyReviewPanel` lê (porte do
   // original #3234): uma chave, um cache, sem um segundo estado para divergir.
   // Desligada em nota e com o compositor bloqueado (o GET exige `agent`; quem
@@ -193,11 +182,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     conversationId,
     mode === "reply" && !blockedReason,
   );
-  const temSugestao = !!sugestao;
-  const ferramentas = useRevelacao({
-    forcado: mode === "note" || temSugestao,
-    chave: conversationId,
-  });
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   // A citação ATUAL, para o `onSuccess` de um envio que já saiu comparar com a
   // que foi junto com ele (ver `handleSubmit`).
@@ -564,14 +548,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   return (
     <>
       <div
-        {...ferramentas.zonaProps}
         data-testid="composer"
         onDragEnter={onDragEnter}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         className={cn(
-          "relative border-t border-border bg-bg px-3 py-2.5",
+          // `@container`: os rótulos da primeira linha somem quando o compositor
+          // fica estreito (celular), e o nome segue no `aria-label`.
+          "@container relative border-t border-border bg-bg px-3 py-2.5",
           mode === "note" && "border-warning/40 bg-warning-bg",
         )}
       >
@@ -598,58 +583,89 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           indice={opcaoAtual ? opcoes.indexOf(opcaoAtual) : 0}
           onPick={escolherMencao}
         />
-        <div
-          {...ferramentas.painelProps}
-          role="group"
-          aria-label={t("Assistência do agente e nota interna")}
-          className={cn(
-            ferramentas.noFluxo
-              ? "mb-1.5"
-              : "absolute inset-x-0 bottom-full z-20 border-t border-border bg-bg px-3 pt-2 pb-1.5 shadow-md",
-            classeDaFaixa(ferramentas.visivel),
-          )}
-        >
         {/* O bloco só existe COM sugestão (#3234): sem ela, quem oferece o gesto
-            é o ícone "Sugerir resposta" da linha de ações, lá embaixo. Com o
-            teclado virtual aberto (#3191), ele sai da frente: num iPhone sobram
-            ~250px de tela, e o fio da conversa vale mais. O marcador é da camada
-            da conversa (`useAlturaVisivel`); o `max-md:` deixa o computador igual.
+            é o "Sugerir resposta" da primeira linha. Com o teclado virtual
+            aberto (#3191), ele sai da frente: num iPhone sobram ~250px de tela,
+            e o fio da conversa vale mais. O marcador é da camada da conversa
+            (`useAlturaVisivel`); o `max-md:` deixa o computador igual.
             `not-focus-within`: se o teclado abriu para editar a PRÓPRIA sugestão
             (ou escrever o motivo da rejeição), o bloco fica onde a pessoa digita. */}
         {mode === "reply" && sugestao && (
           <div
             data-testid="sugestao-sai-com-teclado"
-            className="max-md:group-data-[teclado-aberto]/conversa:not-focus-within:hidden"
+            className="mb-1.5 max-md:group-data-[teclado-aberto]/conversa:not-focus-within:hidden"
           >
             <ReplyReviewPanel conversationId={conversationId} disabled={isDisabled} />
           </div>
         )}
-        <div className="flex gap-1">
-          <button
-            type="button"
-            onClick={() => setMode("reply")}
-            className={cn(
-              "min-h-11 rounded-full px-3 py-1 text-xs font-medium transition-colors lg:min-h-0 lg:px-2.5",
-              mode === "reply"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-muted",
-            )}
+        {/*
+          A PRIMEIRA LINHA (I4): o modo à esquerda e as ajudas à direita, no
+          fluxo e sempre à vista. Antes ela era uma faixa recolhida que abria
+          POR CIMA da última mensagem do paciente — justamente a que está sendo
+          respondida —, e o "⋯" que a abria comia largura do campo.
+
+          Visual das Tabs, semântica de botões alternados (`aria-pressed`): as
+          Tabs do Radix pedem um painel por aba, e aqui o campo é um só. Pelo
+          teclado: Tab chega em "Nota interna", Espaço troca o modo.
+        */}
+        <div className="mb-1.5 flex min-h-11 items-center gap-1.5 lg:h-7 lg:min-h-0">
+          <div
+            role="group"
+            aria-label={t("Modo do compositor")}
+            className="inline-flex shrink-0 items-center rounded-lg bg-muted p-0.5 text-muted-foreground lg:h-7"
           >
-            {t("Responder")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("note")}
-            className={cn(
-              "min-h-11 rounded-full px-3 py-1 text-xs font-medium transition-colors lg:min-h-0 lg:px-2.5",
-              mode === "note"
-                ? "bg-warning text-warning-fg"
-                : "text-muted-foreground hover:bg-muted",
-            )}
-          >
-            {t("Nota interna")}
-          </button>
-        </div>
+            <button
+              type="button"
+              aria-pressed={mode === "reply"}
+              onClick={() => setMode("reply")}
+              className={cn(
+                "min-h-11 rounded-md px-2 text-xs font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden lg:h-6 lg:min-h-0",
+                mode === "reply" ? "bg-background text-foreground shadow-sm" : "hover:text-foreground",
+              )}
+            >
+              {t("Responder")}
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === "note"}
+              onClick={() => setMode("note")}
+              className={cn(
+                "min-h-11 rounded-md px-2 text-xs font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden lg:h-6 lg:min-h-0",
+                // Ativa: warning-fg cheio (5,99:1 com o branco; no escuro o
+                // token vira tinta). A pílula antiga, warning sobre warning-fg,
+                // media 1,62:1.
+                mode === "note" ? "bg-warning-fg text-on-warning shadow-sm" : "hover:text-foreground",
+              )}
+            >
+              {t("Nota interna")}
+            </button>
+          </div>
+          {mode === "reply" && (
+            // Larguras medidas (Inter 12 px medium): a linha inteira pede ~431 px, e
+            // em 1280 o compositor tem 432. Abaixo de 26rem sobram os ícones;
+            // entre 26rem e a largura cheia o rótulo encolhe com reticências em
+            // vez de vazar (as colunas do Inbox mudam de largura).
+            <div className="ml-auto flex min-w-0 items-center gap-0.5">
+              {/* A BARRA DE RESPOSTAS RÁPIDAS (#2833): o clique na resposta NÃO
+                  envia, entrega ao MESMO `applyTemplate` do `/`. */}
+              <BarraDeRecursos
+                respostas={templates.data ?? []}
+                disabled={respostaBarrada}
+                onEscolher={applyTemplate}
+              />
+              {/* "Sugerir resposta" em um clique (porte do original #3234): gera
+                  pelo MESMO POST do bloco, e o rascunho criado chega pela
+                  consulta compartilhada, que monta o bloco acima. Nunca os dois
+                  juntos: com o bloco na tela, o botão de gerar outra é o dele. */}
+              {!sugestao && (
+                <DraftReplyButton
+                  conversationId={conversationId}
+                  disabled={isDisabled}
+                  onDraft={() => void invalidar()}
+                />
+              )}
+            </div>
+          )}
         </div>
         {/*
           A FAIXA DA CITAÇÃO — o que o atendente escolheu responder.
@@ -700,15 +716,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             {t("Contato sem nome no CRM: {{nome}}/{{primeiro_nome}} ficaram literais no texto. Edite antes de enviar.")}
           </p>
         )}
-        {/* A BARRA DE RESPOSTAS RÁPIDAS (#2833): um botão por título. O clique
-            NÃO envia: entrega a resposta ao MESMO `applyTemplate` do `/`. */}
-        {mode === "reply" && (
-          <BarraDeRecursos
-            respostas={templates.data ?? []}
-            disabled={respostaBarrada}
-            onEscolher={applyTemplate}
-          />
-        )}
         <div className="flex items-end gap-2">
           {/* O "+" existe nos DOIS modos: em "Nota interna" a nota aceita anexo
               (foto/vídeo e documento). Contato some — cartão de contato é uma
@@ -720,57 +727,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             onPickContact={mode === "reply" ? () => setContactPickerOpen(true) : undefined}
             soFoto={mode === "reply" ? soFoto : false}
           />
-          <EmojiButton
-            disabled={isDisabled}
-            onPick={(emoji) => {
-              const ta = taRef.current;
-              if (!ta) {
-                setText((t) => t + emoji);
-                return;
-              }
-              const start = ta.selectionStart ?? text.length;
-              const end = ta.selectionEnd ?? text.length;
-              const next = text.slice(0, start) + emoji + text.slice(end);
-              setText(next);
-              requestAnimationFrame(() => {
-                ta.focus();
-                ta.selectionStart = ta.selectionEnd = start + emoji.length;
-                autoresize();
-              });
-            }}
-          />
-          {/* "Sugerir resposta" em um clique, sem faixa (porte do original
-              #3234): gera pelo MESMO POST do bloco, e o rascunho criado chega
-              pela consulta compartilhada, que monta o bloco com o texto e as
-              ações. Nunca os dois juntos: com o bloco na tela, o botão de
-              gerar outra é o dele. O texto não cai no campo: quem revisa é o
-              bloco. */}
-          {mode === "reply" && !sugestao && (
-            <DraftReplyButton
-              conversationId={conversationId}
-              disabled={isDisabled}
-              onDraft={() => void invalidar()}
-            />
-          )}
-          {/* A porta explícita da faixa de cima (toque e teclado). Três
-              pontos, e não faísca: a faísca é do "Sugerir resposta" ao lado,
-              e sem sugestão o que mora na faixa é o Responder/Nota interna.
-              Desabilitada enquanto a faixa está presa aberta por estado
-              (nota, sugestão): ali fechar não é opção, e o botão continua no
-              lugar para o campo não mudar de largura. */}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn("shrink-0", ferramentas.visivel && "bg-muted")}
-            aria-label={t("Opções de resposta")}
-            title={t("Assistência do agente e nota interna")}
-            disabled={mode === "note" || temSugestao}
-            {...ferramentas.alternadorProps}
-            onClick={ferramentas.alternar}
-          >
-            <DotsThree size={16} weight="bold" aria-hidden />
-          </Button>
           <textarea
             ref={taRef}
             value={text}
@@ -811,7 +767,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                 : t("Enter envia · Shift+Enter quebra linha")
             }
             // `placeholder:truncate` + `text-ellipsis`: o placeholder fica numa
-            // linha com reticências. Com o botão de faísca na fileira, em 390px
+            // linha com reticências. Com os alvos de 44px na fileira, em 390px
             // o campo tem ~140px e "Escreva uma mensagem…" quebrava em duas
             // linhas cortadas dentro do campo de uma linha (medido pelo
             // `scrollHeight` no e2e). O texto digitado continua quebrando.
@@ -826,6 +782,25 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             )}
             disabled={mode === "note" ? isDisabled : respostaBarrada}
             aria-label={t("Mensagem")}
+          />
+          <EmojiButton
+            disabled={isDisabled}
+            onPick={(emoji) => {
+              const ta = taRef.current;
+              if (!ta) {
+                setText((t) => t + emoji);
+                return;
+              }
+              const start = ta.selectionStart ?? text.length;
+              const end = ta.selectionEnd ?? text.length;
+              const next = text.slice(0, start) + emoji + text.slice(end);
+              setText(next);
+              requestAnimationFrame(() => {
+                ta.focus();
+                ta.selectionStart = ta.selectionEnd = start + emoji.length;
+                autoresize();
+              });
+            }}
           />
           {text.trim() || mode === "note" ? (
             <Button
