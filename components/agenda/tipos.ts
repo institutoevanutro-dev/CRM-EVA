@@ -65,6 +65,11 @@ export type Agendamento = {
    * modal pede o nome antes. A grade avisa, e o painel do compromisso completa.
    */
   faltaNomeCompleto?: boolean;
+  /**
+   * Quem vai ser atendido pediu para não receber mensagens (`is_blocked`): o
+   * lembrete não sai. A grade mostra o sino cortado e o Remarcar avisa (A10).
+   */
+  naoRecebeMensagens?: boolean;
   /** Quem atende — é dele a cor do bloco. */
   responsavelId: string;
   /** ISO-8601. */

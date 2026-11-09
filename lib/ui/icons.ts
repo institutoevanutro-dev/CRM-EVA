@@ -78,6 +78,7 @@ export {
   Tray,
   // feedback
   CheckCircle,
+  XCircle,
   Warning,
   WarningOctagon,
   Info,

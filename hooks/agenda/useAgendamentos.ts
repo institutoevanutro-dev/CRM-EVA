@@ -27,6 +27,7 @@ interface AgendamentoListado {
   contatoId: string | null;
   contatoNome: string | null;
   contatoSemNomeCompleto?: boolean;
+  contatoNaoRecebeMensagens?: boolean;
 }
 
 export interface RecorteDaGrade {
@@ -104,6 +105,8 @@ export function useAgendamentos(recorte: RecorteDaGrade | null) {
           quemSeraAtendido: a.contatoNome ?? undefined,
           // Mesma tolerância: servidor mais velho não manda, e a grade não avisa.
           faltaNomeCompleto: a.contatoSemNomeCompleto === true,
+          // A10: sino cortado na grade e aviso no Remarcar. Mesma tolerância.
+          naoRecebeMensagens: a.contatoNaoRecebeMensagens === true,
         }));
       } catch (err) {
         showApiError(err);

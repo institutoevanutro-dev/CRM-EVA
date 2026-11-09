@@ -337,7 +337,8 @@ describe("marcado sem passar pelo modal (IA, API, Google): a grade avisa", () =>
     grade([{ ...base, faltaNomeCompleto: true }]);
     const bloco = screen.getByTestId("agendamento-ag-ia");
     expect(bloco).toHaveAttribute("data-falta-nome", "true");
-    expect(bloco).toHaveAttribute("title", "Falta o nome completo");
+    // A2: o title junta a situação e os avisos ("Confirmado · Falta o nome completo").
+    expect(bloco.getAttribute("title")).toContain("Falta o nome completo");
     expect(bloco.getAttribute("aria-label")).toContain("falta o nome completo");
     expect(screen.getByTestId("falta-nome-ag-ia")).toBeInTheDocument();
   });

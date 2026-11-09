@@ -133,7 +133,7 @@ export default async function AgendaPage() {
     supabase
       .from("calendar_appointments")
       .select(
-        "id, revision, title, starts_at, ends_at, status, owner_user_id, contact_id, event_type_id, location_kind, contacts(name, display_name)",
+        "id, revision, title, starts_at, ends_at, status, owner_user_id, contact_id, event_type_id, location_kind, contacts(name, display_name, is_blocked)",
       )
       .eq("organization_id", activeOrg.orgId)
       // A MESMA régua de `listaAgendamentos`: o excluído (migration 0364) não
@@ -321,6 +321,11 @@ export default async function AgendaPage() {
         faltaNomeCompleto: a.contact_id
           ? faltaNomeCompleto(Array.isArray(a.contacts) ? (a.contacts[0] ?? null) : a.contacts)
           : false,
+        // A10: a mesma pergunta de `listaAgendamentos` (o lembrete sai?), para
+        // a primeira pintura e o refetch mostrarem o mesmo sino.
+        naoRecebeMensagens:
+          a.contact_id !== null &&
+          (Array.isArray(a.contacts) ? a.contacts[0] : a.contacts)?.is_blocked === true,
       })) as AgendamentoDaTela[]).concat(
         /**
          * A ocupação do Google entra na MESMA lista, com `origem: "google_sync"`.

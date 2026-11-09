@@ -16,11 +16,13 @@ import {
   ehNomeCompleto,
   faltaNomeCompleto,
   nomeCompletoLimpo,
+  nomeDoContato,
   sugestaoDeNomeCompleto,
 } from "@/lib/contacts/rotulo-do-contato";
 import { CaretLeft, CaretRight, CheckCircle, Warning } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 
+import { AvisoSemLembrete } from "./AvisoSemLembrete";
 import { BloqueioDeHorario } from "./BloqueioDeHorario";
 import { NomeCompletoDoPaciente } from "./NomeCompletoDoPaciente";
 import type { HorarioLivre, Pessoa } from "./tipos";
@@ -165,6 +167,10 @@ export function MarcacaoSimples({
   const doPaciente = contactId && contato?.id === contactId ? contato : null;
   const cadastroCarregado = !contactId || doPaciente !== null;
   const pedeNome = doPaciente !== null && faltaNomeCompleto(doPaciente);
+  // A10: quem pediu para não receber mensagens não recebe o lembrete
+  // (`cron/agenda-reminder` pula `contato_bloqueado`). Marcar continua
+  // permitido; o rodapé avisa para confirmar por telefone.
+  const semLembrete = doPaciente?.is_blocked === true ? (nomeDoContato(doPaciente) ?? t("O paciente")) : null;
   // O nome digitado vale para AQUELE paciente: trocar de paciente volta à
   // sugestão do novo, senão o nome de um viajaria para o cadastro do outro.
   const [nomeEditado, setNomeEditado] = React.useState<{ contactId: string; valor: string } | null>(null);
@@ -284,6 +290,9 @@ export function MarcacaoSimples({
         <p className="mt-0.5 text-xs text-text-subtle">
           {tipo?.nome} · {profissional?.nome}
         </p>
+        {/* Repetido no sucesso: o rodapé sumiu, e quem fecha agora não saberia
+            que este agendamento não terá lembrete. */}
+        {semLembrete ? <AvisoSemLembrete nome={semLembrete} className="mt-3 text-left" /> : null}
         <div className="mt-5 flex gap-2">
           <Button
             variant="outline"
@@ -691,6 +700,7 @@ export function MarcacaoSimples({
               ) : (
                 <p className="text-text-subtle">{t("Escolha profissional, procedimento, dia e horário.")}</p>
               )}
+              {semLembrete ? <AvisoSemLembrete nome={semLembrete} className="mt-2" /> : null}
               {!nomeResolvido ? (
                 <p data-testid="falta-nome-na-marcacao" className="mt-1 text-xs text-warning-fg">
                   {t("Complete o nome do paciente para marcar.")}

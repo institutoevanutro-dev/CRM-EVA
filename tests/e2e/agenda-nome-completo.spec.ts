@@ -264,7 +264,8 @@ test("o que a IA marca para quem não tem nome completo aparece marcado na grade
   await irParaASemanaDoCompromisso(page, inicio);
   const bloco = page.getByTestId(`agendamento-${compromisso}`);
   await expect(bloco).toHaveAttribute("data-falta-nome", "true", { timeout: 15_000 });
-  await expect(bloco).toHaveAttribute("title", "Falta o nome completo");
+  // A2: o title junta a situação e os avisos ("Confirmado · Falta o nome completo").
+  await expect(bloco).toHaveAttribute("title", /Falta o nome completo/);
   await bloco.scrollIntoViewIfNeeded();
   await evidencia(page, info, "0-grade-marca-quem-falta-o-nome");
 
