@@ -63,7 +63,7 @@ export function MediaRenderer({
           <AudioPlayer messageId={message.id} isOutbound={isOutbound} mime={message.media_mime} />
           {texto ? (
             <>
-              <span data-testid="rotulo-transcricao" className="text-[10px] uppercase tracking-wide opacity-70">
+              <span data-testid="rotulo-transcricao" className="text-xs font-medium uppercase tracking-wide opacity-70">
                 {t("Transcrição")}
               </span>
               <p data-testid="transcricao-de-audio" className="whitespace-pre-wrap text-sm leading-relaxed opacity-80">

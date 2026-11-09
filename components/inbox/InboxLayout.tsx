@@ -551,6 +551,13 @@ export function InboxLayout({
   // portão de tela é `inbox.reply`; a regra mora na API, que revalida.
   const podeAgirEmLote = usePermission("inbox.reply");
   const selecao = useSelecaoEmLote();
+  // Seleção em lote é um MODO (I5, como o "Editar" do Mail): as caixas só
+  // aparecem depois do "Selecionar", e a linha fica com a largura toda no resto.
+  const [modoSelecao, setModoSelecao] = useState(false);
+  const sairDoModoSelecao = useCallback(() => {
+    setModoSelecao(false);
+    selecao.limpar();
+  }, [selecao]);
   const lote = useBulkConversations();
   const rodarLote = useCallback(
     (action: AcaoEmLote, toUserId?: string, reason?: string) => {
@@ -558,10 +565,10 @@ export function InboxLayout({
       if (ids.length === 0) return;
       lote.mutate(
         { ids, action, to_user_id: toUserId, reason },
-        { onSuccess: () => selecao.limpar() },
+        { onSuccess: () => sairDoModoSelecao() },
       );
     },
-    [lote, selecao],
+    [lote, selecao, sairDoModoSelecao],
   );
 
   // A leitura da conversa aberta é do upstream e fica: sem ela o contador de
@@ -964,7 +971,21 @@ export function InboxLayout({
             inteira com um botão. */}
         <div className="flex min-h-11 items-center justify-between gap-2 px-3 pt-2">
           <h2 className="text-sm font-semibold">{t("Conversas")}</h2>
-          <BotaoIniciarConversa />
+          <div className="flex items-center gap-1">
+            {podeAgirEmLote && (
+              <Button
+                type="button"
+                size="sm"
+                variant={modoSelecao ? "secondary" : "ghost"}
+                aria-pressed={modoSelecao}
+                data-testid="modo-selecao"
+                onClick={() => (modoSelecao ? sairDoModoSelecao() : setModoSelecao(true))}
+              >
+                {modoSelecao ? t("Concluir") : t("Selecionar")}
+              </Button>
+            )}
+            <BotaoIniciarConversa />
+          </div>
         </div>
         <InboxFilters value={filterValue} onChange={setFilterValue} />
         {podeAgirEmLote && (
@@ -977,7 +998,7 @@ export function InboxLayout({
             onPausarIa={() => rodarLote("pause-ai")}
             onOcultar={() => rodarLote("hide")}
             onTransferir={(toUserId, reason) => rodarLote("transfer", toUserId, reason)}
-            onLimpar={selecao.limpar}
+            onLimpar={sairDoModoSelecao}
           />
         )}
         <div className="min-h-0 flex-1 overflow-hidden">
@@ -989,9 +1010,9 @@ export function InboxLayout({
             onVisibleChange={handleVisibleChange}
             onLimparFiltros={limparFiltrosAuxiliares}
             selecionados={selecao.selecionados}
-            onAlternarSelecao={podeAgirEmLote ? selecao.alternar : undefined}
+            onAlternarSelecao={podeAgirEmLote && modoSelecao ? selecao.alternar : undefined}
             onSelecionarTodosVisiveis={
-              podeAgirEmLote
+              podeAgirEmLote && modoSelecao
                 ? () =>
                     selecao.selecionarTodos(
                       (listQ.data?.pages.flatMap((p) => p.data) ?? []).map((c) => c.id),

@@ -101,7 +101,11 @@ test.describe("Inbox: lote e Iniciar conversa", () => {
     await loginComoAdmin(page, lerCreds());
     await page.goto("/app/inbox?filter=all");
     const [a, b, c] = conversas as [string, string, string];
-    await expect(page.getByTestId(`selecao-em-lote-${a}`)).toBeVisible({ timeout: 30_000 });
+    // A seleção em lote é um modo (Design 2, I5): sem "Selecionar", não há caixa.
+    await expect(page.locator(`[data-conversation-id="${a}"]`)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId(`selecao-em-lote-${a}`)).toHaveCount(0);
+    await page.getByTestId("modo-selecao").click();
+    await expect(page.getByTestId(`selecao-em-lote-${a}`)).toBeVisible();
     await expect(page.getByTestId("barra-de-acoes-em-lote")).toHaveCount(0);
 
     await page.getByTestId(`selecao-em-lote-${a}`).click();

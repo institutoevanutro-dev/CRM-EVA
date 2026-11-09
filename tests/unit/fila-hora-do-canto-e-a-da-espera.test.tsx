@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import { format, subDays } from "date-fns";
 import { describe, expect, it } from "vitest";
 
+import { tempoCurtoDaEspera } from "@/lib/inbox/espera";
+
 import { ConversationListItem } from "@/components/inbox/ConversationListItem";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 
@@ -66,12 +68,18 @@ const pintar = (conv: ConversationWithContact, queuePosition?: number) =>
     />,
   );
 
+/** Sem resposta, o canto é o relógio da espera (I5): o tempo curto, "Aguardando há…" na dica. */
+const relogioDaEspera = () => screen.getByTitle(/^Aguardando/);
+/** Sem mensagem do cliente a responder, o canto volta a ser a hora. */
 const cantoDaFila = () => screen.getByTitle("Desde quando o cliente espera resposta");
+/** "9 d" — o tempo curto contado a partir de um ISO. */
+const curto = (iso: string) => tempoCurtoDaEspera(Math.floor((Date.now() - Date.parse(iso)) / 60_000));
 
 describe("na Fila, o relógio da linha é o relógio da ordem", () => {
-  it("⭐ a hora do canto é a da ESPERA — a mensagem mais antiga sem resposta", () => {
+  it("⭐ o tempo do canto conta da ESPERA — a mensagem mais antiga sem resposta", () => {
     pintar(base, 3);
-    expect(cantoDaFila()).toHaveTextContent(horaDaEspera);
+    expect(relogioDaEspera()).toHaveTextContent(curto(espera));
+    expect(relogioDaEspera()).not.toHaveTextContent(curto(ultimaDoCliente));
   });
 
   it("⭐ não é a ÚLTIMA mensagem do cliente, nem a da atividade, nem a criação", () => {
@@ -96,8 +104,8 @@ describe("na Fila, o relógio da linha é o relógio da ordem", () => {
   });
 
   it("o rótulo diz o que o número é — o mesmo canto significa outra coisa na Fila", () => {
-    pintar(base, 3);
-    expect(cantoDaFila()).toBeInTheDocument();
+    pintar({ ...base, last_outbound_at: subDays(agora, 0.5).toISOString() } as unknown as ConversationWithContact, 3);
+    expect(cantoDaFila()).toHaveTextContent(horaDaEspera);
   });
 });
 
@@ -106,7 +114,8 @@ describe("fora da Fila, nada muda", () => {
     // Sem este caso, "o relógio sempre mostra `last_inbound_at`" passaria no teste
     // de cima — e a aba Todas, que ordena por atividade recente, ficaria com a
     // coluna de horas fora de ordem de novo, só no sentido oposto.
-    pintar(base);
+    // Respondida (I5): sem relógio de espera, o canto é a hora da atividade.
+    pintar({ ...base, last_outbound_at: subDays(agora, 0.5).toISOString() } as unknown as ConversationWithContact);
     expect(screen.getByText(horaDaAtividade)).toBeInTheDocument();
     expect(screen.queryByText(horaDaEspera)).not.toBeInTheDocument();
   });

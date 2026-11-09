@@ -88,11 +88,15 @@ test.describe("G5-03 — fila com posição + atribuição", () => {
     await login(page, creds.users.agent!.email, creds.password);
     await page.goto("/app/inbox?filter=unassigned");
 
-    // (1) Na Fila: a conversa aparece com posição (Nº) + "Aguardando há X".
+    // (1) Na Fila: a conversa aparece com posição (Nº) e, no canto, o tempo de
+    // espera (Design 2, I5: relógio colorido, "Aguardando há X" na dica) — ou a
+    // hora da espera, quando não há mensagem do cliente sem resposta.
     const queueItem = page.getByRole("button").filter({ hasText: q.contact_name });
     await expect(queueItem).toBeVisible({ timeout: 15_000 });
     await expect(queueItem.getByText(/^\d+º$/)).toBeVisible();
-    await expect(queueItem.getByText(/Aguardando/)).toBeVisible();
+    await expect(
+      queueItem.getByTitle(/^Aguardando|^Desde quando o cliente espera resposta$/),
+    ).toBeVisible();
     await page.screenshot({
       path: path.join(EVIDENCE, "G5-03-queue.png"),
       fullPage: true,

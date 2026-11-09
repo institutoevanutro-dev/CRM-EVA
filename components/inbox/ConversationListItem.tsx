@@ -5,12 +5,13 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import type { Locale } from "date-fns";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { Check, Clock, Funnel, InstagramLogo, Phone, Robot, UserCircle } from "@/lib/ui/icons";
+import { Check, CheckCircle, Clock, Funnel, InstagramLogo, Phone, Robot, UserCircle } from "@/lib/ui/icons";
 import { AvatarDoContato } from "@/components/inbox/AvatarDoContato";
 import { Badge } from "@/components/ui/badge";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
 import { SeloDoCanal } from "@/components/inbox/SeloDoCanal";
 import { comandoDaConversa, esperaDaConversa } from "@/lib/inbox/comando-da-conversa";
+import { esperaSemResposta, tempoCurtoDaEspera, type FaixaDaEspera } from "@/lib/inbox/espera";
 import { cn } from "@/lib/utils";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
@@ -89,7 +90,15 @@ const SELO_DO_COMANDO: Record<string, { rotulo: string; classe: string; Icone: t
   automatico: { rotulo: "Automático", classe: "bg-info-bg text-info-fg", Icone: Robot },
   aguardando: { rotulo: "Aguardando", classe: "bg-warning-bg text-warning-fg", Icone: Clock },
   humano: { rotulo: "Equipe", classe: "bg-accent-soft text-accent-hover", Icone: UserCircle },
-  encerrada: { rotulo: "Encerrada", classe: "bg-surface-elevated text-text-muted", Icone: Clock },
+  // Ícone próprio (I5): com o relógio, "Encerrada" se lia como "Aguardando".
+  encerrada: { rotulo: "Encerrada", classe: "bg-surface-elevated text-text-muted", Icone: CheckCircle },
+};
+
+/** A cor do tempo de espera; os limites moram em `LIMITES_DA_ESPERA_MIN`. */
+const COR_DA_ESPERA: Record<FaixaDaEspera, string> = {
+  normal: "text-text-subtle",
+  atencao: "text-warning-fg",
+  alerta: "text-error-fg",
 };
 
 function relativeTime(iso: string | null, locale: Locale): string {
@@ -167,6 +176,9 @@ export function ConversationListItem({
     : conversation.last_message_at;
   const time = relativeTime(horaDaOrdem, localeDaData);
   const unread = conversation.unread_count_for_assignee ?? 0;
+  // Ainda sem resposta? Respondida (por pessoa ou automático) ou encerrada = null,
+  // e a linha mostra a hora em vez do tempo de espera colorido.
+  const espera = esperaSemResposta(conversation);
 
 
   /**
@@ -220,7 +232,7 @@ export function ConversationListItem({
       data-conversation-id={conversation.id}
       onClick={() => onSelect(conversation.id)}
       className={cn(
-        "group relative flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-elevated",
+        "group relative flex w-full items-start gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-elevated",
         onAlternarSelecao ? "min-w-0 flex-1" : "border-b border-border/70",
         "focus-visible:outline-hidden focus-visible:bg-surface-elevated",
         isSelected && "bg-accent/10 hover:bg-accent/10",
@@ -240,38 +252,46 @@ export function ConversationListItem({
       </div>
 
       <div className="min-w-0 flex-1">
-        {naFila && (
-          <div className="mb-1 flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5">
+          {naFila && (
             <span
-              className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-soft px-1 text-[10px] font-medium tabular-nums text-accent"
+              className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-accent-soft px-1 text-xs font-medium tabular-nums text-accent"
               aria-label={`${t("Posição")} ${queuePosition} ${t("na fila")}`}
             >
               {queuePosition}º
             </span>
-            <span className="text-[11px] text-text-muted">
-              {waitingLabel(conversation, t, localeDaData)}
-            </span>
-          </div>
-        )}
-        <div className="flex items-baseline justify-between gap-2">
+          )}
           <span
             className={cn(
-              "truncate text-sm",
-              unread > 0 ? "font-semibold text-text" : "font-medium text-text",
+              "min-w-0 flex-1 truncate text-sm font-semibold text-text",
               c?.is_anonymized && "font-normal italic text-text-muted",
             )}
           >
             {displayName}
           </span>
-          <span
-            className="shrink-0 text-[11px] tabular-nums text-text-subtle"
-            // O mesmo lugar da tela mostra duas coisas diferentes conforme a aba:
-            // na Fila é "desde quando o cliente escreveu", nas outras é "há quanto
-            // tempo a conversa mexeu". O rótulo existe só onde a leitura muda.
-            title={naFila ? t("Desde quando o cliente espera resposta") : undefined}
-          >
-            {time}
-          </span>
+          {espera ? (
+            <span
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1 text-xs font-medium tabular-nums",
+                COR_DA_ESPERA[espera.faixa],
+              )}
+              title={waitingLabel(conversation, t, localeDaData)}
+              data-faixa-da-espera={espera.faixa}
+            >
+              <Clock size={12} weight="bold" aria-hidden />
+              {tempoCurtoDaEspera(espera.minutos)}
+            </span>
+          ) : (
+            <span
+              className="shrink-0 text-[11px] tabular-nums text-text-subtle"
+              // O mesmo lugar da tela mostra duas coisas diferentes conforme a aba:
+              // na Fila é "desde quando o cliente escreveu", nas outras é "há quanto
+              // tempo a conversa mexeu". O rótulo existe só onde a leitura muda.
+              title={naFila ? t("Desde quando o cliente espera resposta") : undefined}
+            >
+              {time}
+            </span>
+          )}
         </div>
 
         <div className="mt-0.5 flex items-center justify-between gap-2">
@@ -282,73 +302,73 @@ export function ConversationListItem({
             )}
           >
             {isAi && mostrarAutomatico ? (
-              <Robot size={12} weight="duotone" className="mr-1 inline align-[-2px]" aria-hidden />
+              <Robot size={13} weight="duotone" className="mr-1 inline align-[-2px]" aria-hidden />
             ) : null}
             {truncated}
           </p>
           {unread > 0 && (
-            <span className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-[10px] font-semibold tabular-nums text-accent-foreground">
+            <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-medium tabular-nums text-accent-foreground">
               {unread}
             </span>
           )}
         </div>
 
         {temSelos && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          <div className="mt-1 flex flex-wrap items-center gap-1">
             {selo && rotuloDoSelo && (
               <span
                 className={cn(
-                  "inline-flex h-4 items-center gap-1 rounded-full px-1.5 text-[10px] font-medium",
+                  "inline-flex h-5 items-center gap-1 rounded-full px-1.5 text-xs font-medium",
                   selo.classe,
                 )}
                 data-selo-do-comando={comando.quem}
               >
-                <selo.Icone size={9} weight="bold" aria-hidden />
+                <selo.Icone size={12} weight="bold" aria-hidden />
                 {rotuloDoSelo}
               </span>
             )}
             {etapa && (
               <span
-                className="inline-flex h-4 max-w-[9rem] items-center gap-1 truncate rounded-full border border-border px-1.5 text-[10px] text-text-muted"
+                className="inline-flex h-5 max-w-[9rem] items-center gap-1 truncate rounded-full border border-border px-1.5 text-xs font-medium text-text-muted"
                 title={t("Etapa do funil")}
                 data-etapa-da-conversa
               >
-                <Funnel size={9} aria-hidden />
+                <Funnel size={12} aria-hidden />
                 <span className="truncate">{etapa}</span>
               </span>
             )}
             {visibleTags.map((t) => (
-              <ChipDeEtiqueta key={t} tag={t} className="h-4 px-1.5 text-[10px]" />
+              <ChipDeEtiqueta key={t} tag={t} className="h-5 px-1.5 text-xs font-medium" />
             ))}
             {overflow > 0 && (
-              <span className="text-[10px] text-text-muted" title={tags.slice(visibleTags.length).join(", ")}>+{overflow}</span>
+              <span className="text-xs font-medium text-text-muted" title={tags.slice(visibleTags.length).join(", ")}>+{overflow}</span>
             )}
             {viaInstagram && (
               <Badge
                 variant="outline"
-                className="h-4 gap-1 border-canal-instagram/30 bg-canal-instagram/10 px-1.5 text-[10px] font-normal text-canal-instagram"
+                className="h-5 gap-1 border-canal-instagram/30 bg-canal-instagram/10 px-1.5 text-xs font-medium text-canal-instagram"
               >
-                <InstagramLogo size={9} weight="regular" aria-hidden />
+                <InstagramLogo size={12} weight="regular" aria-hidden />
                 {rotuloCanal ? `${t("via")} ${rotuloCanal}` : t("Instagram")}
               </Badge>
             )}
             {!viaInstagram && mostrarCanal && rotuloCanal && (
               <Badge
                 variant="outline"
-                className="h-4 gap-1 border-canal-whatsapp/30 bg-canal-whatsapp/10 px-1.5 text-[10px] font-normal text-canal-whatsapp"
+                className="h-5 gap-1 border-canal-whatsapp/30 bg-canal-whatsapp/10 px-1.5 text-xs font-medium text-canal-whatsapp"
                 title={`${t("Entrou por")} ${rotuloCanal}`}
               >
-                <Phone size={9} weight="regular" aria-hidden />
+                <Phone size={12} weight="regular" aria-hidden />
                 {rotuloCanal}
               </Badge>
             )}
             {c?.is_blocked && (
-              <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
+              <Badge variant="destructive" className="h-5 px-1.5 text-xs font-medium">
                 {t("Bloqueado")}
               </Badge>
             )}
             {c?.is_anonymized && (
-              <Badge variant="outline" className="h-4 px-1.5 text-[10px]">
+              <Badge variant="outline" className="h-5 px-1.5 text-xs font-medium">
                 {t("Anonimizado")}
               </Badge>
             )}
@@ -379,14 +399,15 @@ export function ConversationListItem({
         data-testid={`selecao-em-lote-${conversation.id}`}
         onClick={() => onAlternarSelecao(conversation.id)}
         className={cn(
-          "mt-3 ml-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors",
+          // 24 px (I5): a caixa só aparece no modo "Selecionar", e aí é o alvo principal.
+          "mt-4 ml-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors",
           "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent",
           selecionado
             ? "border-accent bg-accent text-accent-foreground"
             : "border-input bg-background hover:bg-surface-elevated",
         )}
       >
-        {selecionado && <Check size={12} weight="bold" aria-hidden />}
+        {selecionado && <Check size={16} weight="bold" aria-hidden />}
       </button>
       {linha}
     </div>

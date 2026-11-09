@@ -36,7 +36,8 @@ interface Props {
   onVisibleChange?: (ids: string[]) => void;
   /**
    * Seleção múltipla (porte do upstream #2909). Quando `onAlternarSelecao`
-   * vem, cada linha ganha a caixa e a lista oferece o "selecionar todas".
+   * vem, cada linha ganha a caixa e a lista oferece o "selecionar todas". Desde
+   * a I5 do Design 2 ela só vem no modo "Selecionar" do cabeçalho da lista.
    */
   selecionados?: Set<string>;
   onAlternarSelecao?: (id: string) => void;
@@ -186,7 +187,7 @@ export function ConversationList({
           <EmptyPorFiltro filtros={filtrosAtivos} onLimpar={onLimparFiltros} />
         )}
         {onAlternarSelecao && items.length > 0 && (
-          <div className="flex items-center gap-2 border-b border-border/70 px-3 py-1.5">
+          <div className="flex items-center gap-3 border-b border-border/70 py-1.5 pr-3">
             <button
               type="button"
               role="checkbox"
@@ -195,9 +196,9 @@ export function ConversationList({
               title={t("Selecionar todas")}
               data-testid="selecionar-todas-visiveis"
               onClick={onSelecionarTodosVisiveis}
-              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-input bg-background transition-colors hover:bg-surface-elevated focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
+              className="ml-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-input bg-background transition-colors hover:bg-surface-elevated focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
             >
-              {todasMarcadas && <Check size={12} weight="bold" aria-hidden />}
+              {todasMarcadas && <Check size={16} weight="bold" aria-hidden />}
             </button>
             <span className="text-xs text-text-muted">{t("Selecionar todas")}</span>
           </div>

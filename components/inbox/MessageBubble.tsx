@@ -441,7 +441,7 @@ export const MessageBubble = memo(function MessageBubble({
           </div>
         )}
         {senderLabel && inicioDoTurno && (
-          <div className="mb-0.5 flex items-center gap-1 text-[11px] font-semibold opacity-80">
+          <div className="mb-0.5 flex items-center gap-1 text-xs font-semibold opacity-80">
             {senderLabel === "Automático" ? (
               <Robot size={10} weight="duotone" aria-hidden />
             ) : null}
@@ -503,7 +503,7 @@ export const MessageBubble = memo(function MessageBubble({
 
         <div
           className={cn(
-            "mt-1 flex items-center justify-end gap-1 text-[10px]",
+            "mt-1 flex items-center justify-end gap-1 text-[11px] tabular-nums",
             // Só o balão da equipe é escuro; o do automático é claro e pede texto escuro.
             // A apagada é cinza: o carimbo claro da equipe sumiria nela.
             falhou
@@ -560,7 +560,7 @@ export const MessageBubble = memo(function MessageBubble({
                     {t("Abrir agenda")}
                   </Link>
                 )}
-                <p className="text-[10px] leading-snug opacity-70">
+                <p className="text-xs leading-snug opacity-70">
                   {t("Para mandar mesmo assim, mude a escolha do fluxo ou escreva pelo campo de resposta.")}
                 </p>
               </div>

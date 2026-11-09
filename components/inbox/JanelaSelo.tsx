@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils";
  * `shrink-0`: o selo divide a linha com o nome do contato, que é quem trunca.
  * Encolher o selo era o que o fazia quebrar dentro da pílula.
  */
-const SELO = "h-4 shrink-0 px-1.5 text-[10px] leading-none";
+const SELO = "h-5 shrink-0 px-1.5 text-xs font-medium leading-none";
 
 export function JanelaSelo({
   provider,

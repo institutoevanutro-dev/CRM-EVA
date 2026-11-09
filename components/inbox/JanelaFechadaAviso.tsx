@@ -290,7 +290,7 @@ export function JanelaFechadaAviso({
         <div className="mt-2 flex flex-col gap-2">
           {slots.map((slot) => (
             <label key={slot.valueKey} className="flex flex-col gap-1">
-              <span className="text-[11px] text-amber-900/80 dark:text-amber-200/80">
+              <span className="text-xs text-amber-900/80 dark:text-amber-200/80">
                 {rotuloDoSlot(slot, t)}
               </span>
               <input
@@ -307,7 +307,7 @@ export function JanelaFechadaAviso({
                 )}
               />
               {ehMidia(slot) && atual?.savedValues !== undefined && (
-                <span className="flex items-center gap-1.5 text-[11px] text-amber-900/80 dark:text-amber-200/80">
+                <span className="flex items-center gap-1.5 text-xs text-amber-900/80 dark:text-amber-200/80">
                   <input
                     type="checkbox"
                     checked={salvar[slot.valueKey] ?? false}
@@ -328,7 +328,7 @@ export function JanelaFechadaAviso({
               parâmetro de novo, sempre — sem ele vem `132012 Format mismatch,
               expected IMAGE, received UNKNOWN`. */}
           {slots.some(ehMidia) && (
-            <p className="text-[11px] text-amber-900/70 dark:text-amber-200/70">
+            <p className="text-xs text-amber-900/70 dark:text-amber-200/70">
               {t("A mídia do modelo entra por link público — a plataforma baixa o arquivo na hora do envio.")}
             </p>
           )}

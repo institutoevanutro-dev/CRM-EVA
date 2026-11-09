@@ -59,7 +59,7 @@ const CLASSE_DA_ABA =
 /** A contagem da aba em pílula: número solto ao lado do rótulo parecia parte dele ("Fila6"). */
 function Contagem({ n }: { n: number }) {
   return (
-    <span className="rounded-full bg-surface-elevated px-1.5 text-[11px] leading-4 font-medium tabular-nums text-text-muted">
+    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-surface-elevated px-1.5 text-xs font-medium tabular-nums text-text-muted">
       {n}
     </span>
   );

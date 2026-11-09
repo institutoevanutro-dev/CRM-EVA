@@ -657,9 +657,9 @@ describe("D1.3 — cor só de token, e texto de estado legível", () => {
   });
 
   it("catraca: cor crua da paleta e texto de 8–11 px só podem cair", () => {
-    // Medido em 06/11/2026, depois da D1.3. Reduziu? Baixe o teto aqui.
+    // Medido em 06/11/2026, depois da D1.3; texto miúdo de novo em 08/11, depois da I5 do Design 2. Reduziu? Baixe o teto aqui.
     const TETO_COR_CRUA = 266;
-    const TETO_TEXTO_MINUSCULO = 166;
+    const TETO_TEXTO_MINUSCULO = 132;
     const conta = (rx: RegExp) =>
       ARQUIVOS.reduce((n, f) => n + (fs.readFileSync(f, "utf8").match(rx)?.length ?? 0), 0);
     // `globals.css` fica fora (não é .ts/.tsx): a catraca mede componente.

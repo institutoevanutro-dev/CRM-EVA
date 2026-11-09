@@ -276,7 +276,7 @@ export function ConversationHeader({
               {/* `[contain:inline-size]` tira o comprimento do nome da conta da
                   largura mínima (senão nome longo nunca truncaria); o piso de
                   7,5rem é o que entra no lugar. */}
-              <h2 className="min-w-[7.5rem] flex-1 truncate text-[15px] font-semibold leading-5 [contain:inline-size]">
+              <h2 className="min-w-[7.5rem] flex-1 truncate text-base font-semibold leading-6 [contain:inline-size]">
                 {displayName}
               </h2>
               {/* Ao lado do nome, não escondido num painel: a pergunta "dá para
@@ -314,7 +314,7 @@ export function ConversationHeader({
               {motivo !== null && (iaResponde || motivo === "contato_descadastrado") && (
                 <Badge
                   variant="outline"
-                  className="h-4 shrink-0 px-1.5 text-[10px] leading-none"
+                  className="h-5 shrink-0 px-1.5 text-xs font-medium leading-none"
                   data-testid="badge-atendimento-humano"
                 >
                   {t(ROTULO_DO_MOTIVO[motivo])}
@@ -323,11 +323,11 @@ export function ConversationHeader({
               {/* Aberta pela aba "Ocultos" ou por link: a tela diz que esta conversa
                   está fora do Inbox, e por que a IA não responde. */}
               {conversation.contato_oculto && (
-                <SeloDeOculto className="h-4 shrink-0 px-1.5 text-[10px] leading-none" />
+                <SeloDeOculto className="h-5 shrink-0 px-1.5 text-xs font-medium leading-none" />
               )}
               {/* O estado do episódio (aberta, fechada…): leitura de consulta, na
                   linha de quem responde. Saiu da faixa, que deixou de existir. */}
-              <Badge variant="outline" className="h-4 shrink-0 px-1.5 text-xs leading-none">
+              <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-xs font-medium leading-none">
                 {t(STATUS_LABEL[status] ?? status)}
               </Badge>
               {/* No celular o telefone sai (porte do #3190): cada linha do

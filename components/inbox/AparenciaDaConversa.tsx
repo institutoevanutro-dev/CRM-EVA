@@ -112,7 +112,7 @@ export function AparenciaDaConversa({
           onEscolher={escolher}
           amostra={(a) => <Balao aparencia={a} lado="recebida" />}
         />
-        <p role="status" className="min-h-4 text-[11px] text-text-muted">
+        <p role="status" className="min-h-4 text-xs text-text-muted">
           {salvando ? t("Salvando…") : ""}
         </p>
       </PopoverContent>
@@ -190,7 +190,7 @@ function Grupo<C extends Campo>({
                 )}
               >
                 {amostra({ ...valor, [campo]: id })}
-                <span className="mt-1 flex items-center justify-center gap-1 text-[11px] leading-4">
+                <span className="mt-1 flex items-center justify-center gap-1 text-xs leading-4">
                   {marcado && <Check size={11} weight="bold" aria-hidden />}
                   {t(o.rotulo)}
                 </span>

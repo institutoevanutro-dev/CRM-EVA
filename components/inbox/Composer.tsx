@@ -664,7 +664,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         {respondendo && mode === "reply" && (
           <div className="mb-1 flex items-start gap-2 rounded-md border-l-2 border-primary bg-muted/60 px-2 py-1.5">
             <div className="min-w-0 flex-1">
-              <div className="text-[11px] font-medium text-primary">
+              <div className="text-xs font-medium text-primary">
                 {respondendo.direction === "outbound" ? t("Você") : t("Cliente")}
               </div>
               <div className="line-clamp-2 text-xs text-muted-foreground">
@@ -848,7 +848,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         {mode === "reply" && limiteDeTexto && (
           <p
             className={cn(
-              "mt-1 text-right text-[11px] text-muted-foreground",
+              "mt-1 text-right text-xs tabular-nums text-muted-foreground",
               acimaDoLimite && "text-destructive",
             )}
           >

@@ -309,7 +309,7 @@ export function ChatThread({
               {/* Pílula OPACA: ela fica presa no alto enquanto a conversa rola, e
                   a versão translúcida (fundo 80% + blur) deixava a data em cima
                   do texto da mensagem que passava por baixo (print de 07/10/2026). */}
-              <span className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-[11px] font-medium text-text-muted">
+              <span className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-xs font-medium text-text-muted">
                 {dayLabel(g.date, t, localeDaData)}
               </span>
             </div>
