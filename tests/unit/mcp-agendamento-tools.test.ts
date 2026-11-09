@@ -384,7 +384,7 @@ describe("crm_list_appointments com período (de/ate)", () => {
     };
     expect(r.compromissos.map((c) => c.id)).toEqual(["seg", "qua"]);
     expect(Object.keys(r.compromissos[0]!).sort()).toEqual([
-      "atendente_id", "contato_id", "contato_nome", "fim", "fim_quando", "fuso", "id", "inicio",
+      "atendente_id", "atendente_nome", "atendente_trilha", "contato_id", "contato_nome", "fim", "fim_quando", "fuso", "id", "inicio",
       "meet_state", "meeting_url", "quando", "situacao", "titulo",
     ]);
   });
@@ -416,6 +416,86 @@ describe("crm_list_appointments com período (de/ate)", () => {
     expect(crmListAppointments.requiresScope).toBe("mcp:read");
     expect(hasMcpToolScope(["agenda:read"], crmListAppointments.name, crmListAppointments.requiresScope)).toBe(true);
     expect(hasMcpToolScope(["outro:read"], crmListAppointments.name, crmListAppointments.requiresScope)).toBe(false);
+  });
+});
+
+describe("crm_list_appointments: nome e trilha de quem atende (Prontuário)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const A = "aaaaaaaa-0000-4000-8000-000000000001"; // escolheu a trilha 5
+  const B = "bbbbbbbb-0000-4000-8000-000000000002"; // usa a derivada
+  const C = "cccccccc-0000-4000-8000-000000000003"; // colega sem compromisso
+  const X = "dddddddd-0000-4000-8000-000000000004"; // só de OUTRA organização
+  const linhas = [
+    { organization_id: "org-1", user_id: A, calendar_trilha: 5, revoked_at: null },
+    { organization_id: "org-1", user_id: B, calendar_trilha: null, revoked_at: null },
+    { organization_id: "org-1", user_id: C, calendar_trilha: null, revoked_at: null },
+    { organization_id: "org-2", user_id: B, calendar_trilha: 3, revoked_at: null },
+    { organization_id: "org-2", user_id: X, calendar_trilha: null, revoked_at: null },
+  ];
+  const nomes: Record<string, string> = { [A]: "Dra. Ana", [B]: "Dr. Bruno" };
+
+  // Dublê mínimo do service role: aplica os filtros de verdade, para o teste
+  // reprovar se o filtro de organização sumir.
+  function clienteFalso() {
+    const filtros: Array<[string, unknown]> = [];
+    const builder = {
+      select: () => builder,
+      eq: (col: string, v: unknown) => (filtros.push([col, v]), builder),
+      is: (col: string, v: unknown) => (filtros.push([col, v]), builder),
+      then: (res: (r: { data: unknown[]; error: null }) => unknown) =>
+        res({
+          data: linhas.filter((l) => filtros.every(([c, v]) => (l as Record<string, unknown>)[c] === v)),
+          error: null,
+        }),
+    };
+    const from = vi.fn(() => builder);
+    const supabase = {
+      from,
+      auth: { admin: { getUserById: async (id: string) => ({
+        data: { user: { email: `${id}@exemplo.com`, user_metadata: { full_name: nomes[id] } } },
+      }) } },
+    } as unknown as SupabaseClient;
+    return { supabase, from, filtros };
+  }
+
+  const comp = (id: string, donoId: string | null) => ({
+    id, titulo: "Consulta", iniciaEm: "2026-11-09T12:00:00Z", terminaEm: "2026-11-09T13:00:00Z",
+    fuso: "America/Sao_Paulo", situacao: "confirmed", contatoId: null, contatoNome: null, donoId,
+  });
+
+  it("escolhida vence, derivada é a da tela, sem dono é null — e só a equipe desta organização conta", async () => {
+    vi.mocked(listaAgendamentos).mockResolvedValue({ ok: true, agendamentos: [
+      comp("a", A), comp("b", B), comp("b2", B), comp("livre", null),
+    ] } as never);
+    const { supabase, from, filtros } = clienteFalso();
+    const r = (await crmListAppointments.handler({ dia: "2026-11-09" }, { ...ctx, supabase })) as {
+      compromissos: Array<Record<string, unknown>>;
+    };
+    const { trilhasEfetivasDaEquipe } = await import("@/lib/agenda/tipos");
+    // A MESMA regra da tela, sobre a equipe da org-1 (A, B, C) — X e a trilha 3 de B
+    // na org-2 não entram.
+    const daTela = trilhasEfetivasDaEquipe(linhas.filter((l) => l.organization_id === "org-1"));
+    expect(r.compromissos.map((c) => [c.id, c.atendente_nome, c.atendente_trilha])).toEqual([
+      ["a", "Dra. Ana", 5],
+      ["b", "Dr. Bruno", daTela.get(B)],
+      ["b2", "Dr. Bruno", daTela.get(B)],
+      ["livre", null, null],
+    ]);
+    expect(daTela.get(B)).not.toBe(3);
+    expect(filtros).toContainEqual(["organization_id", "org-1"]);
+    expect(from).toHaveBeenCalledTimes(1); // uma consulta só, não N+1
+    expect(JSON.stringify(r)).not.toContain("@exemplo.com");
+  });
+
+  it("sem nenhum dono, não consulta nada", async () => {
+    vi.mocked(listaAgendamentos).mockResolvedValue({ ok: true, agendamentos: [comp("livre", null)] } as never);
+    const { supabase, from } = clienteFalso();
+    const r = (await crmListAppointments.handler({ dia: "2026-11-09" }, { ...ctx, supabase })) as {
+      compromissos: Array<Record<string, unknown>>;
+    };
+    expect(r.compromissos[0]).toMatchObject({ atendente_id: null, atendente_nome: null, atendente_trilha: null });
+    expect(from).not.toHaveBeenCalled();
   });
 });
 
