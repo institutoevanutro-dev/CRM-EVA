@@ -66,6 +66,9 @@ export function extensaoDoAudio(tipo: TipoDeAudio): string {
  */
 export function somDoAviso(aviso: { kind: string; ref_kind: string | null; title?: string | null }): TipoDeSom | null {
   if (aviso.kind === "handoff") return "pessoa";
+  // A caixa "Avisar a equipe" de um fluxo de follow-up: o fluxo pediu alguém
+  // (ex.: mandar um áudio a quem não respondeu ao pós-consulta).
+  if (aviso.kind === "followup_notify_team") return "pessoa";
   // A IA ficou sem crédito no provedor, ou a chave foi recusada
   // (`aviso-do-provedor.ts`): nada volta até alguém agir. Foi o aviso que
   // ninguém viu em 11/10/2026, por 15 horas, porque só aparecia para quem

@@ -25,7 +25,7 @@ import { logger } from "@/lib/logger";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { indiceDaVariante } from "@/lib/agent-engine/agent/reentry-template";
 
-import { COLUNA_DA_ANCORA, flowGraphSchema, type AppointmentAnchor, type FlowGraph, type FlowNode, type ReplySaveTo } from "./graph-schema";
+import { COLUNA_DA_ANCORA, TEXTO_DO_AVISO_MAX, flowGraphSchema, type AppointmentAnchor, type FlowGraph, type FlowNode, type ReplySaveTo } from "./graph-schema";
 import {
   ACTION_RECHECK_MS,
   BACKOFF_MS,
@@ -200,12 +200,29 @@ export interface AdminClient {
     enrollment_id: string;
     config: Extract<FlowNode, { type: "edit_lead_tag" }>["config"];
   }): Promise<void>;
+  /**
+   * Nó `notify_team`: abre um aviso na Central (kind `followup_notify_team`)
+   * apontando para a conversa do contato (sem conversa, o contato). Opcional,
+   * como as outras ações sem mensagem; nada é enviado ao cliente.
+   */
+  avisarEquipe?(item: AvisoParaEquipe): Promise<void>;
   persistirRespostaFollowup(input: {
     organization_id: string;
     contact_id: string;
     save_to: ReplySaveTo;
     value: string;
   }): Promise<void>;
+}
+
+export interface AvisoParaEquipe {
+  organization_id: string;
+  contact_id: string;
+  conversation_id: string | null;
+  enrollment_id: string;
+  node_id: string;
+  /** O nome que a pessoa deu à caixa no construtor — vai no corpo do aviso. */
+  rotulo: string;
+  texto: string;
 }
 
 export interface TickDeps {
@@ -454,6 +471,8 @@ async function applyResult(
     payload: {
       ...eventPayload(result),
       ...(result.kind === "enqueue_turn" && node.type === "action" && node.config.mode === "media" ? { mode: "media" } : {}),
+      // O histórico legível diz "avisou a equipe" em vez de "seguiu em frente".
+      ...(result.kind === "advance" && node.type === "notify_team" ? { aviso_equipe: true } : {}),
     },
     idempotency_key: idemKey,
   });
@@ -496,7 +515,17 @@ async function applyResult(
   // `idempotency_key` (`${nó}:${passo}`) é a trava — replay do tick não move o
   // card nem mexe na etiqueta duas vezes. Falha de gravação não reverte o
   // avanço: o warn é o que o suporte lê.
-  if (result.kind === "advance" && !isReplay && (node.type === "move_lead" || node.type === "edit_lead_tag")) {
+  //
+  // `notify_team` usa a MESMA trava: um replay ou reprocessamento do passo não
+  // abre o aviso de novo. A chave é por passo, então um `repeat` que volta à
+  // caixa avisa a cada volta — é uma passagem nova, não um replay.
+  // ponytail: evento gravado e queda antes do insert = aviso perdido (o warn
+  // fica); fechar esse buraco pede índice único por (inscrição, nó, passo).
+  if (
+    result.kind === "advance" &&
+    !isReplay &&
+    (node.type === "move_lead" || node.type === "edit_lead_tag" || node.type === "notify_team")
+  ) {
     try {
       const item = {
         organization_id: enrollment.organization_id,
@@ -504,9 +533,17 @@ async function applyResult(
         enrollment_id: enrollment.id,
       };
       if (node.type === "move_lead") await db.moverLeadNoFunil?.({ ...item, config: node.config });
-      else await db.editarTagDoLead?.({ ...item, config: node.config });
+      else if (node.type === "edit_lead_tag") await db.editarTagDoLead?.({ ...item, config: node.config });
+      else
+        await db.avisarEquipe?.({
+          ...item,
+          conversation_id: enrollment.conversation_id,
+          node_id: node.id,
+          rotulo: node.label,
+          texto: node.config.texto,
+        });
     } catch (err) {
-      logger.warn(node.type === "move_lead" ? "followup_move_lead_failed" : "followup_edit_lead_tag_failed", {
+      logger.warn(`followup_${node.type}_failed`, {
         organization_id: enrollment.organization_id,
         enrollment_id: enrollment.id,
         node_id: node.id,
@@ -1284,6 +1321,36 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
       // `inbox_appointment_revision_unique` (0224) garante um por revisão,
       // inclusive depois de resolvido. Repetição é no-op, não erro.
       if (error && error.code !== "23505") throw new Error(error.message);
+    },
+    /**
+     * Nó `notify_team`. Mesmo jeito de gravar de `abrirAvisoRecuperacaoEsgotada`:
+     * client admin, então `organization_id` explícito em toda leitura e escrita,
+     * e contato anonimizado não vira aviso (a cascata de LGPD cancela a régua;
+     * esta guarda cobre o passo que já estava em voo). O título é o texto da
+     * caixa — escrito por quem monta o fluxo, sem dado do cliente — porque é ele
+     * que vai à tela bloqueada do celular (`push-dos-avisos.ts`).
+     */
+    async avisarEquipe(item) {
+      const { data: contato, error: contatoErr } = await admin
+        .from("contacts")
+        .select("is_anonymized")
+        .eq("organization_id", item.organization_id)
+        .eq("id", item.contact_id)
+        .maybeSingle();
+      if (contatoErr) throw new Error(contatoErr.message);
+      if (!contato) return;
+      if ((contato as { is_anonymized: boolean | null }).is_anonymized === true) return;
+
+      const { error } = await admin.from("agent_inbox_items").insert({
+        organization_id: item.organization_id,
+        kind: "followup_notify_team",
+        severity: "warn",
+        title: item.texto.trim().slice(0, TEXTO_DO_AVISO_MAX),
+        body: `Passo "${item.rotulo}" de um fluxo de follow-up. Nenhuma mensagem foi enviada ao cliente.`,
+        ref_kind: item.conversation_id ? "conversation" : "contact",
+        ref_id: item.conversation_id ?? item.contact_id,
+      });
+      if (error) throw new Error(error.message);
     },
     async persistirRespostaFollowup(input) {
       await persistirRespostaFollowupSupabase(admin, input);

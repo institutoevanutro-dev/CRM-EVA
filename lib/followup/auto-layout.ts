@@ -44,6 +44,7 @@ const TYPE_ORDER: Record<NodeType, number> = {
   // Ações sem mensagem: meio do caminho, junto do envio.
   move_lead: 6.3,
   edit_lead_tag: 6.6,
+  notify_team: 6.8,
   end: 7,
 };
 
