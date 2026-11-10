@@ -10629,6 +10629,10 @@ alter table public.agent_inbox_items
     -- sair: recusado ou sem resposta depois de todas as tentativas. Um aberto
     -- por organização. Entra NESTA lista (bloco único por constraint, #159).
     'ad_conversion_failing',
+    -- (migration 0406) A caixa "Avisar a equipe" de um fluxo de follow-up:
+    -- aviso na Central apontando para a conversa, com push no celular
+    -- (`somDoAviso`). Entra NESTA lista (bloco único por constraint, #159).
+    'followup_notify_team',
     'other'
   ));
 
