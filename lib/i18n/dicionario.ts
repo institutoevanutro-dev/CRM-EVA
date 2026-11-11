@@ -10305,9 +10305,22 @@ export const DICIONARIO: Traducoes = {
     es: "Solo un administrador de la organización puede cambiar esta opción.",
   },
   "Opção salva.": { es: "Opción guardada." },
+  // Interruptor da extração silenciosa de cadastro (migration 0407).
+  "Ler o cadastro que o cliente manda nas conversas atendidas pela equipe": {
+    es: "Leer el registro que el cliente envía en las conversaciones atendidas por el equipo",
+  },
+  "Quando a equipe está atendendo e o cliente manda CPF, e-mail, data de nascimento ou endereço, o dado entra sozinho na ficha se o campo estiver vazio. Se a ficha já tem um valor diferente, nada é trocado: vira uma sugestão na ficha e um aviso na Central. Nenhuma mensagem é enviada ao cliente e a IA continua parada na conversa. Grupos, contatos bloqueados e contatos anonimizados ficam de fora. Vem desligada.": {
+    es: "Cuando el equipo está atendiendo y el cliente envía CPF, correo, fecha de nacimiento o dirección, el dato entra solo en la ficha si el campo está vacío. Si la ficha ya tiene un valor diferente, nada se cambia: se vuelve una sugerencia en la ficha y un aviso en la Central. No se envía ningún mensaje al cliente y la IA sigue detenida en la conversación. Grupos, contactos bloqueados y contactos anonimizados quedan fuera. Viene desactivada.",
+  },
+  "Ligado: os dados de cadastro das conversas da equipe preenchem a ficha vazia, com registro na linha do tempo.": {
+    es: "Activado: los datos de registro de las conversaciones del equipo completan la ficha vacía, con registro en la línea de tiempo.",
+  },
+  "Desligado: ninguém lê os dados de cadastro das conversas atendidas pela equipe.": {
+    es: "Desactivado: nadie lee los datos de registro de las conversaciones atendidas por el equipo.",
+  },
   // O rótulo da atividade `contact_field_auto_applied` na linha do tempo.
-  "Telefone informado pelo cliente aplicado automaticamente": {
-    es: "Teléfono informado por el cliente aplicado automáticamente",
+  "Dado informado pelo cliente aplicado automaticamente": {
+    es: "Dato informado por el cliente aplicado automáticamente",
   },
   "Registra uma nova oportunidade de venda no funil, para que o interesse demonstrado pelo cliente não se perca.": {
     es: "Registra una nueva oportunidad de venta en el embudo, para que el interés demostrado por el cliente no se pierda.",

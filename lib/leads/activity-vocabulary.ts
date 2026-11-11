@@ -329,7 +329,9 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   // Rótulo que diz DUAS coisas de uma vez: que entrou sozinho (e não por
   // digitação de alguém) e de onde veio. Só assim quem lê a linha do tempo não
   // vai procurar quem foi que digitou o número.
-  contact_field_auto_applied: "Telefone informado pelo cliente aplicado automaticamente",
+  // Genérico desde a 0407: a extração silenciosa grava CPF, e-mail, nascimento
+  // e endereço pela mesma linha — o `reason` diz qual campo.
+  contact_field_auto_applied: "Dado informado pelo cliente aplicado automaticamente",
   call_logged: "Ligação registrada",
 };
 

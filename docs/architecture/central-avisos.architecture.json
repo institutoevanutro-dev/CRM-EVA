@@ -140,6 +140,13 @@
       "col": 0,
       "type": "service",
       "label": "Follow-up: caixa «Avisar a equipe» (notify_team) → aviso followup_notify_team na conversa (0406)"
+    },
+    {
+      "id": "extracao_silenciosa",
+      "lane": "app",
+      "col": 0,
+      "type": "service",
+      "label": "Extração silenciosa de cadastro (message.received, conversa da equipe) → aviso contact_data_divergent no contato (0407)"
     }
   ],
   "edges": [
@@ -262,6 +269,16 @@
       "from": "followup_avisar_equipe",
       "to": "push",
       "label": "somDoAviso: pede gente, push com o texto da caixa"
+    },
+    {
+      "from": "extracao_silenciosa",
+      "to": "produtores",
+      "label": "um aberto por contato, sem o valor do dado no texto"
+    },
+    {
+      "from": "extracao_silenciosa",
+      "to": "central",
+      "label": "info: a sugestão espera na ficha do contato"
     }
   ]
 }
