@@ -24,6 +24,7 @@ const h = vi.hoisted(() => ({
   rpc: vi.fn(async (_n: string, _a: Record<string, unknown>) => ({ data: 1, error: null })),
   settings: null as Record<string, unknown> | null,
   guardada: null as Record<string, unknown> | null,
+  erroNaConta: false,
   audit: vi.fn(async (_e: Record<string, unknown>) => undefined),
   bucket: vi.fn(() => {
     throw new Error("chegou no bucket");
@@ -62,7 +63,9 @@ vi.mock("@/lib/supabase/admin", () => ({
       c.abortSignal = () => c;
       c.maybeSingle = async () =>
         colunas.startsWith("conta_")
-          ? { data: h.guardada, error: null }
+          ? h.erroNaConta
+            ? { data: null, error: { code: "08006", message: "conexão caiu" } }
+            : { data: h.guardada, error: null }
           : { data: { settings: h.settings }, error: null };
       return c;
     },
@@ -86,6 +89,7 @@ beforeEach(() => {
   h.audit.mockClear();
   h.bucket.mockClear();
   h.settings = null;
+  h.erroNaConta = false;
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -129,6 +133,13 @@ describe("updateBranding com a Conta", () => {
     expect(h.upsert.mock.calls[0]![0]).toMatchObject({ app_name: "Outra" });
   });
 
+  it("guardado da Conta ilegível com CONTA_URL: recusa e não grava", async () => {
+    const { updateBranding } = await carregar<Branding>("@/app/actions/settings/updateBranding", true);
+    h.erroNaConta = true;
+    expect(await updateBranding(instalacao())).toEqual({ ok: false, error: "db_error" });
+    expect(h.upsert).not.toHaveBeenCalled();
+  });
+
   it("sem CONTA_URL, grava a marca inteira como antes", async () => {
     const { updateBranding } = await carregar<Branding>("@/app/actions/settings/updateBranding", false);
     expect(await updateBranding(instalacao({ app_name: "Outra", accent_hex: "#123456" }))).toEqual({ ok: true });
@@ -137,10 +148,10 @@ describe("updateBranding com a Conta", () => {
 });
 
 describe("updateMarcaDaOrganizacao com a Conta", () => {
-  it("grava só menu_hex e preserva o nome e a cor que a organização já tinha", async () => {
+  it("o pedido da tela com a Conta (sem nome nem cor) grava só menu_hex e preserva o resto", async () => {
     h.settings = { branding: { app_name: "Org Local", accent_hex: "#1f4e5f", logo_path: "org-1/l.png" } };
     const { updateMarcaDaOrganizacao } = await carregar<Org>("@/app/actions/settings/updateMarcaDaOrganizacao", true);
-    expect(await updateMarcaDaOrganizacao({ app_name: null, accent_hex: null, menu_hex: "#ABC" })).toEqual({ ok: true });
+    expect(await updateMarcaDaOrganizacao({ menu_hex: "#ABC" })).toEqual({ ok: true });
     expect(h.rpc.mock.calls[0]![1].p_marca).toMatchObject({
       app_name: "Org Local",
       accent_hex: "#1f4e5f",
@@ -151,7 +162,7 @@ describe("updateMarcaDaOrganizacao com a Conta", () => {
 
   it("menu vazio sem nada gravado continua sendo limpar", async () => {
     const { updateMarcaDaOrganizacao } = await carregar<Org>("@/app/actions/settings/updateMarcaDaOrganizacao", true);
-    await updateMarcaDaOrganizacao({ app_name: null, accent_hex: null, menu_hex: null });
+    await updateMarcaDaOrganizacao({ menu_hex: null });
     expect(h.rpc.mock.calls[0]![1].p_marca).toBeNull();
   });
 
@@ -164,6 +175,38 @@ describe("updateMarcaDaOrganizacao com a Conta", () => {
       expect(h.rpc).not.toHaveBeenCalled();
     },
   );
+
+  it("guardado da Conta ilegível com CONTA_URL: recusa (db_error) e não grava nada", async () => {
+    h.settings = { branding: { app_name: "Org Local", accent_hex: "#1f4e5f" } };
+    const { updateMarcaDaOrganizacao } = await carregar<Org>("@/app/actions/settings/updateMarcaDaOrganizacao", true);
+    h.erroNaConta = true;
+    const r = await updateMarcaDaOrganizacao({ app_name: null, accent_hex: null, menu_hex: "#ABC" });
+    expect(r).toMatchObject({ ok: false, error: "db_error" });
+    expect(h.rpc).not.toHaveBeenCalled();
+    expect(h.audit).not.toHaveBeenCalled();
+  });
+
+  it("aba velha da tela com a Conta, depois de a Conta voltar ao padrão: nome e cor preservados", async () => {
+    h.settings = { branding: { app_name: "Org Local", accent_hex: "#1f4e5f" } };
+    // Conta ligada, mas nada guardado agora: a marca local voltou a valer.
+    const { updateMarcaDaOrganizacao } = await carregar<Org>(
+      "@/app/actions/settings/updateMarcaDaOrganizacao",
+      "sem-guardada",
+    );
+    expect(await updateMarcaDaOrganizacao({ menu_hex: "#334455" })).toEqual({ ok: true });
+    expect(h.rpc.mock.calls[0]![1].p_marca).toMatchObject({
+      app_name: "Org Local",
+      accent_hex: "#1f4e5f",
+      menu_hex: "#334455",
+    });
+  });
+
+  it("sem CONTA_URL, null explícito continua apagando nome e cor (a tela normal)", async () => {
+    h.settings = { branding: { app_name: "Org Local", accent_hex: "#1f4e5f" } };
+    const { updateMarcaDaOrganizacao } = await carregar<Org>("@/app/actions/settings/updateMarcaDaOrganizacao", false);
+    await updateMarcaDaOrganizacao({ app_name: null, accent_hex: null, menu_hex: "#334455" });
+    expect(h.rpc.mock.calls[0]![1].p_marca).toMatchObject({ app_name: null, accent_hex: null, menu_hex: "#334455" });
+  });
 
   it("sem CONTA_URL, nome e cor enviados são gravados como antes", async () => {
     const { updateMarcaDaOrganizacao } = await carregar<Org>("@/app/actions/settings/updateMarcaDaOrganizacao", false);
@@ -198,6 +241,14 @@ describe("/api/v1/marca/logo com a Conta", () => {
     const { POST } = await carregar<Rota>("@/app/api/v1/marca/logo/route", "sem-guardada");
     await POST(post("organizacao")).catch(() => undefined);
     expect(h.bucket).toHaveBeenCalled();
+  });
+
+  it("guardado da Conta ilegível com CONTA_URL: 503 sem tocar no bucket", async () => {
+    const { POST } = await carregar<Rota>("@/app/api/v1/marca/logo/route", true);
+    h.erroNaConta = true;
+    const res = await POST(post("organizacao"));
+    expect(res.status).toBe(503);
+    expect(h.bucket).not.toHaveBeenCalled();
   });
 
   it("sem CONTA_URL, o POST segue para o bucket (controle)", async () => {

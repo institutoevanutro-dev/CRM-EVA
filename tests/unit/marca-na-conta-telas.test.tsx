@@ -8,11 +8,12 @@
  * os campos de antes continuam (controle).
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock("@/app/actions/settings/updateMarcaDaOrganizacao", () => ({ updateMarcaDaOrganizacao: vi.fn() }));
+const salvarOrg = vi.hoisted(() => vi.fn(async (_i: Record<string, unknown>) => ({ ok: true })));
+vi.mock("@/app/actions/settings/updateMarcaDaOrganizacao", () => ({ updateMarcaDaOrganizacao: salvarOrg }));
 vi.mock("@/app/actions/settings/updateBranding", () => ({ updateBranding: vi.fn() }));
 
 import { FormularioDaMarcaDaOrganizacao } from "@/app/app/settings/marca/_form";
@@ -53,6 +54,16 @@ describe("Configurações › Marca com a Conta", () => {
     // A prévia é a pilha real: a Conta guardada vence a organização.
     expect(linhaDeOrigem("Nome")).toBe("vem da Conta Eva Link");
     expect(linhaDeOrigem("Cor")).toBe("vem da Conta Eva Link");
+  });
+
+  it("o Salvar com a Conta NÃO manda nome nem cor (ausente = manter o gravado)", async () => {
+    render(
+      <FormularioDaMarcaDaOrganizacao gravada={GRAVADA} instalacao={INSTALACAO} ambiente={{}} contaUrl={CONTA} />,
+    );
+    fireEvent.change(screen.getByLabelText("Cor do menu lateral"), { target: { value: "#334455" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(salvarOrg).toHaveBeenCalled());
+    expect(salvarOrg.mock.calls.at(-1)![0]).toEqual({ menu_hex: "#334455" });
   });
 
   it("sem a Conta, os campos de antes continuam e não há aviso", () => {

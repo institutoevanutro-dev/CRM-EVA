@@ -258,13 +258,18 @@ export function FormularioDaMarcaDaOrganizacao({
 
     // Os dois campos vazios = "volte ao que vem do sistema". A action traduz esse
     // par de `null` em apagar a chave inteira, e não em gravar um envelope vazio.
-    // Com a Conta, nome e cor não são deste formulário: vão `null` ("não
-    // mandei") e a action preserva o que estiver gravado.
-    const lido = marcaDaOrganizacaoSchema.safeParse({
-      app_name: !contaUrl && nomeLimpo.length > 0 ? nomeLimpo : null,
-      accent_hex: !contaUrl && hexLimpo.length > 0 ? hexLimpo : null,
-      menu_hex: menuLimpo.length > 0 ? menuLimpo : null,
-    });
+    // Com a Conta, nome e cor não são deste formulário: as chaves NÃO vão, e a
+    // action mantém o que estiver gravado (`null` significaria apagar).
+    const menuEnviado = menuLimpo.length > 0 ? menuLimpo : null;
+    const lido = marcaDaOrganizacaoSchema.safeParse(
+      contaUrl
+        ? { menu_hex: menuEnviado }
+        : {
+            app_name: nomeLimpo.length > 0 ? nomeLimpo : null,
+            accent_hex: hexLimpo.length > 0 ? hexLimpo : null,
+            menu_hex: menuEnviado,
+          },
+    );
     if (!lido.success) {
       toast.error(t("Confira os campos: algum valor não está no formato esperado."));
       return;

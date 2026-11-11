@@ -359,7 +359,13 @@ async function registrarAuditoria(
  * gate de propósito: quem não pode escrever recebe o motivo dele, não este.
  * Recusa não é mutação, então não audita (mesmo padrão das outras recusas daqui).
  */
-function recusaDaConta(requestId: string): Response {
+async function recusaDaConta(requestId: string): Promise<Response | null> {
+  const conta = await contaUrlEmVigor();
+  // Guardado ilegível com a Conta ligada: falha fechado, sem tocar no bucket.
+  if (conta === "erro") {
+    return fail("unavailable", "Não deu para conferir a marca da Conta agora. Tente de novo.", 503, { requestId });
+  }
+  if (conta === null) return null;
   return fail("marca_na_conta", "O logo da clínica é configurado na Conta Eva Link.", 409, { requestId });
 }
 
@@ -380,7 +386,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     return fail(aberto.recusa.codigo, aberto.recusa.mensagem, aberto.recusa.status, { requestId });
   }
   const ctx = aberto.ctx;
-  if (await contaUrlEmVigor()) return recusaDaConta(requestId);
+  const recusaConta = await recusaDaConta(requestId);
+  if (recusaConta) return recusaConta;
 
   const limite = await checkRateLimit(
     `marca-logo:${ctx.userId}`,
@@ -481,7 +488,8 @@ export async function DELETE(req: NextRequest): Promise<Response> {
     return fail(aberto.recusa.codigo, aberto.recusa.mensagem, aberto.recusa.status, { requestId });
   }
   const ctx = aberto.ctx;
-  if (await contaUrlEmVigor()) return recusaDaConta(requestId);
+  const recusaConta = await recusaDaConta(requestId);
+  if (recusaConta) return recusaConta;
 
   const limite = await checkRateLimit(
     `marca-logo:${ctx.userId}`,

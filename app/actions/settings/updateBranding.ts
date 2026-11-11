@@ -94,7 +94,10 @@ export async function updateBranding(
   // Campo de marca PREENCHIDO é recusado com nome (`marca_na_conta`) — uma aba
   // aberta antes de ligar a Conta não pode achar que salvou. `null` quer dizer
   // "não mandei", e NÃO apaga: a marca local é a rede quando a Conta cai.
-  const naConta = (await contaUrlEmVigor()) !== null;
+  // Guardado ilegível com a Conta ligada: falha fechado (ver `contaUrlEmVigor`).
+  const conta = await contaUrlEmVigor();
+  if (conta === "erro") return { ok: false, error: "db_error" };
+  const naConta = conta !== null;
   if (
     naConta &&
     (parsed.data.app_name !== null || parsed.data.logo_url !== null || parsed.data.accent_hex !== null)

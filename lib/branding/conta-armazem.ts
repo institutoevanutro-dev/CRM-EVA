@@ -73,15 +73,18 @@ export function contaUrlLigada(): string | null {
 
 /**
  * A `CONTA_URL` quando a marca da Conta está EM VIGOR (ligada E guardada —
- * `contaEmVigor`), senão `null`. É o que as escritas de marca consultam antes de
- * recusar com `marca_na_conta`. Lê do banco, não do memo: escrita é rara, e
- * decidir pelo memo de 30 s deixaria passar a primeira escrita depois da Conta.
+ * `contaEmVigor`), `null` quando não está, e `"erro"` quando a Conta está ligada
+ * mas o guardado não pôde ser lido. É o que as escritas de marca consultam antes
+ * de recusar com `marca_na_conta`; no `"erro"` elas FALHAM FECHADO (não dá para
+ * saber se a escrita vale). Lê do banco, não do memo: escrita é rara, e decidir
+ * pelo memo de 30 s deixaria passar a primeira escrita depois da Conta.
  */
-export async function contaUrlEmVigor(): Promise<string | null> {
+export async function contaUrlEmVigor(): Promise<string | null | "erro"> {
   const url = contaUrlLigada();
   if (!url) return null;
   const g = await lerContaGuardada();
-  return g !== "erro" && contaEmVigor(g) ? url : null;
+  if (g === "erro") return "erro";
+  return contaEmVigor(g) ? url : null;
 }
 
 /**
@@ -310,6 +313,9 @@ export async function rodarMarcaDaConta(
       for (const aviso of r.avisos) avisar(`aviso|${aviso}`, "marca da Conta: logo recusada; a anterior fica", { aviso });
       estado = await estadoDaNova(r, g);
     }
+    // ponytail: conferida ANTES do await de `gravar` — uma rodada que perca a vez
+    // durante o próprio update ainda grava. Fecha só com update condicional no
+    // banco (ex.: `conta_lida_em` como versão), se um dia isso aparecer.
     if (mesmoEstado(estado, g) || !vigente()) return "nada";
     if (!(await gravar(estado, r.tipo === "nova"))) return "falha";
     aoGravar();
