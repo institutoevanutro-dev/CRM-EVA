@@ -234,7 +234,7 @@ test("gerente vê a Visão da clínica e, no Meu dia, a fila e o aviso da clíni
   // A clínica toda: 3 esperando há pouco (ana, bia e a fila), 1 delas sem responsável; 1 antiga à parte.
   await expect(depois("Esperando resposta agora")).toContainText("3", { timeout: 30_000 });
   await expect(depois("Esperando resposta agora")).toContainText("1 sem responsável");
-  await expect(page.getByText("1 conversas antigas sem resposta (mais de 3 dias)")).toBeVisible();
+  await expect(page.locator("dd").filter({ hasText: /^Conversas antigas sem resposta \(mais de 3 dias\): 1$/ })).toBeVisible();
   await expect(depois("Consultas hoje")).toHaveText("2");
   const tabela = page.getByRole("table", { name: "Agenda por profissional nesta semana" });
   await expect(tabela.getByRole("rowheader", { name: "Atendente Ana" })).toBeVisible();

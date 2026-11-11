@@ -330,7 +330,7 @@ function PainelAtendimento({ a, e }: { a: Atendimento; e: Esperando }) {
                 );
               })}
               <li className="text-text-muted">
-                {t("{{n}} conversas novas no total").replace("{{n}}", String(total))}
+                {t("Total de conversas novas: {{n}}").replace("{{n}}", String(total))}
               </li>
             </ul>
           </div>
@@ -360,9 +360,7 @@ function PainelAtendimento({ a, e }: { a: Atendimento; e: Esperando }) {
               </dd>
               {e.antigas ? (
                 <dd className="mt-1 text-sm text-text-muted">
-                  {t("{{n}} conversas antigas sem resposta (mais de {{dias}} dias)")
-                    .replace("{{n}}", String(e.antigas))
-                    .replace("{{dias}}", dias)}
+                  {t("Conversas antigas sem resposta (mais de {{n}} dias)").replace("{{n}}", dias)}: <span className="numero">{e.antigas}</span>
                 </dd>
               ) : null}
             </>

@@ -100,13 +100,13 @@ describe("Visão da clínica", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Atendidas pela equipe").previousElementSibling).toHaveTextContent("55");
     expect(screen.getByText("Resolvidas pela IA sozinha").previousElementSibling).toHaveTextContent("38");
-    expect(screen.getByText("100 conversas novas no total")).toBeInTheDocument();
+    expect(screen.getByText("Total de conversas novas: 100")).toBeInTheDocument();
     // Mediana de 240 s: nunca "10 h 58 m".
     expect(screen.getByText("Metade das conversas recebe resposta em até 4 min.")).toBeInTheDocument();
     // Esperando agora: só as recentes no número; as antigas vão à parte.
     expect(valorDe("Esperando resposta agora")).toHaveTextContent("12");
     expect(valorDe("Esperando resposta agora")).toHaveTextContent("há até 3 dias · 5 sem responsável");
-    expect(screen.getByText("40 conversas antigas sem resposta (mais de 3 dias)")).toBeInTheDocument();
+    expect(screen.getByText(/^Conversas antigas sem resposta \(mais de 3 dias\):/)).toHaveTextContent(/: 40$/);
   });
 
   it("a frase concorda com o número e não diz 'nenhuma' quando alguma ficou sem resposta", async () => {
