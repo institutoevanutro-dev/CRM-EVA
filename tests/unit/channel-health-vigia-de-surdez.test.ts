@@ -53,10 +53,13 @@ const db: {
   atualizacoes: Array<{ id: string }>;
   /** Outra rodada grava entre a nossa leitura e a nossa escrita. */
   antesDaTrava: (() => void) | null;
+  /** A linha de `channel_knobs`. O padrão do teste é a janela de 24 h: os casos não dependem da hora em que a suíte roda. */
+  knobs: Record<string, unknown> | null;
 } = {
   sessao: {}, entradas: [], erroNasMensagens: null, avisos: [], resolucoes: [], filtrosDeMensagem: [],
-  conexao: null, atualizacoes: [], antesDaTrava: null,
+  conexao: null, atualizacoes: [], antesDaTrava: null, knobs: null,
 };
+const JANELA_24H = { window_start_hour: 0, window_end_hour: 24, allow_sunday: true, timezone: "America/Sao_Paulo" };
 
 const vigia = () => (db.sessao.metadata as Record<string, Record<string, unknown> | undefined>)?.vigia_surdez;
 
@@ -90,6 +93,7 @@ function responder(tabela: string, op: string, patch: unknown, filtros: Filtro[]
   }
   if (tabela === "channel_connection_requests") return { data: db.conexao, error: null };
   if (tabela === "system_update_runs") return { data: db.atualizacoes, error: null };
+  if (tabela === "channel_knobs") return { data: db.knobs, error: null };
   if (tabela === "organizations") return { data: { timezone: "America/Sao_Paulo", locale: "pt-BR" }, error: null };
   return { data: null, error: null };
 }
@@ -136,7 +140,7 @@ beforeEach(() => {
   ambiente.CHANNEL_DEAF_RESTART_MAX = "";
   Object.assign(db, {
     entradas: [], erroNasMensagens: null, avisos: [], resolucoes: [], filtrosDeMensagem: [],
-    conexao: null, atualizacoes: [], antesDaTrava: null,
+    conexao: null, atualizacoes: [], antesDaTrava: null, knobs: JANELA_24H,
   });
   db.sessao = {
     id: "s1", organization_id: ORG, status: "WORKING", status_reason: null,
@@ -276,6 +280,25 @@ describe("cron channel-health × vigia de surdez", () => {
     await rodar();
     expect(db.filtrosDeMensagem).toHaveLength(0);
     expect(restart).not.toHaveBeenCalled();
+  });
+
+  it("madrugada, sem linha em channel_knobs (7h às 22h): silêncio de 1 h depois da queda não reinicia", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-11-11T06:00:00.000Z")); // 03:00 em Brasília
+      db.knobs = null;
+      db.sessao.last_status_change_at = ha(60 * MIN);
+      await rodar();
+      expect(restart).not.toHaveBeenCalled();
+      expect(db.filtrosDeMensagem).toHaveLength(0);
+
+      // A mesma queda às 07:45: 45 min de janela, e aí sim.
+      vi.setSystemTime(new Date("2026-11-11T10:45:00.000Z"));
+      await rodar();
+      expect(restart).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("não deu para consultar as mensagens: na dúvida não reinicia nem diz que voltou", async () => {
