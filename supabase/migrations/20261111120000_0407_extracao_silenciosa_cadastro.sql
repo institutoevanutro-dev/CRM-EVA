@@ -125,7 +125,16 @@ begin
   select contact_id, valor_cifrado into v_contato, v_cifra
     from public.contact_field_proposals
    where id = p_proposal and organization_id = p_org and campo = 'cpf' and status = 'accepted';
+  -- As MESMAS três guardas de forma de `decrypt_cpf` (0275), na mesma ordem
+  -- (`credencial-de-enfeite-nao-derruba-a-leitura.test.ts`): sem proposta ou
+  -- sem cifra, curto demais para ser pacote, sem cara de pacote PGP.
   if v_cifra is null then
+    return false;
+  end if;
+  if octet_length(v_cifra) < 66 then
+    return false;
+  end if;
+  if get_byte(v_cifra, 0) < 128 then
     return false;
   end if;
   update public.contacts

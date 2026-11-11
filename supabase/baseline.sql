@@ -38464,6 +38464,79 @@ alter table public.ai_agent_versions
   check (reply_min_interval_ms is null or (reply_min_interval_ms >= 0 and reply_min_interval_ms <= 600000));
 -- ---- fim: intervalo mínimo entre respostas da IA (migration 0405) ----
 
+-- ---- extração silenciosa de cadastro (migration 0407) ----
+-- O vocábulo novo de `contact_field_proposals.campo` (`cpf`, `endereco`) e o
+-- `kind` novo da Central (`contact_data_divergent`) entraram por EDIÇÃO NO
+-- LUGAR dos blocos únicos dessas constraints (cerca
+-- `baseline-constraint-reconstruida`). Aqui só o que é novo de verdade: a
+-- coluna do CPF cifrado e a constraint que impede CPF em claro nesta fila.
+-- Idempotente: `add column if not exists`, `drop constraint if exists` + `add`.
+-- Nenhuma linha existente viola a constraint: a coluna nasce nula e nenhuma
+-- proposta antiga é de CPF.
+alter table public.contact_field_proposals
+  add column if not exists valor_cifrado bytea;
+
+comment on column public.contact_field_proposals.valor_cifrado is
+  'CPF proposto, cifrado por encrypt_cpf (o mesmo par de contacts.cpf_encrypted). Só em campo = ''cpf''; valor_proposto guarda a máscara.';
+
+alter table public.contact_field_proposals
+  drop constraint if exists contact_field_proposals_cpf_cifrado,
+  add constraint contact_field_proposals_cpf_cifrado check (
+    case when campo = 'cpf'
+      then valor_cifrado is not null
+           and valor_anterior is null
+           and length(regexp_replace(valor_proposto, '[^0-9]', '', 'g')) <= 2
+      else valor_cifrado is null
+    end
+  );
+-- ---- aplicar o CPF de uma proposta ACEITA, sem o número sair do banco ----
+-- A rota de decisão (`app/api/v1/contacts/[id]/proposals/[proposal_id]`) marca
+-- a proposta `accepted` e chama esta função pela service role. Ela decifra
+-- `valor_cifrado` só para calcular o índice (`cpf_indice`) e grava o PAR na
+-- ficha — `contacts_cpf_consistency` exige os dois juntos. Nunca devolve o
+-- CPF: o número não atravessa a rede nem passa pela memória do app.
+-- Só alcança proposta `accepted` da organização pedida (a decisão humana vem
+-- antes) e não grava em contato anonimizado. CPF de outro contato vivo da
+-- organização estoura `uniq_contacts_org_cpf` (23505), que a rota traduz.
+create or replace function public.fn_aplicar_cpf_proposto(p_org uuid, p_proposal uuid) returns boolean
+    language plpgsql volatile security definer
+    set search_path to 'public', 'private', 'extensions', 'pg_temp'
+    as $$
+declare
+  k text := private.fn_oauth_key();
+  v_contato uuid;
+  v_cifra bytea;
+begin
+  if k is null or length(k) < 32 then
+    raise exception 'chave de cifra da instalação ausente — rode o update.sh'
+      using errcode = '55000';
+  end if;
+  select contact_id, valor_cifrado into v_contato, v_cifra
+    from public.contact_field_proposals
+   where id = p_proposal and organization_id = p_org and campo = 'cpf' and status = 'accepted';
+  -- As MESMAS três guardas de forma de `decrypt_cpf` (0275), na mesma ordem
+  -- (`credencial-de-enfeite-nao-derruba-a-leitura.test.ts`): sem proposta ou
+  -- sem cifra, curto demais para ser pacote, sem cara de pacote PGP.
+  if v_cifra is null then
+    return false;
+  end if;
+  if octet_length(v_cifra) < 66 then
+    return false;
+  end if;
+  if get_byte(v_cifra, 0) < 128 then
+    return false;
+  end if;
+  update public.contacts
+     set cpf_encrypted = v_cifra,
+         cpf_hash = public.cpf_indice(pgp_sym_decrypt(v_cifra, 'cpf:' || k))
+   where id = v_contato and organization_id = p_org and not is_anonymized;
+  return found;
+end$$;
+
+revoke execute on function public.fn_aplicar_cpf_proposto(uuid, uuid) from public, anon, authenticated;
+grant  execute on function public.fn_aplicar_cpf_proposto(uuid, uuid) to service_role;
+-- ---- fim: extração silenciosa de cadastro (migration 0407) ----
+
 
 
 
@@ -38904,67 +38977,3 @@ update public.crm_leads l
    and c.channel in ('instagram', 'facebook')
    and l.source = 'whatsapp';
 -- ---- fim: origem do negócio segue o canal da conversa (migration 0379) ----
-
--- ---- extração silenciosa de cadastro (migration 0407) ----
--- O vocábulo novo de `contact_field_proposals.campo` (`cpf`, `endereco`) e o
--- `kind` novo da Central (`contact_data_divergent`) entraram por EDIÇÃO NO
--- LUGAR dos blocos únicos dessas constraints (cerca
--- `baseline-constraint-reconstruida`). Aqui só o que é novo de verdade: a
--- coluna do CPF cifrado e a constraint que impede CPF em claro nesta fila.
--- Idempotente: `add column if not exists`, `drop constraint if exists` + `add`.
--- Nenhuma linha existente viola a constraint: a coluna nasce nula e nenhuma
--- proposta antiga é de CPF.
-alter table public.contact_field_proposals
-  add column if not exists valor_cifrado bytea;
-
-comment on column public.contact_field_proposals.valor_cifrado is
-  'CPF proposto, cifrado por encrypt_cpf (o mesmo par de contacts.cpf_encrypted). Só em campo = ''cpf''; valor_proposto guarda a máscara.';
-
-alter table public.contact_field_proposals
-  drop constraint if exists contact_field_proposals_cpf_cifrado,
-  add constraint contact_field_proposals_cpf_cifrado check (
-    case when campo = 'cpf'
-      then valor_cifrado is not null
-           and valor_anterior is null
-           and length(regexp_replace(valor_proposto, '[^0-9]', '', 'g')) <= 2
-      else valor_cifrado is null
-    end
-  );
--- ---- aplicar o CPF de uma proposta ACEITA, sem o número sair do banco ----
--- A rota de decisão (`app/api/v1/contacts/[id]/proposals/[proposal_id]`) marca
--- a proposta `accepted` e chama esta função pela service role. Ela decifra
--- `valor_cifrado` só para calcular o índice (`cpf_indice`) e grava o PAR na
--- ficha — `contacts_cpf_consistency` exige os dois juntos. Nunca devolve o
--- CPF: o número não atravessa a rede nem passa pela memória do app.
--- Só alcança proposta `accepted` da organização pedida (a decisão humana vem
--- antes) e não grava em contato anonimizado. CPF de outro contato vivo da
--- organização estoura `uniq_contacts_org_cpf` (23505), que a rota traduz.
-create or replace function public.fn_aplicar_cpf_proposto(p_org uuid, p_proposal uuid) returns boolean
-    language plpgsql volatile security definer
-    set search_path to 'public', 'private', 'extensions', 'pg_temp'
-    as $$
-declare
-  k text := private.fn_oauth_key();
-  v_contato uuid;
-  v_cifra bytea;
-begin
-  if k is null or length(k) < 32 then
-    raise exception 'chave de cifra da instalação ausente — rode o update.sh'
-      using errcode = '55000';
-  end if;
-  select contact_id, valor_cifrado into v_contato, v_cifra
-    from public.contact_field_proposals
-   where id = p_proposal and organization_id = p_org and campo = 'cpf' and status = 'accepted';
-  if v_cifra is null then
-    return false;
-  end if;
-  update public.contacts
-     set cpf_encrypted = v_cifra,
-         cpf_hash = public.cpf_indice(pgp_sym_decrypt(v_cifra, 'cpf:' || k))
-   where id = v_contato and organization_id = p_org and not is_anonymized;
-  return found;
-end$$;
-
-revoke execute on function public.fn_aplicar_cpf_proposto(uuid, uuid) from public, anon, authenticated;
-grant  execute on function public.fn_aplicar_cpf_proposto(uuid, uuid) to service_role;
--- ---- fim: extração silenciosa de cadastro (migration 0407) ----
