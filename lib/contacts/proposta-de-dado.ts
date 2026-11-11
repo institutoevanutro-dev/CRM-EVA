@@ -41,12 +41,13 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { indiceDoCpf, mascararCpf, mascararCpfsNoTexto, normalizeCpf, parDoCpf } from "@/lib/contacts/cpf";
 import {
   lerTelefoneDeFichaVazia,
   registrarTelefoneAplicadoNaTimeline,
 } from "@/lib/contacts/telefone-aplicado";
 import { logger } from "@/lib/logger";
-import { PHONE_REGEX } from "@/lib/schemas/contacts";
+import { isValidCpf, PHONE_REGEX } from "@/lib/schemas/contacts";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhoneBR } from "@/lib/webhooks/inbound";
 
@@ -57,8 +58,15 @@ import { normalizePhoneBR } from "@/lib/webhooks/inbound";
  * código aceita e o que o banco aceita é a mesma fronteira vista de lados
  * diferentes, e divergir faria a proposta nascer aqui e morrer em 23514 na
  * confirmação — com o erro aparecendo para quem não causou.
+ *
+ * A 0407 (extração silenciosa de cadastro) acrescentou `cpf` e `endereco`:
+ *  - `cpf` NUNCA vai em claro para a fila: o `valor_proposto` é a máscara
+ *    (`mascararCpf`) e o número vai cifrado em `valor_cifrado`, pela mesma
+ *    `encrypt_cpf` de `contacts.cpf_encrypted`. Não há `valor_anterior`.
+ *  - `endereco` é o texto livre de `contacts.custom_fields.endereco` — o mesmo
+ *    que a ficha edita e o Prontuário lê.
  */
-export const CAMPOS_PROPONIVEIS = ["email", "name", "phone_number", "birthdate"] as const;
+export const CAMPOS_PROPONIVEIS = ["email", "name", "phone_number", "birthdate", "cpf", "endereco"] as const;
 export type CampoProponivel = (typeof CAMPOS_PROPONIVEIS)[number];
 
 export type MotivoSemProposta =
@@ -134,6 +142,12 @@ export function valorAceitavel(campo: CampoProponivel, valor: string): boolean {
       data.getUTCFullYear() === ano && data.getUTCMonth() === mes - 1 && data.getUTCDate() === dia;
     return existe && data.getTime() <= Date.now();
   }
+  if (campo === "cpf") return isValidCpf(v);
+  if (campo === "endereco") {
+    // Texto livre, como na ficha. Só recusa o que não pode ser endereço: curto
+    // demais ou sem letra nenhuma (um CEP sozinho não diz onde a pessoa mora).
+    return v.length >= 8 && /\p{L}/u.test(v);
+  }
   // name: só recusa o que claramente não é nome de gente. A guarda forte é a
   // confirmação humana; ser rígido aqui recusaria nome legítimo, que é pior.
   return v.length >= 2 && !/^\d+$/.test(v);
@@ -165,6 +179,8 @@ function normalizar(campo: CampoProponivel, valor: string): string {
   const v = valor.trim();
   if (campo === "email") return v.toLowerCase();
   if (campo === "phone_number") return `+${v.replace(/\D/g, "")}`;
+  if (campo === "cpf") return normalizeCpf(v);
+  if (campo === "endereco") return v.replace(/\s+/g, " ");
   return v;
 }
 
@@ -188,7 +204,7 @@ export async function proporDadoDoContato(
     // mesmo ato, com o MESMO merge por finalidade que a rota de confirmação
     // faz — ler sem ele forçaria substituir o mapa inteiro e apagar
     // `marketing`/`profiling` de quem já tinha dado.
-    .select("id,is_anonymized,email,name,phone_number,birthdate,consent")
+    .select("id,is_anonymized,email,name,phone_number,birthdate,consent,custom_fields")
     .eq("organization_id", organizationId)
     .eq("id", contactId)
     .maybeSingle();
@@ -203,7 +219,14 @@ export async function proporDadoDoContato(
     return { criada: false, motivo: "contato_anonimizado" };
   }
 
-  const atual = ((contato as Record<string, unknown>)[campo] as string | null) ?? null;
+  // CPF: o par cifrado tem dono próprio (`propostaDeCpf`) — nem o valor atual
+  // nem o proposto saem daqui em claro.
+  if (campo === "cpf") return propostaDeCpf(db, dados, valor);
+
+  const atual =
+    campo === "endereco"
+      ? enderecoDaFicha((contato as { custom_fields?: unknown }).custom_fields)
+      : (((contato as Record<string, unknown>)[campo] as string | null) ?? null);
   if (atual !== null && normalizar(campo, atual) === valor) {
     // Não há decisão a tomar. Sem esta recusa, o cliente repetir o próprio
     // e-mail encheria a fila de propostas que confirmam o que já é verdade.
@@ -267,7 +290,10 @@ export async function proporDadoDoContato(
       // O `from` da L-06, capturado no nascimento: quem decide vê os dois lados,
       // e não precisa confiar que o valor anterior ainda estará lá depois.
       valor_anterior: atual,
-      trecho: dados.trecho ?? null,
+      // CPF em claro não mora nesta tabela, nem dentro do trecho de outro
+      // campo. O telefone fica de fora da máscara: 11 dígitos colados parecem
+      // CPF, e é o próprio número que quem confere precisa ver.
+      trecho: dados.trecho ? (campo === "phone_number" ? dados.trecho : mascararCpfsNoTexto(dados.trecho)) : null,
       conversation_id: dados.conversationId ?? null,
       message_id: dados.messageId ?? null,
       proposed_by_agent_id: dados.agentId ?? null,
@@ -288,6 +314,74 @@ export async function proporDadoDoContato(
   }
 
   return { criada: true, id: (criada as { id: string }).id, valorAnterior: atual };
+}
+
+/** O endereço de texto livre da ficha (`custom_fields.endereco`), ou `null`. */
+export function enderecoDaFicha(customFields: unknown): string | null {
+  if (!customFields || typeof customFields !== "object" || Array.isArray(customFields)) return null;
+  const e = (customFields as Record<string, unknown>).endereco;
+  return typeof e === "string" && e.trim() !== "" ? e.trim() : null;
+}
+
+/**
+ * A proposta de CPF (0407). Igualdade pelo ÍNDICE (`cpf_indice`, HMAC com a
+ * chave da instalação) e não pelo número: o CPF gravado só existe cifrado.
+ * `cpf_hash` e as RPCs de cifra são da service role — `authenticated` não lê a
+ * coluna desde a 0289 —, por isso o client de serviço, sempre filtrado pela
+ * organização que quem chama já resolveu de fonte confiável.
+ *
+ * O `trecho` vai com todo CPF mascarado: a tela de propostas o mostra a quem
+ * confere, e o número em claro não pode morar nesta tabela.
+ */
+async function propostaDeCpf(
+  db: SupabaseClient,
+  dados: DadosDaProposta,
+  digitos: string,
+): Promise<ResultadoDaProposta> {
+  const admin = createAdminClient();
+  const { data: atual, error } = await admin
+    .from("contacts")
+    .select("cpf_hash")
+    .eq("organization_id", dados.organizationId)
+    .eq("id", dados.contactId)
+    .maybeSingle();
+  if (error) return { criada: false, motivo: "erro", detalhe: error.message.slice(0, 120) };
+
+  const hashAtual = (atual as { cpf_hash?: string | null } | null)?.cpf_hash ?? null;
+  if (hashAtual) {
+    const indice = await indiceDoCpf(admin, digitos);
+    if (!indice) return { criada: false, motivo: "erro", detalhe: "índice de CPF indisponível" };
+    if (indice === hashAtual) return { criada: false, motivo: "valor_igual_ao_atual" };
+  }
+
+  const par = await parDoCpf(admin, digitos);
+  if (!par) return { criada: false, motivo: "erro", detalhe: "cifra de CPF indisponível" };
+
+  const expiraEm = new Date(
+    Date.now() + (dados.diasDePrazo ?? PRAZO_PADRAO_DIAS) * 24 * 3600_000,
+  ).toISOString();
+  const { data: criada, error: erroInsert } = await db
+    .from("contact_field_proposals")
+    .insert({
+      organization_id: dados.organizationId,
+      contact_id: dados.contactId,
+      campo: "cpf",
+      valor_proposto: mascararCpf(digitos),
+      valor_anterior: null,
+      valor_cifrado: par.cpf_encrypted,
+      trecho: dados.trecho ? mascararCpfsNoTexto(dados.trecho) : null,
+      conversation_id: dados.conversationId ?? null,
+      message_id: dados.messageId ?? null,
+      proposed_by_agent_id: dados.agentId ?? null,
+      expires_at: expiraEm,
+    })
+    .select("id")
+    .single();
+  if (erroInsert) {
+    if ((erroInsert as { code?: string }).code === "23505") return { criada: false, motivo: "ja_existe_proposta" };
+    return { criada: false, motivo: "erro", detalhe: erroInsert.message.slice(0, 120) };
+  }
+  return { criada: true, id: (criada as { id: string }).id, valorAnterior: null };
 }
 
 /**

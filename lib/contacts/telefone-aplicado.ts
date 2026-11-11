@@ -86,6 +86,36 @@ export async function registrarTelefoneAplicadoNaTimeline(
     trecho?: string | null;
   },
 ): Promise<boolean> {
+  return registrarDadoAplicadoNaTimeline(db, {
+    organizationId: p.organizationId,
+    contactId: p.contactId,
+    agentId: p.agentId ?? null,
+    // O NÚMERO fica legível para quem opera: é ele que o item 2 do CR pede
+    // que apareça. A coluna é coberta pela cascata da LGPD
+    // (`fn_lgpd_cascade_redact_contact` faz `update` nesta tabela), então
+    // telefone aqui não sobrevive a um pedido de esquecimento — e por isso o
+    // `trecho` que o cliente escreveu mora AQUI, e não na auditoria.
+    reason: `Número aplicado na ficha pelo assistente: ${p.telefone}`,
+    payload: { campo: "phone_number", telefone: p.telefone, automatico: true, trecho: p.trecho ?? null },
+  });
+}
+
+/**
+ * A linha `contact_field_auto_applied` na timeline, para qualquer campo — a do
+ * telefone de ficha vazia (acima) e a da extração silenciosa de cadastro
+ * (`lib/contacts/extracao-silenciosa.ts`, migration 0407). O roteamento
+ * contato→negócio e o "nunca lança" valem para as duas, e por isso moram aqui.
+ */
+export async function registrarDadoAplicadoNaTimeline(
+  db: SupabaseClient,
+  p: {
+    organizationId: string;
+    contactId: string;
+    agentId?: string | null;
+    reason: string;
+    payload: Record<string, unknown>;
+  },
+): Promise<boolean> {
   try {
     const [{ data: leads }, { data: defaultPipeline }] = await Promise.all([
       db
@@ -108,7 +138,7 @@ export async function registrarTelefoneAplicadoNaTimeline(
     });
 
     if (!alvo.routed) {
-      logger.info("[telefone-de-ficha-vazia] telefone aplicado sem negócio para pendurar", {
+      logger.info("[dado-aplicado] dado aplicado sem negócio para pendurar", {
         organization_id: p.organizationId,
         contact_id: p.contactId,
         motivo_sem_rota: alvo.reason,
@@ -131,17 +161,12 @@ export async function registrarTelefoneAplicadoNaTimeline(
       type: "contact_field_auto_applied",
       sourceModule: MODULO,
       actor,
-      // O NÚMERO fica legível para quem opera: é ele que o item 2 do CR pede
-      // que apareça. A coluna é coberta pela cascata da LGPD
-      // (`fn_lgpd_cascade_redact_contact` faz `update` nesta tabela), então
-      // telefone aqui não sobrevive a um pedido de esquecimento — e por isso o
-      // `trecho` que o cliente escreveu mora AQUI, e não na auditoria.
-      reason: `Número aplicado na ficha pelo assistente: ${p.telefone}`,
-      payload: { campo: "phone_number", telefone: p.telefone, automatico: true, trecho: p.trecho ?? null },
+      reason: p.reason,
+      payload: p.payload,
     });
 
     if (!r.ok) {
-      logger.warn("[telefone-de-ficha-vazia] atividade do telefone aplicado não foi gravada", {
+      logger.warn("[dado-aplicado] atividade do dado aplicado não foi gravada", {
         organization_id: p.organizationId,
         contact_id: p.contactId,
         error: r.error,
@@ -150,7 +175,7 @@ export async function registrarTelefoneAplicadoNaTimeline(
     }
     return true;
   } catch (err) {
-    logger.warn("[telefone-de-ficha-vazia] atividade do telefone aplicado falhou", {
+    logger.warn("[dado-aplicado] atividade do dado aplicado falhou", {
       organization_id: p.organizationId,
       contact_id: p.contactId,
       erro: err instanceof Error ? err.message : String(err),

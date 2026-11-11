@@ -142,7 +142,7 @@ const propostaShape = {
   contact_id: z.string().uuid(),
   campo: z
     .enum(CAMPOS_PROPONIVEIS)
-    .describe("Qual informação: email, name, phone_number ou birthdate (AAAA-MM-DD)."),
+    .describe("Qual informação: email, name, phone_number, birthdate (AAAA-MM-DD), cpf ou endereco."),
   valor: z.string().min(1).max(200).describe("O valor exatamente como a pessoa informou."),
   trecho: z
     .string()
@@ -179,12 +179,12 @@ const propostaShape = {
 export const crmProposeContactField: McpToolDefinition<typeof propostaShape> = {
   name: "crm_propose_contact_field",
   description:
-    "Registra uma informação que o cliente forneceu (email, nome, telefone ou data de nascimento) como PROPOSTA para " +
+    "Registra uma informação que o cliente forneceu (email, nome, telefone, data de nascimento, CPF ou endereço) como PROPOSTA para " +
     "uma pessoa confirmar; a proposta vence sozinha se ninguém decidir. EXCEÇÃO: um TELEFONE informado para um " +
     "contato que está SEM número pode ser gravado NA HORA, em formato internacional E.164 — mas só quando a " +
     "organização liga essa opção (vem desligada), e quem diz se a gravação aconteceu é o RETORNO desta chamada " +
     "(motivo \"aplicado_automaticamente\"); sem esse motivo, diga que alguém vai conferir. Nunca é gravado: telefone de " +
-    "quem JÁ tem número no cadastro (trocar exige decisão humana), email, nome e data de nascimento — para esses nunca " +
+    "quem JÁ tem número no cadastro (trocar exige decisão humana), email, nome, data de nascimento, CPF e endereço — para esses nunca " +
     "diga que o cadastro foi atualizado. Recusa se já houver proposta do mesmo campo aguardando decisão, se o valor for " +
     "igual ao que já está gravado, ou se o contato foi anonimizado.",
   inputSchema: propostaShape,
@@ -263,7 +263,7 @@ export const crmProposeContactField: McpToolDefinition<typeof propostaShape> = {
         contato_anonimizado:
           "esse contato exerceu o direito de exclusão de dados; não é possível registrar informações dele.",
         valor_invalido:
-          "o valor não tem forma de email/telefone/nome/data de nascimento válidos — confirme com a pessoa.",
+          "o valor não tem forma de email/telefone/nome/data de nascimento/CPF/endereço válidos — confirme com a pessoa.",
         valor_igual_ao_atual: "essa informação já está no cadastro; não há o que confirmar.",
         ja_existe_proposta:
           "já existe uma proposta desse mesmo campo aguardando decisão de uma pessoa — não crie outra.",

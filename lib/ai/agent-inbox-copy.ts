@@ -85,6 +85,7 @@ export const KIND_LABEL = {
   jev_parar_de_receber: "Um cliente pediu para parar de receber mensagens",
   ad_conversion_failing: "O aviso de agendamento para a plataforma de anúncio não está saindo",
   followup_notify_team: "Um fluxo de follow-up pediu a atenção da equipe",
+  contact_data_divergent: "Um cliente informou um dado diferente do cadastro",
   other: "Aviso do assistente",
 } as const satisfies Record<InboxKind, string>;
 
