@@ -38930,4 +38930,41 @@ alter table public.contact_field_proposals
       else valor_cifrado is null
     end
   );
+-- ---- aplicar o CPF de uma proposta ACEITA, sem o número sair do banco ----
+-- A rota de decisão (`app/api/v1/contacts/[id]/proposals/[proposal_id]`) marca
+-- a proposta `accepted` e chama esta função pela service role. Ela decifra
+-- `valor_cifrado` só para calcular o índice (`cpf_indice`) e grava o PAR na
+-- ficha — `contacts_cpf_consistency` exige os dois juntos. Nunca devolve o
+-- CPF: o número não atravessa a rede nem passa pela memória do app.
+-- Só alcança proposta `accepted` da organização pedida (a decisão humana vem
+-- antes) e não grava em contato anonimizado. CPF de outro contato vivo da
+-- organização estoura `uniq_contacts_org_cpf` (23505), que a rota traduz.
+create or replace function public.fn_aplicar_cpf_proposto(p_org uuid, p_proposal uuid) returns boolean
+    language plpgsql volatile security definer
+    set search_path to 'public', 'private', 'extensions', 'pg_temp'
+    as $$
+declare
+  k text := private.fn_oauth_key();
+  v_contato uuid;
+  v_cifra bytea;
+begin
+  if k is null or length(k) < 32 then
+    raise exception 'chave de cifra da instalação ausente — rode o update.sh'
+      using errcode = '55000';
+  end if;
+  select contact_id, valor_cifrado into v_contato, v_cifra
+    from public.contact_field_proposals
+   where id = p_proposal and organization_id = p_org and campo = 'cpf' and status = 'accepted';
+  if v_cifra is null then
+    return false;
+  end if;
+  update public.contacts
+     set cpf_encrypted = v_cifra,
+         cpf_hash = public.cpf_indice(pgp_sym_decrypt(v_cifra, 'cpf:' || k))
+   where id = v_contato and organization_id = p_org and not is_anonymized;
+  return found;
+end$$;
+
+revoke execute on function public.fn_aplicar_cpf_proposto(uuid, uuid) from public, anon, authenticated;
+grant  execute on function public.fn_aplicar_cpf_proposto(uuid, uuid) to service_role;
 -- ---- fim: extração silenciosa de cadastro (migration 0407) ----

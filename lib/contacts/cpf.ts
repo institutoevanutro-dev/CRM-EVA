@@ -66,3 +66,23 @@ export async function parDoCpf(admin: SupabaseClient, raw: string): Promise<ParD
 /** Texto do aviso/erro quando a cifra está fora do ar (vai pelo dicionário). */
 export const MSG_CPF_SEM_CIFRA =
   "CPF não foi gravado: a proteção de CPF desta instalação não está disponível. Peça ao administrador para rodar a atualização.";
+
+/**
+ * A máscara com que um CPF aparece fora da ficha (fila de proposta, aviso):
+ * só os 2 dígitos verificadores. É a forma que a constraint
+ * `contact_field_proposals_cpf_cifrado` (migration 0407) exige do
+ * `valor_proposto` — no máximo 2 dígitos.
+ */
+export function mascararCpf(raw: string): string {
+  return `•••.•••.•••-${normalizeCpf(raw).slice(-2)}`;
+}
+
+/**
+ * O mesmo texto com todo CPF trocado pela máscara — para o `trecho` de uma
+ * proposta, que a tela mostra a quem confere. Pega a forma com pontuação e a
+ * de 11 dígitos colados (pode mascarar um telefone de 11 dígitos junto, e
+ * mascarar demais é o lado certo do erro aqui).
+ */
+export function mascararCpfsNoTexto(texto: string): string {
+  return texto.replace(/(?<!\d)\d{3}\.?\d{3}\.?\d{3}[-.\s]?\d{2}(?!\d)/g, (m) => mascararCpf(m));
+}
