@@ -96,3 +96,57 @@ describe("aviso contact_data_divergent", () => {
     expect(countAs(MEMBRO_B, q)).toBe(0);
   });
 });
+
+describe("fn_aplicar_cpf_proposto — aceitar CPF sem o número sair do banco", () => {
+  const CPF = "52998224725";
+  const PROPOSTA = randomUUID();
+  const ANONIMO = randomUUID();
+  const PROPOSTA_ANONIMO = randomUUID();
+
+  beforeAll(() => {
+    sql(`insert into private.app_secrets (name, value)
+           values ('nuvemshop_oauth_key', 'chave-de-teste-do-harness-0407-nao-e-segredo')
+           on conflict (name) do nothing;
+         insert into contacts (id, organization_id, display_name, source)
+           values ('${ANONIMO}', '${ORG_A}', 'Outra Fictícia', 'whatsapp');
+         insert into contact_field_proposals
+           (id, organization_id, contact_id, campo, valor_proposto, valor_cifrado, expires_at)
+         values
+           ('${PROPOSTA}', '${ORG_A}', '${CONTATO}', 'cpf', '•••.•••.•••-25', public.encrypt_cpf('${CPF}'), now() + interval '7 days'),
+           ('${PROPOSTA_ANONIMO}', '${ORG_A}', '${ANONIMO}', 'cpf', '•••.•••.•••-25', public.encrypt_cpf('${CPF}'), now() + interval '7 days');`);
+  });
+
+  it("só service_role executa", () => {
+    const out = sql(`select string_agg(r || '=' || has_function_privilege(r, 'public.fn_aplicar_cpf_proposto(uuid, uuid)', 'EXECUTE')::text, ',' order by r)
+                       from unnest(array['anon','authenticated','service_role']) as r;`);
+    expect(out).toBe("anon=false,authenticated=false,service_role=true");
+  });
+
+  it("proposta ainda pendente não é aplicada (a decisão humana vem antes)", () => {
+    expect(lastLine(sql(`select public.fn_aplicar_cpf_proposto('${ORG_A}', '${PROPOSTA}');`))).toBe("f");
+    expect(lastLine(sql(`select count(*) from contacts where id = '${CONTATO}' and cpf_hash is not null;`))).toBe("0");
+  });
+
+  it("outra organização não alcança a proposta", () => {
+    sql(`update contact_field_proposals set status = 'accepted', decided_at = now() where id = '${PROPOSTA}';`);
+    expect(lastLine(sql(`select public.fn_aplicar_cpf_proposto('${ORG_B}', '${PROPOSTA}');`))).toBe("f");
+  });
+
+  it("aceita: grava o par na ficha, e o índice é o mesmo de cpf_indice", () => {
+    expect(lastLine(sql(`select public.fn_aplicar_cpf_proposto('${ORG_A}', '${PROPOSTA}');`))).toBe("t");
+    expect(
+      lastLine(
+        sql(`select (cpf_hash = public.cpf_indice('${CPF}'))::text || '|' || public.decrypt_cpf(id)
+               from contacts where id = '${CONTATO}';`),
+      ),
+    ).toBe(`true|${CPF}`);
+  });
+
+  it("contato anonimizado não recebe o CPF de volta", () => {
+    sql(`update contacts set is_anonymized = true, anonymized_at = now() where id = '${ANONIMO}';`);
+    // A anonimização apaga as propostas (gatilho da 0123) — e, mesmo que não
+    // apagasse, a função recusa contato anonimizado.
+    expect(lastLine(sql(`select count(*) from contact_field_proposals where id = '${PROPOSTA_ANONIMO}';`))).toBe("0");
+    expect(lastLine(sql(`select count(*) from contacts where id = '${ANONIMO}' and cpf_hash is not null;`))).toBe("0");
+  });
+});
