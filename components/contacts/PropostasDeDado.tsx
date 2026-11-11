@@ -41,6 +41,9 @@ const NOME_DO_CAMPO: Record<string, string> = {
   name: "Nome",
   phone_number: "Telefone",
   birthdate: "Data de nascimento",
+  // 0407: o CPF chega mascarado (`•••.•••.•••-NN`) — o número só existe cifrado.
+  cpf: "CPF",
+  endereco: "Endereço",
 };
 
 /**

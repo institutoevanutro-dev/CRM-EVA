@@ -93,6 +93,10 @@ export type InboxKind =
   // texto é o que quem montou o fluxo escreveu; aponta para a conversa. Vai
   // ao celular como os avisos que pedem gente (`somDoAviso`).
   | 'followup_notify_team'
+  // (migration 0407) Numa conversa atendida pela equipe, o cliente informou um
+  // dado de cadastro diferente do que a ficha tem: a sugestão espera na ficha.
+  // Um aberto por contato; o texto nunca leva o valor.
+  | 'contact_data_divergent'
   | 'other';
 
 export interface InboxItemRow {
