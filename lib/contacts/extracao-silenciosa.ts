@@ -241,7 +241,8 @@ export const lerEnderecoPeloModelo: LeitorDeEndereco = async ({ organizationId, 
   } catch (err) {
     logger.warn("[extracao-silenciosa] leitura do endereço falhou — segue sem ele", {
       organization_id: organizationId,
-      erro: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+      // Só o tipo do erro: a mensagem de parse pode trazer pedaço do endereço.
+      erro: err instanceof Error ? err.name : "desconhecido",
     });
     return null;
   }
