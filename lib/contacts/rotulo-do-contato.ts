@@ -88,8 +88,8 @@ export function ehIdentificadorTecnico(valor: string): boolean {
  *  - `name` é a coluna editável pela pessoa: "Novo contato" e "Editar contato"
  *    gravam nela, o CSV a preenche pela coluna `nome`, e é ela que
  *    `lib/contacts/proposta-de-dado.ts` escreve quando um humano APROVA uma
- *    proposta (`CAMPOS_PROPONIVEIS = ["email", "name", "phone_number",
- *    "birthdate"]` — `display_name` não está na lista).
+ *    proposta (`CAMPOS_PROPONIVEIS` em `lib/contacts/proposta-de-dado.ts` —
+ *    `display_name` não está na lista).
  *  - `display_name` é escrito pela INGESTÃO (`fn_upsert_wa_contact`, a partir do
  *    `pushName` do aparelho). Nenhum formulário do produto o edita: a única
  *    aparição dele nas telas de contato é um `<dd>` de exibição em
