@@ -14,6 +14,7 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/api\/v1\/integrations\/marketing\/report$/,
   /^\/api\/v1\/integrations\/marketing\/financeiro-totais$/,
   /^\/api\/v1\/integrations\/marketing\/funil-por-origem$/,
+  /^\/api\/v1\/integrations\/marketing\/resumo$/,
   // Captura de clique do Google Ads pelo site: público por natureza; a organização
   // sai do token de path, conferido na rota (migration 0400).
   /^\/api\/v1\/publico\/clique-google\/[0-9a-f]{64}$/,

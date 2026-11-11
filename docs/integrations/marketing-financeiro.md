@@ -44,3 +44,10 @@ dos ganhos (`receita_cents`, texto de dígitos) e quantos ganhos vieram sem valo
   `created_at` do primeiro da cadeia de remarcação, sem a agenda importada e sem o lançado por engano; sinais pela entrada
   numa etapa marcada como sinal pago em Configurações › Conversões; ganhos e receita por `closed_at`.
 - **Limite:** planilha importada com coluna "origem" própria não deixa marca no lead e conta como lead do dia da importação.
+
+## Resumo (`/api/v1/integrations/marketing/resumo`)
+
+Mesma credencial, organização, limite e janela de `funil-por-origem`, e as mesmas regras de data. Devolve os totais do
+período (os campos do funil mais `comparecimentos`: consultas `completed` por `starts_at`) e os mesmos números por código de
+anúncio da Meta (`source_metadata.ad_raw.sourceId` ou `source_id`); quem não tem código válido conta em `leads_sem_anuncio`. Só agregados e
+o código do anúncio saem daqui. Regras em `lib/integrations/marketing/resumo.ts`; serve a página Início do painel de anúncios.

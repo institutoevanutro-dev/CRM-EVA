@@ -21,12 +21,12 @@
  *    do aviso de sinal pago à plataforma);
  *  - ganhos: `crm_leads.closed_at` com `status = 'won'`, somando `value_cents`.
  *
+ * A leitura desses eventos mora em `eventos-do-periodo.ts`, compartilhada com o resumo do Início.
+ *
  * Desenho: docs do painel-meta, `specs/2026-10-23-funil-por-origem-design.md`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { lerPreferencias } from "@/lib/conversoes/preferencias";
-import { leadsQueEntraramNoSinal } from "@/lib/conversoes/sinais-do-periodo";
-import { ORIGEM_DA_PLANILHA } from "@/lib/leads/planilha";
+import { emLotes, lerEventosDoPeriodo, type Contato } from "@/lib/integrations/marketing/eventos-do-periodo";
 
 export type Origem = "meta" | "google" | "indicacao" | "organico";
 export const ORIGENS: readonly Origem[] = ["meta", "google", "indicacao", "organico"];
@@ -52,7 +52,6 @@ export function origemDe({ adPlatform, tags }: { adPlatform: string | null; tags
   return "organico";
 }
 
-type Contato = { contactId: string | null };
 export function montarFunil(
   e: { leads: Contato[]; agendamentos: Contato[]; sinais: Contato[]; ganhos: (Contato & { valueCents: number | null })[] },
   origens: ReadonlyMap<string, Origem>,
@@ -79,63 +78,11 @@ export function montarFunil(
 
 // ---------- Leitura (service role: TODA consulta filtra a organização) ----------
 
-const PAGINA = 1000;
-const LOTE = 200;
-
-/** Lê todas as páginas: o PostgREST corta em 1000 linhas por pedido. */
-async function todas<T>(consulta: (de: number, ate: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
-  const saida: T[] = [];
-  for (let i = 0; ; i += PAGINA) {
-    const { data, error } = await consulta(i, i + PAGINA - 1);
-    if (error) throw new Error("funil_por_origem: leitura falhou");
-    saida.push(...(data ?? []));
-    if (!data || data.length < PAGINA) return saida;
-  }
-}
-
-function emLotes<T>(xs: T[]): T[][] {
-  const lotes: T[][] = [];
-  for (let i = 0; i < xs.length; i += LOTE) lotes.push(xs.slice(i, i + LOTE));
-  return lotes;
-}
-
-/** Dia inteiro em São Paulo (sem horário de verão desde 2019). */
-function janela(de: string, ate: string) {
-  const fim = new Date(`${ate}T00:00:00-03:00`);
-  fim.setUTCDate(fim.getUTCDate() + 1);
-  return { inicio: new Date(`${de}T00:00:00-03:00`).toISOString(), fim: fim.toISOString() };
-}
-
 export async function consultaFunilPorOrigem(admin: SupabaseClient, org: string, de: string, ate: string): Promise<FunilPorOrigem> {
-  const { inicio, fim } = janela(de, ate);
-
-  const leads = await todas<{ contact_id: string | null }>((a, b) =>
-    admin.from("crm_leads").select("contact_id").eq("organization_id", org).or(`source.is.null,source.neq.${ORIGEM_DA_PLANILHA}`).gte("created_at", inicio).lt("created_at", fim).order("id").range(a, b));
-
-  const agendamentos = await todas<{ contact_id: string | null }>((a, b) =>
-    admin.from("calendar_appointments").select("contact_id").eq("organization_id", org).is("rescheduled_from_id", null)
-      .is("excluded_at", null).neq("source", "historical_import")
-      .gte("created_at", inicio).lt("created_at", fim).order("id").range(a, b));
-
-  const ganhos = await todas<{ contact_id: string | null; value_cents: number | null }>((a, b) =>
-    admin.from("crm_leads").select("contact_id, value_cents").eq("organization_id", org).eq("status", "won")
-      .gte("closed_at", inicio).lt("closed_at", fim).order("id").range(a, b));
-
-  const { data: dataOrg, error: erroOrg } = await admin.from("organizations").select("settings").eq("id", org).maybeSingle();
-  if (erroOrg) throw new Error("funil_por_origem: organização");
-  const { etapasDeSinalPago } = lerPreferencias((dataOrg as { settings?: unknown } | null)?.settings);
-  const sinais: { contact_id: string | null }[] = [];
-  if (etapasDeSinalPago.length) {
-    const leadsDoSinal = await leadsQueEntraramNoSinal(admin, org, etapasDeSinalPago, inicio, fim);
-    for (const lote of emLotes(leadsDoSinal)) {
-      const { data, error } = await admin.from("crm_leads").select("contact_id").eq("organization_id", org).in("id", lote);
-      if (error) throw new Error("funil_por_origem: leads do sinal");
-      sinais.push(...((data ?? []) as { contact_id: string | null }[]));
-    }
-  }
+  const { leads, agendamentos, sinais, ganhos } = await lerEventosDoPeriodo(admin, org, de, ate);
 
   // Origem de cada contato envolvido: plataforma do anúncio e etiquetas de todos os leads dele.
-  const contatos = [...new Set([...leads, ...agendamentos, ...ganhos, ...sinais].map((x) => x.contact_id).filter((x): x is string => Boolean(x)))];
+  const contatos = [...new Set([...leads, ...agendamentos, ...ganhos, ...sinais].map((x) => x.contactId).filter((x): x is string => Boolean(x)))];
   const plataforma = new Map<string, string | null>();
   const etiquetas = new Map<string, string[]>();
   for (const lote of emLotes(contatos)) {
@@ -150,11 +97,5 @@ export async function consultaFunilPorOrigem(admin: SupabaseClient, org: string,
   }
   const origens = new Map(contatos.map((id) => [id, origemDe({ adPlatform: plataforma.get(id) ?? null, tags: etiquetas.get(id) ?? [] })]));
 
-  const ct = (x: { contact_id: string | null }) => ({ contactId: x.contact_id });
-  return montarFunil({
-    leads: leads.map(ct),
-    agendamentos: agendamentos.map(ct),
-    sinais: sinais.map(ct),
-    ganhos: ganhos.map((x) => ({ contactId: x.contact_id, valueCents: x.value_cents == null ? null : Number(x.value_cents) })),
-  }, origens);
+  return montarFunil({ leads, agendamentos, sinais, ganhos }, origens);
 }
