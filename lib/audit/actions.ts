@@ -844,6 +844,13 @@ export const AUDIT_ACTIONS = [
   // cliente precisa encontrar o ato administrativo que abriu a porta, e não só
   // as gravações que ela deixou passar.
   "crm.telefone_de_ficha_vazia_alterado",
+  // Migration 0407: um administrador ligou ou desligou a extração silenciosa
+  // de cadastro (`organizations.settings.crm.extracao_silenciosa`). Mesmo
+  // motivo do código acima: é o ato que abre a escrita sem decisão humana. As
+  // gravações que ela faz saem como `contact.field_auto_applied` (com
+  // `origem: "extracao_silenciosa"`), e as divergências como
+  // `contact.field_proposed`.
+  "crm.extracao_silenciosa_alterada",
   /** Bônus da equipe (migration 0392). A metadata NUNCA leva valores, metas ou nomes. */
   "bonus.programa_criado",
   "bonus.regras_alteradas",
