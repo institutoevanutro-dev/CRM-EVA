@@ -7,6 +7,8 @@ import { revalidatePath } from "next/cache";
 import { audit } from "@/lib/audit";
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK, escreveComoPlatformAdmin } from "@/lib/auth/types";
+import { contaUrlEmVigor } from "@/lib/branding/conta-armazem";
+import { marcaDaOrganizacaoDeSettings } from "@/lib/branding/organizacao";
 import { normalizarHex } from "@/lib/branding/rampa";
 import {
   marcaDaOrganizacaoSchema,
@@ -25,6 +27,7 @@ export type UpdateMarcaDaOrganizacaoResult =
         | "forbidden_role"
         | "mfa_required"
         | "nao_gravou"
+        | "marca_na_conta"
         | "db_error";
       details?: unknown;
     };
@@ -116,26 +119,49 @@ export async function updateMarcaDaOrganizacao(
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   const userAgent = hdrs.get("user-agent") ?? null;
 
+  // ── Com a marca da Conta em vigor (Plano 6; ver `contaEmVigor`) ───────────
+  // Nome e cor da clínica vêm da Conta Eva Link; aqui só a cor do menu lateral.
+  // Nome/cor PREENCHIDOS são recusados com nome. E como a função SQL substitui o
+  // objeto `branding` inteiro, o nome e a cor já gravados são relidos e mandados
+  // de volta: são a marca que volta se a Conta for desligada.
+  // ponytail: ler-e-regravar tem janela de corrida com outra gravação da MESMA
+  // marca (dois admins salvando juntos); se doer, a função SQL ganha um modo "só menu".
+  const naConta = (await contaUrlEmVigor()) !== null;
+  let dados = parsed.data;
+  if (naConta) {
+    if (dados.app_name !== null || dados.accent_hex !== null) {
+      return { ok: false, error: "marca_na_conta" };
+    }
+    const { data: org, error: erroDeLeitura } = await createAdminClient()
+      .from("organizations")
+      .select("settings")
+      .eq("id", activeOrg.orgId)
+      .maybeSingle();
+    if (erroDeLeitura) return { ok: false, error: "db_error", details: erroDeLeitura.message };
+    const atual = marcaDaOrganizacaoDeSettings((org as { settings?: unknown } | null)?.settings ?? null);
+    dados = { ...dados, app_name: atual?.app_name ?? null, accent_hex: atual?.accent_hex ?? null };
+  }
+
   // Os dois campos vazios significam "volte ao que vem da instalação", e é `null`
   // que a função entende como apagar a chave `branding` — gravar `{}` deixaria um
   // envelope vazio que o resolvedor teria de aprender a ignorar.
   const limpar =
-    parsed.data.app_name === null &&
-    parsed.data.accent_hex === null &&
-    parsed.data.menu_hex === null;
+    dados.app_name === null &&
+    dados.accent_hex === null &&
+    dados.menu_hex === null;
   const marca = limpar
     ? null
     : {
-        app_name: parsed.data.app_name,
+        app_name: dados.app_name,
         // Normaliza porque a função valida com `^#[0-9a-f]{6}$`: `#FFF` e
         // `#FFFFFF` passam pelo Zod (o validador do domínio aceita as duas
         // formas) e só uma das duas passa pelo banco. Normalizar aqui é o que faz
         // "mudou?" ser uma pergunta com resposta.
         accent_hex:
-          parsed.data.accent_hex === null ? null : normalizarHex(parsed.data.accent_hex),
+          dados.accent_hex === null ? null : normalizarHex(dados.accent_hex),
         // Já normalizada pelo Zod. A função SQL não confere esta chave: o
         // `marcaDaOrganizacaoSchema` é a única validação da cor do menu.
-        menu_hex: parsed.data.menu_hex,
+        menu_hex: dados.menu_hex,
         updated_by: authUser.id,
         updated_at: new Date().toISOString(),
       };
@@ -187,10 +213,11 @@ export async function updateMarcaDaOrganizacao(
       // FORMA, nunca IDENTIDADE: nenhum hex e nenhum nome de empresa entram na
       // trilha. Mesma disciplina de `resolve.ts` — a auditoria de plataforma é
       // lida por quem opera a instalação inteira.
-      fields_changed: Object.keys(parsed.data),
-      accent_definido: parsed.data.accent_hex !== null,
-      menu_definido: parsed.data.menu_hex !== null,
-      nome_definido: parsed.data.app_name !== null,
+      fields_changed: naConta ? ["menu_hex"] : Object.keys(parsed.data),
+      accent_definido: dados.accent_hex !== null,
+      menu_definido: dados.menu_hex !== null,
+      nome_definido: dados.app_name !== null,
+      ...(naConta ? { marca_na_conta: true } : {}),
     },
   });
 

@@ -23,6 +23,8 @@ const banco = vi.hoisted(() => ({
   avisos: [] as string[],
   travar: false,
   aoListar: null as null | (() => void),
+  /** Segura o PRIMEIRO upload até ser solto (rodada que trava no bucket). */
+  travaDoUpload: null as null | Promise<void>,
 }));
 
 const CONTA_COLS = "conta_nome, conta_accent_hex";
@@ -66,6 +68,9 @@ vi.mock("@/lib/supabase/admin", () => ({
     storage: {
       from: () => ({
         upload: async (caminho: string, _b: unknown, opts: { contentType: string }) => {
+          const trava = banco.travaDoUpload;
+          banco.travaDoUpload = null;
+          if (trava) await trava;
           if (banco.uploadFalha) return { error: { message: "maior que o limite" } };
           banco.uploads.push({ caminho, tipo: opts.contentType });
           banco.noBucket.push(caminho);
@@ -152,6 +157,7 @@ beforeEach(() => {
   banco.avisos = [];
   banco.travar = false;
   banco.aoListar = null;
+  banco.travaDoUpload = null;
   globalThis.__rodadaDaConta = undefined;
   globalThis.__avisosDaConta = undefined;
   globalThis.__memoDaMarcaDaInstalacao = undefined;
@@ -349,6 +355,31 @@ describe("teto da rodada", () => {
     expect(globalThis.__rodadaDaConta?.emVoo).toBe(true);
     await vi.advanceTimersByTimeAsync(PRAZO_DA_RODADA_MS + 1);
     expect(globalThis.__rodadaDaConta?.emVoo).toBe(false);
+  });
+
+  it("rodada que volta depois de uma mais nova ter gravado não grava o que leu", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("CONTA_URL", CONTA);
+    let soltar!: () => void;
+    banco.travaDoUpload = new Promise<void>((r) => (soltar = r));
+    // 1ª chamada: a marca VELHA, com logo (trava no bucket). Depois: a NOVA, sem logo.
+    let n = 0;
+    const velha = contaFalsa(corpo({ nome_clinica: "Velha" })).f;
+    const nova = contaFalsa(corpo({ nome_clinica: "Nova", logos: { escuro: null, claro: null } })).f;
+    vi.stubGlobal("fetch", ((u: RequestInfo | URL) => (n++ < 2 ? velha(u) : nova(u))) as typeof fetch);
+    const { dispararMarcaDaConta, PRAZO_DA_RODADA_MS } = await armazem();
+    const aoGravar = vi.fn();
+    dispararMarcaDaConta(aoGravar);
+    await vi.advanceTimersByTimeAsync(PRAZO_DA_RODADA_MS + 60_000 + 1);
+    dispararMarcaDaConta(aoGravar);
+    await vi.waitFor(() => expect(aoGravar).toHaveBeenCalledTimes(1));
+    expect(banco.linha?.conta_nome).toBe("Nova");
+
+    soltar();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(banco.linha?.conta_nome).toBe("Nova");
+    expect(banco.updates).toHaveLength(1);
+    expect(aoGravar).toHaveBeenCalledTimes(1);
   });
 });
 

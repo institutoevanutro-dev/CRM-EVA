@@ -407,6 +407,17 @@ export function camadaDaConta(linha: LinhaDaInstalacao | null): CamadaDeMarca {
 }
 
 /**
+ * A Conta GOVERNA a marca: há marca dela guardada (só lida com `CONTA_URL`).
+ * É a mesma condição de `pilhaComConta`, e é ela — não `CONTA_URL` sozinha —
+ * que trava as telas e as escritas de nome, cor e logo: com a Conta ainda sem
+ * resposta (primeiro boot, clone sem a 0409), quem vale é a marca local, e
+ * travá-la deixaria a clínica sem marca editável em lugar nenhum.
+ */
+export function contaEmVigor(linha: LinhaDaInstalacao | null): boolean {
+  return Object.keys(camadaDaConta(linha)).length > 1;
+}
+
+/**
  * Monta a pilha com a Conta no topo — o ÚNICO lugar que sabe a regra da spec 3.5.
  *
  * Conta guardada (camada não vazia): a organização SAI da pilha (nome, cor e logo
@@ -420,8 +431,8 @@ export function pilhaComConta(
   linha: LinhaDaInstalacao | null,
   abaixo: readonly CamadaDeMarca[],
 ): CamadaDeMarca[] {
+  if (!contaEmVigor(linha)) return [...abaixo];
   const conta = camadaDaConta(linha);
-  if (Object.keys(conta).length === 1) return [...abaixo];
   return [
     conta,
     ...abaixo.filter((c) => c.origem !== "organizacao").map((c) => ({ ...c, logoUrl: null })),

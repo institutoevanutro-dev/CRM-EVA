@@ -93,6 +93,7 @@ function origemEmPortugues(
       : t("veio do arquivo de instalação do servidor");
   }
   if (origem === "env") return t("veio do arquivo de instalação do servidor");
+  if (origem === "conta") return t("vem da Conta Eva Link");
   return t("padrão do sistema");
 }
 

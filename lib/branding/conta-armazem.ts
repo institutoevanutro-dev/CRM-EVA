@@ -28,6 +28,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { contaUrlDaMarca, lerMarcaDaConta, type LogoBaixada, type RodadaDaConta } from "./conta";
 import { BUCKET_DE_LOGOS } from "./logo";
+import { contaEmVigor } from "./resolve";
 
 export type ContaGuardada = {
   readonly conta_nome: string | null;
@@ -51,7 +52,8 @@ const PREFIXO = "platform/";
 declare global {
   // Mesmo motivo do memo de `instalacao.ts`: o módulo é instanciado duas vezes no
   // mesmo processo (runtime das rotas e das páginas), e só `globalThis` é comum.
-  var __rodadaDaConta: { ultima: number; emVoo: boolean } | undefined;
+  // `geracao`: a vez de cada rodada. Só a mais nova grava (ver `rodarMarcaDaConta`).
+  var __rodadaDaConta: { ultima: number; emVoo: boolean; geracao: number } | undefined;
   var __avisosDaConta: Map<string, number> | undefined;
 }
 
@@ -67,6 +69,19 @@ function avisar(chave: string, mensagem: string, contexto: Record<string, unknow
 /** A URL da Conta, ou `null` (marca da Conta desligada). */
 export function contaUrlLigada(): string | null {
   return contaUrlDaMarca({ CONTA_URL: env.CONTA_URL });
+}
+
+/**
+ * A `CONTA_URL` quando a marca da Conta está EM VIGOR (ligada E guardada —
+ * `contaEmVigor`), senão `null`. É o que as escritas de marca consultam antes de
+ * recusar com `marca_na_conta`. Lê do banco, não do memo: escrita é rara, e
+ * decidir pelo memo de 30 s deixaria passar a primeira escrita depois da Conta.
+ */
+export async function contaUrlEmVigor(): Promise<string | null> {
+  const url = contaUrlLigada();
+  if (!url) return null;
+  const g = await lerContaGuardada();
+  return g !== "erro" && contaEmVigor(g) ? url : null;
 }
 
 /**
@@ -268,8 +283,12 @@ export type ResultadoDaRodada = "sem-leitura" | "falha" | "igual" | "nada" | "gr
 export async function rodarMarcaDaConta(
   contaUrl: string,
   aoGravar: () => void,
-  dep: { fetch?: typeof fetch; prazoMs?: number } = {},
+  dep: { fetch?: typeof fetch; prazoMs?: number; vigente?: () => boolean } = {},
 ): Promise<ResultadoDaRodada> {
+  // Uma rodada travada além do teto pode voltar DEPOIS de outra mais nova ter
+  // gravado; sem esta guarda o `gravar` (update incondicional) devolveria a marca
+  // velha. Conferida logo antes de gravar e de limpar o bucket.
+  const vigente = dep.vigente ?? (() => true);
   try {
     const g = await lerContaGuardada();
     if (g === "erro") return "sem-leitura";
@@ -291,10 +310,10 @@ export async function rodarMarcaDaConta(
       for (const aviso of r.avisos) avisar(`aviso|${aviso}`, "marca da Conta: logo recusada; a anterior fica", { aviso });
       estado = await estadoDaNova(r, g);
     }
-    if (mesmoEstado(estado, g)) return "nada";
+    if (mesmoEstado(estado, g) || !vigente()) return "nada";
     if (!(await gravar(estado, r.tipo === "nova"))) return "falha";
     aoGravar();
-    if (estado.conta_logo_path !== (g?.conta_logo_path ?? null)) {
+    if (vigente() && estado.conta_logo_path !== (g?.conta_logo_path ?? null)) {
       void limparLogosVelhas([estado.conta_logo_path, g?.conta_logo_path ?? null]);
     }
     return "gravou";
@@ -312,17 +331,18 @@ export function dispararMarcaDaConta(aoGravar: () => void): void {
   try {
     const url = contaUrlLigada();
     if (!url) return;
-    const estado = (globalThis.__rodadaDaConta ??= { ultima: 0, emVoo: false });
+    const estado = (globalThis.__rodadaDaConta ??= { ultima: 0, emVoo: false, geracao: 0 });
     if (estado.emVoo || Date.now() - estado.ultima < INTERVALO_MS) return;
     estado.emVoo = true;
     estado.ultima = Date.now();
+    const minha = (estado.geracao = (estado.geracao ?? 0) + 1);
     // Um banco travado não pode prender `emVoo` para sempre: passado o teto, a
-    // vez é liberada (a rodada travada, se um dia voltar, só grava o que leu).
+    // vez é liberada; a travada, se voltar depois de outra começar, não grava.
     let relogio: ReturnType<typeof setTimeout> | undefined;
     const teto = new Promise<void>((resolve) => {
       relogio = setTimeout(resolve, PRAZO_DA_RODADA_MS);
     });
-    void Promise.race([rodarMarcaDaConta(url, aoGravar), teto]).finally(() => {
+    void Promise.race([rodarMarcaDaConta(url, aoGravar, { vigente: () => estado.geracao === minha }), teto]).finally(() => {
       clearTimeout(relogio);
       estado.emVoo = false;
     });

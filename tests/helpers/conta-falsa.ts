@@ -6,7 +6,11 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose";
 export type OpcoesToken = { sub?: string; email?: string; nome?: string; papel?: unknown; nonce?: string;
   clientId?: string; alg?: "ES256" | "HS256"; emissor?: string; status?: number };
 
-/** Imita a Conta EvaLink: JWKS, troca de código e /authorize que aprova na hora. Tudo fictício. */
+/**
+ * Imita a Conta EvaLink: JWKS, troca de código e /authorize que aprova na hora, e
+ * a marca da clínica (`/api/marca`, `/marca/logo/*`), desligada até a spec ligar.
+ * Tudo fictício.
+ */
 export async function sobeContaFalsa(porta = 0) {
   const { privateKey, publicKey } = await generateKeyPair("ES256");
   const jwk = { ...(await exportJWK(publicKey)), kid: "k1", alg: "ES256", use: "sig" };
@@ -23,8 +27,33 @@ export async function sobeContaFalsa(porta = 0) {
       .setAudience(aud).setIssuedAt().setExpirationTime("5m").sign(privateKey);
   };
 
+  // A marca da clínica (Plano 6): `null` = 404 em `/api/marca`, como a Conta sem
+  // a rota. Quem muda é a própria spec, pela porta de teste `/__teste/marca`
+  // (o servidor roda em outro processo, então não há como mudar por função).
+  let marca: { corpo: unknown; logos: Record<string, Buffer> } | null = null;
+
   const servidor = http.createServer(async (req, res) => {
     const u = new URL(req.url ?? "/", url);
+    if (u.pathname === "/__teste/marca") {
+      if (req.method === "DELETE") marca = null;
+      else {
+        let bruto = ""; for await (const c of req) bruto += c;
+        const pedido = JSON.parse(bruto) as { corpo: unknown; logos?: Record<string, string> };
+        marca = { corpo: pedido.corpo, logos: Object.fromEntries(
+          Object.entries(pedido.logos ?? {}).map(([lado, b64]) => [lado, Buffer.from(b64, "base64")])) };
+      }
+      res.writeHead(204).end(); return;
+    }
+    if (u.pathname === "/api/marca") {
+      if (!marca) { res.writeHead(404).end(); return; }
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(marca.corpo)); return;
+    }
+    const logo = /^\/marca\/logo\/(escuro|claro)$/.exec(u.pathname);
+    if (logo) {
+      const bytes = marca?.logos[logo[1]!];
+      if (!bytes) { res.writeHead(404).end(); return; }
+      res.writeHead(200, { "content-type": "image/png" }).end(bytes); return;
+    }
     if (u.pathname === "/auth/v1/.well-known/jwks.json") {
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ keys: [jwk] })); return;
     }

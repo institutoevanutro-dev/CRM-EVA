@@ -32,8 +32,10 @@ import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
+import { contaUrlLigada } from "@/lib/branding/conta-armazem";
 import { marcaDaInstalacao } from "@/lib/branding/instalacao";
 import { marcaDaOrganizacaoDeSettings, menuDaOrganizacaoDeSettings } from "@/lib/branding/organizacao";
+import { contaEmVigor } from "@/lib/branding/resolve";
 import { env } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -103,7 +105,15 @@ export default async function MarcaDaOrganizacaoPage() {
             logo_url: linha?.logo_url ?? null,
             logo_path: linha?.logo_path ?? null,
             accent_hex: linha?.accent_hex ?? null,
+            // A última marca boa da Conta — só vem preenchida com `CONTA_URL`.
+            // A prévia passa por `pilhaComConta` com ela, igual ao layout de `/app`.
+            conta_nome: linha?.conta_nome ?? null,
+            conta_accent_hex: linha?.conta_accent_hex ?? null,
+            conta_logo_path: linha?.conta_logo_path ?? null,
           }}
+          // A tela trava com a marca da Conta EM VIGOR (guardada), não só com
+          // `CONTA_URL`: sem nada guardado, a marca local é a que pinta.
+          contaUrl={contaEmVigor(linha) ? contaUrlLigada() : null}
           // Só os três campos de marca do ambiente, nunca o objeto `env` inteiro:
           // isto atravessa a fronteira para o navegador, e o que atravessa é o que
           // já está visível na interface de qualquer forma.

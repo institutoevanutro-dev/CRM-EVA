@@ -218,6 +218,10 @@ export const ApiErrorCodes = {
   prontuario_indisponivel: "prontuario_indisponivel", // 502
   prontuario_sem_acesso_ao_crm: "prontuario_sem_acesso_ao_crm", // 502: o Prontuário não conseguiu ler o arquivo no CRM
 
+  // ─── Marca central (Plano 6) ───
+  // 409: com `CONTA_URL`, nome, cor e logo da clínica são escritos na Conta Eva Link, não aqui.
+  marca_na_conta: "marca_na_conta",
+
   // 500 / upstream
   internal_error: "internal_error",
   upstream_unavailable: "upstream_unavailable",

@@ -61,6 +61,7 @@ import { EscritaDePlatformAdminNegada, requirePlatformAdminEscrita } from "@/lib
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { escreveComoPlatformAdmin, roleAtLeast } from "@/lib/auth/types";
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
+import { contaUrlEmVigor } from "@/lib/branding/conta-armazem";
 import { invalidarMarcaDaInstalacao } from "@/lib/branding/instalacao";
 import {
   BUCKET_DE_LOGOS,
@@ -351,6 +352,17 @@ async function registrarAuditoria(
   });
 }
 
+/**
+ * Com a marca da Conta em vigor (`contaUrlEmVigor`: `CONTA_URL` e marca guardada),
+ * o logo da clínica vem da Conta Eva Link (Plano 6) — nos dois
+ * escopos, porque com a Conta guardada a organização sai da pilha. Depois do
+ * gate de propósito: quem não pode escrever recebe o motivo dele, não este.
+ * Recusa não é mutação, então não audita (mesmo padrão das outras recusas daqui).
+ */
+function recusaDaConta(requestId: string): Response {
+  return fail("marca_na_conta", "O logo da clínica é configurado na Conta Eva Link.", 409, { requestId });
+}
+
 export async function POST(req: NextRequest): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
@@ -368,6 +380,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     return fail(aberto.recusa.codigo, aberto.recusa.mensagem, aberto.recusa.status, { requestId });
   }
   const ctx = aberto.ctx;
+  if (await contaUrlEmVigor()) return recusaDaConta(requestId);
 
   const limite = await checkRateLimit(
     `marca-logo:${ctx.userId}`,
@@ -468,6 +481,7 @@ export async function DELETE(req: NextRequest): Promise<Response> {
     return fail(aberto.recusa.codigo, aberto.recusa.mensagem, aberto.recusa.status, { requestId });
   }
   const ctx = aberto.ctx;
+  if (await contaUrlEmVigor()) return recusaDaConta(requestId);
 
   const limite = await checkRateLimit(
     `marca-logo:${ctx.userId}`,
