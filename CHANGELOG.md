@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.6.0] — 2026-11-11
+
+### Adicionado
+
+- **Nova rota de resumo para o painel de anúncios (por anúncio da Meta)** O painel de anúncios ganha uma rota de leitura, `/api/v1/integrations/marketing/resumo`, com a mesma credencial do funil por origem. Ela devolve, no período, leads, agendamentos, comparecimentos, sinais, ganhos e receita, no total e por anúncio da Meta. Só saem números e o código do anúncio, nunca dados de contato. Nada muda para quem não usa o painel.
+
 ## [5.5.1] — 2026-11-11
 
 ### Corrigido
@@ -8945,7 +8951,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.5.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.6.0...HEAD
+[5.6.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.5.1...v5.6.0
 [5.5.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.5.0...v5.5.1
 [5.5.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.4.0...v5.5.0
 [5.4.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.3.0...v5.4.0
