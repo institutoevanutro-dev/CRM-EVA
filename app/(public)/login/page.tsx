@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { LoginForm } from "@/components/auth/LoginForm";
 import { Button } from "@/components/ui/button";
-import { branding } from "@/lib/branding";
+import { marcaDaSaida } from "@/lib/branding/saida";
 import { createClient } from "@/lib/supabase/server";
 import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -37,12 +37,14 @@ export default async function LoginPage({
     (user?.user_metadata?.locale as string | undefined) ?? null,
   );
   const t = (texto: string) => traduzir(texto, idioma);
+  // O MESMO nome do título da aba (`app/layout.tsx`): pilha Conta → banco → `.env`.
+  const { nome } = await marcaDaSaida(null);
 
   return (
     <div className="space-y-6">
       <div className="space-y-1.5 text-center">
         <h1 className="titulo-tela">{t("Entrar")}</h1>
-        <p className="text-sm text-muted-foreground">{branding().name}</p>
+        <p className="text-sm text-muted-foreground">{nome}</p>
       </div>
       {evalinkLigado && (
         <div className="space-y-3">

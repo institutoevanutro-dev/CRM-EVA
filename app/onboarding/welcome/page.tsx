@@ -1,7 +1,7 @@
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { redirect } from "next/navigation";
 import { WelcomeForm } from "./_form";
-import { branding } from "@/lib/branding";
+import { marcaDaSaida } from "@/lib/branding/saida";
 import { createClient } from "@/lib/supabase/server";
 import { lerRetratoDaInstalacao } from "@/lib/instalacao/retrato";
 import { JaEstaPronto } from "../_components/JaEstaPronto";
@@ -22,7 +22,7 @@ export default async function WelcomePage() {
     <div className="space-y-6">
       <header>
         <h2 className="text-2xl font-semibold tracking-tight">
-          {traduzir("Boas-vindas ao", idioma)} {branding().name}
+          {traduzir("Boas-vindas ao", idioma)} {(await marcaDaSaida(null)).nome}
         </h2>
         <p className="text-sm text-muted-foreground">
           {traduzir("Vamos montar quem vai atender seus clientes — e onde ele vai trabalhar.", idioma)}
