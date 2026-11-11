@@ -37,6 +37,7 @@ import {
   pisoDoInboundDaEspera,
   actionTurnCompleted,
   processNode,
+  prazoVencidoDaUltimaEspera,
   repeatTakenFromEvents,
   repeatTotalFromEvents,
   resolveWaitPhase,
@@ -258,7 +259,9 @@ function eventTypeFor(result: NodeResult): string {
       // O trigger desistiu de esperar o plano de tempo. Evento PRÓPRIO porque a
       // consequência é visível pro operador (as esperas do fluxo saem no máximo);
       // enterrá-lo como mais um `node_advanced` esconderia o motivo.
-      return result.reason === "plan_timeout" ? "timing_plan_desistido" : "node_advanced";
+      if (result.reason === "plan_timeout") return "timing_plan_desistido";
+      // A mensagem não saiu porque a espera ancorada antes dela já tinha vencido.
+      return result.reason === "acao_vencida" ? "action_skipped_overdue" : "node_advanced";
     case "wait":
       return "wait_started";
     case "enqueue_turn":
@@ -282,6 +285,7 @@ function eventPayload(result: NodeResult): Record<string, unknown> {
       return {
         next_node_id: result.next_node_id,
         ...(result.reason !== undefined ? { reason: result.reason } : {}),
+        ...(result.vencido !== undefined ? result.vencido : {}),
         ...(result.repeat !== undefined
           ? { repeat_index: result.repeat.index, repeat_total: result.repeat.total }
           : {}),
@@ -894,6 +898,10 @@ async function processEnrollment(
     repeatTaken,
     repeatTotal,
     proximo,
+    acaoVencida:
+      node.type === "action"
+        ? prazoVencidoDaUltimaEspera(events, new Set(graph.nodes.filter((n) => n.type === "wait").map((n) => n.id)))
+        : undefined,
   });
   await applyResult(
     deps,

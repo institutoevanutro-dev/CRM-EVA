@@ -100,7 +100,19 @@ export type NodeResult =
   // `class` só aparece quando o avanço É uma classificação decidida pelo motor:
   // o `ai_classify` que sai por "sem resposta" porque a carência venceu. Vai para
   // o payload do evento e é o que `ultimoDesfechoDe` lê.
-  | { kind: "advance"; next_node_id: string; next_eval_at: Date; reason?: "plan_timeout"; repeat?: { index: number; total: number }; class?: string }
+  //
+  // `prazo_vencido` (espera ancorada na consulta que já passou da tolerância) e
+  // `acao_vencida` (a mensagem que vinha depois dela, pulada) levam `vencido`:
+  // o prazo devido e o atraso, para o histórico dizer por que nada saiu.
+  | {
+      kind: "advance";
+      next_node_id: string;
+      next_eval_at: Date;
+      reason?: "plan_timeout" | "prazo_vencido" | "acao_vencida";
+      vencido?: PrazoVencido;
+      repeat?: { index: number; total: number };
+      class?: string;
+    }
   // stays on the node. `wake_status` parks `match_reply` in waiting_reply without a job.
   | { kind: "wait"; next_eval_at: Date; wake_status?: "active" | "waiting_reply" }
   | {
@@ -116,6 +128,47 @@ export type NodeResult =
   // outcome is nullable for the 'custom' end-node case (cancel_reason carries the note instead).
   | { kind: "complete"; outcome: EnrollmentOutcome | null; cancel_reason?: string }
   | { kind: "fail"; error: string };
+
+/** O prazo devido de uma espera ancorada e quanto ele já tinha passado ao ser avaliado. */
+export type PrazoVencido = { devido_em: string; atraso_ms: number };
+
+/**
+ * Espera ancorada na consulta vencida há mais que isto: a mensagem seguinte NÃO
+ * sai. Incidente de 11/11: presença marcada em lote em consultas de quase quatro
+ * semanas atrás abriu inscrições cujas esperas de 7 e 15 dias já tinham passado,
+ * e o motor mandou as duas mensagens em sequência, minutos depois da marcação.
+ * Um dia cobre os atrasos normais (worker parado alguns minutos, janela do
+ * número que solta o envio na manhã seguinte); acima disso a mensagem fala de
+ * um momento que já passou.
+ */
+export const TOLERANCIA_PRAZO_VENCIDO_MS = 86_400_000;
+
+/**
+ * Só as âncoras que contam DA CONSULTA (pós-consulta). `appointment_created_at`
+ * conta da reserva — cobrança de sinal e lembretes antes da consulta — e fica de
+ * fora: lá o atraso não torna a mensagem sem sentido.
+ */
+const ANCORAS_DA_CONSULTA: ReadonlySet<AppointmentAnchor> = new Set(["appointment_starts_at", "appointment_day"]);
+
+/**
+ * A espera ancorada mais recente que o fluxo atravessou venceu além da
+ * tolerância? Quem pergunta é a ação: vencida, ela não envia e o fluxo segue
+ * até a próxima espera (que decide de novo pelo seu próprio prazo).
+ * `waitNodeIds`: ids dos nós `wait` do grafo pinado.
+ */
+export function prazoVencidoDaUltimaEspera(
+  events: EnrollmentEventRef[],
+  waitNodeIds: ReadonlySet<string>,
+): PrazoVencido | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.event_type !== "node_advanced" || !e.node_id || !waitNodeIds.has(e.node_id)) continue;
+    const p = e.payload ?? {};
+    if (p.reason !== "prazo_vencido" || typeof p.devido_em !== "string" || typeof p.atraso_ms !== "number") return null;
+    return { devido_em: p.devido_em, atraso_ms: p.atraso_ms };
+  }
+  return null;
+}
 
 /** Backoff ladder indexed by `attempts - 1` (clamped to the last slot) — 30s..1h. */
 export const BACKOFF_MS = [30_000, 60_000, 300_000, 900_000, 3_600_000] as const;
@@ -569,6 +622,8 @@ export function processNode(input: {
   repeatTotal?: number | null;
   /** Próximo nó pela aresta `always` — a ação olha o `match_reply` seguinte para pular o envio. */
   proximo?: FlowNode | null;
+  /** action: a última espera ancorada atravessada venceu além da tolerância (`prazoVencidoDaUltimaEspera`). */
+  acaoVencida?: PrazoVencido | null;
 }): NodeResult {
   const {
     node,
@@ -630,6 +685,18 @@ export function processNode(input: {
           : NaN;
         if (Number.isFinite(alvo) && clock().getTime() < alvo) {
           return { kind: "wait", next_eval_at: new Date(alvo) };
+        }
+        const atraso = clock().getTime() - alvo;
+        if (Number.isFinite(alvo) && ANCORAS_DA_CONSULTA.has(node.config.anchor) && atraso > TOLERANCIA_PRAZO_VENCIDO_MS) {
+          const edge = selectEdge(edges, node.id, { type: "always" });
+          if (!edge) return { kind: "fail", error: `wait node "${node.id}" has no outbound edge after elapsing` };
+          return {
+            kind: "advance",
+            next_node_id: edge.target,
+            next_eval_at: clock(),
+            reason: "prazo_vencido",
+            vencido: { devido_em: new Date(alvo).toISOString(), atraso_ms: atraso },
+          };
         }
       }
       // Resposta do lead corta a espera: o timer é teto (ninguém respondeu),
@@ -842,6 +909,11 @@ export function processNode(input: {
       // `${node}:${steps}` idempotency_key was a FRESH key each tick → a 2nd job → a 2nd
       // real send that the send sink's (job_id,seq) dedup can't catch).
       if (!actionEnqueued && !actionCompleted) {
+        if (input.acaoVencida) {
+          const edge = selectEdge(edges, node.id, { type: "always" });
+          if (!edge) return { kind: "fail", error: `action node "${node.id}" has no outbound edge` };
+          return { kind: "advance", next_node_id: edge.target, next_eval_at: clock(), reason: "acao_vencida", vencido: input.acaoVencida };
+        }
         if (
           proximo?.type === "match_reply" &&
           proximo.config.save_to &&

@@ -6689,6 +6689,14 @@ export const DICIONARIO: Traducoes = {
   "Segurou o fluxo por causa de um retorno agendado": { es: "Frenó el flujo por un regreso programado" },
   "volta a andar em {ate}, um dia depois do retorno": { es: "vuelve a avanzar el {ate}, un día después del regreso" },
   "Passo pulado, o fluxo seguiu": { es: "Paso omitido, el flujo siguió" },
+  "O prazo desta espera já tinha passado": { es: "El plazo de esta espera ya había pasado" },
+  "devia terminar em {quando}; a mensagem seguinte não será enviada": {
+    es: "debía terminar el {quando}; el mensaje siguiente no se enviará",
+  },
+  "Mensagem não enviada: o prazo já tinha passado": { es: "Mensaje no enviado: el plazo ya había pasado" },
+  "era para {quando}; o fluxo seguiu até a próxima espera": {
+    es: "era para el {quando}; el flujo siguió hasta la próxima espera",
+  },
   "Passo pulado: fora das 24h do Instagram.": { es: "Paso omitido: fuera de las 24 h de Instagram." },
   "O agente interpretou a resposta": { es: "El agente interpretó la respuesta" },
   "Fluxo concluído": { es: "Flujo concluido" },
