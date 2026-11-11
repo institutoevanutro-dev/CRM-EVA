@@ -10633,6 +10633,10 @@ alter table public.agent_inbox_items
     -- aviso na Central apontando para a conversa, com push no celular
     -- (`somDoAviso`). Entra NESTA lista (bloco único por constraint, #159).
     'followup_notify_team',
+    -- (migration 0407) O paciente informou, numa conversa atendida pela
+    -- equipe, um dado diferente do cadastro: a sugestão espera na ficha.
+    -- Entra NESTA lista (bloco único por constraint, #159).
+    'contact_data_divergent',
     'other'
   ));
 
@@ -11954,10 +11958,12 @@ comment on table public.contact_field_proposals is
 -- apêndice faria este bloco falhar no `update.sh` de um clone cuja fila já
 -- tenha uma proposta de nascimento. Quem já instalou recebe a mudança porque o
 -- `update.sh` reaplica o baseline inteiro, este bloco incluído.
+-- 0407 (extração silenciosa de cadastro): `cpf` e `endereco` entram AQUI, no
+-- mesmo bloco único, pelo mesmo motivo do `birthdate` acima.
 alter table public.contact_field_proposals
   drop constraint if exists contact_field_proposals_campo_check,
   add constraint contact_field_proposals_campo_check check (
-    campo = any (array['email', 'name', 'phone_number', 'birthdate']::text[])
+    campo = any (array['email', 'name', 'phone_number', 'birthdate', 'cpf', 'endereco']::text[])
   );
 
 alter table public.contact_field_proposals
@@ -38898,3 +38904,30 @@ update public.crm_leads l
    and c.channel in ('instagram', 'facebook')
    and l.source = 'whatsapp';
 -- ---- fim: origem do negócio segue o canal da conversa (migration 0379) ----
+
+-- ---- extração silenciosa de cadastro (migration 0407) ----
+-- O vocábulo novo de `contact_field_proposals.campo` (`cpf`, `endereco`) e o
+-- `kind` novo da Central (`contact_data_divergent`) entraram por EDIÇÃO NO
+-- LUGAR dos blocos únicos dessas constraints (cerca
+-- `baseline-constraint-reconstruida`). Aqui só o que é novo de verdade: a
+-- coluna do CPF cifrado e a constraint que impede CPF em claro nesta fila.
+-- Idempotente: `add column if not exists`, `drop constraint if exists` + `add`.
+-- Nenhuma linha existente viola a constraint: a coluna nasce nula e nenhuma
+-- proposta antiga é de CPF.
+alter table public.contact_field_proposals
+  add column if not exists valor_cifrado bytea;
+
+comment on column public.contact_field_proposals.valor_cifrado is
+  'CPF proposto, cifrado por encrypt_cpf (o mesmo par de contacts.cpf_encrypted). Só em campo = ''cpf''; valor_proposto guarda a máscara.';
+
+alter table public.contact_field_proposals
+  drop constraint if exists contact_field_proposals_cpf_cifrado,
+  add constraint contact_field_proposals_cpf_cifrado check (
+    case when campo = 'cpf'
+      then valor_cifrado is not null
+           and valor_anterior is null
+           and length(regexp_replace(valor_proposto, '[^0-9]', '', 'g')) <= 2
+      else valor_cifrado is null
+    end
+  );
+-- ---- fim: extração silenciosa de cadastro (migration 0407) ----
