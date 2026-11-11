@@ -192,7 +192,7 @@ function AvisosPorAssunto({ a }: { a: Avisos }) {
             {/* A Central não filtra por assunto na URL: a linha abre a Central inteira. */}
             <Link className={LINHA} href="/app/ai/inbox">
               <span className="flex min-w-0 items-baseline gap-3 text-text">
-                <span className="numero w-8 shrink-0 text-right text-base">{l.total}</span>
+                <span className="numero w-8 shrink-0 text-base">{l.total}</span>
                 <span className="min-w-0 break-words">{l.rotulo}</span>
               </span>
               <Abrir />
@@ -216,7 +216,8 @@ function Sistema({ carregando, saude }: { carregando: boolean; saude: { status: 
         <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${noAr ? "bg-success" : "bg-error"}`} />
         {noAr ? t("Tudo no ar") : t("Algum serviço está fora do ar. Avise o suporte.")}
       </p>
-      {saude?.version ? (
+      {/* Fora de uma imagem publicada a rota de saúde responde "desconhecido": aí não há versão a mostrar. */}
+      {saude?.version && saude.version !== "desconhecido" ? (
         <p className="mt-1 text-xs text-text-muted">
           {t("versão")} {saude.version}
         </p>

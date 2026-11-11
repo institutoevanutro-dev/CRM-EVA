@@ -307,7 +307,7 @@ function PainelAtendimento({ a, e }: { a: Atendimento; e: Esperando }) {
                   <span key={f.chave} className="h-full" style={{ flexGrow: f.n, flexBasis: 0, background: f.fundo }} />
                 ))}
             </div>
-            <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+            <ul className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
               {faixas.map((f) => {
                 const texto = (
                   <>
@@ -324,12 +324,12 @@ function PainelAtendimento({ a, e }: { a: Atendimento; e: Esperando }) {
                         {texto}
                       </Link>
                     ) : (
-                      <span className="flex min-h-11 items-center gap-1.5 lg:min-h-0 toque:min-h-11">{texto}</span>
+                      <span className="flex items-center gap-1.5">{texto}</span>
                     )}
                   </li>
                 );
               })}
-              <li className="flex min-h-11 items-center text-text-muted lg:min-h-0 toque:min-h-11">
+              <li className="text-text-muted">
                 {t("{{n}} conversas novas no total").replace("{{n}}", String(total))}
               </li>
             </ul>

@@ -248,6 +248,14 @@ describe("painel Início — Gestão em três quadros pequenos", () => {
     expect(c.getByText("versão 5.6.0")).toBeInTheDocument();
   });
 
+  it("sem versão conhecida (fora de uma imagem publicada), a linha da versão não aparece", async () => {
+    respostas.health = { status: "healthy", version: "desconhecido" };
+    await montar();
+    const c = within(cartao("Sistema"));
+    expect(await c.findByText("Tudo no ar")).toBeInTheDocument();
+    expect(c.queryByText(/versão/)).toBeNull();
+  });
+
   it("Sistema fora do ar avisa em frase, não só com a cor", async () => {
     respostas.health = { status: "degraded", version: "5.6.0" };
     await montar();
