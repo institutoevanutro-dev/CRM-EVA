@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { runFollowupTick, type AdminClient } from "./engine";
 import type { AppointmentAnchor, FlowGraph } from "./graph-schema";
-import { TOLERANCIA_PRAZO_VENCIDO_MS, prazoVencidoDaUltimaEspera, type EnrollmentEventRef, type EnrollmentRow } from "./node-handlers";
+import { TOLERANCIA_PRAZO_VENCIDO_MS, prazoVencidoDaUltimaEspera, cadeiaDaAcaoVencida, type EnrollmentEventRef, type EnrollmentRow } from "./node-handlers";
 
 /**
  * AÇÃO VENCIDA NÃO É ENVIADA (incidente de 11/11).
@@ -67,6 +67,7 @@ function motor(inicio: Date, g = grafo()) {
   } as EnrollmentRow;
   const eventos: Evento[] = [];
   const enviados: string[] = [];
+  const efeitos: string[] = [];
   const db = {
     claimDueEnrollments: async () =>
       enrollment.status === "active" && Date.parse(enrollment.next_eval_at!) <= agora.getTime() ? [{ ...enrollment }] : [],
@@ -87,11 +88,13 @@ function motor(inicio: Date, g = grafo()) {
     loadFlowPointerName: async () => "Pós-consulta",
     insertDeadInboxItem: async () => undefined,
     persistirRespostaFollowup: async () => undefined,
+    editarTagDoLead: async () => void efeitos.push("tag"),
+    avisarEquipe: async () => void efeitos.push("aviso"),
   } as unknown as AdminClient;
 
   /** O que o worker de envio faria: fecha o turno com `action_sent` e avança. */
   function concluirEnvio(nodeId: string) {
-    const edge = g.edges.find((e) => e.source === nodeId)!;
+    const edge = g.edges.find((e) => e.source === nodeId && e.condition.type === "always")!;
     eventos.push({ node_id: nodeId, idempotency_key: `${nodeId}:sent:${enviados.length}`, event_type: "action_sent", payload: {} });
     Object.assign(enrollment, { current_node_id: edge.target, status: "active", next_eval_at: agora.toISOString() });
   }
@@ -113,7 +116,7 @@ function motor(inicio: Date, g = grafo()) {
     throw new Error("o motor não estacionou");
   }
 
-  return { enrollment, eventos, enviados, rodarAte };
+  return { enrollment, eventos, enviados, efeitos, rodarAte };
 }
 
 describe("ação vencida não é enviada", () => {
@@ -180,5 +183,93 @@ describe("prazoVencidoDaUltimaEspera", () => {
   it("espera avançada sem o seu node_advanced (resgate de replay) não herda o vencido da anterior", () => {
     const resgatada = { node_id: "w-rel", idempotency_key: "w-rel:5", event_type: "wait_started", payload: {} };
     expect(prazoVencidoDaUltimaEspera([vencida, resgatada], esperas)).toBeNull();
+  });
+});
+
+/**
+ * O grafo do pós-consulta real: mensagem → espera a resposta → no ramo "sem
+ * resposta", etiqueta + aviso na Central → próxima espera. Com a mensagem
+ * pulada, nada do ramo "sem resposta" pode acontecer: o paciente não deixou de
+ * responder a uma mensagem que nunca recebeu.
+ */
+function grafoComResposta(acaoNoSemResposta = false): FlowGraph {
+  const no = (id: string, type: string, config: Record<string, unknown>) => ({ id, type, label: id, position: { x: 0, y: 0 }, config });
+  const espera = (id: string, dias: number) => no(id, "wait", { mode: "fixed", duration_ms: dias * DIA, anchor: "appointment_day" });
+  const resposta = (id: string) =>
+    no(id, "match_reply", { branches: [{ id: "sim", label: "Sim", op: "contains", pattern: "sim" }], grace_timeout_ms: 2 * DIA });
+  const nodes = [
+    no("t", "trigger", {}),
+    espera("w7", 7),
+    no("a7", "action", { mode: "fixed_text", fixed_text: "Oi" }),
+    resposta("r7"),
+    no("t7", "edit_lead_tag", { tags: ["pos-consulta-sem-resposta"] }),
+    no("n7", "notify_team", { texto: "Paciente não respondeu ao pós-consulta do dia 7" }),
+    ...(acaoNoSemResposta ? [no("x7", "action", { mode: "fixed_text", fixed_text: "Tudo bem?" })] : []),
+    espera("w15", 15),
+    no("a15", "action", { mode: "fixed_text", fixed_text: "Oi" }),
+    no("fim", "end", { outcome: "exhausted" }),
+  ];
+  const always = (source: string, target: string) => ({ id: `${source}-${target}`, source, target, priority: 0, condition: { type: "always" } });
+  const edges = [
+    always("t", "w7"),
+    always("w7", "a7"),
+    always("a7", "r7"),
+    { id: "r7-sim", source: "r7", target: "w15", priority: 0, condition: { type: "branch", branch_id: "sim" } },
+    { id: "r7-nr", source: "r7", target: "t7", priority: 0, condition: { type: "branch", branch_id: "no_reply" } },
+    always("t7", "n7"),
+    ...(acaoNoSemResposta ? [always("n7", "x7"), always("x7", "w15")] : [always("n7", "w15")]),
+    always("w15", "a15"),
+    always("a15", "fim"),
+  ];
+  return { nodes, edges } as unknown as FlowGraph;
+}
+
+describe("mensagem pulada pula também a espera da resposta e o ramo 'sem resposta'", () => {
+  it("consulta de 10 dias atrás: a7 pulada, r7/t7/n7 pulados sem carência, sem etiqueta e sem aviso; estaciona em w15", async () => {
+    const inicio = new Date(CONSULTA.getTime() + 10 * DIA);
+    const m = motor(inicio, grafoComResposta());
+    await m.rodarAte(inicio);
+
+    expect(m.enviados).toEqual([]);
+    expect(m.efeitos).toEqual([]);
+    expect(m.eventos.filter((e) => e.event_type === "action_skipped_overdue").map((e) => e.node_id)).toEqual(["a7"]);
+    expect(m.eventos.filter((e) => e.event_type === "node_skipped_overdue").map((e) => e.node_id)).toEqual(["r7", "t7", "n7"]);
+    expect(m.eventos.filter((e) => e.node_id === "r7").map((e) => e.event_type)).toEqual(["node_skipped_overdue"]);
+    expect(m.enrollment).toMatchObject({ current_node_id: "w15", status: "active" });
+    expect(m.enrollment.next_eval_at).toBe("2026-10-16T03:00:00.000Z");
+
+    // Controle: no dia 15 a mensagem sai.
+    await m.rodarAte(new Date(Date.parse("2026-10-16T03:00:00.000Z") + 9 * HORA));
+    expect(m.enviados).toEqual(["a15"]);
+  });
+
+  it("uma ação no ramo 'sem resposta' é alcançada e passa pela regra da ação vencida (pulada, não enviada)", async () => {
+    const inicio = new Date(CONSULTA.getTime() + 10 * DIA);
+    const m = motor(inicio, grafoComResposta(true));
+    await m.rodarAte(inicio);
+    expect(m.enviados).toEqual([]);
+    expect(m.eventos.filter((e) => e.event_type === "action_skipped_overdue").map((e) => e.node_id)).toEqual(["a7", "x7"]);
+    expect(m.enrollment.current_node_id).toBe("w15");
+  });
+
+  it("controle: mensagem enviada no prazo segue o caminho normal (r7 espera a resposta)", async () => {
+    const m = motor(new Date(CONSULTA.getTime() + HORA), grafoComResposta());
+    await m.rodarAte(new Date(Date.parse("2026-10-08T03:00:00.000Z") + 9 * HORA));
+    expect(m.enviados).toEqual(["a7"]);
+    expect(m.enrollment.current_node_id).toBe("r7");
+    expect(m.eventos.some((e) => e.event_type === "node_skipped_overdue")).toBe(false);
+  });
+});
+
+describe("cadeiaDaAcaoVencida", () => {
+  const pulo = { node_id: "a7", idempotency_key: "a7:3", event_type: "action_skipped_overdue", payload: { next_node_id: "r7", devido_em: "2026-10-08T03:00:00.000Z", atraso_ms: DIA * 2 } };
+  it("o nó apontado pelo pulo está na cadeia, mesmo com o cliente escrevendo no meio", () => {
+    const woke = { node_id: "r7", idempotency_key: "r7:4:wake", event_type: "inbound_woke", payload: {} };
+    expect(cadeiaDaAcaoVencida([pulo, woke], "r7")).toEqual({ devido_em: "2026-10-08T03:00:00.000Z", atraso_ms: DIA * 2 });
+  });
+  it("outro nó, ou um passo normal depois do pulo, encerra a cadeia", () => {
+    expect(cadeiaDaAcaoVencida([pulo], "t7")).toBeNull();
+    const passo = { node_id: "r7", idempotency_key: "r7:4", event_type: "wait_started", payload: {} };
+    expect(cadeiaDaAcaoVencida([pulo, passo], "r7")).toBeNull();
   });
 });

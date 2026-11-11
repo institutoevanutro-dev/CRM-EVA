@@ -6694,6 +6694,10 @@ export const DICIONARIO: Traducoes = {
     es: "debía terminar el {quando}; el mensaje siguiente no se enviará",
   },
   "Mensagem não enviada: o prazo já tinha passado": { es: "Mensaje no enviado: el plazo ya había pasado" },
+  "Passo pulado: a mensagem antes dele não foi enviada": { es: "Paso omitido: el mensaje anterior no se envió" },
+  "nada foi feito aqui; o fluxo seguiu até a próxima espera": {
+    es: "no se hizo nada aquí; el flujo siguió hasta la próxima espera",
+  },
   "era para {quando}; o fluxo seguiu até a próxima espera": {
     es: "era para el {quando}; el flujo siguió hasta la próxima espera",
   },

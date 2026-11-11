@@ -429,5 +429,7 @@ describe("prazo vencido (presença marcada semanas depois da consulta)", () => {
     expect(pulada.titulo).toBe("Mensagem não enviada: o prazo já tinha passado");
     expect(pulada.detalhe).toContain("o fluxo seguiu até a próxima espera");
     expect(pulada.detalhe).not.toContain("{quando}");
+    const junto = descreveEvento(evento({ node_id: "action-1", event_type: "node_skipped_overdue", payload }), nos, "pt-BR");
+    expect(junto.titulo).toBe("Passo pulado: a mensagem antes dele não foi enviada");
   });
 });

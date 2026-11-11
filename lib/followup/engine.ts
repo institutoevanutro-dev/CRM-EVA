@@ -38,6 +38,7 @@ import {
   actionTurnCompleted,
   processNode,
   prazoVencidoDaUltimaEspera,
+  cadeiaDaAcaoVencida,
   repeatTakenFromEvents,
   repeatTotalFromEvents,
   resolveWaitPhase,
@@ -261,7 +262,9 @@ function eventTypeFor(result: NodeResult): string {
       // enterrá-lo como mais um `node_advanced` esconderia o motivo.
       if (result.reason === "plan_timeout") return "timing_plan_desistido";
       // A mensagem não saiu porque a espera ancorada antes dela já tinha vencido.
-      return result.reason === "acao_vencida" ? "action_skipped_overdue" : "node_advanced";
+      if (result.reason === "acao_vencida") return "action_skipped_overdue";
+      // Esperar resposta / etiqueta / aviso de uma mensagem que não saiu: pulado junto.
+      return result.reason === "pulado_com_a_acao" ? "node_skipped_overdue" : "node_advanced";
     case "wait":
       return "wait_started";
     case "enqueue_turn":
@@ -528,6 +531,7 @@ async function applyResult(
   if (
     result.kind === "advance" &&
     !isReplay &&
+    result.reason !== "pulado_com_a_acao" &&
     (node.type === "move_lead" || node.type === "edit_lead_tag" || node.type === "notify_team")
   ) {
     try {
@@ -633,6 +637,7 @@ async function applyResult(
   if (
     result.kind === "advance" &&
     !isReplay &&
+    result.reason !== "pulado_com_a_acao" &&
     respostaParaGravar &&
     node.type === "match_reply" &&
     node.config.save_to &&
@@ -780,6 +785,9 @@ async function processEnrollment(
     node.type === "match_reply" ||
     node.type === "action" ||
     node.type === "repeat" ||
+    // A cadeia de pulo da ação vencida (`cadeiaDaAcaoVencida`) também passa por eles.
+    node.type === "edit_lead_tag" ||
+    node.type === "notify_team" ||
     // `condition` lê eventos por causa de `last_outcome`: o desfecho do passo
     // anterior mora no evento `ai_classified`, não na linha do lead.
     node.type === "condition";
@@ -902,6 +910,7 @@ async function processEnrollment(
       node.type === "action"
         ? prazoVencidoDaUltimaEspera(events, new Set(graph.nodes.filter((n) => n.type === "wait").map((n) => n.id)))
         : undefined,
+    puladoComAAcao: cadeiaDaAcaoVencida(events, node.id),
   });
   await applyResult(
     deps,

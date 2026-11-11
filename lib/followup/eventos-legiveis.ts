@@ -477,6 +477,14 @@ export function descreveEvento(
         ...motor,
       };
     }
+    case "node_skipped_overdue":
+      // A mensagem antes deste passo não saiu (prazo vencido): esperar a resposta
+      // dela, marcar "sem resposta" ou avisar a equipe seria afirmar algo falso.
+      return {
+        titulo: "Passo pulado: a mensagem antes dele não foi enviada",
+        detalhe: "nada foi feito aqui; o fluxo seguiu até a próxima espera",
+        ...motor,
+      };
     case "action_pulado":
       return { titulo: "Passo pulado, o fluxo seguiu", detalhe: texto(p.reason), ...motor };
     case "ai_classified":
