@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { runFollowupTick, type AdminClient } from "./engine";
 import type { AppointmentAnchor, FlowGraph } from "./graph-schema";
-import { TOLERANCIA_PRAZO_VENCIDO_MS, type EnrollmentEventRef, type EnrollmentRow } from "./node-handlers";
+import { TOLERANCIA_PRAZO_VENCIDO_MS, prazoVencidoDaUltimaEspera, type EnrollmentEventRef, type EnrollmentRow } from "./node-handlers";
 
 /**
  * AÇÃO VENCIDA NÃO É ENVIADA (incidente de 11/11).
@@ -161,5 +161,24 @@ describe("ação vencida não é enviada", () => {
     await m.rodarAte(new Date(CONSULTA.getTime() + 26 * DIA));
     expect(m.enviados).toEqual(["a7", "a15"]);
     expect(m.eventos.some((e) => e.event_type === "action_skipped_overdue")).toBe(false);
+  });
+});
+
+describe("prazoVencidoDaUltimaEspera", () => {
+  const esperas = new Set(["w7", "w-rel"]);
+  const vencida = { node_id: "w7", idempotency_key: "w7:2", event_type: "node_advanced", payload: { reason: "prazo_vencido", devido_em: "2026-10-08T03:00:00.000Z", atraso_ms: 9 * DIA } };
+
+  it("lê o prazo da última espera atravessada", () => {
+    expect(prazoVencidoDaUltimaEspera([vencida], esperas)).toEqual({ devido_em: "2026-10-08T03:00:00.000Z", atraso_ms: 9 * DIA });
+  });
+
+  it("uma espera posterior que venceu normalmente (ancorada ou não) volta a enviar", () => {
+    const normal = { node_id: "w-rel", idempotency_key: "w-rel:5", event_type: "node_advanced", payload: { next_node_id: "a" } };
+    expect(prazoVencidoDaUltimaEspera([vencida, normal], esperas)).toBeNull();
+  });
+
+  it("espera avançada sem o seu node_advanced (resgate de replay) não herda o vencido da anterior", () => {
+    const resgatada = { node_id: "w-rel", idempotency_key: "w-rel:5", event_type: "wait_started", payload: {} };
+    expect(prazoVencidoDaUltimaEspera([vencida, resgatada], esperas)).toBeNull();
   });
 });

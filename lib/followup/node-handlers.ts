@@ -162,7 +162,11 @@ export function prazoVencidoDaUltimaEspera(
 ): PrazoVencido | null {
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]!;
-    if (e.event_type !== "node_advanced" || !e.node_id || !waitNodeIds.has(e.node_id)) continue;
+    if (!e.node_id || !waitNodeIds.has(e.node_id)) continue;
+    // O resgate de replay do motor pode avançar uma espera sem gravar o seu
+    // `node_advanced`: o último evento dela é então o `wait_started`. Sem prova
+    // de que ESTA espera venceu, envia (nunca herda o vencido de uma anterior).
+    if (e.event_type !== "node_advanced") return null;
     const p = e.payload ?? {};
     if (p.reason !== "prazo_vencido" || typeof p.devido_em !== "string" || typeof p.atraso_ms !== "number") return null;
     return { devido_em: p.devido_em, atraso_ms: p.atraso_ms };

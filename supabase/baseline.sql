@@ -20179,16 +20179,17 @@ begin
  -- Incidente de 11/11: presença marcada em lote em consultas antigas abriu uma
  -- segunda inscrição para quem já estava no fluxo (ou já tinha recebido as
  -- mensagens dele), e a régua inteira saiu de novo. Impede: inscrição VIVA no
- -- mesmo fluxo, ou iniciada nele dentro da janela — exceto a cancelada que
- -- nunca enviou nada (ela não chegou ao paciente). Sem recibo e sem aviso,
+ -- mesmo fluxo, ou iniciada nele dentro da janela E que enviou ao menos uma
+ -- mensagem: encerrada sem envio (cancelada antes, ou com todas as ações
+ -- puladas por prazo vencido) não chegou ao paciente. Sem recibo e sem aviso,
  -- como a presença sem fluxo: não é pendência. O motivo fica no retorno, que o
  -- consumidor do event_log grava.
  if result is null and attended and exists(select 1 from public.followup_enrollments x
     where x.organization_id=p_org and x.contact_id=contact and x.pointer_id=candidates[1]
      and (x.status in ('active','waiting_reply','paused_handoff','paused_manual')
       or (x.started_at>now()-janela_pos_consulta
-       and (x.status<>'cancelled' or exists(select 1 from public.followup_enrollment_events ev
-        where ev.organization_id=p_org and ev.enrollment_id=x.id and ev.event_type='action_sent'))))) then
+       and exists(select 1 from public.followup_enrollment_events ev
+        where ev.organization_id=p_org and ev.enrollment_id=x.id and ev.event_type='action_sent')))) then
   return jsonb_build_object('result','already_enrolled');
  end if;
  -- 0373: presença NOVA recomeça a régua pós-consulta (desde a 0410, só a de
@@ -22522,16 +22523,17 @@ begin
  -- Incidente de 11/11: presença marcada em lote em consultas antigas abriu uma
  -- segunda inscrição para quem já estava no fluxo (ou já tinha recebido as
  -- mensagens dele), e a régua inteira saiu de novo. Impede: inscrição VIVA no
- -- mesmo fluxo, ou iniciada nele dentro da janela — exceto a cancelada que
- -- nunca enviou nada (ela não chegou ao paciente). Sem recibo e sem aviso,
+ -- mesmo fluxo, ou iniciada nele dentro da janela E que enviou ao menos uma
+ -- mensagem: encerrada sem envio (cancelada antes, ou com todas as ações
+ -- puladas por prazo vencido) não chegou ao paciente. Sem recibo e sem aviso,
  -- como a presença sem fluxo: não é pendência. O motivo fica no retorno, que o
  -- consumidor do event_log grava.
  if result is null and attended and exists(select 1 from public.followup_enrollments x
     where x.organization_id=p_org and x.contact_id=contact and x.pointer_id=candidates[1]
      and (x.status in ('active','waiting_reply','paused_handoff','paused_manual')
       or (x.started_at>now()-janela_pos_consulta
-       and (x.status<>'cancelled' or exists(select 1 from public.followup_enrollment_events ev
-        where ev.organization_id=p_org and ev.enrollment_id=x.id and ev.event_type='action_sent'))))) then
+       and exists(select 1 from public.followup_enrollment_events ev
+        where ev.organization_id=p_org and ev.enrollment_id=x.id and ev.event_type='action_sent')))) then
   return jsonb_build_object('result','already_enrolled');
  end if;
  -- 0373: presença NOVA recomeça a régua pós-consulta (desde a 0410, só a de

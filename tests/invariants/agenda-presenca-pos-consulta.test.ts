@@ -329,12 +329,28 @@ describe("presença confirmada inicia o acompanhamento pós-consulta", () => {
     expect((await pool.query("select count(*)::int n from agent_inbox_items where ref_id=$1", [segunda])).rows[0].n).toBe(0);
   });
 
-  it("0410: inscrição ENCERRADA nos últimos 30 dias no mesmo fluxo impede; há mais de 30 dias, não", async () => {
+  it("0410: concluída SEM envio (ações puladas por prazo vencido) não impede", async () => {
     await stopFlows();
     await flow();
     const a = await fixture();
     await change(a.id, 1, { status: "completed" });
     const antiga = await recover(a.id);
+    await pool.query("update followup_enrollments set status='completed', completed_at=now(), next_eval_at=null where id=$1", [
+      antiga.enrollment_id,
+    ]);
+    expect((await recover(await outraPresenca(a))).result).toBe("started");
+  });
+
+  it("0410: inscrição ENCERRADA que enviou, nos últimos 30 dias no mesmo fluxo, impede; há mais de 30 dias, não", async () => {
+    await stopFlows();
+    await flow();
+    const a = await fixture();
+    await change(a.id, 1, { status: "completed" });
+    const antiga = await recover(a.id);
+    await pool.query(
+      "insert into followup_enrollment_events(organization_id,enrollment_id,node_id,event_type,payload,idempotency_key) values($1,$2,'w7','action_sent','{}','a:1')",
+      [GOV_ORG, antiga.enrollment_id],
+    );
     await pool.query("update followup_enrollments set status='completed', completed_at=now(), next_eval_at=null where id=$1", [
       antiga.enrollment_id,
     ]);
