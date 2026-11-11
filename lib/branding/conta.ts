@@ -28,8 +28,11 @@ export type LogoBaixada = { sha: string; tipo: "png" | "jpeg"; bytes: Uint8Array
  * Por tipo de logo:
  *  - `LogoBaixada`: bytes novos, sha conferido — grave e guarde ESTE sha.
  *  - `"mesma"`: o sha anunciado é o que `anterior.logos` já tem — não baixou; mantenha o caminho guardado.
- *  - `null`: sem logo na Conta, OU logo recusada (motivo em `avisos`) — mantenha a anterior e
- *    NÃO troque o sha guardado, para a próxima rodada tentar de novo.
+ *  - `null` com `marca.logos.escuro` E `.claro` ambos null: a clínica NÃO TEM logo na Conta —
+ *    apague a logo guardada (e os shas).
+ *  - `null` com algum sha anunciado: logo RECUSADA (motivo em `avisos`) — mantenha a anterior e
+ *    NÃO troque o sha guardado. A rodada vem com `etag: null`, para a próxima não cair no 304 e
+ *    tentar a logo de novo.
  */
 export type LogoDaRodada = LogoBaixada | "mesma" | null;
 
@@ -189,7 +192,8 @@ async function rodada(
     return p;
   };
   const [escuro, claro] = await Promise.all([resolver("escuro"), resolver("claro")]);
-  return { tipo: "nova", marca, etag, logos: { escuro, claro }, avisos };
+  // Logo recusada: sem ETag, senão a próxima rodada recebe 304 e nunca tenta a logo de novo.
+  return { tipo: "nova", marca, etag: avisos.length > 0 ? null : etag, logos: { escuro, claro }, avisos };
 }
 
 export async function lerMarcaDaConta(

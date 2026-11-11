@@ -178,6 +178,31 @@ describe("lerMarcaDaConta", () => {
     expect(r.avisos[0]).toMatch(/escuro/);
   });
 
+  it("logo recusada → etag null, e a rodada seguinte pede a logo de novo em vez de cair no 304", async () => {
+    let webp = true;
+    const { f, chamadas } = fetchFalso({
+      [`${CONTA}/api/marca`]: (init) =>
+        new Headers(init?.headers).get("if-none-match") === '"v1"'
+          ? new Response(null, { status: 304, headers: { etag: '"v1"' } })
+          : json(corpo()),
+      [`${CONTA}/marca/logo/escuro`]: () => bytes(webp ? WEBP : PNG),
+      [`${CONTA}/marca/logo/claro`]: () => bytes(PNG_CLARO),
+    });
+    const r1 = nova(await lerMarcaDaConta(CONTA, null, { fetch: f }));
+    expect(r1.logos.escuro).toBeNull();
+    expect(r1.etag).toBeNull();
+
+    webp = false;
+    chamadas.length = 0;
+    const r2 = nova(
+      await lerMarcaDaConta(CONTA, { etag: r1.etag, logos: { escuro: null, claro: sha(PNG_CLARO) } }, { fetch: f }),
+    );
+    expect(chamadas.map((c) => c.url)).toContain(`${CONTA}/marca/logo/escuro`);
+    expect(r2.logos.escuro).toMatchObject({ sha: sha(PNG) });
+    expect(r2.logos.claro).toBe("mesma");
+    expect(r2.etag).toBe('"v1"');
+  });
+
   it("logo de 1 MiB exato passa", async () => {
     const grande = new Uint8Array(1024 * 1024);
     grande.set(PNG);
