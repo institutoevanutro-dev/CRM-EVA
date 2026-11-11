@@ -5,39 +5,52 @@ import { Bell, CalendarDays, CircleCheck, ListChecks, MessageCircle } from "luci
 
 import { apiClient } from "@/lib/api/client";
 import { useT } from "@/hooks/i18n/useT";
-import type { Bloco, ItemDoBloco } from "@/lib/inicio/tipos";
+import {
+  DIAS_DE_ESPERA_RECENTE,
+  type Avisos,
+  type Bloco,
+  type Esperando,
+  type Pendencias,
+  type TipoDePendencia,
+} from "@/lib/inicio/tipos";
 import { PaineisDaClinica, type NumerosDeHoje } from "./PaineisDaClinica";
-import { CabecalhoDaSecao, Cartao, Esqueleto, FOCO } from "./partes";
+import { Barra, CabecalhoDaSecao, Cartao, Esqueleto, FOCO, haQuanto } from "./partes";
 
 type Gasto =
   | { ok: true; consumidoCents: number; limiteCents: number | null }
   | { ok: false };
 type Resposta = {
-  meuDia: { avisos: Bloco; esperando: Bloco; agenda: Bloco; tarefas: Bloco };
-  gestao: null | { configuracao: Bloco; numeros: NumerosDeHoje; gastoIa: Gasto };
+  meuDia: { avisos: Avisos; esperando: Esperando; agenda: Bloco; tarefas: Bloco };
+  gestao: null | { configuracao: Pendencias; numeros: NumerosDeHoje; gastoIa: Gasto };
 };
 
-/** O `detalhe` dos itens de configuração é um código; aqui vira frase. */
-const MOTIVO: Record<string, string> = {
-  sem_responsavel: "sem responsável na agenda",
-  canal_fora: "WhatsApp desconectado",
-  convite_vencido: "convite vencido",
-  agente_rascunho: "agente nunca publicado",
+/** O `tipo` de cada grupo de pendências é um código; aqui vira o nome do grupo e o do resumo. */
+const PENDENCIA: Record<TipoDePendencia, string> = {
+  canal_fora: "WhatsApp fora do ar",
+  sem_responsavel: "Atendimentos sem responsável na agenda",
+  convite_vencido: "Convites vencidos",
+  agente_rascunho: "Agentes de IA em rascunho",
 };
-
-/**
- * Por que o aviso chegou a esta pessoa (`escopoDoAviso`, lib/inicio/meu-dia.ts).
- * Só gerente e admin recebem estes dois; para os demais todo aviso é "meu".
- */
-const ESCOPO_DO_AVISO: Record<string, string> = {
-  sem_dono: "ninguém assumiu",
-  organizacao: "da clínica",
+const PENDENCIA_CURTA: Record<TipoDePendencia, string> = {
+  canal_fora: "WhatsApp fora",
+  sem_responsavel: "Agenda sem responsável",
+  convite_vencido: "Convites vencidos",
+  agente_rascunho: "Agentes em rascunho",
+};
+/** Onde se resolve o resto do grupo, quando a lista não mostra todos. */
+const ONDE_RESOLVER: Record<TipoDePendencia, string> = {
+  canal_fora: "/app/connections",
+  sem_responsavel: "/app/agenda",
+  convite_vencido: "/app/team",
+  agente_rascunho: "/app/ai/agents",
 };
 
 /** Centavos de DÓLAR (o custo de IA é calculado em USD — ver BudgetCard). */
 function dolares(cents: number) {
   return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "USD" });
 }
+
+const LINHA = `-mx-2 flex min-h-11 items-center justify-between gap-3 rounded-md px-2 py-2 text-sm hover:bg-row-hover ${FOCO}`;
 
 function FalhaDoBloco() {
   const t = useT();
@@ -48,7 +61,7 @@ function FalhaDoBloco() {
   );
 }
 
-/** Vazio com frase própria de cada bloco: "nada aqui" diz menos que "ninguém esperando por você". */
+/** Vazio com frase própria de cada bloco: "nada aqui" diz menos que "ninguém esperando resposta". */
 function Vazio({ texto }: { texto: string }) {
   return (
     <p className="flex items-center gap-2 py-2 text-sm text-success-fg">
@@ -66,78 +79,227 @@ function Vazio({ texto }: { texto: string }) {
  * consultas, que é o dia dando certo. `pendencia` marca os blocos em que o
  * total conta o que está ESPERANDO alguém.
  */
-function ListaDoBloco({
-  bloco,
-  vazio,
-  rotulo,
-  comMotivo,
-  comEscopo,
-  pendencia,
-  agrupar,
-}: {
-  bloco: Bloco | null;
-  vazio: string;
-  /** O que o número conta: ele nunca fica solto na tela. */
-  rotulo: string;
-  comMotivo?: boolean;
-  /** Avisos: o detalhe é o escopo (meu / da clínica / ninguém assumiu). */
-  comEscopo?: boolean;
-  pendencia?: boolean;
-  /** Avisos com o mesmo texto viram uma linha só, com a contagem. */
-  agrupar?: boolean;
-}) {
+function Total({ valor, rotulo, pendencia }: { valor: number; rotulo: string; pendencia?: boolean }) {
+  return (
+    <p className="mb-2 flex items-baseline gap-2">
+      <span className={`numero-destaque ${pendencia ? "text-warning-fg" : "text-text"}`}>{valor}</span>
+      <span className="text-sm text-text-muted">{rotulo}</span>
+    </p>
+  );
+}
+
+function Abrir() {
   const t = useT();
-  if (!bloco || !bloco.ok) return <FalhaDoBloco />;
+  return <span className="shrink-0 text-xs font-medium text-accent">{t("Abrir")} →</span>;
+}
+
+function ListaDoBloco({ bloco, vazio, rotulo }: { bloco: Bloco; vazio: string; rotulo: string }) {
+  const t = useT();
+  if (!bloco.ok) return <FalhaDoBloco />;
   if (bloco.total === 0) return <Vazio texto={t(vazio)} />;
-  const texto = (i: ItemDoBloco) =>
-    comMotivo
-      ? `${i.titulo}${i.detalhe ? ` — ${t(MOTIVO[i.detalhe] ?? i.detalhe)}` : ""}`
-      : comEscopo
-        ? i.titulo
-        : `${i.detalhe ? `${i.detalhe} · ` : ""}${i.titulo}`;
-  const linhas: Array<{ chave: string; texto: string; href: string; vezes: number; selo?: string }> = [];
-  for (const i of bloco.itens) {
-    const tx = texto(i);
-    const selo = comEscopo && i.detalhe ? ESCOPO_DO_AVISO[i.detalhe] : undefined;
-    const igual = agrupar ? linhas.find((l) => l.texto === tx && l.selo === selo) : undefined;
-    if (igual) igual.vezes++;
-    else linhas.push({ chave: i.id, texto: tx, href: i.href, vezes: 1, ...(selo ? { selo } : {}) });
-  }
   return (
     <>
-      <p className="mb-2 flex items-baseline gap-2">
-        <span className={`numero-destaque ${pendencia ? "text-warning-fg" : "text-text"}`}>{bloco.total}</span>
-        <span className="text-sm text-text-muted">{t(rotulo)}</span>
-      </p>
+      <Total valor={bloco.total} rotulo={t(rotulo)} />
       <ul className="divide-y divide-border">
-        {linhas.map((l) => (
-          <li key={l.chave}>
+        {bloco.itens.map((i) => (
+          <li key={i.id}>
             {/* Alvo de toque generoso: a recepção usa isto no celular. */}
-            <Link
-              className={`-mx-2 flex min-h-11 items-center justify-between gap-3 rounded-md px-2 py-2 text-sm hover:bg-row-hover ${FOCO}`}
-              href={l.href}
-            >
-              <span className="min-w-0 text-text">
-                <span className="line-clamp-2 break-words">{l.texto}</span>
-                {l.selo || l.vezes > 1 ? (
-                  <span className="mt-1 flex flex-wrap gap-1.5">
-                    {l.selo ? (
-                      <span className="rounded-full bg-info-bg px-2 py-0.5 text-xs text-info-fg">{t(l.selo)}</span>
-                    ) : null}
-                    {l.vezes > 1 ? (
-                      <span className="numero rounded-full bg-warning-bg px-2 py-0.5 text-xs text-warning-fg">
-                        {l.vezes}×
-                      </span>
-                    ) : null}
-                  </span>
-                ) : null}
+            <Link className={LINHA} href={i.href}>
+              <span className="line-clamp-2 min-w-0 break-words text-text">
+                {i.detalhe ? `${i.detalhe} · ` : ""}
+                {i.titulo}
               </span>
-              <span className="shrink-0 text-xs font-medium text-accent">{t("Abrir")} →</span>
+              <Abrir />
             </Link>
           </li>
         ))}
       </ul>
     </>
+  );
+}
+
+/**
+ * Quem espera resposta de quem está logado. O número grande são as esperas
+ * RECENTES (com a pessoa + sem responsável); as antigas ficam à parte, apagadas,
+ * porque "210 esperando" com 113 esquecidas há semanas não diz o que fazer hoje.
+ */
+function EsperandoResposta({ e }: { e: Esperando }) {
+  const t = useT();
+  if (!e.ok) return <FalhaDoBloco />;
+  const dias = String(DIAS_DE_ESPERA_RECENTE);
+  return (
+    <>
+      {e.total === 0 ? (
+        <Vazio texto={t("Ninguém esperando resposta.")} />
+      ) : (
+        <Total valor={e.total} rotulo={t("esperando há até {{n}} dias").replace("{{n}}", dias)} pendencia />
+      )}
+      <dl className="space-y-1 text-sm">
+        {e.total > 0 ? (
+          <div className="flex justify-between gap-3">
+            <dt>{t("Com você")}</dt>
+            <dd className="numero">{e.comVoce}</dd>
+          </div>
+        ) : null}
+        {/* Quem não pode abrir conversa sem responsável não vê um zero que engana. */}
+        {e.total > 0 && e.veSemResponsavel ? (
+          <div className="flex justify-between gap-3">
+            <dt>{t("Sem responsável")}</dt>
+            <dd className="numero">{e.semResponsavel}</dd>
+          </div>
+        ) : null}
+        {e.antigas > 0 ? (
+          <div className="flex justify-between gap-3 text-text-muted">
+            <dt>{t("Conversas antigas sem resposta (mais de {{n}} dias)").replace("{{n}}", dias)}</dt>
+            <dd className="numero font-normal">{e.antigas}</dd>
+          </div>
+        ) : null}
+      </dl>
+      {e.itens.length ? (
+        <ul className="mt-2 divide-y divide-border border-t border-border">
+          {e.itens.map((i) => (
+            <li key={i.id}>
+              <Link className={LINHA} href={i.href}>
+                <span className="min-w-0 text-text">
+                  <span className="line-clamp-1 break-words">{i.titulo}</span>
+                  <span className="block text-xs text-text-muted">{haQuanto(i.desde, t)}</span>
+                </span>
+                <Abrir />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </>
+  );
+}
+
+/** Avisos por assunto: "139 avisos" não diz nada; "50 atendimentos parados" diz. */
+function AvisosPorAssunto({ a }: { a: Avisos }) {
+  const t = useT();
+  if (!a.ok) return <FalhaDoBloco />;
+  if (a.total === 0) return <Vazio texto={t("Nenhum aviso para você.")} />;
+  const linhas = [
+    ...a.grupos.map((g) => ({ chave: g.kind, rotulo: t(g.rotulo), total: g.total })),
+    ...(a.outros > 0 ? [{ chave: "outros", rotulo: t("Outros avisos do sistema"), total: a.outros }] : []),
+  ];
+  return (
+    <>
+      <Total valor={a.total} rotulo={t("pedem a sua atenção")} pendencia />
+      <ul className="divide-y divide-border">
+        {linhas.map((l) => (
+          <li key={l.chave}>
+            {/* A Central não filtra por assunto na URL: a linha abre a Central inteira. */}
+            <Link className={LINHA} href="/app/ai/inbox">
+              <span className="flex min-w-0 items-baseline gap-3 text-text">
+                <span className="numero w-8 shrink-0 text-right text-base">{l.total}</span>
+                <span className="min-w-0 break-words">{l.rotulo}</span>
+              </span>
+              <Abrir />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function Sistema({ carregando, saude }: { carregando: boolean; saude: { status: string; version?: string } | undefined }) {
+  const t = useT();
+  if (carregando)
+    return <div role="status" aria-label={t("Carregando")} className="h-5 w-32 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />;
+  const noAr = saude?.status === "healthy";
+  return (
+    <>
+      {/* Bolinha + frase: a cor nunca é a única pista. */}
+      <p role={noAr ? undefined : "alert"} className="flex items-center gap-2 text-sm">
+        <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${noAr ? "bg-success" : "bg-error"}`} />
+        {noAr ? t("Tudo no ar") : t("Algum serviço está fora do ar. Avise o suporte.")}
+      </p>
+      {saude?.version ? (
+        <p className="mt-1 text-xs text-text-muted">
+          {t("versão")} {saude.version}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+function GastoComIa({ g }: { g: Gasto }) {
+  const t = useT();
+  if (!g.ok) return <FalhaDoBloco />;
+  if (g.limiteCents == null)
+    return (
+      <p className="text-sm text-text-muted">
+        <b className="numero block text-xl text-text">{dolares(g.consumidoCents)}</b>
+        {t("sem limite configurado")}
+      </p>
+    );
+  const pct = Math.round((g.consumidoCents / g.limiteCents) * 100);
+  return (
+    <>
+      <p className="text-sm text-text-muted">
+        <b className="numero text-xl text-text">{dolares(g.consumidoCents)}</b> {t("de")} {dolares(g.limiteCents)}
+      </p>
+      <Barra pct={pct} className="mt-2 h-1.5" />
+      <p className="mt-1 text-xs text-text-muted">
+        {t("{{n}}% do limite do mês").replace("{{n}}", String(pct))}
+      </p>
+    </>
+  );
+}
+
+function ParaArrumar({ p }: { p: Pendencias }) {
+  const t = useT();
+  if (!p.ok) return <FalhaDoBloco />;
+  if (p.total === 0) return <Vazio texto={t("Tudo configurado.")} />;
+  return (
+    <>
+      <Total valor={p.total} rotulo={t("para resolver")} pendencia />
+      <p className="text-xs text-text-muted">
+        {p.grupos.map((g) => `${t(PENDENCIA_CURTA[g.tipo])}: ${g.total}`).join(" · ")}
+      </p>
+    </>
+  );
+}
+
+/** A lista do que arrumar, por tipo, abaixo dos três quadros da Gestão. */
+function ListaParaArrumar({ p }: { p: Pendencias }) {
+  const t = useT();
+  if (!p.ok || p.total === 0) return null;
+  return (
+    <Cartao titulo={t("O que arrumar, por tipo")} className="mt-4">
+      <div className="grid gap-x-8 gap-y-4 md:grid-cols-2">
+        {p.grupos.map((g) => (
+          <div key={g.tipo} className="min-w-0">
+            <h4 className="flex items-baseline justify-between gap-3 text-sm font-semibold text-text">
+              <span>{t(PENDENCIA[g.tipo])}</span>
+              <span className="numero text-warning-fg">{g.total}</span>
+            </h4>
+            <ul className="mt-1 divide-y divide-border">
+              {g.itens.map((i) => (
+                <li key={i.id}>
+                  <Link className={LINHA} href={i.href}>
+                    <span className="line-clamp-2 min-w-0 break-words text-text">{i.titulo}</span>
+                    <Abrir />
+                  </Link>
+                </li>
+              ))}
+              {g.total > g.itens.length ? (
+                <li>
+                  <Link className={LINHA} href={ONDE_RESOLVER[g.tipo]}>
+                    <span className="text-text-muted">
+                      {t("e mais {{n}}").replace("{{n}}", String(g.total - g.itens.length))}
+                    </span>
+                    <Abrir />
+                  </Link>
+                </li>
+              ) : null}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </Cartao>
   );
 }
 
@@ -170,13 +332,15 @@ export function PainelInicio() {
         <button
           type="button"
           onClick={() => void painel.refetch()}
-          className={`mt-3 min-h-10 rounded-lg border px-3 text-sm font-medium hover:bg-row-hover ${FOCO}`}
+          className={`mt-3 min-h-11 rounded-lg border px-3 text-sm font-medium hover:bg-row-hover ${FOCO}`}
         >
           {t("Tentar de novo")}
         </button>
       </div>
     );
   const { meuDia, gestao } = painel.data;
+  // Sem tarefa, o quadro não ocupa um quarto da tela para dizer "nenhuma": vira uma linha.
+  const semTarefas = meuDia.tarefas.ok && meuDia.tarefas.total === 0;
 
   return (
     <div className="space-y-10">
@@ -186,31 +350,44 @@ export function PainelInicio() {
           titulo={t("Meu dia")}
           descricao={
             gestao
-              ? t("O que é seu, mais os avisos da clínica que ninguém assumiu.")
-              : t("Só o que é seu: suas conversas, sua agenda, suas tarefas e os seus avisos.")
+              ? t("O que precisa de você hoje, mais o que ninguém assumiu na clínica.")
+              : t("O que precisa de você hoje: conversas, agenda, tarefas e avisos.")
           }
         />
         <div className="grid gap-4 md:grid-cols-2">
           <Cartao titulo={t("Pacientes esperando resposta")} icone={MessageCircle} verTodos="/app/inbox">
-            <ListaDoBloco bloco={meuDia.esperando} rotulo="esperando por você" vazio="Ninguém esperando resposta sua." pendencia />
+            <EsperandoResposta e={meuDia.esperando} />
           </Cartao>
           <Cartao titulo={t("Minha agenda de hoje")} icone={CalendarDays} verTodos="/app/agenda">
             <ListaDoBloco bloco={meuDia.agenda} rotulo="compromissos hoje" vazio="Nenhum compromisso seu hoje." />
           </Cartao>
-          <Cartao titulo={t("Minhas tarefas")} icone={ListChecks} verTodos="/app/tasks">
-            <ListaDoBloco bloco={meuDia.tarefas} rotulo="para hoje ou atrasadas" vazio="Nenhuma tarefa sua para hoje." />
+          <Cartao
+            titulo={t("Avisos, separados por assunto")}
+            icone={Bell}
+            verTodos="/app/ai/inbox"
+            rotuloVerTodos={t("Central de avisos")}
+            className={semTarefas ? "md:col-span-2" : ""}
+          >
+            <AvisosPorAssunto a={meuDia.avisos} />
           </Cartao>
-          <Cartao titulo={t("Meus avisos")} icone={Bell} verTodos="/app/ai/inbox" rotuloVerTodos={t("Central de avisos")}>
-            <ListaDoBloco
-              bloco={meuDia.avisos}
-              rotulo="pedem a sua atenção"
-              vazio="Nenhum aviso para você."
-              comEscopo
-              pendencia
-              agrupar
-            />
-          </Cartao>
+          {semTarefas ? null : (
+            <Cartao titulo={t("Minhas tarefas")} icone={ListChecks} verTodos="/app/tasks">
+              <ListaDoBloco bloco={meuDia.tarefas} rotulo="para hoje ou atrasadas" vazio="Nenhuma tarefa sua para hoje." />
+            </Cartao>
+          )}
         </div>
+        {semTarefas ? (
+          <p className="mt-3 flex flex-wrap items-center gap-x-2 text-sm text-text-muted">
+            <ListChecks aria-hidden className="size-4 shrink-0" />
+            {t("Nenhuma tarefa sua para hoje.")}
+            <Link
+              className={`inline-flex items-center rounded-md text-accent underline-offset-4 hover:underline max-lg:min-h-11 toque:min-h-11 ${FOCO}`}
+              href="/app/tasks"
+            >
+              {t("Ver tarefas")}
+            </Link>
+          </p>
+        ) : null}
       </section>
 
       {/* Só para gestor: o servidor manda `gestao` e a rota dos painéis exige manager. */}
@@ -219,39 +396,18 @@ export function PainelInicio() {
       {gestao ? (
         <section aria-labelledby="inicio-gestao">
           <CabecalhoDaSecao id="inicio-gestao" titulo={t("Gestão")} descricao={t("O que impede o CRM de funcionar direito.")} />
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Cartao titulo={t("Configuração pendente")}>
-              <ListaDoBloco bloco={gestao.configuracao} rotulo="para resolver" vazio="Tudo configurado." comMotivo pendencia />
+          <div className="grid gap-4 md:grid-cols-3">
+            <Cartao titulo={t("Sistema")}>
+              <Sistema carregando={saude.isLoading} saude={saude.data} />
             </Cartao>
             <Cartao titulo={t("Gasto com IA no mês")} verTodos="/app/ai/usage" rotuloVerTodos={t("Abrir")}>
-              {gestao.gastoIa?.ok ? (
-                <p className="text-sm text-text-muted">
-                  <b className="numero-destaque block text-text">{dolares(gestao.gastoIa.consumidoCents)}</b>
-                  {gestao.gastoIa.limiteCents != null
-                    ? `${t("de")} ${dolares(gestao.gastoIa.limiteCents)}`
-                    : t("sem limite configurado")}
-                </p>
-              ) : (
-                <FalhaDoBloco />
-              )}
+              <GastoComIa g={gestao.gastoIa} />
             </Cartao>
-            <Cartao titulo={t("Sistema")}>
-              {saude.isLoading ? (
-                <div role="status" aria-label={t("Carregando")} className="h-5 w-32 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />
-              ) : saude.data?.status === "healthy" ? (
-                <p className="flex items-center gap-2 text-sm">
-                  <span aria-hidden className="size-2.5 rounded-full bg-success" />
-                  {t("Tudo no ar")}
-                  {saude.data.version ? ` · ${t("versão")} ${saude.data.version}` : ""}
-                </p>
-              ) : (
-                <p role="alert" className="flex items-center gap-2 text-sm">
-                  <span aria-hidden className="size-2.5 rounded-full bg-error" />
-                  {t("Algum serviço está fora do ar. Avise o suporte.")}
-                </p>
-              )}
+            <Cartao titulo={t("Para arrumar")}>
+              <ParaArrumar p={gestao.configuracao} />
             </Cartao>
           </div>
+          <ListaParaArrumar p={gestao.configuracao} />
         </section>
       ) : null}
     </div>

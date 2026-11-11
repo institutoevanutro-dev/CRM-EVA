@@ -11,6 +11,18 @@ import type { Idioma } from "@/lib/i18n/idiomas";
 export const FUSO_PADRAO = "America/Sao_Paulo";
 export const LIMITE_DE_ITENS = 5;
 
+/**
+ * "Esperando resposta" só é RECENTE até tantos dias de espera (decisão do dono,
+ * 11/11/2026). Constante única: o "Meu dia" e a "Visão da clínica" passam o
+ * mesmo corte a `fn_inicio_esperando`, e a tela escreve o mesmo número.
+ */
+export const DIAS_DE_ESPERA_RECENTE = 3;
+
+/** O instante a partir do qual uma espera ainda é recente. */
+export function corteDaEsperaRecente(agora: Date): string {
+  return new Date(agora.getTime() - DIAS_DE_ESPERA_RECENTE * 24 * 60 * 60 * 1000).toISOString();
+}
+
 export interface ItemDoBloco {
   id: string;
   titulo: string;
@@ -19,6 +31,35 @@ export interface ItemDoBloco {
 }
 
 export type Bloco = { ok: true; total: number; itens: ItemDoBloco[] } | { ok: false };
+
+/**
+ * Pacientes esperando resposta, para quem está logado. `total` conta só as
+ * esperas recentes (com a pessoa + sem responsável); as antigas vão à parte.
+ * `veSemResponsavel` é a régua da RLS: quem não pode abrir conversa sem
+ * responsável não vê essa linha (o zero dela seria um número que engana).
+ */
+export type Esperando =
+  | {
+      ok: true;
+      total: number;
+      comVoce: number;
+      semResponsavel: number;
+      veSemResponsavel: boolean;
+      antigas: number;
+      itens: Array<{ id: string; titulo: string; desde: string; href: string }>;
+    }
+  | { ok: false };
+
+/** Avisos da Central que chegam à pessoa, por assunto: os maiores grupos e a soma do resto. */
+export type Avisos =
+  | { ok: true; total: number; grupos: Array<{ kind: string; rotulo: string; total: number }>; outros: number }
+  | { ok: false };
+
+/** O que falta arrumar na configuração, por tipo (o `tipo` é um código; a tela o traduz). */
+export type TipoDePendencia = "canal_fora" | "convite_vencido" | "agente_rascunho" | "sem_responsavel";
+export type Pendencias =
+  | { ok: true; total: number; grupos: Array<{ tipo: TipoDePendencia; total: number; itens: ItemDoBloco[] }> }
+  | { ok: false };
 
 export interface ContextoDoInicio {
   orgId: string;

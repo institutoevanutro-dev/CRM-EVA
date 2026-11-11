@@ -1,5 +1,5 @@
 /**
- * GET /api/v1/inicio/paineis — só gestor; cada painel isolado (spec 2026-10-07-inicio-paineis).
+ * GET /api/v1/inicio/paineis — só gestor; cada painel isolado (specs 2026-10-07-inicio-paineis e 2026-11-11-inicio-claro).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -59,8 +59,17 @@ beforeEach(() => {
   vi.clearAllMocks();
   chamadas.length = 0;
   vi.mocked(createClient).mockResolvedValue(dbFalso() as never);
-  RPC.fn_inicio_conversas_por_dia = {
-    data: [{ dia: "2026-10-01", ia_sozinha: 2, com_equipe: 1, sem_resposta: 0, soma_primeira_resposta_s: 300, respondidas: 3 }],
+  RPC.fn_inicio_atendimento = {
+    data: { ia_sozinha: 38, com_equipe: 55, sem_resposta: 7, mediana_primeira_resposta_s: 42.5 },
+    error: null,
+  };
+  RPC.fn_inicio_esperando = {
+    data: {
+      ve_sem_responsavel: true,
+      recentes: { total: 12, com_voce: 1, sem_responsavel: 5 },
+      antigas: { total: 40, com_voce: 0, sem_responsavel: 31 },
+      itens: [{ id: "c1", desde: "2026-10-01T10:00:00Z", name: null, display_name: "Fulana", phone_number: null }],
+    },
     error: null,
   };
   RPC.fn_inicio_agenda = {
@@ -77,8 +86,7 @@ beforeEach(() => {
         { user_id: "p1", hoje: 3, semana: 9, realizadas: 4, faltas: 1, canceladas: 0, minutos: 540 },
         { user_id: null, hoje: 1, semana: 1, realizadas: 0, faltas: 0, canceladas: 0, minutos: 60 },
       ],
-      esperando: { total: 5, sem_responsavel: 2, desde: "2026-10-01T10:00:00Z" },
-      leads: { novos_mes: 12, novos_anterior: 8, ganhos_mes: 3, ganhos_anterior: 4 },
+      vendas: { novos_mes: 12, novos_anterior: 8, ganhos_mes: 3, perdidos_mes: 2, valor: { BRL: "150000" } },
     },
     error: null,
   };
@@ -100,34 +108,64 @@ describe("GET /api/v1/inicio/paineis", () => {
     expect(vi.mocked(requireRole).mock.calls[0]![0]).toBe("manager");
   });
 
-  it("gestor recebe os quatro painéis montados", async () => {
+  it("gestor recebe os painéis montados", async () => {
     comoGestor();
     const res = await chamar();
     expect(res.status).toBe(200);
     const d = ((await res.json()) as { data: Paineis }).data;
-    expect(d.conversas.ok).toBe(true);
-    expect(d.conversas.dias).toHaveLength(30);
-    expect(d.conversas.primeiraRespostaMediaS).toBe(100);
     expect(d.agenda.unidades[0]).toMatchObject({ unidade: "Vitória", comparecimento: 2 / 3 });
-    expect(d.funil).toMatchObject({ ok: true, funilId: "f1", funis: [{ id: "f2" }, { id: "f1" }] });
+    // Do funil saem só as etapas: ganhos e valor DESTE funil não vão à tela (as vendas somam todos).
+    expect(d.funil).toEqual({ ok: true, funilId: "f1", funis: [{ id: "f2", nome: "Outro" }, { id: "f1", nome: "Pedidos" }], etapas: [{ id: "e1", nome: "Avaliação", abertos: 2 }] });
     expect(d.origem.itens[0]).toEqual({ origem: "anuncio_meta", rotulo: "Anúncio do Meta", total: 4, detalhes: [] });
     expect(d.origem.itens[1]).toMatchObject({ origem: "formulario", total: 3, detalhes: [{ utm: "site", total: 2 }] });
-    expect(chamadas.find((c) => c.fn === "fn_inicio_conversas_por_dia")!.args.p_fuso).toBe("America/Sao_Paulo");
+    // O nome do mês sai destes dois dias; a tela o escreve no idioma de quem lê.
+    expect(d.periodo.mes).toMatch(/^\d{4}-\d{2}-01$/);
+    expect(d.periodo.mesAnterior).toMatch(/^\d{4}-\d{2}-01$/);
   });
 
-  it("resumo da clínica: profissionais com nome, espera agora e leads; janelas de hoje, semana e mês", async () => {
+  it("atendimento: as três faixas, a frase 'de cada 10' somando 10 e a MEDIANA da primeira resposta", async () => {
+    comoGestor();
+    const d = ((await (await chamar()).json()) as { data: Paineis }).data;
+    expect(d.atendimento).toEqual({
+      ok: true,
+      equipe: 55,
+      ia: 38,
+      semResposta: 7,
+      deCadaDez: { equipe: 5, ia: 4, semResposta: 1 },
+      medianaPrimeiraRespostaS: 42.5,
+    });
+    expect(Object.keys(chamadas.find((c) => c.fn === "fn_inicio_atendimento")!.args).sort()).toEqual(["p_fim", "p_inicio", "p_org"]);
+  });
+
+  it("esperando agora: a clínica toda, pela mesma função e o mesmo corte de 3 dias do Meu dia", async () => {
+    comoGestor();
+    const antes = Date.now();
+    const d = ((await (await chamar()).json()) as { data: Paineis }).data;
+    expect(d.esperando).toEqual({ ok: true, recentes: 12, semResponsavel: 5, antigas: 40 });
+    const args = chamadas.find((c) => c.fn === "fn_inicio_esperando")!.args;
+    expect(args.p_org).toBe("org-1");
+    const corte = Date.parse(String(args.p_corte));
+    const tresDias = 3 * 24 * 60 * 60 * 1000;
+    expect(corte).toBeGreaterThanOrEqual(antes - tresDias);
+    expect(corte).toBeLessThanOrEqual(Date.now() - tresDias);
+  });
+
+  it("resumo da clínica: profissionais com nome e vendas de todos os funis; o mês anterior vai só até os mesmos dias", async () => {
     comoGestor();
     const d = ((await (await chamar()).json()) as { data: Paineis }).data;
     expect(d.resumo.ok).toBe(true);
     expect(d.resumo.profissionais[0]).toMatchObject({ user_id: "p1", nome: "Dra. Exemplo", hoje: 3 });
     expect(d.resumo.profissionais[1]).toMatchObject({ user_id: null, nome: null });
-    expect(d.resumo.esperando).toEqual({ total: 5, sem_responsavel: 2, desde: "2026-10-01T10:00:00Z" });
-    expect(d.resumo.leads.novos_mes).toBe(12);
+    expect(d.resumo.vendas).toEqual({ novos_mes: 12, novos_anterior: 8, ganhos_mes: 3, perdidos_mes: 2, valor: { BRL: "150000" } });
     const args = chamadas.find((c) => c.fn === "fn_inicio_resumo_da_clinica")!.args;
     expect(args.p_org).toBe("org-1");
     expect(Object.keys(args).sort()).toEqual(
-      ["p_ant_inicio", "p_hoje_fim", "p_hoje_inicio", "p_mes_fim", "p_mes_inicio", "p_org", "p_semana_fim", "p_semana_inicio"],
+      ["p_ant_fim", "p_ant_inicio", "p_hoje_fim", "p_hoje_inicio", "p_mes_fim", "p_mes_inicio", "p_org", "p_semana_fim", "p_semana_inicio"],
     );
+    // Nunca o mês anterior inteiro: a janela de comparação fecha antes do começo deste mês
+    // (ou nele, nos últimos dias de um mês mais longo que o anterior).
+    expect(Date.parse(String(args.p_ant_fim))).toBeLessThanOrEqual(Date.parse(String(args.p_mes_inicio)));
+    expect(Date.parse(String(args.p_ant_fim))).toBeGreaterThanOrEqual(Date.parse(String(args.p_ant_inicio)));
   });
 
   it("um painel com erro vira {ok:false} sem derrubar os outros", async () => {
@@ -135,7 +173,7 @@ describe("GET /api/v1/inicio/paineis", () => {
     RPC.fn_inicio_agenda = { data: null, error: { message: "boom" } };
     const d = ((await (await chamar()).json()) as { data: Paineis }).data;
     expect(d.agenda).toEqual({ ok: false });
-    expect(d.conversas.ok).toBe(true);
+    expect(d.atendimento.ok).toBe(true);
   });
 
   it("?funil= de um funil que não existe usa o padrão", async () => {

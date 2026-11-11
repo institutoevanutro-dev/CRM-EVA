@@ -32680,67 +32680,9 @@ on conflict (id) do update
 create index if not exists conversations_org_created_idx on public.conversations (organization_id, created_at);
 create index if not exists contacts_org_created_idx on public.contacts (organization_id, created_at);
 
--- A coluna da 0372 (contato oculto do Inbox) nasce TAMBÉM aqui: a função logo
--- abaixo a lê desde a 0372, e `language sql` confere o corpo ao ser criada —
--- numa instalação nova este bloco roda antes do da 0372. Idempotente; o bloco
--- da 0372 repete o mesmo `add column if not exists`.
-alter table public.conversations
-  add column if not exists contato_oculto boolean not null default false;
-
--- Conversas novas por dia no fuso da org. "IA sozinha" = a IA falou e ninguém da
--- equipe; "com a equipe" = alguém da equipe falou; "sem resposta" = nenhum dos dois.
--- Corpo FINAL (migration 0372: conversa de contato oculto do Inbox não conta),
--- o mesmo que o bloco da 0372 repete no fim do arquivo.
-create or replace function public.fn_inicio_conversas_por_dia(p_org uuid, p_inicio timestamptz, p_fim timestamptz, p_fuso text)
-returns table(dia date, ia_sozinha int, com_equipe int, sem_resposta int, soma_primeira_resposta_s float8, respondidas int)
-language sql stable
-set search_path = public
-as $$
-  with conv as (
-    select c.id, (c.created_at at time zone p_fuso)::date as dia
-      from public.conversations c
-     where c.organization_id = p_org and not c.is_group and not c.contato_oculto
-       and c.created_at >= p_inicio and c.created_at < p_fim
-  ), msg as (
-    -- sent_via='ai' cobre QUALQUER ator não humano (lembrete, campanha, automação);
-    -- fala da IA é a marca de autoria, a mesma régua de ehFalaDaIa
-    -- (lib/ai/handoff/aviso-ao-lead.ts). Envio que falhou não é resposta.
-    select m.conversation_id, m.direction, m.sent_at,
-           (m.direction = 'outbound' and m.status <> 'failed'
-             and coalesce(m.metadata->>'aviso_de_escalacao', '') <> 'true'
-             and (jsonb_typeof(m.metadata->'ai_actor_id') = 'string'
-                  or m.metadata->>'ai_generated' = 'true'
-                  or m.metadata->>'texto_escrito_pela_ia' = 'true')) as da_ia,
-           (m.direction = 'outbound' and m.status <> 'failed'
-             and (m.sent_by_user_id is not null or m.sent_via in ('user', 'external_device'))) as da_equipe
-      from public.messages m
-      join conv on conv.id = m.conversation_id
-     where m.organization_id = p_org
-  ), por_conv as (
-    select conv.id, conv.dia,
-           coalesce(bool_or(m.da_ia), false) as ia,
-           coalesce(bool_or(m.da_equipe), false) as humano,
-           min(m.sent_at) filter (where m.direction = 'inbound') as pri_in
-      from conv
-      left join msg m on m.conversation_id = conv.id
-     group by conv.id, conv.dia
-  ), com_resposta as (
-    select p.*,
-           (select min(m.sent_at) from msg m
-             where m.conversation_id = p.id and (m.da_ia or m.da_equipe)
-               and m.sent_at > p.pri_in) as pri_out
-      from por_conv p
-  )
-  select p.dia,
-         (count(*) filter (where p.ia and not p.humano))::int,
-         (count(*) filter (where p.humano))::int,
-         (count(*) filter (where not p.ia and not p.humano))::int,
-         coalesce(sum(extract(epoch from p.pri_out - p.pri_in)) filter (where p.pri_out > p.pri_in), 0)::float8,
-         (count(*) filter (where p.pri_out > p.pri_in))::int
-    from com_resposta p
-   group by p.dia
-   order by p.dia;
-$$;
+-- `fn_inicio_conversas_por_dia` nascia aqui. Saiu na migration 0408 (o gráfico
+-- por dia deu lugar a `fn_inicio_atendimento`); o `drop ... if exists` para quem
+-- já instalou está no bloco da 0408, no fim do arquivo.
 
 -- Agenda por unidade. Comparecimento é calculado na rota: realizadas ÷ (realizadas + faltas).
 create or replace function public.fn_inicio_agenda(p_org uuid, p_inicio timestamptz, p_fim timestamptz)
@@ -32817,11 +32759,9 @@ as $$
    order by 3 desc;
 $$;
 
-revoke execute on function public.fn_inicio_conversas_por_dia(uuid, timestamptz, timestamptz, text) from public, anon;
 revoke execute on function public.fn_inicio_agenda(uuid, timestamptz, timestamptz) from public, anon;
 revoke execute on function public.fn_inicio_funil(uuid, uuid, timestamptz, timestamptz, timestamptz) from public, anon;
 revoke execute on function public.fn_inicio_origem(uuid, timestamptz, timestamptz) from public, anon;
-grant execute on function public.fn_inicio_conversas_por_dia(uuid, timestamptz, timestamptz, text) to authenticated;
 grant execute on function public.fn_inicio_agenda(uuid, timestamptz, timestamptz) to authenticated;
 grant execute on function public.fn_inicio_funil(uuid, uuid, timestamptz, timestamptz, timestamptz) to authenticated;
 grant execute on function public.fn_inicio_origem(uuid, timestamptz, timestamptz) to authenticated;
@@ -36273,8 +36213,6 @@ notify pgrst, 'reload schema';
 -- (o porquê inteiro está no cabeçalho de lá). `contacts.inbox_hidden_at` marca o
 -- contato; `conversations.contato_oculto` é a cópia que o Inbox filtra, mantida
 -- por gatilho dos dois lados (molde da 0332); só o servidor escreve a marca.
--- `fn_inicio_conversas_por_dia` repete aqui o corpo final, que é também o da
--- primeira (e única outra) definição, no bloco da 0330.
 --
 -- ⚠️ ANTES do bloco da VARREDURA anon, que é de propósito o último a criar
 -- função (`tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`).
@@ -36391,58 +36329,9 @@ do $janela$ begin
   revoke all on function public.fn_ocultacao_do_contato_so_o_servidor() from public, anon, authenticated;
 end $janela$;
 
--- O painel de conversas por dia do Início (0330) deixa de contar conversa de
--- contato oculto. Corpo idêntico ao da 0330, com `and not c.contato_oculto`.
-create or replace function public.fn_inicio_conversas_por_dia(p_org uuid, p_inicio timestamptz, p_fim timestamptz, p_fuso text)
-returns table(dia date, ia_sozinha int, com_equipe int, sem_resposta int, soma_primeira_resposta_s float8, respondidas int)
-language sql stable
-set search_path = public
-as $$
-  with conv as (
-    select c.id, (c.created_at at time zone p_fuso)::date as dia
-      from public.conversations c
-     where c.organization_id = p_org and not c.is_group and not c.contato_oculto
-       and c.created_at >= p_inicio and c.created_at < p_fim
-  ), msg as (
-    -- sent_via='ai' cobre QUALQUER ator não humano (lembrete, campanha, automação);
-    -- fala da IA é a marca de autoria, a mesma régua de ehFalaDaIa
-    -- (lib/ai/handoff/aviso-ao-lead.ts). Envio que falhou não é resposta.
-    select m.conversation_id, m.direction, m.sent_at,
-           (m.direction = 'outbound' and m.status <> 'failed'
-             and coalesce(m.metadata->>'aviso_de_escalacao', '') <> 'true'
-             and (jsonb_typeof(m.metadata->'ai_actor_id') = 'string'
-                  or m.metadata->>'ai_generated' = 'true'
-                  or m.metadata->>'texto_escrito_pela_ia' = 'true')) as da_ia,
-           (m.direction = 'outbound' and m.status <> 'failed'
-             and (m.sent_by_user_id is not null or m.sent_via in ('user', 'external_device'))) as da_equipe
-      from public.messages m
-      join conv on conv.id = m.conversation_id
-     where m.organization_id = p_org
-  ), por_conv as (
-    select conv.id, conv.dia,
-           coalesce(bool_or(m.da_ia), false) as ia,
-           coalesce(bool_or(m.da_equipe), false) as humano,
-           min(m.sent_at) filter (where m.direction = 'inbound') as pri_in
-      from conv
-      left join msg m on m.conversation_id = conv.id
-     group by conv.id, conv.dia
-  ), com_resposta as (
-    select p.*,
-           (select min(m.sent_at) from msg m
-             where m.conversation_id = p.id and (m.da_ia or m.da_equipe)
-               and m.sent_at > p.pri_in) as pri_out
-      from por_conv p
-  )
-  select p.dia,
-         (count(*) filter (where p.ia and not p.humano))::int,
-         (count(*) filter (where p.humano))::int,
-         (count(*) filter (where not p.ia and not p.humano))::int,
-         coalesce(sum(extract(epoch from p.pri_out - p.pri_in)) filter (where p.pri_out > p.pri_in), 0)::float8,
-         (count(*) filter (where p.pri_out > p.pri_in))::int
-    from com_resposta p
-   group by p.dia
-   order by p.dia;
-$$;
+-- `fn_inicio_conversas_por_dia` (0330) era redefinida aqui para não contar
+-- conversa de contato oculto. A função saiu na migration 0408; quem a substitui
+-- (`fn_inicio_atendimento`, bloco da 0408) já nasce com `not c.contato_oculto`.
 
 notify pgrst, 'reload schema';
 -- ---- fim: ocultar um contato do Inbox (migration 0372) ----
@@ -36451,6 +36340,12 @@ notify pgrst, 'reload schema';
 -- Derivado de supabase/migrations/20261017120000_0376_inicio_visao_da_clinica.sql
 -- (o porquê inteiro está no cabeçalho de lá). Uma função SECURITY INVOKER nova,
 -- revogada de public e anon. Quem mede: tests/invariants/inicio-visao-da-clinica.test.ts.
+-- A 0408 trocou o corpo AQUI, no lugar: `p_ant_fim` fecha os MESMOS DIAS do mês
+-- anterior, o bloco `leads` virou `vendas` (todos os funis, com desistências e
+-- valor por moeda) e `esperando` foi para `fn_inicio_esperando`. A assinatura
+-- mudou, então a de oito argumentos sai antes.
+drop function if exists public.fn_inicio_resumo_da_clinica(uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz);
+
 create or replace function public.fn_inicio_resumo_da_clinica(
   p_org uuid,
   p_hoje_inicio timestamptz,
@@ -36459,7 +36354,8 @@ create or replace function public.fn_inicio_resumo_da_clinica(
   p_semana_fim timestamptz,
   p_mes_inicio timestamptz,
   p_mes_fim timestamptz,
-  p_ant_inicio timestamptz
+  p_ant_inicio timestamptz,
+  p_ant_fim timestamptz
 )
 returns jsonb
 language sql stable
@@ -36485,37 +36381,33 @@ as $$
            group by a.owner_user_id
         ) p
     ), '[]'::jsonb),
-    'esperando', (
-      select jsonb_build_object(
-               'total', count(*)::int,
-               'sem_responsavel', (count(*) filter (where c.assigned_to_user_id is null))::int,
-               'desde', min(coalesce(c.awaiting_since, c.last_inbound_at)))
-        from public.conversations c
-       where c.organization_id = p_org
-         and not c.is_group
-         and not c.contato_oculto
-         and c.status not in ('resolved', 'closed', 'archived')
-         and c.last_inbound_at is not null
-         and (c.last_outbound_at is null or c.last_inbound_at > c.last_outbound_at)
-    ),
-    'leads', (
+    -- TODOS os funis. `novos_anterior` conta só até `p_ant_fim`: os mesmos dias
+    -- do mês anterior, nunca o mês anterior inteiro contra o mês pela metade.
+    'vendas', (
       select jsonb_build_object(
                'novos_mes', (count(*) filter (where l.created_at >= p_mes_inicio and l.created_at < p_mes_fim))::int,
-               'novos_anterior', (count(*) filter (where l.created_at >= p_ant_inicio and l.created_at < p_mes_inicio))::int,
+               'novos_anterior', (count(*) filter (where l.created_at >= p_ant_inicio and l.created_at < p_ant_fim))::int,
                'ganhos_mes', (count(*) filter (where l.status = 'won'
                                                  and l.closed_at >= p_mes_inicio and l.closed_at < p_mes_fim))::int,
-               'ganhos_anterior', (count(*) filter (where l.status = 'won'
-                                                      and l.closed_at >= p_ant_inicio and l.closed_at < p_mes_inicio))::int)
+               'perdidos_mes', (count(*) filter (where l.status = 'lost'
+                                                   and l.closed_at >= p_mes_inicio and l.closed_at < p_mes_fim))::int,
+               'valor', coalesce((
+                 select jsonb_object_agg(v.moeda, v.total::text)
+                   from (select coalesce(g.currency, 'BRL') as moeda, sum(g.value_cents) as total
+                           from public.crm_leads g
+                          where g.organization_id = p_org and g.status = 'won' and g.value_cents is not null
+                            and g.closed_at >= p_mes_inicio and g.closed_at < p_mes_fim
+                          group by 1) v), '{}'::jsonb))
         from public.crm_leads l
        where l.organization_id = p_org
-         and (l.created_at >= p_ant_inicio or l.closed_at >= p_ant_inicio)
+         and (l.created_at >= p_ant_inicio or l.closed_at >= p_mes_inicio)
     )
   );
 $$;
 
 -- As DUAS origens de EXECUTE saem (CLAUDE.md, item 9); só quem tem sessão chama.
-revoke execute on function public.fn_inicio_resumo_da_clinica(uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz) from public, anon;
-grant execute on function public.fn_inicio_resumo_da_clinica(uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz) to authenticated;
+revoke execute on function public.fn_inicio_resumo_da_clinica(uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz) from public, anon;
+grant execute on function public.fn_inicio_resumo_da_clinica(uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz) to authenticated;
 
 notify pgrst, 'reload schema';
 -- ---- fim: Visão da clínica (migration 0376) ----
@@ -38457,6 +38349,125 @@ alter table public.ai_agent_versions
   add constraint ai_agent_versions_reply_min_interval_ms_check
   check (reply_min_interval_ms is null or (reply_min_interval_ms >= 0 and reply_min_interval_ms <= 600000));
 -- ---- fim: intervalo mínimo entre respostas da IA (migration 0405) ----
+
+-- ---- Início claro: espera recente, mediana e mesmos dias do mês anterior (migration 0408) ----
+-- Derivado de supabase/migrations/20261111130000_0408_inicio_claro.sql (o porquê
+-- inteiro está no cabeçalho de lá). Duas funções SECURITY INVOKER novas,
+-- revogadas de public e anon; cria função, então entra ANTES da VARREDURA anon.
+-- `fn_inicio_resumo_da_clinica` foi trocada NO LUGAR, no bloco da 0376, e as
+-- duas definições de `fn_inicio_conversas_por_dia` (blocos da 0330 e da 0372)
+-- saíram do texto: aqui fica só o `drop` para quem já instalou. Quem mede:
+-- tests/invariants/inicio-esperando.test.ts e inicio-paineis.test.ts.
+create or replace function public.fn_inicio_esperando(p_org uuid, p_corte timestamptz)
+returns jsonb
+language sql stable
+set search_path = public
+as $$
+  with esperando as (
+    select c.id, c.contact_id, c.assigned_to_user_id,
+           coalesce(c.awaiting_since, c.last_inbound_at) as desde
+      from public.conversations c
+     where c.organization_id = p_org
+       and not c.is_group
+       and not c.contato_oculto
+       and c.status not in ('resolved', 'closed', 'archived')
+       and c.last_inbound_at is not null
+       and (c.last_outbound_at is null or c.last_inbound_at > c.last_outbound_at)
+  ), marcadas as (
+    select e.*,
+           e.desde >= p_corte as recente,
+           coalesce(e.assigned_to_user_id = auth.uid(), false) as com_voce,
+           e.assigned_to_user_id is null as sem_responsavel
+      from esperando e
+  )
+  select jsonb_build_object(
+    've_sem_responsavel', coalesce(public.fn_can_view_conversation(p_org, null), false),
+    'recentes', jsonb_build_object(
+      'total', (count(*) filter (where m.recente))::int,
+      'com_voce', (count(*) filter (where m.recente and m.com_voce))::int,
+      'sem_responsavel', (count(*) filter (where m.recente and m.sem_responsavel))::int),
+    'antigas', jsonb_build_object(
+      'total', (count(*) filter (where not m.recente))::int,
+      'com_voce', (count(*) filter (where not m.recente and m.com_voce))::int,
+      'sem_responsavel', (count(*) filter (where not m.recente and m.sem_responsavel))::int),
+    'itens', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', i.id, 'desde', i.desde,
+               'name', ct.name, 'display_name', ct.display_name, 'phone_number', ct.phone_number)
+             order by i.desde, i.id)
+        from (
+          select x.id, x.contact_id, x.desde
+            from marcadas x
+           where x.recente and (x.com_voce or x.sem_responsavel)
+           order by x.desde, x.id
+           limit 5
+        ) i
+        left join public.contacts ct on ct.id = i.contact_id and ct.organization_id = p_org
+    ), '[]'::jsonb))
+    from marcadas m;
+$$;
+
+create or replace function public.fn_inicio_atendimento(p_org uuid, p_inicio timestamptz, p_fim timestamptz)
+returns jsonb
+language sql stable
+set search_path = public
+as $$
+  with conv as (
+    select c.id
+      from public.conversations c
+     where c.organization_id = p_org and not c.is_group and not c.contato_oculto
+       and c.created_at >= p_inicio and c.created_at < p_fim
+  ), msg as (
+    -- sent_via='ai' cobre QUALQUER ator não humano (lembrete, campanha, automação);
+    -- fala da IA é a marca de autoria, a mesma régua de ehFalaDaIa
+    -- (lib/ai/handoff/aviso-ao-lead.ts). Envio que falhou não é resposta.
+    select m.conversation_id, m.direction, m.sent_at,
+           (m.direction = 'outbound' and m.status <> 'failed'
+             and coalesce(m.metadata->>'aviso_de_escalacao', '') <> 'true'
+             and (jsonb_typeof(m.metadata->'ai_actor_id') = 'string'
+                  or m.metadata->>'ai_generated' = 'true'
+                  or m.metadata->>'texto_escrito_pela_ia' = 'true')) as da_ia,
+           (m.direction = 'outbound' and m.status <> 'failed'
+             and (m.sent_by_user_id is not null or m.sent_via in ('user', 'external_device'))) as da_equipe
+      from public.messages m
+      join conv on conv.id = m.conversation_id
+     where m.organization_id = p_org
+  ), por_conv as (
+    select conv.id,
+           coalesce(bool_or(m.da_ia), false) as ia,
+           coalesce(bool_or(m.da_equipe), false) as humano,
+           min(m.sent_at) filter (where m.direction = 'inbound') as pri_in
+      from conv
+      left join msg m on m.conversation_id = conv.id
+     group by conv.id
+  ), com_resposta as (
+    select p.*,
+           (select min(m.sent_at) from msg m
+             where m.conversation_id = p.id and (m.da_ia or m.da_equipe)
+               and m.sent_at > p.pri_in) as pri_out
+      from por_conv p
+  )
+  select jsonb_build_object(
+    'ia_sozinha', (count(*) filter (where p.ia and not p.humano))::int,
+    'com_equipe', (count(*) filter (where p.humano))::int,
+    'sem_resposta', (count(*) filter (where not p.ia and not p.humano))::int,
+    -- Mediana, não média: uma conversa esquecida por dias não arrasta o número.
+    'mediana_primeira_resposta_s',
+      percentile_cont(0.5) within group (order by extract(epoch from p.pri_out - p.pri_in))
+        filter (where p.pri_out > p.pri_in))
+    from com_resposta p;
+$$;
+
+drop function if exists public.fn_inicio_conversas_por_dia(uuid, timestamptz, timestamptz, text);
+
+-- As DUAS origens de EXECUTE saem (CLAUDE.md, item 9); só quem tem sessão chama.
+revoke execute on function public.fn_inicio_esperando(uuid, timestamptz) from public, anon;
+revoke execute on function public.fn_inicio_atendimento(uuid, timestamptz, timestamptz) from public, anon;
+grant execute on function public.fn_inicio_esperando(uuid, timestamptz) to authenticated;
+grant execute on function public.fn_inicio_atendimento(uuid, timestamptz, timestamptz) to authenticated;
+
+notify pgrst, 'reload schema';
+-- ---- fim: Início claro (migration 0408) ----
 
 
 
