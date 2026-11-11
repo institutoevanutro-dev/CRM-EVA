@@ -129,6 +129,7 @@ const TIPO_DO_NO: Record<FlowNode["type"], string> = {
   action: "Mensagem",
   move_lead: "Mover no funil",
   edit_lead_tag: "Etiqueta",
+  notify_team: "Avisar a equipe",
   end: "Fim",
 };
 
@@ -199,6 +200,13 @@ export function resumoDoNo(node: FlowNode): NoDoDossie {
           : "mexe em etiqueta, ainda sem etiqueta escolhida — sem mensagem ao cliente",
       };
     }
+    case "notify_team":
+      return {
+        ...base,
+        resumo: node.config.texto.trim()
+          ? `avisa a equipe na Central: "${node.config.texto.trim()}" — sem mensagem ao cliente`
+          : "avisa a equipe na Central, ainda sem texto — sem mensagem ao cliente",
+      };
     case "end":
       return { ...base, resumo: `encerra — ${DESFECHO[node.config.outcome] ?? node.config.outcome}` };
   }
@@ -361,6 +369,9 @@ export function descreveEvento(
           detalhe: `foi para ${refDoNo(texto(p.next_node_id), nos)}`,
           ...motor,
         };
+      }
+      if (p.aviso_equipe === true) {
+        return { titulo: "Avisou a equipe na Central", detalhe: `foi para ${refDoNo(texto(p.next_node_id), nos)}`, ...motor };
       }
       return { titulo: "Seguiu em frente", detalhe: `foi para ${refDoNo(texto(p.next_node_id), nos)}`, ...motor };
     case "wait_started": {

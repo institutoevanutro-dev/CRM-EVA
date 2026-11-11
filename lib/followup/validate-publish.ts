@@ -29,6 +29,7 @@ export const PUBLISH_ERROR_CODES = [
   'etapa_destino_ausente',
   'etapa_destino_arquivada',
   'tag_ausente',
+  'texto_do_aviso_ausente',
 ] as const;
 export type PublishErrorCode = (typeof PUBLISH_ERROR_CODES)[number];
 
@@ -76,6 +77,7 @@ export const CONTA_NO_TETO: Record<NodeType, boolean> = {
   end: false, // desfecho
   move_lead: false, // mexe no card, o cliente não sente
   edit_lead_tag: false, // mexe na etiqueta, o cliente não sente
+  notify_team: false, // avisa a equipe, o cliente não sente
 };
 
 function waitMs(config: Extract<FlowNode, { type: 'wait' }>['config']): number {
@@ -493,6 +495,16 @@ function conferirTags(node: Extract<FlowNode, { type: 'edit_lead_tag' }>, errors
   }
 }
 
+function conferirTextoDoAviso(node: Extract<FlowNode, { type: 'notify_team' }>, errors: PublishValidationError[]): void {
+  if (node.config.texto.trim() === '') {
+    errors.push({
+      node_id: node.id,
+      code: 'texto_do_aviso_ausente',
+      message: `A caixa "${node.label}" não tem texto — escreva o que a equipe vai ler no aviso.`,
+    });
+  }
+}
+
 export function validateFlowForPublish(graph: FlowGraph, contexto: ContextoDoPublish = {}): PublishValidationResult {
   const { nodes, edges } = graph;
   const errors: PublishValidationError[] = [];
@@ -501,6 +513,7 @@ export function validateFlowForPublish(graph: FlowGraph, contexto: ContextoDoPub
   for (const node of [...nodes].sort(byId)) {
     if (node.type === 'move_lead') conferirEtapaDestino(node, contexto, errors);
     if (node.type === 'edit_lead_tag') conferirTags(node, errors);
+    if (node.type === 'notify_team') conferirTextoDoAviso(node, errors);
   }
   const nodesById = new Map(nodes.map((n) => [n.id, n]));
   const outEdges = buildOutEdges(edges);

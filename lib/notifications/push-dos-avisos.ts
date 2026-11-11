@@ -5,7 +5,8 @@
  * atende pelo WhatsApp passa o dia com o CRM fechado no bolso, e os avisos que
  * pedem uma pessoa esperavam sem ninguém saber. Vai ao celular o momento em que
  * a IA passou a conversa para uma pessoa (aviso `handoff`) e o momento em que a
- * IA ficou sem crédito ou com a chave recusada no provedor. E os avisos do vigia
+ * IA ficou sem crédito ou com a chave recusada no provedor, e a caixa "Avisar a
+ * equipe" de um fluxo de follow-up (`followup_notify_team`). E os avisos do vigia
  * de conexão surda, por regra própria logo abaixo (esses sem som).
  *
  * É o MESMO que tem som próprio: a regra de quais avisos pedem gente é uma só
@@ -100,6 +101,16 @@ export async function pushDoAvisoDaCentral(
       body: traduzir("Abra a Central de avisos para ver o que fazer.", idioma),
       tag: `aviso:${item.id}`,
       href: CENTRAL,
+    };
+  }
+  // A caixa "Avisar a equipe" do follow-up: o título é o texto da caixa, que
+  // quem montou o fluxo escreveu (sem dado de cliente — `engine.ts`, `avisarEquipe`).
+  if (item.kind === "followup_notify_team") {
+    return {
+      title: item.title,
+      body: traduzir("Abra a conversa para falar com o cliente.", idioma),
+      tag: `aviso:${item.id}`,
+      href: destinoDaPassagem(item),
     };
   }
   return {

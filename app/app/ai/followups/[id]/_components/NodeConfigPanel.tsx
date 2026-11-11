@@ -13,6 +13,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { ActionForm } from "./forms/ActionForm";
 import { EditLeadTagForm } from "./forms/EditLeadTagForm";
 import { MoveLeadForm } from "./forms/MoveLeadForm";
+import { NotifyTeamForm } from "./forms/NotifyTeamForm";
 import { ClassifyForm } from "./forms/ClassifyForm";
 import { ConditionForm } from "./forms/ConditionForm";
 import { EndForm } from "./forms/EndForm";
@@ -127,6 +128,12 @@ export function NodeConfigPanel({ node, onChange, onDelete, ramosLigados }: Prop
         {type === "edit_lead_tag" && (
           <EditLeadTagForm
             config={node.data.config as ConfigOf<"edit_lead_tag">}
+            onChange={(config) => onChange({ config })}
+          />
+        )}
+        {type === "notify_team" && (
+          <NotifyTeamForm
+            config={node.data.config as ConfigOf<"notify_team">}
             onChange={(config) => onChange({ config })}
           />
         )}

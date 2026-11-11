@@ -39,6 +39,7 @@ export const CUSTO_NO_MOTOR: Record<NodeType, number> = {
   // `condition` — a escrita sai junto do `advance`, guardada pelo evento do passo.
   move_lead: 1,
   edit_lead_tag: 1,
+  notify_team: 1,
 };
 
 /**

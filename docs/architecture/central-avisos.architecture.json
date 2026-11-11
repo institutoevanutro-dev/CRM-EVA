@@ -133,6 +133,13 @@
       "col": 0,
       "type": "service",
       "label": "leads.aviso-de-etapa: lead.stage_changed → aviso other/lead"
+    },
+    {
+      "id": "followup_avisar_equipe",
+      "lane": "app",
+      "col": 0,
+      "type": "service",
+      "label": "Follow-up: caixa «Avisar a equipe» (notify_team) → aviso followup_notify_team na conversa (0406)"
     }
   ],
   "edges": [
@@ -245,6 +252,16 @@
       "from": "aviso_de_etapa",
       "to": "produtores",
       "label": "um aviso por negócio e etapa, só o nome da etapa no texto"
+    },
+    {
+      "from": "followup_avisar_equipe",
+      "to": "produtores",
+      "label": "um aviso por passagem (trava do evento do passo), sem mensagem ao cliente"
+    },
+    {
+      "from": "followup_avisar_equipe",
+      "to": "push",
+      "label": "somDoAviso: pede gente, push com o texto da caixa"
     }
   ]
 }

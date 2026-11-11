@@ -89,6 +89,10 @@ export type InboxKind =
   // (migration 0391) O aviso de agendamento à plataforma de anúncio parou de
   // sair. Um aberto por organização; nenhum dado do paciente no texto.
   | 'ad_conversion_failing'
+  // (migration 0406) A caixa "Avisar a equipe" de um fluxo de follow-up: o
+  // texto é o que quem montou o fluxo escreveu; aponta para a conversa. Vai
+  // ao celular como os avisos que pedem gente (`somDoAviso`).
+  | 'followup_notify_team'
   | 'other';
 
 export interface InboxItemRow {

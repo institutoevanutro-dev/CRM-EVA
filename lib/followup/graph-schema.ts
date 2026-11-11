@@ -19,6 +19,10 @@ export const NODE_TYPES = [
   // (DeskcommCRM, PR #2181 de @webtecnica).
   'move_lead',
   'edit_lead_tag',
+  // Também não fala com o cliente: abre um aviso na Central (com push no
+  // celular) para alguém da equipe agir — ex.: mandar um áudio a quem não
+  // respondeu ao pós-consulta.
+  'notify_team',
   'end',
 ] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
@@ -359,6 +363,20 @@ export const editLeadTagConfigSchema = z.strictObject({
   operacao: z.enum(OPERACOES_DE_TAG).optional(),
 });
 
+/** Teto do texto do aviso: cabe no título da Central e na notificação do celular. */
+export const TEXTO_DO_AVISO_MAX = 140;
+
+/**
+ * Nó `notify_team` — abre um item na Central (`agent_inbox_items`, kind
+ * `followup_notify_team`) apontando para a conversa do contato, e segue pela
+ * aresta única. Nada sai para o cliente. Texto vazio é rascunho; o publish
+ * recusa (`texto_do_aviso_ausente`). O texto é escrito por quem monta o fluxo
+ * e vai para a tela bloqueada do celular: não interpola dado do cliente.
+ */
+export const notifyTeamConfigSchema = z.strictObject({
+  texto: z.string().max(TEXTO_DO_AVISO_MAX, `Texto muito longo: máximo de ${TEXTO_DO_AVISO_MAX} caracteres.`),
+});
+
 export const flowNodeSchema = z.discriminatedUnion('type', [
   // Trigger node: entry point, no config
   z.strictObject({
@@ -456,6 +474,17 @@ export const flowNodeSchema = z.discriminatedUnion('type', [
       y: z.number(),
     }),
     config: editLeadTagConfigSchema,
+  }),
+  // Ação sem mensagem: avisa a equipe na Central
+  z.strictObject({
+    id: z.string().min(1),
+    type: z.literal('notify_team'),
+    label: z.string().min(1).max(60),
+    position: z.strictObject({
+      x: z.number(),
+      y: z.number(),
+    }),
+    config: notifyTeamConfigSchema,
   }),
   // End node: terminal state
   z.strictObject({

@@ -35,6 +35,7 @@ describe('graph-schema', () => {
         'action',
         'move_lead',
         'edit_lead_tag',
+        'notify_team',
         'end',
       ]);
     });

@@ -59,6 +59,7 @@ import { RepeatNode } from "./nodes/RepeatNode";
 import { ActionNode } from "./nodes/ActionNode";
 import { EditLeadTagNode } from "./nodes/EditLeadTagNode";
 import { MoveLeadNode } from "./nodes/MoveLeadNode";
+import { NotifyTeamNode } from "./nodes/NotifyTeamNode";
 import { EndNode } from "./nodes/EndNode";
 
 const EMPTY_GRAPH: FlowGraph = { nodes: [], edges: [] };
@@ -76,6 +77,7 @@ const nodeTypes: NodeTypes = {
   action: ActionNode,
   move_lead: MoveLeadNode,
   edit_lead_tag: EditLeadTagNode,
+  notify_team: NotifyTeamNode,
   end: EndNode,
 };
 

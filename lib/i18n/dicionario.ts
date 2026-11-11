@@ -4419,6 +4419,23 @@ export const DICIONARIO: Traducoes = {
   "move o card para outra etapa do funil": { es: "mueve la tarjeta a otra etapa del embudo" },
   "sem etapa de destino": { es: "sin etapa de destino" },
   "sem etiqueta escolhida": { es: "sin etiqueta elegida" },
+  // Caixa "Avisar a equipe" do follow-up (aviso na Central + push)
+  "sem texto do aviso": { es: "sin texto del aviso" },
+  "Texto do aviso": { es: "Texto del aviso" },
+  "ex.: Paciente não respondeu ao pós-consulta do dia 15": {
+    es: "ej.: El paciente no respondió al seguimiento del día 15",
+  },
+  "Escreva o texto do aviso.": { es: "Escribe el texto del aviso." },
+  "Abre um aviso na Central com link para a conversa e avisa no celular quem ligou o push. Nada é enviado ao cliente. Não escreva dados do cliente: o texto aparece na tela bloqueada.":
+    {
+      es: "Abre un aviso en la Central con enlace a la conversación y avisa en el celular a quien activó el push. No se envía nada al cliente. No escribas datos del cliente: el texto aparece en la pantalla bloqueada.",
+    },
+  "Avisou a equipe na Central": { es: "Avisó al equipo en la Central" },
+  "Um fluxo de follow-up pediu a atenção da equipe": { es: "Un flujo de seguimiento pidió la atención del equipo" },
+  "Abra a conversa e fale com o cliente, como o fluxo pediu.": {
+    es: "Abre la conversación y habla con el cliente, como pidió el flujo.",
+  },
+  "Abra a conversa para falar com o cliente.": { es: "Abre la conversación para hablar con el cliente." },
   "tira:": { es: "quita:" },
   "põe:": { es: "pone:" },
   "Pôr etiqueta": { es: "Poner etiqueta" },

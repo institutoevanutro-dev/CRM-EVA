@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 
-import { Play, Clock, GitBranch, Brain, ChatCircle, ArrowsClockwise, PaperPlaneTilt, Flag, Funnel, Tag } from "@/lib/ui/icons";
+import { Play, Clock, GitBranch, Brain, ChatCircle, ArrowsClockwise, PaperPlaneTilt, Flag, Funnel, Tag, Bell } from "@/lib/ui/icons";
 import type { FlowNode, NodeType } from "@/lib/followup/graph-schema";
 import { RESULTADOS_DO_FIM } from "@/lib/followup/vocabulario";
 
@@ -118,6 +118,16 @@ export const NODE_VISUALS: Record<NodeType, NodeVisual> = {
     defaultLabel: "Pôr etiqueta no lead",
     defaultConfig: () => ({ tags: [], operacao: "adicionar" }),
   },
+  // Também sem mensagem: abre um aviso na Central (e push no celular).
+  notify_team: {
+    type: "notify_team",
+    paletteLabel: "Avisar a equipe",
+    icon: Bell,
+    chipClassName: "bg-warning-bg text-warning-fg",
+    borderClassName: "border-l-warning",
+    defaultLabel: "Avisar a equipe",
+    defaultConfig: () => ({ texto: "" }),
+  },
   end: {
     type: "end",
     paletteLabel: "Fim",
@@ -194,6 +204,10 @@ export function describeNodeConfig(
       const c = config as ConfigOf<"edit_lead_tag">;
       if (!c.tags.length) return t("sem etiqueta escolhida");
       return `${c.operacao === "remover" ? t("tira:") : t("põe:")} ${c.tags.join(", ")}`;
+    }
+    case "notify_team": {
+      const c = config as ConfigOf<"notify_team">;
+      return c.texto.trim() ? c.texto.trim() : t("sem texto do aviso");
     }
     case "end": {
       const c = config as ConfigOf<"end">;
