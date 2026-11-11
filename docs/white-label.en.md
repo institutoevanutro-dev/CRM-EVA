@@ -1,4 +1,4 @@
-<!-- traduzido-de: docs/white-label.md@fa423200c49b -->
+<!-- traduzido-de: docs/white-label.md@26162646af8d -->
 
 [🇧🇷 Português](white-label.md) · 🇺🇸 English · [🇪🇸 Español](white-label.es.md)
 
@@ -93,7 +93,7 @@ Straight to the point, so that you do not find out in front of the client. Each 
 
 ## With the Eva Link Account
 
-If the installation uses the **Eva Link Account** — the `.env` has `CONTA_URL`, the same variable as the Account sign-in —, **the brand is configured in the Account, not in the CRM.** The clinic name, color and logo from there apply everywhere: sign-in, menu, tab, icon and e-mails, over the installation brand and over each organization's brand. The only thing from the organization that still applies is the **side menu color**.
+If the installation uses the **Eva Link Account** — the `.env` has `CONTA_URL`, the same variable as the Account sign-in —, **the brand is configured in the Account, not in the CRM.** The name becomes **CRM · <clinic name>** (just **CRM** when the Account has no clinic name), and it, the color and the logo from there apply everywhere: sign-in, menu, tab, icon and e-mails, over the installation brand and over each organization's brand. The only thing from the organization that still applies is the **side menu color**.
 
 - **How long it takes:** the CRM asks the Account at most once a minute, outside the page load. A change made in the Account shows up within two minutes.
 - **Account down:** the last good brand the CRM stored in its own database stays. If there never was one, the local brand applies, as without the Account.

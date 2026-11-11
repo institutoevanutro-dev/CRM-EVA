@@ -326,7 +326,7 @@ describe("camada da Conta (Plano 6) — acima da organização e da instalação
     vi.stubGlobal("__PUBLIC_ENV__", { NEXT_PUBLIC_SUPABASE_URL: "https://projeto.exemplo.test" });
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://projeto.exemplo.test");
     const m = resolverMarcaDaOrganizacao(ORG, { ...LINHA, ...CONTA }, AMBIENTE);
-    expect(m.name).toBe("Clínica da Conta");
+    expect(m.name).toBe("CRM · Clínica da Conta");
     expect(m.cor?.semente).toBe("#27463b");
     expect(m.logoUrl).toContain(CONTA.conta_logo_path);
     expect(m.origens).toEqual({ nome: "conta", logoUrl: "conta", cor: "conta" });
@@ -345,27 +345,31 @@ describe("camada da Conta (Plano 6) — acima da organização e da instalação
     ]) {
       expect(m.logoUrl).toBeNull();
       expect(m.origens.logoUrl).toBe("padrao");
-      expect(m.name).toBe("Clínica da Conta");
+      expect(m.name).toBe("CRM · Clínica da Conta");
       expect(m.origens.cor).toBe("conta");
     }
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
 
-  it("Conta ligada sem nome: o nome é o LOCAL, nunca o da organização", () => {
-    const m = resolverMarcaDaOrganizacao(ORG, { ...LINHA, ...CONTA, conta_nome: null }, AMBIENTE);
-    expect(m.name).toBe("Da Instalação");
-    expect(m.origens.nome).toBe("banco");
+  it("Conta ligada sem nome: só o nome do módulo — nem o local nem o da organização", () => {
+    for (const nome of [null, "   "]) {
+      const m = resolverMarcaDaOrganizacao(ORG, { ...LINHA, ...CONTA, conta_nome: nome }, AMBIENTE);
+      expect(m.name).toBe("CRM");
+      expect(m.origens.nome).toBe("conta");
+    }
   });
 
   it("a cor do menu da organização continua (não passa pelo resolvedor)", () => {
     expect(menuDaOrganizacaoDeSettings(ORG)).toBe("#123456");
   });
 
-  it("Conta sem nome: vale o nome local, campo a campo", () => {
-    const m = resolverMarcaDaOrganizacao(null, { ...LINHA, ...CONTA, conta_nome: null }, AMBIENTE);
-    expect(m.name).toBe("Da Instalação");
-    expect(m.origens.cor).toBe("conta");
+  it("Conta com nome: \"CRM · <clínica>\", aparado, nas duas pilhas", () => {
+    const linha = { ...LINHA, ...CONTA, conta_nome: "  Clínica X  " };
+    expect(resolverMarcaDaOrganizacao(null, linha, AMBIENTE).name).toBe("CRM · Clínica X");
+    expect(resolverMarca(pilhaComConta(linha, [camadaDaInstalacao(linha), camadaDoAmbiente(AMBIENTE)]), REGUA).name).toBe(
+      "CRM · Clínica X",
+    );
   });
 
   it("sem conta_* guardado, o resultado é IDÊNTICO à pilha de antes", () => {

@@ -245,7 +245,7 @@ describe("marcaDaSaida — a última marca boa da Conta (Plano 6)", () => {
     const { marcaDaSaida } = await carregar();
     for (const org of [null, "00000000-0000-4000-8000-000000000001"]) {
       const marca = await marcaDaSaida(org);
-      expect(marca.nome).toBe("Clínica da Conta");
+      expect(marca.nome).toBe("CRM · Clínica da Conta");
       expect(marca.origens).toEqual({ nome: "conta", cor: "conta" });
     }
     expect(f).not.toHaveBeenCalled();

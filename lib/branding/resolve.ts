@@ -386,6 +386,9 @@ export type LinhaDaInstalacao = {
   readonly conta_logo_path?: string | null;
 };
 
+/** O nome fixo deste módulo na família Eva Link (spec §2 item 8). */
+export const NOME_DO_MODULO = "CRM";
+
 /**
  * A camada da CONTA — a marca central da clínica, acima de tudo (spec 3.5).
  *
@@ -401,8 +404,16 @@ export function camadaDaConta(linha: LinhaDaInstalacao | null): CamadaDeMarca {
   const hex = (linha?.conta_accent_hex ?? "").trim();
   const nome = linha?.conta_nome ?? null;
   const caminho = linha?.conta_logo_path ?? null;
-  if (!hex && !(nome ?? "").trim() && !(caminho ?? "").trim()) return { origem: "conta" };
-  const base = { origem: "conta", nome, logoUrl: logoDaCamada(caminho, null) };
+  const clinica = (nome ?? "").trim();
+  if (!hex && !clinica && !(caminho ?? "").trim()) return { origem: "conta" };
+  // Decisão do André (11/11, spec §2 item 8): "CRM · <clínica>", como os outros
+  // módulos; sem nome de clínica na Conta, só o nome do módulo — o nome local
+  // NÃO volta.
+  const base = {
+    origem: "conta",
+    nome: clinica ? `${NOME_DO_MODULO} · ${clinica}` : NOME_DO_MODULO,
+    logoUrl: logoDaCamada(caminho, null),
+  };
   return hex ? { ...base, cor: envelopeDeSemente(hex) } : base;
 }
 
@@ -423,7 +434,7 @@ export function contaEmVigor(linha: LinhaDaInstalacao | null): boolean {
  * Conta guardada (camada não vazia): a organização SAI da pilha (nome, cor e logo
  * dela deixam de valer; `menu_hex` não passa por aqui e continua), e o logo das
  * camadas de baixo é suprimido — Conta sem logo quer dizer "sem logo", não "o
- * logo local". O nome cai no local quando a Conta não tem nome (permitido).
+ * logo local". O nome é "CRM · <clínica>", ou só "CRM" sem nome na Conta.
  *
  * Conta vazia (sem `CONTA_URL`, ou nada guardado): a pilha volta intacta.
  */

@@ -174,6 +174,10 @@ async function limparLogosVelhas(manter: readonly (string | null)[]): Promise<vo
     const velhas = data
       .map((o) => `${PREFIXO}${o.name}`)
       .filter((c) => /^platform\/conta-[0-9a-f]{64}\.(png|jpg)$/.test(c) && !fica.includes(c));
+    // ponytail: list → releitura → remove não é atômico entre processos; se outro
+    // processo gravar uma logo nova (já listada) depois da releitura, ela some e o
+    // logo fica quebrado até a próxima troca. Muito improvável (1 processo de app
+    // na VPS); trava por advisory lock se um dia houver réplicas.
     if (velhas.length > 0) await bucket.remove(velhas);
   } catch {
     // Arquivo órfão não é falha de marca; a próxima troca tenta de novo.

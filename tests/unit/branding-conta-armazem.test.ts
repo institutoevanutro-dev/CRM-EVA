@@ -383,6 +383,28 @@ describe("teto da rodada", () => {
   });
 });
 
+describe("versão do ícone acompanha a gravação da Conta", () => {
+  it("uma rodada que grava logo nova muda versaoDoIcone() na hora, sem esperar 30 s", async () => {
+    vi.stubEnv("CONTA_URL", CONTA);
+    vi.stubGlobal("fetch", contaFalsa(corpo()).f);
+    const antiga = `platform/conta-${"a".repeat(64)}.png`;
+    banco.linha = { ...LOCAL, conta_logo_path: antiga, conta_logos: { escuro: null, claro: "a".repeat(64) }, conta_atualizado_em: "x" };
+    vi.resetModules();
+    const { versaoDoIcone, invalidarVersaoDoIcone } = await import("@/lib/branding/icone-versao");
+    const { marcaDaInstalacao } = await import("@/lib/branding/instalacao");
+    invalidarVersaoDoIcone();
+    // Primeiro a versão vigente fica no memo (rodada bloqueada pela janela de 60 s).
+    globalThis.__rodadaDaConta = { ultima: Date.now(), emVoo: false, geracao: 0 };
+    expect(await versaoDoIcone()).toBe("aaaaaaaa");
+    // Agora a rodada roda e grava a logo nova.
+    globalThis.__rodadaDaConta = undefined;
+    await marcaDaInstalacao();
+    await vi.waitFor(() => expect(banco.linha?.conta_logo_path).toBe(`platform/conta-${sha(PNG)}.png`));
+    globalThis.__rodadaDaConta = { ultima: Date.now(), emVoo: false, geracao: 0 };
+    expect(await versaoDoIcone()).toBe(sha(PNG).slice(0, 8));
+  });
+});
+
 describe("marcaDaInstalacao com a Conta", () => {
   async function instalacao() {
     vi.resetModules();

@@ -14,7 +14,6 @@
  * `globalThis` (o mesmo motivo do memo da marca em `instalacao.ts`) e NUNCA
  * lança — no pior caso devolve `d` e a aba fica como estava.
  */
-import { marcaDaInstalacao } from "@/lib/branding/instalacao";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const MEMO_MS = 30_000;
@@ -40,6 +39,9 @@ export async function versaoDoIcone(): Promise<string> {
       .maybeSingle();
     // Sem ícone enviado, a logo da Conta guardada (mesma ordem de `app/icon.tsx`).
     const enviado = (data as { icone_path?: string | null } | null)?.icone_path;
+    // Import dinâmico: `instalacao.ts` importa `invalidarVersaoDoIcone` daqui
+    // (a rodada da Conta zera esta versão), e um import estático fecharia o ciclo.
+    const { marcaDaInstalacao } = await import("@/lib/branding/instalacao");
     valor = versaoDoCaminho(enviado || (await marcaDaInstalacao())?.conta_logo_path);
   } catch {
     valor = memo?.valor ?? "d";
