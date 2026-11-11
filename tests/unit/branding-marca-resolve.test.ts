@@ -1,8 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { derivarMarca } from "@/lib/branding/contraste";
 import { REGUA_DO_PRODUTO } from "@/lib/branding/regua-do-produto";
 import {
+  marcaDaOrganizacaoDeSettings,
+  menuDaOrganizacaoDeSettings,
+  resolverMarcaDaOrganizacao,
+} from "@/lib/branding/organizacao";
+import {
+  camadaDaConta,
+  camadaDaInstalacao,
+  camadaDaOrganizacao,
   camadaDoAmbiente,
   resolverMarca,
   type CamadaDeMarca,
@@ -300,5 +308,56 @@ describe("memoização da derivação", () => {
       REGUA,
     );
     expect(pelaCamada.cor?.derivada).toEqual(direto);
+  });
+});
+
+describe("camada da Conta (Plano 6) — acima da organização e da instalação", () => {
+  const AMBIENTE = { APP_NAME: "Do Env", APP_ACCENT_HEX: "#6b2737" };
+  const LINHA = { app_name: "Da Instalação", accent_hex: "#3a3f47", logo_path: null, logo_url: "https://cdn.exemplo.test/l.png" };
+  const ORG = { branding: { app_name: "Da Organização", accent_hex: "#8a3f26", logo_path: "org/1.png", menu_hex: "#123456" } };
+  const CONTA = {
+    conta_nome: "Clínica da Conta",
+    conta_accent_hex: "#27463b",
+    conta_logo_path: `platform/conta-${"a".repeat(64)}.png`,
+  };
+
+  it("nome, cor e logo da Conta vencem a organização e a instalação", () => {
+    // jsdom: `baseDoStorage` lê a base do `window` (ver `lib/branding/logo.ts`).
+    vi.stubGlobal("__PUBLIC_ENV__", { NEXT_PUBLIC_SUPABASE_URL: "https://projeto.exemplo.test" });
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://projeto.exemplo.test");
+    const m = resolverMarcaDaOrganizacao(ORG, { ...LINHA, ...CONTA }, AMBIENTE);
+    expect(m.name).toBe("Clínica da Conta");
+    expect(m.cor?.semente).toBe("#27463b");
+    expect(m.logoUrl).toContain(CONTA.conta_logo_path);
+    expect(m.origens).toEqual({ nome: "conta", logoUrl: "conta", cor: "conta" });
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("a cor do menu da organização continua (não passa pelo resolvedor)", () => {
+    expect(menuDaOrganizacaoDeSettings(ORG)).toBe("#123456");
+  });
+
+  it("Conta sem nome: vale o nome local, campo a campo", () => {
+    const m = resolverMarcaDaOrganizacao(null, { ...LINHA, ...CONTA, conta_nome: null }, AMBIENTE);
+    expect(m.name).toBe("Da Instalação");
+    expect(m.origens.cor).toBe("conta");
+  });
+
+  it("sem conta_* guardado, o resultado é IDÊNTICO à pilha de antes", () => {
+    const linhas = [null, LINHA, { ...LINHA, accent_hex: "" }, { app_name: null, accent_hex: "#zzz" }];
+    const settings = [null, ORG, { branding: { accent_hex: "#ffff00" } }, { branding: "lixo" }];
+    for (const linha of linhas) {
+      for (const s of settings) {
+        const antes = resolverMarca(
+          [camadaDaOrganizacao(marcaDaOrganizacaoDeSettings(s)), camadaDaInstalacao(linha), camadaDoAmbiente(AMBIENTE)],
+          REGUA,
+        );
+        expect(resolverMarcaDaOrganizacao(s, linha, AMBIENTE)).toEqual(antes);
+      }
+      expect(resolverMarca([camadaDaConta(linha), camadaDaInstalacao(linha), camadaDoAmbiente(AMBIENTE)], REGUA)).toEqual(
+        resolverMarca([camadaDaInstalacao(linha), camadaDoAmbiente(AMBIENTE)], REGUA),
+      );
+    }
   });
 });

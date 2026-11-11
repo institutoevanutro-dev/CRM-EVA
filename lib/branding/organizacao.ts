@@ -37,6 +37,7 @@
 import { ehHexValido, normalizarHex } from "./rampa";
 import { REGUA_DO_PRODUTO } from "./regua-do-produto";
 import {
+  camadaDaConta,
   camadaDaInstalacao,
   camadaDaOrganizacao,
   camadaDoAmbiente,
@@ -104,7 +105,7 @@ export function menuDaOrganizacaoDeSettings(settings: unknown): string | null {
 }
 
 /**
- * A pilha inteira: ORGANIZAÇÃO acima, instalação no meio, `.env` embaixo.
+ * A pilha inteira: CONTA no topo (só com `CONTA_URL`), ORGANIZAÇÃO, instalação, `.env` embaixo.
  *
  * Precedência POR CAMPO (`primeiroDefinido`, em `resolve.ts`): a organização que
  * definiu só a cor continua com o nome E o logo do revendedor. Desde a onda do
@@ -118,6 +119,9 @@ export function resolverMarcaDaOrganizacao(
 ): MarcaResolvida {
   return resolverMarca(
     [
+      // A Conta (quando ligada e guardada) vence a organização campo a campo —
+      // ver `camadaDaConta`. Vazia, a pilha é a de antes.
+      camadaDaConta(linha),
       camadaDaOrganizacao(marcaDaOrganizacaoDeSettings(settings)),
       camadaDaInstalacao(linha),
       camadaDoAmbiente(ambiente),

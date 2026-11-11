@@ -3,7 +3,10 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { derivarMarca, extrairRegua } from "@/lib/branding/contraste";
+import { cssDaMarca } from "@/lib/branding/css";
 import { PALETAS, paletaDaCor } from "@/lib/branding/paletas";
+import { REGUA_DO_PRODUTO } from "@/lib/branding/regua-do-produto";
+import { camadaDaConta, camadaDaInstalacao, resolverMarca } from "@/lib/branding/resolve";
 
 const REGUA = extrairRegua(fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"));
 
@@ -43,6 +46,17 @@ describe("paletas do guia de marca", () => {
           `${p.id}: ${reprovas.map((r) => `${r.papel}×${r.superficie}=${r.razao.toFixed(2)}`).join(", ")}`,
         ).toEqual([]);
       }
+    }
+  });
+});
+
+describe("paletas pela Conta (Plano 6)", () => {
+  it("a semente da Conta pinta exatamente como a mesma cor local, nas 6 paletas", () => {
+    for (const p of PALETAS) {
+      const pelaConta = resolverMarca([camadaDaConta({ conta_accent_hex: p.principal }), camadaDaInstalacao(null)], REGUA_DO_PRODUTO);
+      const local = resolverMarca([camadaDaInstalacao({ accent_hex: p.principal })], REGUA_DO_PRODUTO);
+      expect(cssDaMarca(pelaConta.cor).css, p.id).toBe(cssDaMarca(local.cor).css);
+      expect(pelaConta.cor?.semente).toBe(p.principal);
     }
   });
 });

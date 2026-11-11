@@ -14,6 +14,7 @@
  * `globalThis` (o mesmo motivo do memo da marca em `instalacao.ts`) e NUNCA
  * lança — no pior caso devolve `d` e a aba fica como estava.
  */
+import { marcaDaInstalacao } from "@/lib/branding/instalacao";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const MEMO_MS = 30_000;
@@ -22,7 +23,8 @@ const chave = Symbol.for("crm.icone.versao");
 const g = globalThis as unknown as Record<symbol, Memo | undefined>;
 
 export function versaoDoCaminho(caminho: string | null | undefined): string {
-  const uuid = (caminho ?? "").match(/^platform\/([0-9a-f]{8})/)?.[1];
+  // `platform/<uuid>` (ícone enviado) ou `platform/conta-<sha>` (logo da Conta).
+  const uuid = (caminho ?? "").match(/^platform\/(?:conta-)?([0-9a-f]{8})/)?.[1];
   return uuid ?? "d";
 }
 
@@ -36,7 +38,9 @@ export async function versaoDoIcone(): Promise<string> {
       .select("icone_path")
       .eq("id", 1)
       .maybeSingle();
-    valor = versaoDoCaminho((data as { icone_path?: string | null } | null)?.icone_path);
+    // Sem ícone enviado, a logo da Conta guardada (mesma ordem de `app/icon.tsx`).
+    const enviado = (data as { icone_path?: string | null } | null)?.icone_path;
+    valor = versaoDoCaminho(enviado || (await marcaDaInstalacao())?.conta_logo_path);
   } catch {
     valor = memo?.valor ?? "d";
   }

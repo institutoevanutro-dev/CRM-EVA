@@ -14,6 +14,7 @@ import {
 } from "@/lib/branding/instalacao";
 import { REGUA_DO_PRODUTO } from "@/lib/branding/regua-do-produto";
 import {
+  camadaDaConta,
   camadaDaInstalacao,
   camadaDoAmbiente,
   resolverMarca,
@@ -61,7 +62,7 @@ const inconsolata = localFont({
 });
 
 /**
- * A pilha de camadas da marca da instalação: BANCO acima, `.env` embaixo.
+ * A pilha de camadas da marca da instalação: CONTA (só com `CONTA_URL`), BANCO, `.env` embaixo.
  *
  * Uma função só porque `generateMetadata`, `EstiloDaMarca` e `MarcaNoNavegador`
  * precisam da MESMA resolução — montagens separadas da pilha divergiriam, e a
@@ -78,7 +79,7 @@ async function marcaResolvida(): Promise<{
 }> {
   const linha = await marcaDaInstalacao();
   const marca = resolverMarca(
-    [camadaDaInstalacao(linha), camadaDoAmbiente(env)],
+    [camadaDaConta(linha), camadaDaInstalacao(linha), camadaDoAmbiente(env)],
     REGUA_DO_PRODUTO,
   );
   return { linha, marca };

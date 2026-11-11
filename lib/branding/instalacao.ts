@@ -65,6 +65,7 @@ import { env } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 
+import { contaUrlLigada, dispararMarcaDaConta, lerContaGuardada } from "./conta-armazem";
 import { ehHexValido, normalizarHex } from "./rampa";
 import type { LinhaDaInstalacao } from "./resolve";
 
@@ -331,6 +332,9 @@ function avisarUmaVez(chave: string, mensagem: string, contexto: Record<string, 
  * ninguém aplicar migration. Ele degrada para o `.env` igual, com um aviso.
  */
 export async function marcaDaInstalacao(): Promise<LinhaDaMarca | null> {
+  // Com `CONTA_URL`, pergunta à Conta FORA do render: sem `await`, no máximo uma
+  // rodada a cada 60 s, e quem grava invalida este memo. Sem ela, não faz nada.
+  dispararMarcaDaConta(invalidarMarcaDaInstalacao);
   const memoria = memoEmVigor();
   if (memoria && memoria.expiraEm > Date.now()) return memoria.linha;
 
@@ -371,6 +375,21 @@ export async function marcaDaInstalacao(): Promise<LinhaDaMarca | null> {
 }
 
 async function lerOuSemear(): Promise<LinhaDaMarca | null | "erro"> {
+  const lida = await lerOuSemearLocal();
+  if (lida === "erro" || lida === null || !contaUrlLigada()) return lida;
+  // A última marca boa da Conta, em consulta SEPARADA: sem a 0409 ela dá `42703`
+  // e só a camada da Conta fica vazia (ver `lerContaGuardada`).
+  const conta = await lerContaGuardada();
+  if (conta === "erro" || conta === null) return lida;
+  return {
+    ...lida,
+    conta_nome: conta.conta_nome,
+    conta_accent_hex: conta.conta_accent_hex,
+    conta_logo_path: conta.conta_logo_path,
+  };
+}
+
+async function lerOuSemearLocal(): Promise<LinhaDaMarca | null | "erro"> {
   const atual = await lerLinha();
   if (atual === "erro") return "erro";
 

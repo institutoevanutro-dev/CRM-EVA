@@ -376,7 +376,35 @@ export type LinhaDaInstalacao = {
    */
   readonly logo_path?: string | null;
   readonly accent_hex?: string | null;
+  /**
+   * A última marca boa lida da Conta (migration 0409). Só vêm preenchidas com
+   * `CONTA_URL` ligada — `instalacao.ts` nem as lê sem ela —, e é isso que
+   * mantém o caminho sem Conta idêntico ao de antes. Quem lê é `camadaDaConta`.
+   */
+  readonly conta_nome?: string | null;
+  readonly conta_accent_hex?: string | null;
+  readonly conta_logo_path?: string | null;
 };
+
+/**
+ * A camada da CONTA — a marca central da clínica, acima de tudo (spec 3.5).
+ *
+ * Vem das colunas `conta_*` já GUARDADAS, nunca da rede: a leitura da Conta
+ * acontece fora do render (`conta-armazem.ts`). Fica acima da organização: com a
+ * Conta ligada, nome, cor e logo da organização deixam de sobrepor a clínica. A
+ * cor do menu (`menu_hex`) não passa pelo resolvedor e continua da organização.
+ *
+ * Sem nada guardado devolve a camada que não fala de nada — a pilha fica igual à
+ * de antes, campo a campo.
+ */
+export function camadaDaConta(linha: LinhaDaInstalacao | null): CamadaDeMarca {
+  const hex = (linha?.conta_accent_hex ?? "").trim();
+  const nome = linha?.conta_nome ?? null;
+  const caminho = linha?.conta_logo_path ?? null;
+  if (!hex && !(nome ?? "").trim() && !(caminho ?? "").trim()) return { origem: "conta" };
+  const base = { origem: "conta", nome, logoUrl: logoDaCamada(caminho, null) };
+  return hex ? { ...base, cor: envelopeDeSemente(hex) } : base;
+}
 
 /**
  * A camada do BANCO — a configuração viva da instalação, acima do `.env`.

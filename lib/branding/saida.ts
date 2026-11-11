@@ -53,7 +53,7 @@ import { marcaDaInstalacao } from "./instalacao";
 import { resolverMarcaDaOrganizacao } from "./organizacao";
 import { stop } from "./rampa";
 import { REGUA_DO_PRODUTO } from "./regua-do-produto";
-import { camadaDaInstalacao, camadaDoAmbiente, resolverMarca } from "./resolve";
+import { camadaDaConta, camadaDaInstalacao, camadaDoAmbiente, resolverMarca } from "./resolve";
 
 export type MarcaDeSaida = {
   readonly nome: string;
@@ -184,7 +184,10 @@ export async function marcaDaSaida(organizationId: string | null): Promise<Marca
     const linha = await marcaDaInstalacao();
     const marca =
       organizationId === null
-        ? resolverMarca([camadaDaInstalacao(linha), camadaDoAmbiente(env)], REGUA_DO_PRODUTO)
+        ? resolverMarca(
+            [camadaDaConta(linha), camadaDaInstalacao(linha), camadaDoAmbiente(env)],
+            REGUA_DO_PRODUTO,
+          )
         : resolverMarcaDaOrganizacao(await settingsDaOrganizacao(organizationId), linha, env);
 
     // `claro`, sempre — ver o cabeçalho. `derivada` é `null` quando a semente
