@@ -8,8 +8,9 @@ import { test, expect, type Page } from "@playwright/test";
  *
  * O caso que motivou o painel: "Acupuntura — Dra. Lúcia Prado" estava sem
  * responsável, e isso só apareceu quando alguém abriu a agenda. Aqui o tipo sem
- * responsável tem de aparecer em "Configuração pendente" e o botão tem de levar
- * à agenda. Spec: docs/superpowers/specs/2026-09-21-painel-inicio-design.md
+ * responsável tem de aparecer em "Para arrumar" e a linha tem de levar à
+ * agenda. Specs: docs/superpowers/specs/2026-09-21-painel-inicio-design.md e
+ * 2026-11-11-inicio-claro.md
  *
  * `manager` e `agent` em vez de `admin`: o `admin` do seed tem TOTP, e a tela
  * de 2FA não é o assunto (mesma razão das specs de agenda).
@@ -40,23 +41,41 @@ async function entrar(page: Page, creds: Creds, papel: "manager" | "agent") {
   await page.waitForURL(/\/app(\/|$)/, { timeout: 20_000 });
 }
 
-test("gerente cai no Início e vê Meu dia + Gestão", async ({ page }) => {
+test("gerente cai no Início e vê Meu dia + Visão da clínica + Gestão", async ({ page }) => {
   await entrar(page, lerCreds(), "manager");
   await page.goto("/app");
   await expect(page).toHaveURL(/\/app\/inicio$/, { timeout: 20_000 });
   await expect(page.getByRole("heading", { name: "Meu dia" })).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByRole("heading", { name: "Gestão" })).toBeVisible();
-  // Visão da clínica (spec 2026-10-07-inicio-paineis): os quatro painéis, nenhum em falha.
+  for (const titulo of ["Pacientes esperando resposta", "Minha agenda de hoje", "Avisos, separados por assunto"]) {
+    await expect(page.getByRole("heading", { name: titulo })).toBeVisible();
+  }
+  // Visão da clínica (spec 2026-11-11-inicio-claro): três blocos com o período no título.
   await expect(page.getByRole("heading", { name: "Visão da clínica" })).toBeVisible({ timeout: 20_000 });
-  for (const titulo of ["Conversas · últimos 30 dias", "Agenda por profissional · semana", "Agenda por unidade · semana", "Funil de vendas", "Origem dos pacientes · mês"]) {
+  for (const titulo of [
+    "A clínica hoje",
+    "Atendimento · últimos 30 dias",
+    /^Vendas · .+, todos os funis$/,
+    "Agenda por profissional · semana",
+    "Agenda por unidade · semana",
+    /^Onde os pacientes estão agora/,
+    "Origem dos pacientes · mês",
+  ]) {
     await expect(page.getByRole("heading", { name: titulo })).toBeVisible({ timeout: 20_000 });
   }
+  await expect(page.getByText("Tempo até a primeira resposta")).toBeVisible();
+  await expect(page.getByText("Esperando resposta agora")).toBeVisible();
   await expect(page.getByText("Não foi possível carregar este painel.")).toHaveCount(0);
+  // Gestão: três quadros pequenos.
+  await expect(page.getByRole("heading", { name: "Gestão" })).toBeVisible();
+  for (const titulo of ["Sistema", "Gasto com IA no mês", "Para arrumar"]) {
+    await expect(page.getByRole("heading", { name: titulo, exact: true })).toBeVisible();
+  }
+  await expect(page.getByText("Não consegui carregar este bloco.")).toHaveCount(0);
   fs.mkdirSync(EVIDENCIA, { recursive: true });
   await page.screenshot({ path: path.join(EVIDENCIA, "painel-inicio-gerente.png"), fullPage: true });
 });
 
-test("tipo de atendimento sem responsável aparece em Configuração pendente e leva à agenda", async ({ page }) => {
+test("tipo de atendimento sem responsável aparece em Para arrumar e leva à agenda", async ({ page }) => {
   await entrar(page, lerCreds(), "manager");
   const nome = `Acupuntura E2E ${Date.now()}`;
   const criado = await page.request.post("/api/v1/agenda/tipos", {
@@ -66,8 +85,11 @@ test("tipo de atendimento sem responsável aparece em Configuração pendente e 
   const tipoId = (await criado.json()).data.id as string;
   try {
     await page.goto("/app/inicio");
-    const item = page.getByRole("link", { name: new RegExp(`${nome} — sem responsável na agenda`) });
-    await expect(item, "o tipo sem responsável não apareceu em Configuração pendente").toBeVisible({ timeout: 20_000 });
+    // O quadro pequeno conta; a lista por tipo, logo abaixo, nomeia e dá a porta.
+    await expect(page.getByText(/Agenda sem responsável: \d+/)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("heading", { name: /Atendimentos sem responsável na agenda/ })).toBeVisible();
+    const item = page.getByRole("link", { name: new RegExp(nome) });
+    await expect(item, "o tipo sem responsável não apareceu em Para arrumar").toBeVisible();
     await item.click();
     await expect(page).toHaveURL(/\/app\/agenda/);
   } finally {

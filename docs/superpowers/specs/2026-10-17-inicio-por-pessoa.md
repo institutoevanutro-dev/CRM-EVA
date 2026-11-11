@@ -1,5 +1,7 @@
 # Início por pessoa e Visão da clínica como painel de gestão
 
+> **Ajustado em 2026-11-11** por [`2026-11-11-inicio-claro.md`](2026-11-11-inicio-claro.md): esperando resposta (recente × antiga, com você + sem responsável), avisos por assunto, mediana, mesmos dias do mês anterior e Gestão em três quadros. Onde os dois textos discordam, vale o mais novo.
+
 Data: 2026-10-17 · Pedido do dono do produto · Complementa
 `2026-09-21-painel-inicio-design.md` e `2026-10-07-inicio-paineis-design.md`.
 

@@ -9,13 +9,16 @@ import { janelaDeHoje } from "../../lib/inicio/tipos";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 
 /**
- * INÍCIO POR PESSOA — "Meu dia" mostra só o que é de quem está logado, e a
- * "Visão da clínica" só aparece para gerente e admin.
- * Spec: docs/superpowers/specs/2026-10-17-inicio-por-pessoa.md
+ * INÍCIO POR PESSOA — "Meu dia" mostra o que é de quem está logado (mais a fila
+ * sem responsável, que qualquer pessoa pode assumir), e a "Visão da clínica" só
+ * aparece para gerente e admin.
+ * Specs: docs/superpowers/specs/2026-10-17-inicio-por-pessoa.md e
+ * 2026-11-11-inicio-claro.md
  *
  * Organização própria (nada do seed): duas atendentes e um gerente. Cada
  * atendente tem um paciente esperando, um compromisso hoje e um aviso da
- * Central ligado à conversa dela; a clínica tem um aviso de canal fora do ar.
+ * Central ligado à conversa dela; a clínica tem um aviso de canal fora do ar,
+ * um paciente esperando SEM responsável e uma conversa esquecida há 10 dias.
  * Prova pela tela, nos dois sentidos: cada uma vê o seu e NÃO vê o da outra.
  */
 const RAIZ = path.resolve(__dirname, "../..");
@@ -111,6 +114,18 @@ test.beforeAll(async () => {
     ref_kind: "channel_session",
     ref_id: sessao,
   });
+  // A fila de ninguém: uma espera recente (40 min) e uma esquecida (10 dias).
+  for (const [nome, minutos] of [["sem responsável", 40], ["esquecido", 10 * 24 * 60]] as const) {
+    const contato = await inserir("contacts", { organization_id: fixture.org, display_name: `Paciente ${nome} ${sufixo}` });
+    await inserir("conversations", {
+      organization_id: fixture.org,
+      contact_id: contato,
+      channel_session_id: sessao,
+      status: "open",
+      assigned_to_user_id: null,
+      last_inbound_at: new Date(agora - minutos * 60_000).toISOString(),
+    });
+  }
 });
 
 test.afterAll(async () => {
@@ -134,53 +149,97 @@ async function entrar(page: Page, email: string) {
   await expect(page.getByRole("heading", { name: "Meu dia" })).toBeVisible({ timeout: 30_000 });
 }
 
-/** Nenhuma rolagem horizontal da página — medida, não a olho. */
+/**
+ * Nenhuma rolagem horizontal da página e, no celular, todo alvo de toque do
+ * Início com 44 px — medidos, não a olho.
+ */
 async function semEstouroHorizontal(page: Page, largura: number, nome: string) {
   await page.setViewportSize({ width: largura, height: 900 });
   await page.waitForTimeout(300);
-  const { scroll, cliente } = await page.evaluate(() => ({
+  const { scroll, cliente, pequenos } = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth,
     cliente: document.documentElement.clientWidth,
+    pequenos: [...document.querySelectorAll<HTMLElement>('section[aria-labelledby^="inicio-"] :is(a, button, select)')]
+      .map((el) => ({ texto: (el.textContent ?? "").trim().slice(0, 40), r: el.getBoundingClientRect() }))
+      .filter(({ r }) => r.width > 0 && (r.height < 44 || r.width < 44))
+      .map(({ texto, r }) => `${texto} (${Math.round(r.width)}×${Math.round(r.height)})`),
   }));
   expect(scroll, `estouro horizontal em ${largura}px`).toBeLessThanOrEqual(cliente);
+  if (largura < 768) expect(pequenos, `alvos de toque menores que 44 px em ${largura}px`).toEqual([]);
   fs.mkdirSync(EVIDENCIA, { recursive: true });
   await page.screenshot({ path: path.join(EVIDENCIA, `${nome}-${largura}.png`), fullPage: true });
 }
 
+/** O cartão (a `section` em volta) do título dado. */
+const cartao = (page: Page, titulo: string) =>
+  page.locator("section").filter({ has: page.getByRole("heading", { name: titulo, exact: true }) }).last();
+
 for (const [quem, outra] of [["ana", "bia"], ["bia", "ana"]] as const) {
-  test(`atendente ${quem} vê só o que é dela`, async ({ page }) => {
+  test(`atendente ${quem} vê o que é dela e a fila sem responsável — nada da colega`, async ({ page }) => {
     await entrar(page, fixture.usuarios[quem].email);
-    await expect(page.getByText(`Aviso da conversa da ${quem} ${sufixo}`)).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText(`Paciente da ${quem} ${sufixo}`)).toBeVisible();
+    const esperando = cartao(page, "Pacientes esperando resposta");
+    // 1 com ela + 1 sem responsável; a esquecida há 10 dias fica à parte.
+    await expect(esperando.locator(".numero-destaque")).toHaveText("2", { timeout: 20_000 });
+    await expect(esperando.getByText("Com você").locator("xpath=following-sibling::dd[1]")).toHaveText("1");
+    await expect(esperando.getByText("Sem responsável", { exact: true }).locator("xpath=following-sibling::dd[1]")).toHaveText("1");
+    await expect(
+      esperando.getByText("Conversas antigas sem resposta (mais de 3 dias)").locator("xpath=following-sibling::dd[1]"),
+    ).toHaveText("1");
+    // Quem espera há mais tempo vem primeiro: a fila (40 min) antes da dela (20 min).
+    // (O "há quanto" anda com o relógio da suíte; a ordem é o que se prova.)
+    await expect(esperando.getByRole("listitem")).toHaveText([
+      new RegExp(`Paciente sem responsável ${sufixo}.*há \\d+ (min|h)`),
+      new RegExp(`Paciente da ${quem} ${sufixo}.*há \\d+ (min|h)`),
+    ]);
+    await expect(page.getByText(`Paciente esquecido ${sufixo}`)).toHaveCount(0);
     await expect(page.getByText(`Consulta da ${quem} ${sufixo}`)).toBeVisible();
+    // Avisos por assunto: só o pedido de pessoa da conversa DELA.
+    const avisos = cartao(page, "Avisos, separados por assunto");
+    await expect(avisos.locator(".numero-destaque")).toHaveText("1");
+    await expect(avisos.getByRole("link", { name: /^1\s*Paciente pediu para falar com uma pessoa/ })).toHaveAttribute("href", "/app/ai/inbox");
     // O da colega e o da clínica não chegam a ela.
-    await expect(page.getByText(`Aviso da conversa da ${outra} ${sufixo}`)).toHaveCount(0);
     await expect(page.getByText(`Paciente da ${outra} ${sufixo}`)).toHaveCount(0);
     await expect(page.getByText(`Consulta da ${outra} ${sufixo}`)).toHaveCount(0);
-    await expect(page.getByText(`Canal fora do ar ${sufixo}`)).toHaveCount(0);
+    await expect(avisos.getByText(/Conexão do WhatsApp caiu/)).toHaveCount(0);
+    // Sem tarefa, o quadro é só uma linha.
+    await expect(page.getByRole("heading", { name: "Minhas tarefas" })).toHaveCount(0);
+    await expect(page.getByText("Nenhuma tarefa sua para hoje.")).toBeVisible();
     // Sem painel de gestão — nem na tela, nem na rota.
     await expect(page.getByRole("heading", { name: "Visão da clínica" })).toHaveCount(0);
     expect((await page.request.get("/api/v1/inicio/paineis")).status()).toBe(403);
-    if (quem === "ana") for (const largura of [1280, 1440, 390]) await semEstouroHorizontal(page, largura, "atendente");
+    if (quem === "ana") for (const largura of [1280, 1440, 375]) await semEstouroHorizontal(page, largura, "atendente");
   });
 }
 
-test("gerente vê a Visão da clínica e, no Meu dia, o aviso da clínica — não os das atendentes", async ({ page }) => {
+test("a linha de quem espera abre a conversa na Inbox", async ({ page }) => {
+  await entrar(page, fixture.usuarios.ana.email);
+  await cartao(page, "Pacientes esperando resposta").getByRole("link", { name: new RegExp(`Paciente da ana ${sufixo}`) }).click();
+  await expect(page).toHaveURL(/\/app\/inbox\?id=[0-9a-f-]{36}/);
+});
+
+test("gerente vê a Visão da clínica e, no Meu dia, a fila e o aviso da clínica — não os das atendentes", async ({ page }) => {
   await entrar(page, fixture.usuarios.gerente.email);
-  await expect(page.getByText(`Canal fora do ar ${sufixo}`)).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText(`Aviso da conversa da ana ${sufixo}`)).toHaveCount(0);
-  await expect(page.getByText(`Aviso da conversa da bia ${sufixo}`)).toHaveCount(0);
+  // Meu dia do gerente: nada com ele, 1 sem responsável.
+  const esperando = cartao(page, "Pacientes esperando resposta");
+  await expect(esperando.locator(".numero-destaque")).toHaveText("1", { timeout: 20_000 });
+  await expect(esperando.getByRole("listitem")).toHaveText([new RegExp(`Paciente sem responsável ${sufixo}`)]);
+  // O aviso da clínica chega a ele; os pedidos de pessoa das atendentes, não.
+  const avisos = cartao(page, "Avisos, separados por assunto");
+  await expect(avisos.locator(".numero-destaque")).toHaveText("1");
+  await expect(avisos.getByText(/Conexão do WhatsApp caiu/)).toBeVisible();
+  await expect(avisos.getByText("Paciente pediu para falar com uma pessoa")).toHaveCount(0);
 
   await expect(page.getByRole("heading", { name: "Visão da clínica" })).toBeVisible({ timeout: 30_000 });
-  const faixa = page.getByLabel("Indicadores da clínica");
-  await expect(faixa).toBeVisible({ timeout: 30_000 });
-  // Duas conversas esperando, duas consultas hoje.
-  await expect(faixa.getByText("Esperando resposta").locator("xpath=following-sibling::dd[1]")).toHaveText("2");
-  await expect(faixa.getByText("Consultas hoje").locator("xpath=following-sibling::dd[1]")).toHaveText("2");
+  const depois = (rotulo: string) => page.getByText(rotulo, { exact: true }).locator("xpath=following-sibling::dd[1]");
+  // A clínica toda: 3 esperando há pouco (ana, bia e a fila), 1 delas sem responsável; 1 antiga à parte.
+  await expect(depois("Esperando resposta agora")).toContainText("3", { timeout: 30_000 });
+  await expect(depois("Esperando resposta agora")).toContainText("1 sem responsável");
+  await expect(page.getByText("1 conversas antigas sem resposta (mais de 3 dias)")).toBeVisible();
+  await expect(depois("Consultas hoje")).toHaveText("2");
   const tabela = page.getByRole("table", { name: "Agenda por profissional nesta semana" });
   await expect(tabela.getByRole("rowheader", { name: "Atendente Ana" })).toBeVisible();
   await expect(tabela.getByRole("rowheader", { name: "Atendente Bia" })).toBeVisible();
   await expect(page.getByText("Não foi possível carregar este painel.")).toHaveCount(0);
 
-  for (const largura of [1280, 1440, 390]) await semEstouroHorizontal(page, largura, "gerente");
+  for (const largura of [1280, 1440, 375]) await semEstouroHorizontal(page, largura, "gerente");
 });

@@ -1,5 +1,7 @@
 # Painel "Início" — design
 
+> **Ajustado em 2026-11-11** por [`2026-11-11-inicio-claro.md`](2026-11-11-inicio-claro.md): esperando resposta (recente × antiga, com você + sem responsável), avisos por assunto, mediana, mesmos dias do mês anterior e Gestão em três quadros. Onde os dois textos discordam, vale o mais novo.
+
 **Data:** 2026-09-21 · **Pedido de:** dono da clínica · **Estado:** aprovado na conversa, aguardando revisão deste texto
 
 ## Intenção

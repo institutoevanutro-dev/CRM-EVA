@@ -88,9 +88,9 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 
 ## J1b — Primeira tela: painel Início `[P0]`
 
-- `[P0]` Depois do login, a primeira tela é o **Início**: gerente vê "Meu dia" + "Gestão"; colaborador só "Meu dia" — `tests/e2e/painel-inicio.spec.ts`.
-- `[P0]` Tipo de atendimento sem responsável aparece em **Configuração pendente** e o botão leva à Agenda (o caso real: "Acupuntura — Dra. Lúcia Prado", 2026-09-21) — mesma spec. Evidência em `.superpowers/evidence/painel-inicio-*.png`.
-- `[P0]` **Meu dia é por pessoa**: cada atendente vê só a própria conversa esperando, o próprio compromisso de hoje e o aviso da Central ligado à conversa dela — nunca o da colega nem o da clínica; o gerente vê o aviso da clínica e a **Visão da clínica** (indicadores + agenda por profissional), que a atendente não vê nem pela rota (403). Sem estouro horizontal em 1280/1440/390 — `tests/e2e/inicio-por-pessoa.spec.ts`. Evidência em `.superpowers/evidence/inicio/`.
+- `[P0]` Depois do login, a primeira tela é o **Início**: gerente vê "Meu dia" + "Visão da clínica" (três blocos com o período no título: a clínica hoje, atendimento dos últimos 30 dias, vendas do mês) + "Gestão" (Sistema, Gasto com IA, Para arrumar); colaborador só "Meu dia" — `tests/e2e/painel-inicio.spec.ts`.
+- `[P0]` Tipo de atendimento sem responsável aparece em **Para arrumar** (contado no quadro e nomeado na lista por tipo) e a linha leva à Agenda (o caso real: "Acupuntura — Dra. Lúcia Prado", 2026-09-21) — mesma spec. Evidência em `.superpowers/evidence/painel-inicio-*.png`.
+- `[P0]` **Meu dia é por pessoa, mais a fila de ninguém** (Início claro, 2026-11-11): cada atendente vê a própria conversa esperando **e a que está sem responsável** (quem espera há mais tempo primeiro), com a espera de mais de 3 dias numa linha à parte; o próprio compromisso de hoje; e os avisos **por assunto**, só os ligados ao que é dela — nunca os da colega nem os da clínica. Sem tarefa, o quadro de tarefas vira uma linha. O gerente vê a fila, o aviso da clínica e a **Visão da clínica** (esperando agora na clínica toda, consultas de hoje, agenda por profissional), que a atendente não vê nem pela rota (403). Sem estouro horizontal em 1280/1440/375 e, em 375, todo alvo de toque do Início com 44 px — `tests/e2e/inicio-por-pessoa.spec.ts`. Evidência em `.superpowers/evidence/inicio/`.
 
 ## J2 — Conectar WhatsApp e Central de Conexões `[P0]`
 
