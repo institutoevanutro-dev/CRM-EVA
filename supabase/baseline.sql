@@ -20145,6 +20145,8 @@ returns jsonb language plpgsql security definer set search_path=public as $$
 declare e public.event_log; a public.calendar_appointments; r public.appointment_recovery_receipts;
  contact uuid; rev bigint; result text; candidates uuid[]; pointer uuid; agent uuid; version uuid; node text; boundary jsonb; enrollment uuid;
  attended boolean; v_status text; v_kind text; pinned uuid;
+ -- 0410: janela em que uma inscrição anterior no MESMO fluxo pós-consulta impede outra.
+ janela_pos_consulta constant interval := interval '30 days';
 begin
  select * into e from public.event_log where organization_id=p_org and id=p_event and event_type in ('appointment.outcome_confirmed','appointment.attended') and entity_kind='appointment';
  if not found then raise exception 'appointment_source_event_missing' using errcode='P0002'; end if;
@@ -20173,7 +20175,24 @@ begin
      and v.followup->'enabled'='true'::jsonb and v.followup->'flow_pointer_ids' ? p.id::text);
   result:=case when coalesce(cardinality(candidates),0)=0 then 'not_configured' when cardinality(candidates)>1 then 'ambiguous' else null end;
  end if;
- -- 0373: presença NOVA recomeça a régua pós-consulta. A inscrição viva de uma
+ -- 0410: presença não abre inscrição duplicada no MESMO fluxo pós-consulta.
+ -- Incidente de 11/11: presença marcada em lote em consultas antigas abriu uma
+ -- segunda inscrição para quem já estava no fluxo (ou já tinha recebido as
+ -- mensagens dele), e a régua inteira saiu de novo. Impede: inscrição VIVA no
+ -- mesmo fluxo, ou iniciada nele dentro da janela — exceto a cancelada que
+ -- nunca enviou nada (ela não chegou ao paciente). Sem recibo e sem aviso,
+ -- como a presença sem fluxo: não é pendência. O motivo fica no retorno, que o
+ -- consumidor do event_log grava.
+ if result is null and attended and exists(select 1 from public.followup_enrollments x
+    where x.organization_id=p_org and x.contact_id=contact and x.pointer_id=candidates[1]
+     and (x.status in ('active','waiting_reply','paused_handoff','paused_manual')
+      or (x.started_at>now()-janela_pos_consulta
+       and (x.status<>'cancelled' or exists(select 1 from public.followup_enrollment_events ev
+        where ev.organization_id=p_org and ev.enrollment_id=x.id and ev.event_type='action_sent'))))) then
+  return jsonb_build_object('result','already_enrolled');
+ end if;
+ -- 0373: presença NOVA recomeça a régua pós-consulta (desde a 0410, só a de
+ -- OUTRO fluxo pós-consulta: o mesmo fluxo já parou no bloco acima). A inscrição viva de uma
  -- presença ANTERIOR não é "outro acompanhamento": é cancelada no mesmo bloco
  -- da inscrição nova, logo abaixo. Qualquer outro fluxo vivo continua impedindo.
  if result is null and exists(select 1 from public.followup_enrollments x where x.organization_id=p_org and x.contact_id=contact and x.status in ('active','waiting_reply','paused_handoff','paused_manual')
@@ -22469,6 +22488,8 @@ returns jsonb language plpgsql security definer set search_path=public as $$
 declare e public.event_log; a public.calendar_appointments; r public.appointment_recovery_receipts;
  contact uuid; rev bigint; result text; candidates uuid[]; pointer uuid; agent uuid; version uuid; node text; boundary jsonb; enrollment uuid;
  attended boolean; v_status text; v_kind text; pinned uuid;
+ -- 0410: janela em que uma inscrição anterior no MESMO fluxo pós-consulta impede outra.
+ janela_pos_consulta constant interval := interval '30 days';
 begin
  select * into e from public.event_log where organization_id=p_org and id=p_event and event_type in ('appointment.outcome_confirmed','appointment.attended') and entity_kind='appointment';
  if not found then raise exception 'appointment_source_event_missing' using errcode='P0002'; end if;
@@ -22497,7 +22518,24 @@ begin
      and v.followup->'enabled'='true'::jsonb and v.followup->'flow_pointer_ids' ? p.id::text);
   result:=case when coalesce(cardinality(candidates),0)=0 then 'not_configured' when cardinality(candidates)>1 then 'ambiguous' else null end;
  end if;
- -- 0373: presença NOVA recomeça a régua pós-consulta. A inscrição viva de uma
+ -- 0410: presença não abre inscrição duplicada no MESMO fluxo pós-consulta.
+ -- Incidente de 11/11: presença marcada em lote em consultas antigas abriu uma
+ -- segunda inscrição para quem já estava no fluxo (ou já tinha recebido as
+ -- mensagens dele), e a régua inteira saiu de novo. Impede: inscrição VIVA no
+ -- mesmo fluxo, ou iniciada nele dentro da janela — exceto a cancelada que
+ -- nunca enviou nada (ela não chegou ao paciente). Sem recibo e sem aviso,
+ -- como a presença sem fluxo: não é pendência. O motivo fica no retorno, que o
+ -- consumidor do event_log grava.
+ if result is null and attended and exists(select 1 from public.followup_enrollments x
+    where x.organization_id=p_org and x.contact_id=contact and x.pointer_id=candidates[1]
+     and (x.status in ('active','waiting_reply','paused_handoff','paused_manual')
+      or (x.started_at>now()-janela_pos_consulta
+       and (x.status<>'cancelled' or exists(select 1 from public.followup_enrollment_events ev
+        where ev.organization_id=p_org and ev.enrollment_id=x.id and ev.event_type='action_sent'))))) then
+  return jsonb_build_object('result','already_enrolled');
+ end if;
+ -- 0373: presença NOVA recomeça a régua pós-consulta (desde a 0410, só a de
+ -- OUTRO fluxo pós-consulta: o mesmo fluxo já parou no bloco acima). A inscrição viva de uma
  -- presença ANTERIOR não é "outro acompanhamento": é cancelada no mesmo bloco
  -- da inscrição nova, logo abaixo. Qualquer outro fluxo vivo continua impedindo.
  if result is null and exists(select 1 from public.followup_enrollments x where x.organization_id=p_org and x.contact_id=contact and x.status in ('active','waiting_reply','paused_handoff','paused_manual')
@@ -38909,3 +38947,17 @@ update public.crm_leads l
    and c.channel in ('instagram', 'facebook')
    and l.source = 'whatsapp';
 -- ---- fim: origem do negócio segue o canal da conversa (migration 0379) ----
+
+-- ---- presença não abre inscrição duplicada no mesmo pós-consulta (migration 0410) ----
+-- Derivado de supabase/migrations/20261111200000_0410_pos_consulta_sem_inscricao_duplicada.sql
+-- (incidente e critério: cabeçalho de lá).
+--
+-- NÃO HÁ CORPO DE FUNÇÃO AQUI, de propósito: a troca de `fn_appointment_recover`
+-- foi feita no lugar, nas DUAS definições desta função acima neste arquivo.
+-- Assim a reaplicação não passa por versão antiga dela
+-- (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`), e a última
+-- definição é igual à da migration 0410
+-- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
+-- Nenhuma função nova, tabela, coluna ou constraint.
+-- Quem mede a regra: `tests/invariants/agenda-presenca-pos-consulta.test.ts`.
+-- ---- fim: presença não abre inscrição duplicada no mesmo pós-consulta (migration 0410) ----

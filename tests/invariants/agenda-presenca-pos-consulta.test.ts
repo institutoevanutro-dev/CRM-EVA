@@ -289,7 +289,28 @@ describe("presença confirmada inicia o acompanhamento pós-consulta", () => {
     ).toBe("active");
   });
 
-  it("NOVA presença recomeça a régua: a inscrição da consulta anterior é cancelada e a nova nasce", async () => {
+  /** Segunda consulta do MESMO contato, com presença confirmada. */
+  async function outraPresenca(a: { contact: string; conversation: string }, inicio = "now()-interval '2 hours'") {
+    const id = (
+      await pool.query(
+        `insert into calendar_appointments(organization_id,contact_id,conversation_id,title,starts_at,ends_at,status) values($1,$2,$3,'Retorno',${inicio},${inicio}+interval '1 hour','confirmed') returning id`,
+        [GOV_ORG, a.contact, a.conversation],
+      )
+    ).rows[0].id as string;
+    await change(id, 1, { status: "completed" });
+    return id;
+  }
+
+  async function inscricoesDo(contact: string) {
+    return (
+      await pool.query(
+        "select id, appointment_id, status from followup_enrollments where organization_id=$1 and contact_id=$2 order by started_at",
+        [GOV_ORG, contact],
+      )
+    ).rows;
+  }
+
+  it("0410: presença com inscrição VIVA no mesmo fluxo não abre outra, e a viva segue", async () => {
     await stopFlows();
     await flow();
     const a = await fixture();
@@ -297,16 +318,71 @@ describe("presença confirmada inicia o acompanhamento pós-consulta", () => {
     const antiga = await recover(a.id);
     expect(antiga.result).toBe("started");
 
-    const segunda = (
-      await pool.query(
-        "insert into calendar_appointments(organization_id,contact_id,conversation_id,title,starts_at,ends_at,status) values($1,$2,$3,'Retorno',now()-interval '2 hours',now()-interval '1 hour','confirmed') returning id",
-        [GOV_ORG, a.contact, a.conversation],
-      )
-    ).rows[0].id;
-    await change(segunda, 1, { status: "completed" });
-    const nova = await recover(segunda);
+    // Presença em lote numa consulta de quase quatro semanas atrás (o incidente).
+    const segunda = await outraPresenca(a, "now()-interval '26 days'");
+    expect(await recover(segunda)).toEqual({ result: "already_enrolled" });
+    expect(await inscricoesDo(a.contact)).toEqual([{ id: antiga.enrollment_id, appointment_id: a.id, status: "active" }]);
+    // Não é pendência: nem recibo, nem aviso.
+    expect(
+      (await pool.query("select count(*)::int n from appointment_recovery_receipts where appointment_id=$1", [segunda])).rows[0].n,
+    ).toBe(0);
+    expect((await pool.query("select count(*)::int n from agent_inbox_items where ref_id=$1", [segunda])).rows[0].n).toBe(0);
+  });
+
+  it("0410: inscrição ENCERRADA nos últimos 30 dias no mesmo fluxo impede; há mais de 30 dias, não", async () => {
+    await stopFlows();
+    await flow();
+    const a = await fixture();
+    await change(a.id, 1, { status: "completed" });
+    const antiga = await recover(a.id);
+    await pool.query("update followup_enrollments set status='completed', completed_at=now(), next_eval_at=null where id=$1", [
+      antiga.enrollment_id,
+    ]);
+    expect(await recover(await outraPresenca(a))).toEqual({ result: "already_enrolled" });
+
+    await pool.query("update followup_enrollments set started_at=now()-interval '31 days' where id=$1", [antiga.enrollment_id]);
+    expect((await recover(await outraPresenca(a))).result).toBe("started");
+  });
+
+  it("0410: cancelada SEM envio dentro de 30 dias não impede; cancelada que enviou impede", async () => {
+    await stopFlows();
+    await flow();
+    const a = await fixture();
+    await change(a.id, 1, { status: "completed" });
+    const antiga = await recover(a.id);
+    await pool.query(
+      "update followup_enrollments set status='cancelled', cancel_reason='Cancelado à mão', completed_at=now(), next_eval_at=null where id=$1",
+      [antiga.enrollment_id],
+    );
+    const nova = await recover(await outraPresenca(a));
     expect(nova.result).toBe("started");
-    expect(nova.enrollment_id).not.toBe(antiga.enrollment_id);
+
+    // A nova enviou uma mensagem e foi cancelada: agora conta.
+    await pool.query(
+      "insert into followup_enrollment_events(organization_id,enrollment_id,node_id,event_type,payload,idempotency_key) values($1,$2,'w7','action_sent','{}','a:1')",
+      [GOV_ORG, nova.enrollment_id],
+    );
+    await pool.query(
+      "update followup_enrollments set status='cancelled', cancel_reason='Cancelado à mão', completed_at=now(), next_eval_at=null where id=$1",
+      [nova.enrollment_id],
+    );
+    expect(await recover(await outraPresenca(a))).toEqual({ result: "already_enrolled" });
+  });
+
+  it("presença em OUTRO fluxo pós-consulta ainda recomeça por ela (0373): a viva do outro fluxo é cancelada", async () => {
+    await stopFlows();
+    const primeiro = await flow();
+    const a = await fixture();
+    await change(a.id, 1, { status: "completed" });
+    const antiga = await recover(a.id);
+    expect(antiga).toMatchObject({ result: "started", pointer_id: primeiro });
+
+    // O fluxo da clínica mudou: um pós-consulta novo no lugar do antigo.
+    await pool.query("update followup_flow_pointers set status='disabled' where id=$1", [primeiro]);
+    const segundoFluxo = await flow();
+    const segunda = await outraPresenca(a);
+    const nova = await recover(segunda);
+    expect(nova).toMatchObject({ result: "started", pointer_id: segundoFluxo });
 
     const linhas = (
       await pool.query(
@@ -322,7 +398,6 @@ describe("presença confirmada inicia o acompanhamento pós-consulta", () => {
       },
       { appointment_id: segunda, status: "active", cancel_reason: null },
     ]);
-    // Nenhum aviso: recomeçar não é pendência.
     expect(
       (await pool.query("select count(*)::int n from agent_inbox_items where ref_id in ($1,$2)", [a.id, segunda])).rows[0].n,
     ).toBe(0);
