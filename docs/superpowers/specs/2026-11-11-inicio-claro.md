@@ -24,7 +24,7 @@ contado como configuração pendente.
 | Avisos: mesma regra de dono (`escopoDoAviso`/`avisoChegaAQuem`), saída por assunto — 4 maiores + "Outros avisos do sistema" | `agruparAvisos`; rótulos em `ROTULO_DO_ASSUNTO`, senão o da Central (`KIND_LABEL`); `other` e tipo desconhecido somam em "outros" |
 | Cada linha de aviso abre a Central inteira | a Central não filtra por tipo na URL |
 | Tarefas: sem tarefa, uma linha no lugar do quadro | `PainelInicio.tsx` |
-| "De cada 10 conversas novas…": maior resto, soma sempre 10 | `deCadaDez` (`lib/inicio/paineis.ts`) |
+| "De cada 10 conversas novas…": maior resto, soma sempre 10; o fim da frase concorda com o número ("3 ficaram", "1 ficou", "menos de 1 ficou", "nenhuma ficou") | `deCadaDez` (`lib/inicio/paineis.ts`) e `DE_CADA_10` (`PaineisDaClinica.tsx`) |
 | Tempo até a primeira resposta = **mediana**, entre as conversas respondidas; abaixo de 1 min, "na hora" | `fn_inicio_atendimento` (`percentile_cont`), no lugar de `fn_inicio_conversas_por_dia`, que saiu com o gráfico por dia |
 | Pacientes novos: o mês contra **os mesmos dias** do mês anterior (até o mesmo dia e hora; mês anterior mais curto → ele inteiro) | `janelasDosPaineis` → `p_ant_fim` de `fn_inicio_resumo_da_clinica` |
 | Vendas fechadas, desistências e valor (por moeda): **todos os funis** | bloco `vendas` de `fn_inicio_resumo_da_clinica` |
@@ -35,6 +35,9 @@ contado como configuração pendente.
 
 - **Meu dia**: Pacientes esperando resposta · Minha agenda de hoje; abaixo,
   Avisos por assunto (largura toda; divide com Minhas tarefas quando há tarefa).
+- No celular (abaixo de 640 px) as duas tabelas da agenda viram lista — cada
+  número com o nome da coluna na frente — e nada rola para o lado; alvos de
+  toque com 44 px.
 - **Visão da clínica** (gerente e admin), em blocos com o período no título:
   *A clínica hoje* (consultas, quem escreveu, agendamentos feitos; agenda por
   profissional e por unidade na semana) · *Atendimento · últimos 30 dias* (a
@@ -48,8 +51,10 @@ contado como configuração pendente.
 
 - A mediana considera só conversas que tiveram resposta; as sem resposta
   aparecem na mesma frase e na legenda, não dentro do tempo.
-- Uma faixa com menos de 5% das conversas pode sair como "0" na frase "de cada
-  10"; a contagem exata está na legenda da barra.
+- Na frase "de cada 10", uma faixa com menos de 5% das conversas arredonda para
+  zero. Para "sem resposta" a frase diz "menos de 1 ficou sem resposta" (nunca
+  "nenhuma" quando alguma ficou); para a equipe e a IA sai "0", e a contagem
+  exata está na legenda da barra.
 - "Sistema" segue dizendo só "algum serviço está fora do ar": nomear o serviço
   exigiria ler as chaves da rota de saúde, uma delas com nome de provedor de
   canal (doutrina de restrição de canal).
