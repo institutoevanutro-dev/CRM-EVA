@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.7.0] — 2026-11-11
+
+### Alterado
+
+- **A página Início ficou mais clara — os números dizem o que parecem dizer** A página Início foi reorganizada para ser lida de relance. **Pacientes esperando resposta** agora conta as conversas que estão com você **e as que estão sem responsável**, só as que esperam há até 3 dias; as mais antigas aparecem à parte. **Avisos** vêm separados por assunto (por exemplo, "Paciente pediu para falar com uma pessoa"), em vez de um número só. Na **Visão da clínica**, cada bloco diz o período no título: a clínica hoje, o atendimento dos últimos 30 dias (com a frase "de cada 10 conversas novas…" e o tempo de resposta pela mediana, não pela média) e as vendas do mês somando todos os funis, comparadas com **os mesmos dias** do mês anterior. Em **Gestão**, Sistema, Gasto com IA e "Para arrumar" viraram três quadros pequenos; canal arquivado ou que só guarda histórico deixou de contar como pendência. Você não precisa fazer nada: a atualização troca as funções do banco sozinha.
+
 ## [5.6.0] — 2026-11-11
 
 ### Adicionado
@@ -8951,7 +8957,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.6.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.7.0...HEAD
+[5.7.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.6.0...v5.7.0
 [5.6.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.5.1...v5.6.0
 [5.5.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.5.0...v5.5.1
 [5.5.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.4.0...v5.5.0

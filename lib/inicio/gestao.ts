@@ -2,23 +2,38 @@
  * "GESTÃO" — o que impede o CRM de funcionar direito. Só a rota decide quem vê
  * (manager/admin); estas funções não checam papel.
  *
- * O `detalhe` dos itens de configuração é um CÓDIGO (`sem_responsavel`, …): a
+ * O `tipo` de cada grupo de pendências é um CÓDIGO (`sem_responsavel`, …): a
  * tela o traduz. O `titulo` é o nome do objeto, que não se traduz.
  */
+import { ARCHIVED_AT } from "@/lib/channels/archived";
 import { COLUNA_DO_OCULTO } from "@/lib/inbox/contato-oculto";
 import type { BudgetStatus } from "@/lib/ai/budget/check";
 import type { createClient } from "@/lib/supabase/server";
 import {
   janelaDeHoje,
   LIMITE_DE_ITENS,
-  type Bloco,
   type ContextoDoInicio,
   type ItemDoBloco,
+  type Pendencias,
+  type TipoDePendencia,
 } from "./tipos";
 
 type Db = Awaited<ReturnType<typeof createClient>>;
 
-export async function configuracaoPendente(db: Db, ctx: ContextoDoInicio): Promise<Bloco> {
+/**
+ * Canal que só guarda o HISTÓRICO de uma organização antiga (migração de dados):
+ * nunca será reconectado, então não é pendência. A marca é a que a migração
+ * grava na linha — `status_reason` ou a chave em `metadata`.
+ */
+export function ehCanalDeHistorico(canal: { status_reason?: unknown; metadata?: unknown }): boolean {
+  const meta = canal.metadata;
+  return (
+    canal.status_reason === "historico_da_org_antiga" ||
+    (typeof meta === "object" && meta !== null && "migracao_org_antiga" in meta)
+  );
+}
+
+export async function configuracaoPendente(db: Db, ctx: ContextoDoInicio): Promise<Pendencias> {
   const agora = ctx.agora.toISOString();
   const [tipos, convites, canais, agentes] = await Promise.all([
     db
@@ -40,9 +55,11 @@ export async function configuracaoPendente(db: Db, ctx: ContextoDoInicio): Promi
       .limit(50),
     db
       .from("channel_sessions")
-      .select("id,display_name,status")
+      .select("id,display_name,status,status_reason,metadata")
       .eq("organization_id", ctx.orgId)
       .neq("status", "WORKING")
+      // Canal arquivado foi excluído pela pessoa (Conexões nem o mostra).
+      .is(ARCHIVED_AT, null)
       .limit(50),
     db
       .from("ai_agents")
@@ -53,33 +70,42 @@ export async function configuracaoPendente(db: Db, ctx: ContextoDoInicio): Promi
       .limit(50),
   ]);
   if (tipos.error || convites.error || canais.error || agentes.error) return { ok: false };
-  const itens: ItemDoBloco[] = [
-    ...(tipos.data ?? []).map((t) => ({
-      id: `tipo:${t.id}`,
-      titulo: String(t.name),
-      detalhe: "sem_responsavel",
-      href: "/app/agenda",
-    })),
-    ...(canais.data ?? []).map((c) => ({
-      id: `canal:${c.id}`,
-      titulo: c.display_name ? String(c.display_name) : "WhatsApp",
-      detalhe: "canal_fora",
-      href: "/app/connections",
-    })),
-    ...(convites.data ?? []).map((i) => ({
-      id: `convite:${i.id}`,
-      titulo: String(i.email),
-      detalhe: "convite_vencido",
-      href: "/app/team",
-    })),
-    ...(agentes.data ?? []).map((a) => ({
-      id: `agente:${a.id}`,
-      titulo: String(a.name),
-      detalhe: "agente_rascunho",
-      href: `/app/ai/agents/${a.id}`,
-    })),
+  // A ordem é a do conserto: sem canal ninguém atende; o resto espera.
+  const grupos: Array<{ tipo: TipoDePendencia; itens: ItemDoBloco[] }> = [
+    {
+      tipo: "canal_fora",
+      itens: (canais.data ?? [])
+        .filter((c) => !ehCanalDeHistorico(c))
+        .map((c) => ({
+          id: `canal:${c.id}`,
+          titulo: c.display_name ? String(c.display_name) : "WhatsApp",
+          href: "/app/connections",
+        })),
+    },
+    {
+      tipo: "sem_responsavel",
+      itens: (tipos.data ?? []).map((t) => ({ id: `tipo:${t.id}`, titulo: String(t.name), href: "/app/agenda" })),
+    },
+    {
+      tipo: "convite_vencido",
+      itens: (convites.data ?? []).map((i) => ({ id: `convite:${i.id}`, titulo: String(i.email), href: "/app/team" })),
+    },
+    {
+      tipo: "agente_rascunho",
+      itens: (agentes.data ?? []).map((a) => ({
+        id: `agente:${a.id}`,
+        titulo: String(a.name),
+        href: `/app/ai/agents/${a.id}`,
+      })),
+    },
   ];
-  return { ok: true, total: itens.length, itens: itens.slice(0, LIMITE_DE_ITENS) };
+  return {
+    ok: true,
+    total: grupos.reduce((s, g) => s + g.itens.length, 0),
+    grupos: grupos
+      .filter((g) => g.itens.length > 0)
+      .map((g) => ({ tipo: g.tipo, total: g.itens.length, itens: g.itens.slice(0, LIMITE_DE_ITENS) })),
+  };
 }
 
 export interface Numeros {

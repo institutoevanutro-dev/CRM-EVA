@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { DICIONARIO } from "@/lib/i18n/dicionario";
 import { fakeDb } from "./fake-db.test-helper";
 import {
   agendaDeHoje,
+  agruparAvisos,
   avisoChegaAQuem,
   avisosAbertos,
   escopoDoAviso,
   esperandoResposta,
   minhasTarefas,
+  ROTULO_DO_ASSUNTO,
 } from "./meu-dia";
-import type { Bloco } from "./tipos";
+import type { Avisos, Bloco } from "./tipos";
 
 const ORG = "org-1";
 const OUTRA = "org-2";
@@ -44,8 +47,8 @@ describe("avisosAbertos — só o que é da pessoa", () => {
       aviso("conv-minha", { ref_kind: "conversation", ref_id: "c-minha" }),
       aviso("conv-outro", { ref_kind: "conversation", ref_id: "c-outro" }),
       aviso("conv-sem-dono", { ref_kind: "conversation", ref_id: "c-livre" }),
-      aviso("consulta-minha", { kind: "appointment_unconfirmed", ref_kind: "appointment", ref_id: "ap-minha" }),
-      aviso("consulta-outro", { kind: "appointment_unconfirmed", ref_kind: "appointment", ref_id: "ap-outro" }),
+      aviso("consulta-minha", { kind: "appointment_outcome_required", ref_kind: "appointment", ref_id: "ap-minha" }),
+      aviso("consulta-outro", { kind: "appointment_outcome_required", ref_kind: "appointment", ref_id: "ap-outro" }),
       aviso("caso-meu", { kind: "case_stale", ref_kind: "agent_case", ref_id: "caso-1" }),
       // Segundo caso aberto na MESMA conversa: herda o mesmo atendente.
       aviso("caso-meu-2", { kind: "case_stale", ref_kind: "agent_case", ref_id: "caso-2" }),
@@ -77,51 +80,102 @@ describe("avisosAbertos — só o que é da pessoa", () => {
     followup_enrollments: [{ id: "fe-1", organization_id: ORG, contact_id: "ct-e", conversation_id: "c-do-followup" }],
     crm_leads: [{ id: "l-1", organization_id: ORG, contact_id: "ct-lead-meu", owner_user_id: EU, status: "open" }],
   });
-  const ids = (b: Bloco) => (b.ok ? b.itens.map((i) => i.id).sort() : []);
+  /** `kind → quantos`, somando grupos e "outros" — o que a pessoa recebe, por assunto. */
+  const porAssunto = (b: Avisos) => {
+    if (!b.ok) throw new Error("bloco falhou");
+    return { total: b.total, outros: b.outros, ...Object.fromEntries(b.grupos.map((g) => [g.kind, g.total])) };
+  };
 
   it("atendente vê SÓ os avisos ligados ao que é dele — nunca os de outra pessoa nem os da organização", async () => {
     const { db } = fakeDb(tabelas());
-    const b = ok(await avisosAbertos(db, { ...ctx, papel: "agent" }, 99));
-    expect(ids(b)).toEqual(["caso-meu", "caso-meu-2", "consulta-minha", "contato-meu", "conv-minha"]);
-    expect(b.total).toBe(5);
+    // conv-minha + contato-meu (handoff), caso-meu + caso-meu-2 (case_stale), consulta-minha.
+    expect(porAssunto(await avisosAbertos(db, { ...ctx, papel: "agent" }))).toEqual({
+      total: 5,
+      outros: 0,
+      handoff: 2,
+      case_stale: 2,
+      appointment_outcome_required: 1,
+    });
   });
 
   it("o colega vê os dele, e nenhum dos meus", async () => {
     const { db } = fakeDb(tabelas());
-    const b = ok(await avisosAbertos(db, { ...ctx, userId: OUTRO, papel: "agent" }, 99));
-    expect(ids(b)).toEqual(["consulta-outro", "conv-outro", "followup-outro"]);
+    // conv-outro (handoff), consulta-outro, followup-outro.
+    expect(porAssunto(await avisosAbertos(db, { ...ctx, userId: OUTRO, papel: "agent" }))).toEqual({
+      total: 3,
+      outros: 0,
+      handoff: 1,
+      appointment_outcome_required: 1,
+      followup_dead: 1,
+    });
   });
 
   it("profissional (provider) segue a mesma regra do atendente", async () => {
     const { db } = fakeDb(tabelas());
-    const b = ok(await avisosAbertos(db, { ...ctx, papel: "provider" }, 99));
-    expect(ids(b)).toEqual(["caso-meu", "caso-meu-2", "consulta-minha", "contato-meu", "conv-minha"]);
+    expect(porAssunto(await avisosAbertos(db, { ...ctx, papel: "provider" })).total).toBe(5);
   });
 
   it("gerente vê os dele + os da organização + os que ninguém assumiu, e não os de outra pessoa", async () => {
     const { db } = fakeDb(tabelas());
-    const b = ok(await avisosAbertos(db, { ...ctx, papel: "manager" }, 99));
-    expect(ids(b)).toEqual([
-      "canal-fora",
-      "caso-meu",
-      "caso-meu-2",
-      "consulta-minha",
-      "contato-meu",
-      "conv-minha",
-      "conv-sem-dono",
-      "envio-preso",
-      "lgpd",
-      "sem-ref",
+    // Os 5 dele + conv-sem-dono (handoff) + canal-fora, envio-preso, sem-ref e lgpd (other).
+    // São 6 assuntos com frase: cabem 4, e o resto (2 grupos que não couberam + `other`) soma em "outros".
+    const b = await avisosAbertos(db, { ...ctx, papel: "manager" });
+    if (!b.ok) throw new Error("bloco falhou");
+    expect(b.total).toBe(10);
+    expect(b.grupos.slice(0, 2)).toEqual([
+      { kind: "handoff", rotulo: "Paciente pediu para falar com uma pessoa", total: 3 },
+      { kind: "case_stale", rotulo: "Atendimentos parados, esperando decisão", total: 2 },
     ]);
+    expect(b.grupos).toHaveLength(4);
+    expect(b.outros).toBe(3);
+  });
+});
+
+describe("agruparAvisos — separados por assunto", () => {
+  const vezes = (kind: string, n: number) => Array.from({ length: n }, () => kind);
+
+  it("os 4 maiores assuntos, do maior para o menor, e o resto somado em 'outros'", () => {
+    // As contagens que motivaram a mudança: "139 avisos" eram isto.
+    const r = agruparAvisos([
+      ...vezes("handoff", 27),
+      ...vezes("case_stale", 50),
+      ...vezes("other", 15),
+      ...vezes("promise_unfulfilled", 28),
+      ...vezes("followup_dead", 12),
+      ...vezes("appointment_outcome_required", 28),
+      ...vezes("qr_rescan", 4),
+    ]);
+    expect(r.grupos).toEqual([
+      { kind: "case_stale", rotulo: "Atendimentos parados, esperando decisão", total: 50 },
+      // Empate em 28: a ordem do nome do tipo desempata, sempre igual.
+      { kind: "appointment_outcome_required", rotulo: "Consultas sem resultado marcado (veio ou faltou)", total: 28 },
+      { kind: "promise_unfulfilled", rotulo: "Equipe prometeu retorno e não voltou", total: 28 },
+      { kind: "handoff", rotulo: "Paciente pediu para falar com uma pessoa", total: 27 },
+    ]);
+    expect(r.outros).toBe(15 + 12 + 4);
   });
 
-  it("o motivo do aviso vai no detalhe: seu ou da clínica", async () => {
-    const { db } = fakeDb(tabelas());
-    const b = ok(await avisosAbertos(db, { ...ctx, papel: "admin" }, 99));
-    const porId = new Map(b.itens.map((i) => [i.id, i.detalhe]));
-    expect(porId.get("conv-minha")).toBe("meu");
-    expect(porId.get("conv-sem-dono")).toBe("sem_dono");
-    expect(porId.get("canal-fora")).toBe("organizacao");
+  it("tipo sem frase própria usa o rótulo da Central; `other`, nulo e desconhecido não têm assunto", () => {
+    const r = agruparAvisos(["qr_rescan", "other", null, "tipo_que_este_build_nao_conhece"]);
+    expect(r.grupos).toEqual([
+      { kind: "qr_rescan", rotulo: "Conexão do WhatsApp caiu — precisa escanear o QR de novo", total: 1 },
+    ]);
+    expect(r.outros).toBe(3);
+  });
+
+  it("`other` nunca vira grupo, nem sendo o maior", () => {
+    const r = agruparAvisos([...vezes("other", 9), "handoff"]);
+    expect(r.grupos.map((g) => g.kind)).toEqual(["handoff"]);
+    expect(r.outros).toBe(9);
+  });
+
+  it("sem aviso: nenhum grupo e nenhum resto", () => {
+    expect(agruparAvisos([])).toEqual({ grupos: [], outros: 0 });
+  });
+
+  it("toda frase de assunto tem espanhol: a tela a traduz por t(rotulo), que o guarda de i18n não enxerga", () => {
+    // O rótulo viaja pelo JSON da rota, então `tests/unit/i18n-espanhol-cobre-a-tela` não o alcança.
+    for (const frase of Object.values(ROTULO_DO_ASSUNTO)) expect(DICIONARIO[frase]?.es, frase).toBeTruthy();
   });
 });
 
@@ -150,58 +204,46 @@ describe("escopoDoAviso", () => {
   });
 });
 
-describe("esperandoResposta", () => {
-  const base = {
-    organization_id: ORG,
-    assigned_to_user_id: EU,
-    is_group: false,
-    contato_oculto: false,
-    status: "open",
-    last_outbound_at: "2026-09-21T09:00:00Z",
-    last_message_preview: "oi",
+describe("esperandoResposta — a conta é do banco (fn_inicio_esperando), aqui só a tradução", () => {
+  // Quem entra e quem não entra (grupo, oculta, encerrada, respondida, de outra
+  // pessoa, o corte de 3 dias e a RLS) é provado contra o Postgres em
+  // tests/invariants/inicio-esperando.test.ts.
+  const resposta = {
+    ve_sem_responsavel: true,
+    recentes: { total: 9, com_voce: 2, sem_responsavel: 4 },
+    antigas: { total: 30, com_voce: 1, sem_responsavel: 20 },
+    itens: [
+      { id: "c1", desde: "2026-09-21T10:00:00Z", name: null, display_name: "Marina Teles", phone_number: "+5527999990001" },
+      { id: "c2", desde: "2026-09-21T12:00:00Z", name: null, display_name: null, phone_number: "+5527999990002" },
+    ],
   };
-  it("inclui minha conversa cuja última mensagem é do paciente; exclui grupo, fechada, de outra pessoa e já respondida", async () => {
-    const { db } = fakeDb({
-      conversations: [
-        { ...base, id: "c1", last_inbound_at: "2026-09-21T10:00:00Z" },
-        { ...base, id: "c2", last_inbound_at: "2026-09-21T08:00:00Z" }, // já respondida
-        { ...base, id: "c3", last_inbound_at: "2026-09-21T10:00:00Z", is_group: true },
-        { ...base, id: "c4", last_inbound_at: "2026-09-21T10:00:00Z", status: "closed" },
-        { ...base, id: "c5", last_inbound_at: "2026-09-21T10:00:00Z", assigned_to_user_id: OUTRO },
-        { ...base, id: "c6", last_inbound_at: "2026-09-21T10:00:00Z", last_outbound_at: null },
-        { ...base, id: "c7", last_inbound_at: "2026-09-21T10:00:00Z", organization_id: OUTRA },
-        // Contato oculto do Inbox (migration 0372): não é paciente esperando.
-        { ...base, id: "c8", last_inbound_at: "2026-09-21T10:00:00Z", contato_oculto: true },
-      ],
+  const dbCom = (r: { data: unknown; error: unknown }) => {
+    const chamadas: Array<{ fn: string; args: Record<string, unknown> }> = [];
+    const db = { rpc: async (fn: string, args: Record<string, unknown>) => (chamadas.push({ fn, args }), r) };
+    return { db: db as never, chamadas };
+  };
+
+  it("o número grande é com você + sem responsável; as de outras pessoas ficam fora", async () => {
+    const { db, chamadas } = dbCom({ data: resposta, error: null });
+    const b = await esperandoResposta(db, ctx);
+    if (!b.ok) throw new Error("bloco falhou");
+    expect(b).toMatchObject({ total: 6, comVoce: 2, semResponsavel: 4, veSemResponsavel: true, antigas: 21 });
+    expect(chamadas[0]).toEqual({
+      fn: "fn_inicio_esperando",
+      // O corte de 3 dias sai daqui, da constante única.
+      args: { p_org: ORG, p_corte: "2026-09-18T15:00:00.000Z" },
     });
-    const b = ok(await esperandoResposta(db, ctx));
-    expect(b.itens.map((i) => i.id).sort()).toEqual(["c1", "c6"]);
-    expect(b.total).toBe(2);
-    expect(b.itens[0]!.href).toMatch(/^\/app\/inbox\?id=c[16]$/);
-  });
-  it("acha a conversa esperando mesmo com mais de 200 conversas antigas fechadas atribuídas a mim", async () => {
-    const velhas = Array.from({ length: 201 }, (_, i) => ({
-      ...base,
-      id: `velha-${i}`,
-      status: "closed",
-      last_inbound_at: `2026-08-01T10:${String(i % 60).padStart(2, "0")}:00Z`,
-    }));
-    const { db } = fakeDb({
-      conversations: [...velhas, { ...base, id: "nova", last_inbound_at: "2026-09-21T10:00:00Z" }],
-    });
-    const b = ok(await esperandoResposta(db, ctx));
-    expect(b.itens.map((i) => i.id)).toEqual(["nova"]);
   });
 
-  it("mostra o nome do paciente, não só a prévia da mensagem", async () => {
-    const { db } = fakeDb({
-      conversations: [
-        { ...base, id: "c1", last_inbound_at: "2026-09-21T10:00:00Z", last_message_preview: null,
-          contact: { name: null, display_name: "Maria Souza", phone_number: "+5527999990001" } },
-      ],
-    });
-    const b = ok(await esperandoResposta(db, ctx));
-    expect(b.itens[0]!.titulo).toBe("Maria Souza");
+  it("cada linha tem o nome do paciente (ou o telefone), desde quando espera e a porta da conversa", async () => {
+    const b = await esperandoResposta(dbCom({ data: resposta, error: null }).db, ctx);
+    if (!b.ok) throw new Error("bloco falhou");
+    expect(b.itens[0]).toEqual({ id: "c1", titulo: "Marina Teles", desde: "2026-09-21T10:00:00Z", href: "/app/inbox?id=c1" });
+    expect(b.itens[1]!.titulo).toMatch(/99999-?0002/);
+  });
+
+  it("erro do banco vira bloco com falha", async () => {
+    expect(await esperandoResposta(dbCom({ data: null, error: { message: "boom" } }).db, ctx)).toEqual({ ok: false });
   });
 });
 

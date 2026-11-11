@@ -1,48 +1,31 @@
 /**
- * D1.6: no gráfico "Conversas · últimos 30 dias", quem ficou sem resposta é a
- * faixa que pede ação. Ela vai para a BASE da pilha, em cor de erro com
- * hachura, e ganha número com porta para o Radar — a informação não depende só
- * da cor.
+ * D1.6, na forma do Início claro (spec 2026-11-11): em "Atendimento · últimos 30
+ * dias", quem ficou sem resposta é a faixa que pede ação. Ela tem HACHURA na
+ * barra e na legenda (a informação não depende só da cor) e número com porta
+ * para o Radar. O gráfico por dia saiu: agora é UMA barra.
  */
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-
-const barras = vi.hoisted(() => [] as { dataKey: string; fill: string }[]);
-
-vi.mock("recharts", () => {
-  const Passa = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
-  return {
-    ResponsiveContainer: Passa,
-    BarChart: Passa,
-    CartesianGrid: () => null,
-    XAxis: () => null,
-    YAxis: () => null,
-    Tooltip: () => null,
-    Bar: (p: { dataKey: string; fill: string }) => {
-      barras.push({ dataKey: p.dataKey, fill: p.fill });
-      return null;
-    },
-  };
-});
 
 const falha = { ok: false };
 vi.mock("@/lib/api/client", () => ({
   apiClient: {
     get: vi.fn(async () => ({
       data: {
+        periodo: { mes: "2026-11-01", mesAnterior: "2026-10-01" },
         resumo: falha,
+        esperando: falha,
         agenda: falha,
         funil: falha,
         origem: falha,
-        conversas: {
+        atendimento: {
           ok: true,
-          primeiraRespostaMediaS: 90,
-          dias: [
-            { dia: "2026-11-01", ia_sozinha: 4, com_equipe: 2, sem_resposta: 3 },
-            { dia: "2026-11-02", ia_sozinha: 1, com_equipe: 0, sem_resposta: 2 },
-          ],
+          equipe: 2,
+          ia: 5,
+          semResposta: 5,
+          deCadaDez: { equipe: 2, ia: 4, semResposta: 4 },
+          medianaPrimeiraRespostaS: 90,
         },
       },
     })),
@@ -50,26 +33,30 @@ vi.mock("@/lib/api/client", () => ({
 }));
 
 describe("Início — Sem resposta à vista", () => {
-  it("mostra quantos ficaram sem resposta, com link para o Radar, e põe a faixa na base", async () => {
+  it("mostra quantos ficaram sem resposta, com link para o Radar e hachura — nunca só a cor", async () => {
     const { PaineisDaClinica } = await import("@/app/app/inicio/_components/PaineisDaClinica");
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
+    const { container } = render(
       <QueryClientProvider client={qc}>
         <PaineisDaClinica />
       </QueryClientProvider>,
     );
 
-    const rotulo = await screen.findByText("ficaram sem resposta");
+    const rotulo = await screen.findByText("Sem resposta");
     const link = rotulo.closest("a");
     expect(link?.getAttribute("href")).toBe("/app/radar");
     expect(link?.textContent).toContain("5");
-    expect(link?.className).toContain("text-error-fg");
-    expect(screen.queryByText("a IA resolveu sozinha")).toBeNull();
 
-    const ordem = barras.slice(-3);
-    expect(ordem.map((b) => b.dataKey)).toEqual(["sem_resposta", "ia_sozinha", "com_equipe"]);
-    expect(ordem[0]!.fill).toMatch(/^url\(#/);
-    expect(ordem[1]!.fill).toBe("var(--color-accent-strong)");
-    expect(ordem[2]!.fill).toBe("var(--grafico-equipe)");
+    // A amostra da legenda e a faixa da barra usam a mesma hachura na cor de erro.
+    const amostra = link?.querySelector("[aria-hidden]") as HTMLElement;
+    expect(amostra.style.background).toContain("repeating-linear-gradient");
+    expect(amostra.style.background).toContain("var(--grafico-sem-resposta)");
+
+    // UMA barra, três faixas proporcionais às contagens, na ordem da frase.
+    const faixas = [...container.querySelectorAll<HTMLElement>("div.rounded-full > span")];
+    expect(faixas.map((f) => f.style.flexGrow)).toEqual(["2", "5", "5"]);
+    expect(faixas[0]!.style.background).toBe("var(--grafico-equipe)");
+    expect(faixas[1]!.style.background).toBe("var(--color-accent-strong)");
+    expect(faixas[2]!.style.background).toContain("repeating-linear-gradient");
   });
 });
