@@ -36,6 +36,22 @@
  * 6 h, contados entre episódios: o número que cai toda hora não vira laço).
  * Sem poder tentar de novo, escala uma vez. Entrou mensagem: "voltou", uma vez.
  *
+ * ─── E o alarme da madrugada (novembro/2026) ─────────────────────────────────
+ *
+ * O websocket oscila de madrugada, e cada oscilação é uma "queda". Com ninguém
+ * escrevendo, 45 min de silêncio chegavam sempre: o vigia reiniciava (o
+ * `STOPPED` do reinício abria o "fora do ar" do vigia de saúde), avisava, e
+ * avisava de novo que "continua sem receber". ~40 avisos em 3 dias, quase todos
+ * entre 23h e 7h, e todos no celular da equipe.
+ *
+ * Por isso os dois relógios (os 45 min de silêncio e as 6 h da queda) contam só
+ * o tempo DENTRO da janela de horário do canal (`channel_knobs.window_*`, padrão
+ * 7h às 22h). Fora dela o silêncio é o normal, não suspeita. As 6 h também
+ * passaram a contar janela: contadas no relógio de parede, uma queda às 23:30
+ * chegaria às 7h já "antiga" e seria descartada sem ninguém olhar; contadas na
+ * janela, ela é investigada às 07:45 e segue investigável até as 13h.
+ * O teto de reinícios continua em tempo real: ele é freio de laço, não suspeita.
+ *
  * Este arquivo é só a decisão e o texto, puros. Quem consulta o banco, fala com
  * o transporte e abre o aviso é `app/api/v1/cron/channel-health/route.ts`.
  */
@@ -44,9 +60,9 @@ import type { Idioma } from "@/lib/i18n/idiomas";
 
 import { STATUS_SAUDAVEL } from "./health";
 
-/** Silêncio mínimo depois da queda (ou do último reinício) para suspeitar. */
+/** Silêncio mínimo, em tempo de janela do canal, depois da queda (ou do último reinício) para suspeitar. */
 export const SURDEZ_SILENCIO_MINIMO_MS = 45 * 60_000;
-/** Depois disto o silêncio já não aponta para a queda (noite, fim de semana). */
+/** Depois disto (em tempo de janela do canal) o silêncio já não aponta para a queda. */
 export const SURDEZ_JANELA_MAXIMA_MS = 6 * 60 * 60_000;
 /** Mudança de estado até aqui depois do nosso reinício é efeito DELE, não queda nova. */
 export const SURDEZ_FOLGA_DO_REINICIO_MS = 5 * 60_000;
@@ -60,6 +76,51 @@ export const SURDEZ_ESPERA_DO_AVISO_MS = 2 * 60_000;
 
 /** Chave em `channel_sessions.metadata`. */
 export const CHAVE_DO_VIGIA = "vigia_surdez";
+
+/**
+ * Janela de horário do canal: [inicio, fim) na hora local de `fuso`, como a do
+ * pacing (`lib/agent-engine/pacing/engine.ts`). Quem lê de `channel_knobs` é a rota.
+ */
+export interface JanelaDoVigia {
+  inicio: number;
+  fim: number;
+  /** Fuso IANA já validado: a decisão não confere. */
+  fuso: string;
+  domingo: boolean;
+}
+
+/** Até onde se olha para trás: 7 dias de janela vazia não existem, e o laço fica limitado. */
+const OLHAR_PARA_TRAS_MS = 7 * 24 * 60 * 60_000;
+
+/**
+ * Milissegundos de [desde, ate) que caem dentro da janela. Sem janela, o
+ * intervalo inteiro (o comportamento de antes). Anda de hora local em hora
+ * local: a janela tem hora cheia de borda, então cada pedaço está todo dentro
+ * ou todo fora.
+ */
+export function tempoNaJanela(desde: number, ate: number, janela?: JanelaDoVigia): number {
+  if (!(ate > desde)) return 0;
+  if (!janela) return ate - desde;
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: janela.fuso,
+    hourCycle: "h23",
+    weekday: "short",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+  });
+  let total = 0;
+  for (let t = Math.max(desde, ate - OLHAR_PARA_TRAS_MS); t < ate; ) {
+    const partes = Object.fromEntries(fmt.formatToParts(new Date(t)).map((p) => [p.type, p.value]));
+    const hora = Number(partes.hour) % 24;
+    const proxima = t - (Number(partes.minute) * 60 + Number(partes.second)) * 1000 - (((t % 1000) + 1000) % 1000) + 60 * 60_000;
+    const fimDoPedaco = Math.min(proxima, ate);
+    const aberta = (janela.domingo || partes.weekday !== "Sun") && hora >= janela.inicio && hora < janela.fim;
+    if (aberta) total += fimDoPedaco - t;
+    t = fimDoPedaco;
+  }
+  return total;
+}
 
 export interface TetoDeReinicios {
   maximo: number;
@@ -182,6 +243,8 @@ export interface EntradaDoVigia {
   houveEntrada: boolean;
   agora: Date;
   teto: TetoDeReinicios;
+  /** Janela de horário do canal. Ausente, o relógio conta o dia inteiro. */
+  janela?: JanelaDoVigia;
 }
 
 /** Desde quando a rota pergunta se entrou mensagem. `null` sem data de mudança. */
@@ -204,14 +267,15 @@ export function decidirVigiaDeSurdez(e: EntradaDoVigia): DecisaoDeSurdez {
 
   if (ep.daMarca && ep.desfecho === "voltou") return { acao: "nada", motivo: "encerrado" };
   if (ep.daMarca && e.houveEntrada) return { acao: "voltou", quedaEm };
-  if (agora - ep.relogio < SURDEZ_SILENCIO_MINIMO_MS) {
+  // Silêncio fora da janela do canal não é suspeito: só conta o tempo dentro dela.
+  if (tempoNaJanela(ep.relogio, agora, e.janela) < SURDEZ_SILENCIO_MINIMO_MS) {
     return { acao: "nada", motivo: ep.daMarca ? "aguardando" : "recente" };
   }
   if (e.houveEntrada) return { acao: "nada", motivo: "saudavel" };
   if (ep.daMarca && ep.desfecho === "escalado") return { acao: "nada", motivo: "escalado" };
 
   const recentes = reiniciosDaMarca(marca).filter((t) => agora - t < e.teto.janelaMs).length;
-  const naJanela = agora - ep.quedaEm <= SURDEZ_JANELA_MAXIMA_MS;
+  const naJanela = tempoNaJanela(ep.quedaEm, agora, e.janela) <= SURDEZ_JANELA_MAXIMA_MS;
   if (naJanela && recentes < e.teto.maximo) return { acao: "reiniciar", quedaEm, tentativa: ep.tentativas + 1 };
   // Já tentamos nesta queda e não voltou, ou nem podemos tentar com ela fresca: chama gente.
   if (ep.daMarca || naJanela) return { acao: "escalar", quedaEm, tentativas: ep.tentativas, recentes };

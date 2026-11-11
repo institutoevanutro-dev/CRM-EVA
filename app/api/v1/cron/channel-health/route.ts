@@ -70,6 +70,7 @@ import { audit } from "@/lib/audit";
 import {
   REF_KIND_SESSAO,
   STATUS_REASON_DESCONECTADO_NO_APP,
+  STATUS_SAUDAVEL,
   sincronizarSaudeDaConexao,
 } from "@/lib/channels/health";
 import {
@@ -93,6 +94,7 @@ import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { RUN_STALE_AFTER_MS } from "@/lib/system/update-run";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
+import { knobsDoCanal } from "@/lib/automation/janela-do-canal";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
 
 export const dynamic = "force-dynamic";
@@ -190,17 +192,25 @@ async function vigiarSurdez(
   };
   const agora = new Date();
   const agoraIso = agora.toISOString();
+  // A janela de horário do canal, lida como a automação lê (falha aberta nos
+  // padrões, 7h às 22h). Fora dela o silêncio não conta como suspeita. Fora de
+  // WORKING a regra nem chega à janela, e a leitura não é paga.
+  const knobs =
+    (sessao.status ?? "").toUpperCase() === STATUS_SAUDAVEL ? await knobsDoCanal(admin, s.organization_id, s.id) : null;
   const entrada = {
     status: sessao.status,
     lastStatusChangeAt: s.last_status_change_at,
     metadata: s.metadata,
     agora,
     teto: v.teto,
+    janela: knobs
+      ? { inicio: knobs.windowStartHour, fim: knobs.windowEndHour, fuso: fusoUtilizavel(knobs.timezone), domingo: knobs.allowSunday }
+      : undefined,
   };
 
   // Duas voltas na mesma regra pura para só pagar a consulta de mensagens
   // quando ela muda a decisão. Na rodada comum (a cada 5 min, sessão saudável
-  // ou fora da janela) este bloco não toca no banco.
+  // ou fora da janela) este bloco não consulta as mensagens.
   let decisao = decidirVigiaDeSurdez({ ...entrada, houveEntrada: false });
   let voltouEm: string | null = null;
   const desde = relogioDoVigia(s.last_status_change_at, s.metadata);
