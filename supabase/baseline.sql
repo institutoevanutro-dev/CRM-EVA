@@ -38898,3 +38898,70 @@ update public.crm_leads l
    and c.channel in ('instagram', 'facebook')
    and l.source = 'whatsapp';
 -- ---- fim: origem do negócio segue o canal da conversa (migration 0379) ----
+
+-- ---- marca da Conta (migration 0409) ----
+-- Derivado de supabase/migrations/20261111140000_0409_marca_da_conta.sql
+-- (o porquê inteiro está no cabeçalho de lá). Colunas conta_* em
+-- platform_branding: a última marca boa lida da Conta Eva Link. Bloco
+-- autocontido: só depende de platform_branding (bloco da 0155). CHECKs criados
+-- só se faltarem; dado corrigido antes. Nenhum GRANT, gatilho ou função nova.
+-- Quem mede: `tests/invariants/marca-da-conta.test.ts`.
+alter table public.platform_branding
+  add column if not exists conta_nome text,
+  add column if not exists conta_accent_hex text,
+  add column if not exists conta_logo_path text,
+  add column if not exists conta_logos jsonb,
+  add column if not exists conta_etag text,
+  add column if not exists conta_atualizado_em timestamptz,
+  add column if not exists conta_lida_em timestamptz;
+
+comment on column public.platform_branding.conta_nome is
+  'Nome da clínica lido da Conta Eva Link (última marca boa). Vale acima de app_name quando presente. Escrito por lib/branding/conta.ts.';
+comment on column public.platform_branding.conta_accent_hex is
+  'cores.principal da Conta, #rrggbb minúsculo — semente da paleta. Última marca boa (passou no contraste).';
+comment on column public.platform_branding.conta_logo_path is
+  'Logo da Conta guardada em storage/brand-logos, sempre platform/conta-<sha256>.(png|jpg). Caminho e NÃO url (DIRC-C).';
+comment on column public.platform_branding.conta_logos is
+  'sha256 das logos guardadas: {escuro: sha|null, claro: sha|null}. Comparado com o que a Conta anuncia para saber se precisa baixar.';
+comment on column public.platform_branding.conta_etag is
+  'ETag da última resposta aceita de /api/marca, mandado em If-None-Match.';
+comment on column public.platform_branding.conta_atualizado_em is
+  'atualizado_em anunciado pela Conta na última marca aceita (null = a Conta nunca foi configurada).';
+comment on column public.platform_branding.conta_lida_em is
+  'Quando a última rodada de leitura da Conta foi aceita.';
+
+update public.platform_branding
+   set conta_accent_hex = null
+ where conta_accent_hex is not null
+   and conta_accent_hex !~ '^#[0-9a-f]{6}$';
+
+update public.platform_branding
+   set conta_logo_path = null
+ where conta_logo_path is not null
+   and conta_logo_path !~ '^platform/conta-[0-9a-f]{64}\.(png|jpg)$';
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.platform_branding'::regclass
+       and conname = 'platform_branding_conta_accent_hex'
+  ) then
+    alter table public.platform_branding
+      add constraint platform_branding_conta_accent_hex check (
+        conta_accent_hex is null or conta_accent_hex ~ '^#[0-9a-f]{6}$'
+      );
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.platform_branding'::regclass
+       and conname = 'platform_branding_conta_logo_path'
+  ) then
+    alter table public.platform_branding
+      add constraint platform_branding_conta_logo_path check (
+        conta_logo_path is null
+        or conta_logo_path ~ '^platform/conta-[0-9a-f]{64}\.(png|jpg)$'
+      );
+  end if;
+end $$;
+-- ---- fim: marca da Conta (migration 0409) ----
