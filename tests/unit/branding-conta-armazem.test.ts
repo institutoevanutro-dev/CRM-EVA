@@ -21,6 +21,8 @@ const banco = vi.hoisted(() => ({
   noBucket: [] as string[],
   uploadFalha: false,
   avisos: [] as string[],
+  travar: false,
+  aoListar: null as null | (() => void),
 }));
 
 const CONTA_COLS = "conta_nome, conta_accent_hex";
@@ -33,6 +35,7 @@ vi.mock("@/lib/supabase/admin", () => ({
           eq: () => consulta,
           abortSignal: () => consulta,
           maybeSingle: async () => {
+            if (banco.travar) return new Promise(() => {});
             if (cols.startsWith(CONTA_COLS)) {
               return banco.erroConta ? { data: null, error: banco.erroConta } : { data: banco.linha, error: null };
             }
@@ -68,7 +71,11 @@ vi.mock("@/lib/supabase/admin", () => ({
           banco.noBucket.push(caminho);
           return { error: null };
         },
-        list: async () => ({ data: banco.noBucket.map((c) => ({ name: c.replace("platform/", "") })), error: null }),
+        list: async () => {
+          const data = banco.noBucket.map((c) => ({ name: c.replace("platform/", "") }));
+          banco.aoListar?.();
+          return { data, error: null };
+        },
         remove: async (caminhos: string[]) => {
           banco.removidos.push(...caminhos);
           return { error: null };
@@ -143,6 +150,8 @@ beforeEach(() => {
   banco.noBucket = [];
   banco.uploadFalha = false;
   banco.avisos = [];
+  banco.travar = false;
+  banco.aoListar = null;
   globalThis.__rodadaDaConta = undefined;
   globalThis.__avisosDaConta = undefined;
   globalThis.__memoDaMarcaDaInstalacao = undefined;
@@ -239,6 +248,23 @@ describe("rodada nova", () => {
   });
 });
 
+describe("limpeza do bucket entre processos", () => {
+  it("logo gravada por OUTRO processo durante a limpeza não é apagada", async () => {
+    const velha = `platform/conta-${"b".repeat(64)}.png`;
+    const anterior = `platform/conta-${"a".repeat(64)}.png`;
+    banco.noBucket = [velha, anterior];
+    banco.linha = { ...LOCAL, conta_logo_path: anterior, conta_logos: { escuro: null, claro: "a".repeat(64) }, conta_atualizado_em: "x" };
+    // Entre o list e o remove, outro processo aponta para a `velha`.
+    banco.aoListar = () => {
+      banco.linha = { ...banco.linha, conta_logo_path: velha };
+    };
+    const { rodarMarcaDaConta } = await armazem();
+    await rodarMarcaDaConta(CONTA, () => {}, { fetch: contaFalsa(corpo()).f });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(banco.removidos).toEqual([]);
+  });
+});
+
 describe("rodadas que não são nova", () => {
   it("igual (304) não grava nada", async () => {
     banco.linha = { ...LOCAL, conta_etag: '"v1"', conta_atualizado_em: "x" };
@@ -310,6 +336,19 @@ describe("disparo preguiçoso", () => {
     dispararMarcaDaConta(aoGravar);
     await new Promise((r) => setTimeout(r, 10));
     expect(chamadas.filter((c) => c.endsWith("/api/marca"))).toHaveLength(1);
+  });
+});
+
+describe("teto da rodada", () => {
+  it("banco travado não prende a rodada para sempre: depois de 20 s a vez é liberada", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("CONTA_URL", CONTA);
+    banco.travar = true;
+    const { dispararMarcaDaConta, PRAZO_DA_RODADA_MS } = await armazem();
+    dispararMarcaDaConta(() => {});
+    expect(globalThis.__rodadaDaConta?.emVoo).toBe(true);
+    await vi.advanceTimersByTimeAsync(PRAZO_DA_RODADA_MS + 1);
+    expect(globalThis.__rodadaDaConta?.emVoo).toBe(false);
   });
 });
 

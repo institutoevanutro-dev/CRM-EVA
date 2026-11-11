@@ -8,10 +8,10 @@ import {
   resolverMarcaDaOrganizacao,
 } from "@/lib/branding/organizacao";
 import {
-  camadaDaConta,
   camadaDaInstalacao,
   camadaDaOrganizacao,
   camadaDoAmbiente,
+  pilhaComConta,
   resolverMarca,
   type CamadaDeMarca,
 } from "@/lib/branding/resolve";
@@ -334,6 +334,30 @@ describe("camada da Conta (Plano 6) — acima da organização e da instalação
     vi.unstubAllGlobals();
   });
 
+  it("Conta ligada SEM logo: nem o logo da organização nem o local reaparecem", () => {
+    vi.stubGlobal("__PUBLIC_ENV__", { NEXT_PUBLIC_SUPABASE_URL: "https://projeto.exemplo.test" });
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://projeto.exemplo.test");
+    const linha = { ...LINHA, logo_path: "platform/11111111-1111-4111-8111-111111111111.png", ...CONTA, conta_logo_path: null };
+    const comLogoNoEnv = { ...AMBIENTE, APP_LOGO_URL: "https://cdn.exemplo.test/env.png" };
+    for (const m of [
+      resolverMarcaDaOrganizacao(ORG, linha, comLogoNoEnv),
+      resolverMarca(pilhaComConta(linha, [camadaDaInstalacao(linha), camadaDoAmbiente(comLogoNoEnv)]), REGUA),
+    ]) {
+      expect(m.logoUrl).toBeNull();
+      expect(m.origens.logoUrl).toBe("padrao");
+      expect(m.name).toBe("Clínica da Conta");
+      expect(m.origens.cor).toBe("conta");
+    }
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("Conta ligada sem nome: o nome é o LOCAL, nunca o da organização", () => {
+    const m = resolverMarcaDaOrganizacao(ORG, { ...LINHA, ...CONTA, conta_nome: null }, AMBIENTE);
+    expect(m.name).toBe("Da Instalação");
+    expect(m.origens.nome).toBe("banco");
+  });
+
   it("a cor do menu da organização continua (não passa pelo resolvedor)", () => {
     expect(menuDaOrganizacaoDeSettings(ORG)).toBe("#123456");
   });
@@ -355,7 +379,7 @@ describe("camada da Conta (Plano 6) — acima da organização e da instalação
         );
         expect(resolverMarcaDaOrganizacao(s, linha, AMBIENTE)).toEqual(antes);
       }
-      expect(resolverMarca([camadaDaConta(linha), camadaDaInstalacao(linha), camadaDoAmbiente(AMBIENTE)], REGUA)).toEqual(
+      expect(resolverMarca(pilhaComConta(linha, [camadaDaInstalacao(linha), camadaDoAmbiente(AMBIENTE)]), REGUA)).toEqual(
         resolverMarca([camadaDaInstalacao(linha), camadaDoAmbiente(AMBIENTE)], REGUA),
       );
     }

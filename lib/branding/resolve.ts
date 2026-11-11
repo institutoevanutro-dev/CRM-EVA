@@ -407,6 +407,28 @@ export function camadaDaConta(linha: LinhaDaInstalacao | null): CamadaDeMarca {
 }
 
 /**
+ * Monta a pilha com a Conta no topo — o ÚNICO lugar que sabe a regra da spec 3.5.
+ *
+ * Conta guardada (camada não vazia): a organização SAI da pilha (nome, cor e logo
+ * dela deixam de valer; `menu_hex` não passa por aqui e continua), e o logo das
+ * camadas de baixo é suprimido — Conta sem logo quer dizer "sem logo", não "o
+ * logo local". O nome cai no local quando a Conta não tem nome (permitido).
+ *
+ * Conta vazia (sem `CONTA_URL`, ou nada guardado): a pilha volta intacta.
+ */
+export function pilhaComConta(
+  linha: LinhaDaInstalacao | null,
+  abaixo: readonly CamadaDeMarca[],
+): CamadaDeMarca[] {
+  const conta = camadaDaConta(linha);
+  if (Object.keys(conta).length === 1) return [...abaixo];
+  return [
+    conta,
+    ...abaixo.filter((c) => c.origem !== "organizacao").map((c) => ({ ...c, logoUrl: null })),
+  ];
+}
+
+/**
  * A camada do BANCO — a configuração viva da instalação, acima do `.env`.
  *
  * Fica ACIMA do ambiente na pilha porque é ela que o operador edita sem SSH.

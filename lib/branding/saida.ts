@@ -53,7 +53,7 @@ import { marcaDaInstalacao } from "./instalacao";
 import { resolverMarcaDaOrganizacao } from "./organizacao";
 import { stop } from "./rampa";
 import { REGUA_DO_PRODUTO } from "./regua-do-produto";
-import { camadaDaConta, camadaDaInstalacao, camadaDoAmbiente, resolverMarca } from "./resolve";
+import { camadaDaInstalacao, camadaDoAmbiente, pilhaComConta, resolverMarca } from "./resolve";
 
 export type MarcaDeSaida = {
   readonly nome: string;
@@ -185,7 +185,7 @@ export async function marcaDaSaida(organizationId: string | null): Promise<Marca
     const marca =
       organizationId === null
         ? resolverMarca(
-            [camadaDaConta(linha), camadaDaInstalacao(linha), camadaDoAmbiente(env)],
+            pilhaComConta(linha, [camadaDaInstalacao(linha), camadaDoAmbiente(env)]),
             REGUA_DO_PRODUTO,
           )
         : resolverMarcaDaOrganizacao(await settingsDaOrganizacao(organizationId), linha, env);

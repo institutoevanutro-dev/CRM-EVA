@@ -14,9 +14,9 @@ import {
 } from "@/lib/branding/instalacao";
 import { REGUA_DO_PRODUTO } from "@/lib/branding/regua-do-produto";
 import {
-  camadaDaConta,
   camadaDaInstalacao,
   camadaDoAmbiente,
+  pilhaComConta,
   resolverMarca,
   type MarcaResolvida,
 } from "@/lib/branding/resolve";
@@ -79,7 +79,7 @@ async function marcaResolvida(): Promise<{
 }> {
   const linha = await marcaDaInstalacao();
   const marca = resolverMarca(
-    [camadaDaConta(linha), camadaDaInstalacao(linha), camadaDoAmbiente(env)],
+    pilhaComConta(linha, [camadaDaInstalacao(linha), camadaDoAmbiente(env)]),
     REGUA_DO_PRODUTO,
   );
   return { linha, marca };

@@ -43,6 +43,8 @@ type Logos = { escuro: string | null; claro: string | null };
 const COLUNAS_DA_CONTA =
   "conta_nome, conta_accent_hex, conta_logo_path, conta_logos, conta_etag, conta_atualizado_em";
 const INTERVALO_MS = 60_000;
+/** Teto da rodada inteira (banco + Conta + bucket): só a Conta tem prazo próprio. */
+export const PRAZO_DA_RODADA_MS = 20_000;
 const SILENCIO_DO_LOG_MS = 10 * 60_000;
 const PREFIXO = "platform/";
 
@@ -146,9 +148,14 @@ async function limparLogosVelhas(manter: readonly (string | null)[]): Promise<vo
     const bucket = createAdminClient().storage.from(BUCKET_DE_LOGOS);
     const { data, error } = await bucket.list("platform", { search: "conta-", limit: 100 });
     if (error || !data) return;
+    // Relê o caminho guardado AGORA: outro processo pode ter gravado uma logo
+    // nova entre a nossa gravação e esta limpeza, e ela nunca pode sair.
+    const atual = await lerContaGuardada();
+    if (atual === "erro") return;
+    const fica = [...manter, atual?.conta_logo_path ?? null];
     const velhas = data
       .map((o) => `${PREFIXO}${o.name}`)
-      .filter((c) => /^platform\/conta-[0-9a-f]{64}\.(png|jpg)$/.test(c) && !manter.includes(c));
+      .filter((c) => /^platform\/conta-[0-9a-f]{64}\.(png|jpg)$/.test(c) && !fica.includes(c));
     if (velhas.length > 0) await bucket.remove(velhas);
   } catch {
     // Arquivo órfão não é falha de marca; a próxima troca tenta de novo.
@@ -309,7 +316,14 @@ export function dispararMarcaDaConta(aoGravar: () => void): void {
     if (estado.emVoo || Date.now() - estado.ultima < INTERVALO_MS) return;
     estado.emVoo = true;
     estado.ultima = Date.now();
-    void rodarMarcaDaConta(url, aoGravar).finally(() => {
+    // Um banco travado não pode prender `emVoo` para sempre: passado o teto, a
+    // vez é liberada (a rodada travada, se um dia voltar, só grava o que leu).
+    let relogio: ReturnType<typeof setTimeout> | undefined;
+    const teto = new Promise<void>((resolve) => {
+      relogio = setTimeout(resolve, PRAZO_DA_RODADA_MS);
+    });
+    void Promise.race([rodarMarcaDaConta(url, aoGravar), teto]).finally(() => {
+      clearTimeout(relogio);
       estado.emVoo = false;
     });
   } catch {

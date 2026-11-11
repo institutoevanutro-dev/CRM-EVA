@@ -37,10 +37,10 @@
 import { ehHexValido, normalizarHex } from "./rampa";
 import { REGUA_DO_PRODUTO } from "./regua-do-produto";
 import {
-  camadaDaConta,
   camadaDaInstalacao,
   camadaDaOrganizacao,
   camadaDoAmbiente,
+  pilhaComConta,
   resolverMarca,
   type LinhaDaInstalacao,
   type MarcaDaOrganizacao,
@@ -118,14 +118,13 @@ export function resolverMarcaDaOrganizacao(
   ambiente: AmbienteDaMarca,
 ): MarcaResolvida {
   return resolverMarca(
-    [
-      // A Conta (quando ligada e guardada) vence a organização campo a campo —
-      // ver `camadaDaConta`. Vazia, a pilha é a de antes.
-      camadaDaConta(linha),
+    // A Conta (quando ligada e guardada) tira a organização da pilha — ver
+    // `pilhaComConta`. Vazia, a pilha é a de antes.
+    pilhaComConta(linha, [
       camadaDaOrganizacao(marcaDaOrganizacaoDeSettings(settings)),
       camadaDaInstalacao(linha),
       camadaDoAmbiente(ambiente),
-    ],
+    ]),
     REGUA_DO_PRODUTO,
   );
 }
