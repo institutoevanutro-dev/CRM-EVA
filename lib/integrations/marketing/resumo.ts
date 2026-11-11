@@ -10,7 +10,7 @@ import { emLotes, lerComparecimentos, lerEventosDoPeriodo, type Contato } from "
 export interface Numeros { leads: number; agendamentos: number; comparecimentos: number; sinais: number; ganhos: number; ganhos_sem_valor: number; receita_cents: string }
 export interface Resumo { currency: "BRL"; totais: Numeros; por_anuncio: (Numeros & { anuncio: string })[]; leads_sem_anuncio: number }
 
-/** Código do anúncio da Meta: `sourceId` (WAHA, camelCase) ou `source_id` (API oficial). Post impulsionado não conta. */
+/** Código do anúncio da Meta: `sourceId` (conexão não oficial, camelCase) ou `source_id` (API oficial). Post impulsionado não conta. */
 const CODIGO = /^\d{10,20}$/;
 export function anuncioDe({ adPlatform, adRaw }: { adPlatform: string | null; adRaw: unknown }): string | null {
   if (adPlatform !== "meta_ads" || !adRaw || typeof adRaw !== "object") return null;
