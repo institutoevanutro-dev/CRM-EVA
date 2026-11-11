@@ -1,23 +1,33 @@
 /**
- * "MEU DIA" — o que a pessoa logada precisa fazer hoje, e SÓ o que é dela.
+ * "MEU DIA" — o que a pessoa logada precisa fazer hoje: o que é DELA e, nas
+ * conversas, também a fila sem responsável (que qualquer um pode assumir).
  *
- * Conversas, agenda e tarefas filtram pela pessoa na própria coluna de dono.
+ * Agenda e tarefas filtram pela pessoa na própria coluna de dono; quem espera
+ * resposta é contado no banco (`fn_inicio_esperando`), sob a RLS de quem lê.
  * Avisos da Central não têm dono no schema (`agent_inbox_items` aponta para uma
  * referência polimórfica), então o dono é DERIVADO da referência — regra em
  * `escopoDoAviso` e `avisoChegaAQuem`, abaixo, e em
- * docs/superpowers/specs/2026-10-17-inicio-por-pessoa.md.
+ * docs/superpowers/specs/2026-10-17-inicio-por-pessoa.md. O que mudou em
+ * 2026-11-11 está em docs/superpowers/specs/2026-11-11-inicio-claro.md.
  */
+import { KIND_LABEL } from "@/lib/ai/agent-inbox-copy";
 import { roleAtLeast } from "@/lib/auth/types";
-import { COLUNA_DO_OCULTO } from "@/lib/inbox/contato-oculto";
-import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { tagDeIdioma } from "@/lib/i18n/datas";
+import { traduzir } from "@/lib/i18n/dicionario";
 import type { createClient } from "@/lib/supabase/server";
-import { janelaDeHoje, LIMITE_DE_ITENS, type Bloco, type ContextoDoInicio } from "./tipos";
+import {
+  corteDaEsperaRecente,
+  janelaDeHoje,
+  LIMITE_DE_ITENS,
+  type Avisos,
+  type Bloco,
+  type ContextoDoInicio,
+  type Esperando,
+} from "./tipos";
 import { HREF_MINHAS_TAREFAS } from "@/lib/tarefas/tipos";
 
 type Db = Awaited<ReturnType<typeof createClient>>;
-
-const STATUS_DE_CONVERSA_ENCERRADA = ["resolved", "closed", "archived"];
 
 /** "10:00" no fuso da clínica, no idioma de quem lê. */
 function horaNoFuso(iso: string, ctx: ContextoDoInicio): string {
@@ -158,13 +168,50 @@ async function donosDasReferencias(
   return donos;
 }
 
-export async function avisosAbertos(db: Db, ctx: ContextoDoInicio, limite = LIMITE_DE_ITENS): Promise<Bloco> {
+/**
+ * O ASSUNTO de cada tipo de aviso, dito como a recepção diria. Os cinco que mais
+ * aparecem têm frase própria; os demais usam o rótulo que a Central já mostra
+ * (`KIND_LABEL`); `other` e tipo desconhecido não têm assunto e somam em "outros".
+ */
+export const ROTULO_DO_ASSUNTO: Record<string, string> = {
+  case_stale: "Atendimentos parados, esperando decisão",
+  promise_unfulfilled: "Equipe prometeu retorno e não voltou",
+  appointment_outcome_required: "Consultas sem resultado marcado (veio ou faltou)",
+  handoff: "Paciente pediu para falar com uma pessoa",
+  followup_dead: "Mensagens de acompanhamento que pararam",
+};
+
+function rotuloDoAssunto(kind: string): string | null {
+  if (kind === "other") return null;
+  return ROTULO_DO_ASSUNTO[kind] ?? (KIND_LABEL as Record<string, string>)[kind] ?? null;
+}
+
+/**
+ * Avisos por assunto: os `maximo` maiores grupos (empate pela ordem do nome do
+ * tipo, para a tela não trocar as linhas de lugar a cada carga) e a soma do
+ * resto — os grupos que não couberam e os tipos sem assunto.
+ */
+export function agruparAvisos(
+  kinds: Array<string | null>,
+  maximo = 4,
+): { grupos: Array<{ kind: string; rotulo: string; total: number }>; outros: number } {
+  const porKind = new Map<string, number>();
+  for (const k of kinds) porKind.set(k ?? "other", (porKind.get(k ?? "other") ?? 0) + 1);
+  const comAssunto = [...porKind.entries()]
+    .map(([kind, total]) => ({ kind, rotulo: rotuloDoAssunto(kind), total }))
+    .filter((g): g is { kind: string; rotulo: string; total: number } => g.rotulo !== null)
+    .sort((a, b) => b.total - a.total || a.kind.localeCompare(b.kind));
+  const grupos = comAssunto.slice(0, maximo);
+  return { grupos, outros: kinds.length - grupos.reduce((s, g) => s + g.total, 0) };
+}
+
+export async function avisosAbertos(db: Db, ctx: ContextoDoInicio): Promise<Avisos> {
   // ponytail: lê até 1000 avisos abertos (teto do PostgREST) e filtra aqui. Numa
   // organização com mais que isso abertos, os mais antigos ficam fora da conta;
   // se acontecer, o conserto é uma função no banco que faça o mesmo filtro.
   const { data, error } = await db
     .from("agent_inbox_items")
-    .select("id,title,kind,ref_kind,ref_id,created_at")
+    .select("id,kind,ref_kind,ref_id,created_at")
     .eq("organization_id", ctx.orgId)
     .eq("status", "open")
     .order("created_at", { ascending: false })
@@ -172,55 +219,49 @@ export async function avisosAbertos(db: Db, ctx: ContextoDoInicio, limite = LIMI
   if (error) return { ok: false };
   const linhas = data ?? [];
   const donos = await donosDasReferencias(db, ctx.orgId, linhas);
-  const meus = linhas
-    .map((l) => ({ l, escopo: escopoDoAviso(l, donos, ctx.userId) }))
-    .filter(({ escopo }) => avisoChegaAQuem(escopo, ctx.papel));
-  return {
-    ok: true,
-    total: meus.length,
-    itens: meus.slice(0, limite).map(({ l, escopo }) => ({
-      id: String(l.id),
-      titulo: String(l.title ?? ""),
-      detalhe: escopo,
-      href: "/app/ai/inbox",
-    })),
-  };
+  const meus = linhas.filter((l) => avisoChegaAQuem(escopoDoAviso(l, donos, ctx.userId), ctx.papel));
+  return { ok: true, total: meus.length, ...agruparAvisos(meus.map((l) => l.kind)) };
 }
 
-export async function esperandoResposta(db: Db, ctx: ContextoDoInicio): Promise<Bloco> {
-  // Encerrar a conversa NÃO limpa `assigned_to_user_id` (fn_service_status), então
-  // as fechadas se acumulam na pessoa. O corte de status fica NA QUERY — filtrado
-  // depois do `limit`, quem tem 200+ fechadas veria "Tudo em dia" com paciente
-  // esperando (achado da revisão). "A última é do paciente" compara duas colunas,
-  // o que o PostgREST não faz; isso sim fica aqui, sobre as mais recentes.
-  const { data, error } = await db
-    .from("conversations")
-    .select(
-      "id,last_inbound_at,last_outbound_at,last_message_preview,contact:contacts(name,display_name,phone_number)",
-    )
-    .eq("organization_id", ctx.orgId)
-    .eq("assigned_to_user_id", ctx.userId)
-    .eq("is_group", false)
-    // Contato oculto do Inbox (migration 0372) não é paciente esperando.
-    .eq(COLUNA_DO_OCULTO, false)
-    .not("status", "in", `(${STATUS_DE_CONVERSA_ENCERRADA.join(",")})`)
-    .not("last_inbound_at", "is", null)
-    .order("last_inbound_at", { ascending: false })
-    .limit(200);
-  if (error) return { ok: false };
-  const esperando = (data ?? []).filter(
-    (c) =>
-      c.last_outbound_at == null ||
-      Date.parse(String(c.last_inbound_at)) > Date.parse(String(c.last_outbound_at)),
-  );
+interface EsperandoNoBanco {
+  ve_sem_responsavel: boolean;
+  recentes: { total: number; com_voce: number; sem_responsavel: number };
+  antigas: { total: number; com_voce: number; sem_responsavel: number };
+  itens: Array<{
+    id: string;
+    desde: string;
+    name: string | null;
+    display_name: string | null;
+    phone_number: string | null;
+  }>;
+}
+
+/**
+ * Quem espera resposta de quem está logado: as conversas DELA e as SEM
+ * responsável (que qualquer um pode assumir). A contagem é do banco
+ * (`fn_inicio_esperando`, migration 0408, SECURITY INVOKER): a RLS de quem lê
+ * decide o que entra, então o quadro nunca conta conversa que a pessoa não
+ * consegue abrir. Antes eram 200 linhas lidas e filtradas aqui, só das
+ * atribuídas — com 788 conversas sem responsável, a tela dizia "ninguém".
+ */
+export async function esperandoResposta(db: Db, ctx: ContextoDoInicio): Promise<Esperando> {
+  const { data, error } = await db.rpc("fn_inicio_esperando", {
+    p_org: ctx.orgId,
+    p_corte: corteDaEsperaRecente(ctx.agora),
+  });
+  if (error || !data) return { ok: false };
+  const r = data as EsperandoNoBanco;
   return {
     ok: true,
-    total: esperando.length,
-    itens: esperando.slice(0, LIMITE_DE_ITENS).map((c) => ({
-      id: String(c.id),
-      titulo:
-        nomeDoContato(Array.isArray(c.contact) ? c.contact[0] : c.contact) ??
-        String(c.last_message_preview ?? ""),
+    total: r.recentes.com_voce + r.recentes.sem_responsavel,
+    comVoce: r.recentes.com_voce,
+    semResponsavel: r.recentes.sem_responsavel,
+    veSemResponsavel: r.ve_sem_responsavel,
+    antigas: r.antigas.com_voce + r.antigas.sem_responsavel,
+    itens: r.itens.map((c) => ({
+      id: c.id,
+      titulo: rotuloDoContato(c, (texto) => traduzir(texto, ctx.idioma)),
+      desde: c.desde,
       // `?id=` é o parâmetro que a Inbox lê (11 links no repo usam esse).
       href: `/app/inbox?id=${c.id}`,
     })),

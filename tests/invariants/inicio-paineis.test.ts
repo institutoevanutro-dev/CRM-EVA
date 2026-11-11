@@ -3,11 +3,12 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { GOV_MANAGER, GOV_ORG, GOV_SESSION, lastLine, seedGov, sql } from "./gov-helpers";
 
 /**
- * Painéis do Início (migration 0330, spec 2026-10-07-inicio-paineis).
+ * Painéis do Início (migration 0330, spec 2026-10-07-inicio-paineis; a 0408
+ * trocou `fn_inicio_conversas_por_dia` por `fn_inicio_atendimento`).
  *
  * As quatro funções são SECURITY INVOKER: a RLS de cada tabela continua valendo.
  * Aqui se prova (1) que cada número sai certo — valores distintos na fixture, para
- * troca de coluna reprovar —, (2) a virada de dia no fuso da org e (3) que um membro
+ * troca de coluna reprovar —, (2) a borda da janela no fuso da org e (3) que um membro
  * da GOV_ORG pedindo a org vizinha recebe ZERO, nunca os dados dela.
  */
 
@@ -20,7 +21,6 @@ const FUNIL = "beb04444-0000-4000-8000-000000000001";
 const ETAPA_1 = "beb04444-0000-4000-8000-000000000011";
 const ETAPA_2 = "beb04444-0000-4000-8000-000000000012";
 const ETAPA_GANHO = "beb04444-0000-4000-8000-000000000013";
-const FUSO = "America/Sao_Paulo";
 
 /** Março/2026 no fuso de São Paulo (UTC-3): [01/03 00:00, 01/04 00:00). */
 const DE = "2026-03-01T03:00:00Z";
@@ -53,6 +53,7 @@ beforeAll(() => {
       ('${C(3)}', '${GOV_ORG}', 'Pac Mudo',    'webhook',  '{"utm_source":"site"}'::jsonb, '2026-03-10T13:00:00Z'),
       ('${C(4)}', '${GOV_ORG}', 'Pac Noite',   'whatsapp', '{}'::jsonb,                    '2026-02-15T13:00:00Z'),
       ('${C(5)}', '${GOV_ORG}', 'Pac Lembrete', 'manual',  '{}'::jsonb,                    '2026-02-15T13:00:00Z'),
+      ('${C(6)}', '${GOV_ORG}', 'Pac Esquecido', 'manual', '{}'::jsonb,                    '2026-02-15T13:00:00Z'),
       ('${C(9)}', '${VIZINHA}', 'Pac Vizinho', 'meta_ads', '{}'::jsonb,                    '2026-03-10T13:00:00Z');
 
     -- Conversas: 10/03 (IA sozinha, com a equipe, sem resposta) e 31/03 22h local = 01/04 01h UTC.
@@ -62,6 +63,7 @@ beforeAll(() => {
       ('${CONV(3)}', '${GOV_ORG}', '${C(3)}', '${GOV_SESSION}', 'open', '2026-03-10T15:00:00Z'),
       ('${CONV(4)}', '${GOV_ORG}', '${C(4)}', '${GOV_SESSION}', 'open', '2026-04-01T01:00:00Z'),
       ('${CONV(5)}', '${GOV_ORG}', '${C(5)}', '${GOV_SESSION}', 'open', '2026-03-10T16:00:00Z'),
+      ('${CONV(6)}', '${GOV_ORG}', '${C(6)}', '${GOV_SESSION}', 'open', '2026-03-12T10:00:00Z'),
       ('${CONV(9)}', '${VIZINHA}', '${C(9)}', '${SESSION_VIZ}', 'open', '2026-03-10T13:00:00Z');
     insert into public.messages
       (organization_id, conversation_id, channel_session_id, contact_id, type, direction, status, sent_via, sent_by_user_id, sent_at, metadata)
@@ -75,7 +77,10 @@ beforeAll(() => {
       -- Saída que FALHOU não é resposta.
       ('${GOV_ORG}', '${CONV(3)}', '${GOV_SESSION}', '${C(3)}', 'text', 'outbound', 'failed',   'crm', '${GOV_MANAGER}', '2026-03-10T15:05:00Z', '{}'::jsonb),
       -- Lembrete da Agenda: sent_via='ai' SEM marca de autoria da IA — não é a IA atendendo.
-      ('${GOV_ORG}', '${CONV(5)}', '${GOV_SESSION}', '${C(5)}', 'text', 'outbound', 'sent',     'ai',  null, '2026-03-10T16:00:00Z', '{}'::jsonb);
+      ('${GOV_ORG}', '${CONV(5)}', '${GOV_SESSION}', '${C(5)}', 'text', 'outbound', 'sent',     'ai',  null, '2026-03-10T16:00:00Z', '{}'::jsonb),
+      -- Esquecida por dois dias: é ela que separa a MEDIANA (180 s) da média (57.680 s).
+      ('${GOV_ORG}', '${CONV(6)}', '${GOV_SESSION}', '${C(6)}', 'text', 'inbound',  'received', 'ai',  null, '2026-03-12T10:00:00Z', '{}'::jsonb),
+      ('${GOV_ORG}', '${CONV(6)}', '${GOV_SESSION}', '${C(6)}', 'text', 'outbound', 'sent',     'crm', '${GOV_MANAGER}', '2026-03-14T10:00:00Z', '{}'::jsonb);
 
     -- Agenda: Vitória com 2 realizadas e 1 falta; 1 confirmada sem unidade; 1 cancelada.
     insert into public.calendar_units (id, organization_id, name) values ('${UNIDADE}', '${GOV_ORG}', 'Vitória');
@@ -102,25 +107,33 @@ beforeAll(() => {
   `);
 });
 
-describe("fn_inicio_conversas_por_dia", () => {
-  const conversas = (org: string) =>
-    linhas(`select * from public.fn_inicio_conversas_por_dia('${org}', '${DE}', '${ATE}', '${FUSO}')`);
+describe("fn_inicio_atendimento", () => {
+  const atendimento = (org: string, de = DE, ate = ATE) =>
+    JSON.parse(como(`select public.fn_inicio_atendimento('${org}', '${de}', '${ate}');`));
 
   it("separa IA sozinha, com a equipe e sem resposta; lembrete e envio que falhou não contam", () => {
-    const dia10 = conversas(GOV_ORG).find((l: { dia: string }) => l.dia === "2026-03-10");
-    expect(dia10).toMatchObject({ ia_sozinha: 1, com_equipe: 1, sem_resposta: 2, respondidas: 2 });
-    // primeira resposta: 60 s (IA) + 180 s (equipe)
-    expect(dia10.soma_primeira_resposta_s).toBe(240);
+    // Sem resposta: a do envio que falhou, a do lembrete e a das 22h do dia 31.
+    expect(atendimento(GOV_ORG)).toMatchObject({ ia_sozinha: 1, com_equipe: 2, sem_resposta: 3 });
   });
 
-  it("a conversa das 22h do dia 31 conta no dia 31 do fuso, não no dia 1", () => {
-    const dias = conversas(GOV_ORG).map((l: { dia: string }) => l.dia);
-    expect(dias).toContain("2026-03-31");
-    expect(dias).not.toContain("2026-04-01");
+  it("o tempo até a primeira resposta é a MEDIANA: a conversa esquecida por dois dias não arrasta o número", () => {
+    // Respostas em 60 s (IA), 180 s (equipe) e 172.800 s (dois dias): a do meio.
+    expect(atendimento(GOV_ORG).mediana_primeira_resposta_s).toBe(180);
   });
 
-  it("a org vizinha não vaza", () => {
-    expect(conversas(VIZINHA)).toEqual([]);
+  it("a conversa das 22h do dia 31 (01h UTC do dia 1) entra na janela que a rota calcula no fuso", () => {
+    expect(atendimento(GOV_ORG, "2026-03-31T03:00:00Z", ATE)).toMatchObject({ ia_sozinha: 0, com_equipe: 0, sem_resposta: 1 });
+  });
+
+  it("sem conversa respondida não há mediana, e a org vizinha não vaza", () => {
+    expect(atendimento(VIZINHA)).toEqual({ ia_sozinha: 0, com_equipe: 0, sem_resposta: 0, mediana_primeira_resposta_s: null });
+  });
+
+  it("a função antiga saiu, e anon não executa a nova", () => {
+    expect(lastLine(sql(`select count(*) from pg_proc where proname = 'fn_inicio_conversas_por_dia';`))).toBe("0");
+    expect(
+      lastLine(sql(`select has_function_privilege('anon', 'public.fn_inicio_atendimento(uuid, timestamptz, timestamptz)', 'execute');`)),
+    ).toBe("f");
   });
 });
 

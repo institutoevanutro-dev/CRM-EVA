@@ -15,6 +15,7 @@ export function Cartao({
   verTodos,
   rotuloVerTodos,
   className = "",
+  tituloComo: Titulo = "h3",
 }: {
   titulo: string;
   icone?: LucideIcon;
@@ -22,23 +23,48 @@ export function Cartao({
   verTodos?: string;
   rotuloVerTodos?: string;
   className?: string;
+  /** `h4` quando o cartão mora dentro de um bloco que já tem título `h3`. */
+  tituloComo?: "h3" | "h4";
 }) {
   const t = useT();
   return (
     <section className={`flex min-w-0 flex-col rounded-2xl border bg-surface p-5 shadow-sm ${className}`}>
       <div className="mb-3 flex items-start justify-between gap-3">
-        <h3 className="flex min-w-0 items-start gap-2 titulo-cartao text-text">
+        <Titulo className="flex min-w-0 items-start gap-2 titulo-cartao text-text">
           {Icone ? <Icone aria-hidden className="mt-[3px] size-4 shrink-0 text-text-muted" /> : null}
           <span className="min-w-0 break-words">{titulo}</span>
-        </h3>
+        </Titulo>
         {verTodos ? (
-          <Link className={`shrink-0 rounded-md text-sm text-accent underline-offset-4 hover:underline ${FOCO}`} href={verTodos}>
+          // No celular e no toque o link ganha 44 × 44 px de alvo; a margem
+          // negativa devolve a altura, para o título não ser empurrado.
+          <Link
+            className={`inline-flex shrink-0 items-center justify-end rounded-md text-sm text-accent underline-offset-4 hover:underline max-lg:-my-3 max-lg:min-h-11 max-lg:min-w-11 toque:-my-3 toque:min-h-11 toque:min-w-11 ${FOCO}`}
+            href={verTodos}
+          >
             {rotuloVerTodos ?? t("Ver todos")}
           </Link>
         ) : null}
       </div>
       {children}
     </section>
+  );
+}
+
+/** "há 3 h" desde um instante: há quanto tempo alguém espera. */
+export function haQuanto(iso: string, t: (s: string) => string): string {
+  const min = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000));
+  if (min < 60) return t("há {{n}} min").replace("{{n}}", String(min));
+  const h = Math.round(min / 60);
+  if (h < 48) return t("há {{n}} h").replace("{{n}}", String(h));
+  return t("há {{n}} dias").replace("{{n}}", String(Math.round(h / 24)));
+}
+
+/** Barra fina de proporção (0 a 100). Enfeite: o número ao lado é quem informa. */
+export function Barra({ pct, className = "" }: { pct: number; className?: string }) {
+  return (
+    <span aria-hidden className={`block h-2 overflow-hidden rounded-full bg-border ${className}`}>
+      <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
+    </span>
   );
 }
 

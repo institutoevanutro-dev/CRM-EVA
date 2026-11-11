@@ -1,5 +1,7 @@
 # Início com painéis da clínica (parte 3 do redesenho)
 
+> **Ajustado em 2026-11-11** por [`2026-11-11-inicio-claro.md`](2026-11-11-inicio-claro.md): esperando resposta (recente × antiga, com você + sem responsável), avisos por assunto, mediana, mesmos dias do mês anterior e Gestão em três quadros. Onde os dois textos discordam, vale o mais novo.
+
 Data: 07/10/2026. Aprovado em conversa pelo dono: os quatro painéis, a regra de "IA resolveu
 sozinha" e a visibilidade só para gestores. Parte 3 de 5 do redesenho do CRM.
 

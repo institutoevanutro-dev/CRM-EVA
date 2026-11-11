@@ -44,10 +44,26 @@ async function chamar() {
   return ((await res.json()) as { data: Record<string, unknown> }).data;
 }
 
+/** O dublê de tabelas não tem `rpc`: aqui ele ganha a resposta de `fn_inicio_esperando`. */
+function dbCom(tabelas: Parameters<typeof fakeDb>[0] = {}) {
+  const { db } = fakeDb(tabelas);
+  return Object.assign(db as object, {
+    rpc: async () => ({
+      data: {
+        ve_sem_responsavel: true,
+        recentes: { total: 3, com_voce: 1, sem_responsavel: 2 },
+        antigas: { total: 9, com_voce: 0, sem_responsavel: 4 },
+        itens: [],
+      },
+      error: null,
+    }),
+  }) as never;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   quebra.agenda = false;
-  vi.mocked(createClient).mockResolvedValue(fakeDb({}).db as never);
+  vi.mocked(createClient).mockResolvedValue(dbCom());
 });
 
 describe("GET /api/v1/inicio", () => {
@@ -62,8 +78,23 @@ describe("GET /api/v1/inicio", () => {
     comoPapel(papel);
     const d = (await chamar()) as { gestao: Record<string, { ok: boolean }> | null };
     expect(d.gestao).not.toBeNull();
-    expect(d.gestao!.configuracao!.ok).toBe(true);
+    expect(d.gestao!.configuracao).toEqual({ ok: true, total: 0, grupos: [] });
     expect(d.gestao!.gastoIa).toEqual({ ok: true, consumidoCents: 0, limiteCents: null });
+  });
+
+  it("meu dia: esperando resposta soma o que é da pessoa com o que está sem responsável; avisos vêm por assunto", async () => {
+    comoPapel("agent");
+    const d = (await chamar()) as { meuDia: Record<string, unknown> };
+    expect(d.meuDia.esperando).toEqual({
+      ok: true,
+      total: 3,
+      comVoce: 1,
+      semResponsavel: 2,
+      veSemResponsavel: true,
+      antigas: 4,
+      itens: [],
+    });
+    expect(d.meuDia.avisos).toEqual({ ok: true, total: 0, grupos: [], outros: 0 });
   });
 
   it("um bloco que lança vira {ok:false} e os outros continuam", async () => {
@@ -81,11 +112,11 @@ describe("GET /api/v1/inicio", () => {
       org: { orgId: ORG, role: "agent" },
     } as never);
     vi.mocked(createClient).mockResolvedValue(
-      fakeDb({
+      dbCom({
         calendar_appointments: [
           { id: "h1", organization_id: ORG, owner_user_id: "u1", status: "confirmed", title: "Consulta", starts_at: new Date().toISOString() },
         ],
-      }).db as never,
+      }),
     );
     const d = (await chamar()) as { meuDia: Record<string, { ok: boolean }> };
     expect(d.meuDia.agenda!.ok).toBe(true);
