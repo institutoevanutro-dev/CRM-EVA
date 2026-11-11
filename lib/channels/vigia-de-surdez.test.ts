@@ -15,7 +15,9 @@ import {
   ehAvisoDoVigiaDeSurdez,
   precisaPerguntarSeEntrou,
   relogioDoVigia,
+  tempoNaJanela,
   tetoDosReinicios,
+  type JanelaDoVigia,
 } from "./vigia-de-surdez";
 
 /**
@@ -200,6 +202,89 @@ describe("decidirVigiaDeSurdez: depois do reinício", () => {
       metadata: { [CHAVE_DO_VIGIA]: { reiniciado_em: ha(50 * MIN) } },
     };
     expect(decidirVigiaDeSurdez(antiga)).toEqual({ acao: "reiniciar", quedaEm: ha(50 * MIN), tentativa: 2 });
+  });
+});
+
+/**
+ * O alarme da madrugada (novembro/2026): o websocket oscila de noite, ninguém
+ * escreve, e 45 min de silêncio chegavam sempre. Fora da janela do canal o
+ * silêncio não é suspeito: os relógios contam só o tempo dentro dela.
+ * Brasília é UTC-3 o ano todo; 10/11/2026 é uma terça.
+ */
+describe("decidirVigiaDeSurdez: só o tempo dentro da janela do canal conta", () => {
+  const SP = "America/Sao_Paulo";
+  const PADRAO: JanelaDoVigia = { inicio: 7, fim: 22, fuso: SP, domingo: true };
+  /** "2026-11-10T23:30" no horário de Brasília. */
+  const br = (local: string) => new Date(`${local}:00.000-03:00`);
+  const noite = (queda: string, agora: string, janela: JanelaDoVigia = PADRAO, extra: Record<string, unknown> = {}) =>
+    decidirVigiaDeSurdez({ ...base, lastStatusChangeAt: br(queda).toISOString(), agora: br(agora), janela, ...extra });
+
+  it("queda às 23:30 sem mensagem: não suspeita às 00:15 nem às 06:59, e suspeita às 07:45", () => {
+    expect(noite("2026-11-10T23:30", "2026-11-11T00:15")).toEqual({ acao: "nada", motivo: "recente" });
+    expect(noite("2026-11-10T23:30", "2026-11-11T06:59")).toEqual({ acao: "nada", motivo: "recente" });
+    expect(noite("2026-11-10T23:30", "2026-11-11T07:44")).toEqual({ acao: "nada", motivo: "recente" });
+    expect(noite("2026-11-10T23:30", "2026-11-11T07:45")).toEqual({
+      acao: "reiniciar",
+      quedaEm: br("2026-11-10T23:30").toISOString(),
+      tentativa: 1,
+    });
+  });
+
+  it("queda às 21:40: conta 20 min até as 22h e o resto a partir das 7h", () => {
+    expect(tempoNaJanela(br("2026-11-10T21:40").getTime(), br("2026-11-11T07:00").getTime(), PADRAO)).toBe(20 * MIN);
+    expect(noite("2026-11-10T21:40", "2026-11-10T23:59")).toEqual({ acao: "nada", motivo: "recente" });
+    expect(noite("2026-11-10T21:40", "2026-11-11T07:24")).toEqual({ acao: "nada", motivo: "recente" });
+    expect(noite("2026-11-10T21:40", "2026-11-11T07:25")).toMatchObject({ acao: "reiniciar", tentativa: 1 });
+  });
+
+  it("de dia continua como antes: 45 min de silêncio", () => {
+    expect(noite("2026-11-10T10:00", "2026-11-10T10:44")).toEqual({ acao: "nada", motivo: "recente" });
+    expect(noite("2026-11-10T10:00", "2026-11-10T10:45")).toMatchObject({ acao: "reiniciar", tentativa: 1 });
+  });
+
+  it("janela personalizada (8h às 20h) é respeitada", () => {
+    const oitoAsVinte: JanelaDoVigia = { inicio: 8, fim: 20, fuso: SP, domingo: true };
+    expect(noite("2026-11-10T19:30", "2026-11-11T07:59", oitoAsVinte)).toEqual({ acao: "nada", motivo: "recente" });
+    expect(noite("2026-11-10T19:30", "2026-11-11T08:14", oitoAsVinte)).toEqual({ acao: "nada", motivo: "recente" });
+    expect(noite("2026-11-10T19:30", "2026-11-11T08:15", oitoAsVinte)).toMatchObject({ acao: "reiniciar" });
+    // Às 07:45 a janela padrão já teria suspeitado; esta ainda não abriu.
+    expect(noite("2026-11-10T23:30", "2026-11-11T07:45", oitoAsVinte)).toEqual({ acao: "nada", motivo: "recente" });
+  });
+
+  it("domingo fora da janela (allow_sunday desligado) também não conta", () => {
+    const semDomingo: JanelaDoVigia = { ...PADRAO, domingo: false };
+    // 15/11/2026 é domingo.
+    expect(noite("2026-11-14T21:50", "2026-11-16T07:30", semDomingo)).toEqual({ acao: "nada", motivo: "recente" });
+    expect(noite("2026-11-14T21:50", "2026-11-16T07:35", semDomingo)).toMatchObject({ acao: "reiniciar" });
+  });
+
+  it("mensagem chegando fecha como antes", () => {
+    const depoisDoReinicio = {
+      metadata: marca({ reiniciado_em: br("2026-11-11T07:45").toISOString(), queda_em: br("2026-11-10T23:30").toISOString() }),
+    };
+    expect(noite("2026-11-10T23:30", "2026-11-11T07:50", PADRAO, { ...depoisDoReinicio, houveEntrada: true })).toEqual({
+      acao: "voltou",
+      quedaEm: br("2026-11-10T23:30").toISOString(),
+    });
+    expect(noite("2026-11-10T23:30", "2026-11-11T07:50", PADRAO, depoisDoReinicio)).toEqual({ acao: "nada", motivo: "aguardando" });
+    expect(noite("2026-11-10T23:30", "2026-11-11T07:45", PADRAO, { houveEntrada: true })).toEqual({ acao: "nada", motivo: "saudavel" });
+  });
+
+  it("as 6 h também são de janela: a queda da madrugada é investigada de manhã, não descartada como antiga", () => {
+    // Relógio de parede: 8h15 depois da queda. Janela: 45 min.
+    expect(noite("2026-11-10T23:30", "2026-11-11T07:45").acao).toBe("reiniciar");
+    // 6 h de janela depois (13:00) ainda vale; passou disso, é antiga.
+    expect(noite("2026-11-10T23:30", "2026-11-11T13:00").acao).toBe("reiniciar");
+    expect(noite("2026-11-10T23:30", "2026-11-11T13:01")).toEqual({ acao: "nada", motivo: "antiga" });
+  });
+
+  it("reinício de manhã sem efeito: a segunda tentativa espera mais 45 min de janela, não de noite", () => {
+    const reiniciou = (r: string) => ({
+      metadata: marca({ reiniciado_em: br(r).toISOString(), reinicios: [br(r).toISOString()], queda_em: br("2026-11-10T21:00").toISOString() }),
+    });
+    // Reiniciou às 21:45 (45 min de janela) e não voltou: 15 min até as 22h, o resto às 7h.
+    expect(noite("2026-11-10T21:00", "2026-11-11T07:29", PADRAO, reiniciou("2026-11-10T21:45"))).toEqual({ acao: "nada", motivo: "aguardando" });
+    expect(noite("2026-11-10T21:00", "2026-11-11T07:30", PADRAO, reiniciou("2026-11-10T21:45"))).toMatchObject({ acao: "reiniciar", tentativa: 2 });
   });
 });
 
