@@ -81,6 +81,11 @@ export type CamadaDeMarca = {
   readonly nome?: string | null;
   readonly logoUrl?: string | null;
   /**
+   * O logo para FUNDO ESCURO (o menu lateral verde). Só a Conta tem os dois; nas
+   * outras camadas vale o `logoUrl` — ver `resolverMarca`.
+   */
+  readonly logoEscuroUrl?: string | null;
+  /**
    * O envelope CRU, como veio da fonte — `unknown` de propósito: validar é
    * trabalho do resolvedor, e uma camada que já entregasse validado esconderia
    * de onde o dado inválido veio.
@@ -319,6 +324,9 @@ export function resolverMarca(
 ): MarcaResolvida {
   const nome = primeiroDefinido(camadas, (c) => c.nome);
   const logo = primeiroDefinido(camadas, (c) => c.logoUrl);
+  // A MESMA camada do `logoUrl` (nunca a escura de uma camada e a clara de outra);
+  // sem escura nela, a clara.
+  const escuro = primeiroDefinido(camadas, (c) => ((c.logoUrl ?? "").trim() ? c.logoEscuroUrl || c.logoUrl : null));
   const base = resolveBranding(nome?.valor, logo?.valor);
 
   const motivos: MotivoDaMarca[] = [];
@@ -338,6 +346,7 @@ export function resolverMarca(
 
   return {
     ...base,
+    logoEscuroUrl: escuro?.valor ?? base.logoUrl,
     cor,
     origens: {
       nome: nome?.origem ?? PADRAO,
@@ -384,6 +393,8 @@ export type LinhaDaInstalacao = {
   readonly conta_nome?: string | null;
   readonly conta_accent_hex?: string | null;
   readonly conta_logo_path?: string | null;
+  /** A logo da Conta para fundo escuro (`conta_logos.escuro_path`). Só o menu lateral a usa. */
+  readonly conta_logo_escuro_path?: string | null;
   /** Ícone da aba vindo da Conta (Plano 7). Só `app/icon.tsx` e `icone-versao.ts` leem. */
   readonly conta_icone_path?: string | null;
 };
@@ -405,16 +416,19 @@ export const NOME_DO_MODULO = "CRM";
 export function camadaDaConta(linha: LinhaDaInstalacao | null): CamadaDeMarca {
   const hex = (linha?.conta_accent_hex ?? "").trim();
   const nome = linha?.conta_nome ?? null;
-  const caminho = linha?.conta_logo_path ?? null;
+  // Regra 2.6 da Conta: um lado ausente usa o outro.
+  const clara = (linha?.conta_logo_path ?? "").trim();
+  const escura = (linha?.conta_logo_escuro_path ?? "").trim();
   const clinica = (nome ?? "").trim();
-  if (!hex && !clinica && !(caminho ?? "").trim()) return { origem: "conta" };
+  if (!hex && !clinica && !clara && !escura) return { origem: "conta" };
   // Decisão do André (11/11, spec §2 item 8): "CRM · <clínica>", como os outros
   // módulos; sem nome de clínica na Conta, só o nome do módulo — o nome local
   // NÃO volta.
   const base = {
     origem: "conta",
     nome: clinica ? `${NOME_DO_MODULO} · ${clinica}` : NOME_DO_MODULO,
-    logoUrl: logoDaCamada(caminho, null),
+    logoUrl: logoDaCamada(clara || escura, null),
+    logoEscuroUrl: logoDaCamada(escura || clara, null),
   };
   return hex ? { ...base, cor: envelopeDeSemente(hex) } : base;
 }

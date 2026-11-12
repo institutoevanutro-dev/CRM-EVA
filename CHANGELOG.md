@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.10.1] — 2026-11-12
+
+### Corrigido
+
+- **O menu lateral mostra a logo para fundo escuro da Conta** Com a marca vinda da Conta Eva Link (`CONTA_URL`), o menu lateral — que é verde — mostrava a logo feita para fundo **claro**, que ali aparecia como um retângulo quase branco. Agora o CRM guarda também a logo **escura** da Conta (no mesmo lugar e no mesmo formato da clara) e o menu passa a usá-la; a tela de login, o ícone da aba e os e-mails continuam com a logo clara. Se a Conta tiver só uma das duas logos, ela serve aos dois lugares, como antes. Não há nada a fazer: depois da atualização, o CRM baixa a logo escura na próxima leitura da Conta (até dois minutos). A logo da organização, quando existe, continua na frente. Sem `CONTA_URL`, nada muda.
+
 ## [5.10.0] — 2026-11-12
 
 ### Adicionado
@@ -8987,7 +8993,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.10.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.10.1...HEAD
+[5.10.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.10.0...v5.10.1
 [5.10.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.9.0...v5.10.0
 [5.9.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.8.0...v5.9.0
 [5.8.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.7.0...v5.8.0

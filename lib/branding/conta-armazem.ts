@@ -9,11 +9,13 @@
  * por motivo.
  *
  * Decisões declaradas:
- *  - Uma coluna de logo só (`conta_logo_path`), e é a CLARA (para fundo claro):
- *    é a que o ícone da aba e o e-mail (tema claro sempre) pedem, e o CRM tem um
- *    logo por camada. A clara ausente já chega como a escura (regra 2.6, no
- *    leitor). O sha da escura fica em `conta_logos.escuro` só para não baixá-la
- *    de novo a cada mudança.
+ *  - `conta_logo_path` é a CLARA (para fundo claro): a que a fachada, o ícone da
+ *    aba e o e-mail (tema claro sempre) pedem. A ESCURA (para fundo escuro — o
+ *    menu lateral verde) vai para o mesmo bucket, mesmo padrão de caminho, e o
+ *    caminho dela fica em `conta_logos.escuro_path` (jsonb, sem migration). Um
+ *    lado ausente na Conta já chega como o outro (regra 2.6, no leitor). Até a
+ *    5.10.0 a escura não era baixada: linha com `conta_logos.escuro` e sem
+ *    `escuro_path` é baixada uma vez (ver `anteriorDaRodada`).
  *  - O ícone da aba (Plano 7) é a coluna `conta_icone_path`, mesmo padrão de
  *    caminho das logos (`platform/conta-<sha>.png`); o sha fica em
  *    `conta_logos.icone`. Campo ausente na Conta (versão anterior) não mexe nele;
@@ -44,7 +46,9 @@ export type ContaGuardada = {
   readonly conta_atualizado_em: string | null;
 };
 
-type Logos = { escuro: string | null; claro: string | null; icone: string | null };
+type Logos = { escuro: string | null; claro: string | null; icone: string | null; escuro_path: string | null };
+
+const CAMINHO_DA_CONTA = /^platform\/conta-[0-9a-f]{64}\.(png|jpg)$/;
 
 const COLUNAS_DA_CONTA =
   "conta_nome, conta_accent_hex, conta_logo_path, conta_icone_path, conta_logos, conta_etag, conta_atualizado_em";
@@ -126,10 +130,29 @@ export async function lerContaGuardada(): Promise<ContaGuardada | null | "erro">
 
 function logosGuardados(g: ContaGuardada | null): Logos {
   const l = g?.conta_logos;
-  if (typeof l !== "object" || l === null) return { escuro: null, claro: null, icone: null };
+  if (typeof l !== "object" || l === null) return { escuro: null, claro: null, icone: null, escuro_path: null };
   const o = l as Record<string, unknown>;
   const sha = (v: unknown) => (typeof v === "string" ? v : null);
-  return { escuro: sha(o.escuro), claro: sha(o.claro), icone: sha(o.icone) };
+  // O jsonb não tem o CHECK de `conta_logo_path`: a forma é conferida aqui.
+  const caminho = typeof o.escuro_path === "string" && CAMINHO_DA_CONTA.test(o.escuro_path) ? o.escuro_path : null;
+  return { escuro: sha(o.escuro), claro: sha(o.claro), icone: sha(o.icone), escuro_path: caminho };
+}
+
+/** O caminho da logo ESCURA guardada (fundo escuro), ou `null`. Lido por `instalacao.ts`. */
+export function logoEscuraGuardada(g: ContaGuardada | null): string | null {
+  return logosGuardados(g).escuro_path;
+}
+
+/**
+ * O que a rodada diz à Conta que já tem. Escura com sha e SEM caminho (guardada
+ * pela 5.10.0, que não a baixava) é dada como ausente — e sem ETag, senão o 304
+ * nunca deixaria baixá-la.
+ */
+function anteriorDaRodada(g: ContaGuardada | null) {
+  if (!g) return null;
+  const logos = logosGuardados(g);
+  if (logos.escuro && !logos.escuro_path) return { etag: null, logos: { ...logos, escuro: null } };
+  return { etag: g.conta_etag, logos };
 }
 
 function caminhoDaLogo(logo: LogoBaixada): string {
@@ -175,10 +198,15 @@ async function limparLogosVelhas(manter: readonly (string | null)[]): Promise<vo
     // nova entre a nossa gravação e esta limpeza, e ela nunca pode sair.
     const atual = await lerContaGuardada();
     if (atual === "erro") return;
-    const fica = [...manter, atual?.conta_logo_path ?? null, atual?.conta_icone_path ?? null];
+    const fica = [
+      ...manter,
+      atual?.conta_logo_path ?? null,
+      atual?.conta_icone_path ?? null,
+      logosGuardados(atual).escuro_path,
+    ];
     const velhas = data
       .map((o) => `${PREFIXO}${o.name}`)
-      .filter((c) => /^platform\/conta-[0-9a-f]{64}\.(png|jpg)$/.test(c) && !fica.includes(c));
+      .filter((c) => CAMINHO_DA_CONTA.test(c) && !fica.includes(c));
     // ponytail: list → releitura → remove não é atômico entre processos; se outro
     // processo gravar uma logo nova (já listada) depois da releitura, ela some e o
     // logo fica quebrado até a próxima troca. Muito improvável (1 processo de app
@@ -211,7 +239,7 @@ const VAZIO: Estado = {
 
 function mesmoEstado(a: Estado, g: ContaGuardada | null): boolean {
   const b = logosGuardados(g);
-  const la = a.conta_logos ?? { escuro: null, claro: null, icone: null };
+  const la = a.conta_logos ?? { escuro: null, claro: null, icone: null, escuro_path: null };
   return (
     a.conta_nome === (g?.conta_nome ?? null) &&
     a.conta_accent_hex === (g?.conta_accent_hex ?? null) &&
@@ -220,6 +248,7 @@ function mesmoEstado(a: Estado, g: ContaGuardada | null): boolean {
     la.escuro === b.escuro &&
     la.claro === b.claro &&
     la.icone === b.icone &&
+    la.escuro_path === b.escuro_path &&
     a.conta_etag === (g?.conta_etag ?? null) &&
     a.conta_atualizado_em === (g?.conta_atualizado_em ?? null)
   );
@@ -268,17 +297,28 @@ async function estadoDaNova(
     caminho = null;
     logos.escuro = null;
     logos.claro = null;
+    logos.escuro_path = null;
   } else {
-    const escuro = r.logos.escuro;
-    if (escuro && escuro !== "mesma") logos.escuro = escuro.sha;
     const claro = r.logos.claro;
+    let caminhoDaClara: string | null = null;
     if (claro && claro !== "mesma") {
-      const enviado = await enviarLogo(claro);
-      if (enviado) {
-        caminho = enviado;
+      caminhoDaClara = await enviarLogo(claro);
+      if (caminhoDaClara) {
+        caminho = caminhoDaClara;
         logos.claro = claro.sha;
       } else {
         etag = null; // a próxima rodada tenta a logo de novo
+      }
+    }
+    const escuro = r.logos.escuro;
+    if (escuro && escuro !== "mesma") {
+      // Mesmo arquivo da clara (a Conta só tem uma logo): não envia duas vezes.
+      const enviado = escuro === claro && caminhoDaClara ? caminhoDaClara : await enviarLogo(escuro);
+      if (enviado) {
+        logos.escuro_path = enviado;
+        logos.escuro = escuro.sha;
+      } else {
+        etag = null;
       }
     }
     // `null` com sha anunciado = recusada (motivo nos avisos): caminho e sha ficam.
@@ -324,7 +364,7 @@ export async function rodarMarcaDaConta(
   try {
     const g = await lerContaGuardada();
     if (g === "erro") return "sem-leitura";
-    const anterior = g ? { etag: g.conta_etag, logos: logosGuardados(g) } : null;
+    const anterior = anteriorDaRodada(g);
     const r = await lerMarcaDaConta(contaUrl, anterior, dep);
 
     if (r.tipo === "falha") {
@@ -349,12 +389,17 @@ export async function rodarMarcaDaConta(
     if (!(await gravar(estado, r.tipo === "nova"))) return "falha";
     aoGravar();
     const trocouIcone = estado.conta_icone_path !== (g?.conta_icone_path ?? null);
-    if (vigente() && (estado.conta_logo_path !== (g?.conta_logo_path ?? null) || trocouIcone)) {
+    const escuraNova = estado.conta_logos?.escuro_path ?? null;
+    const escuraVelha = logosGuardados(g).escuro_path;
+    const trocouEscura = escuraNova !== escuraVelha;
+    if (vigente() && (estado.conta_logo_path !== (g?.conta_logo_path ?? null) || trocouIcone || trocouEscura)) {
       void limparLogosVelhas([
         estado.conta_logo_path,
         g?.conta_logo_path ?? null,
         estado.conta_icone_path,
         g?.conta_icone_path ?? null,
+        escuraNova,
+        escuraVelha,
       ]);
     }
     return "gravou";

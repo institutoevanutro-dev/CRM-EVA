@@ -283,12 +283,12 @@ async function MarcaNoNavegador() {
  */
 async function MarcaDosClientComponents({ children }: { children: React.ReactNode }) {
   const { marca } = await marcaResolvida();
-  // Só os três campos de `Branding`: `marca` carrega junto `cor`, `origens` e
+  // Só os campos de `Branding` (`logoEscuroUrl` é o do menu lateral, que é verde): `marca` carrega junto `cor`, `origens` e
   // `motivos`, que são diagnóstico do servidor e não têm leitor no navegador —
   // mandá-los engordaria o payload do RSC de TODA página com dado que ninguém lê.
   return (
     <MarcaDaInstalacaoProvider
-      marca={{ name: marca.name, logoUrl: marca.logoUrl, initial: marca.initial }}
+      marca={{ name: marca.name, logoUrl: marca.logoUrl, logoEscuroUrl: marca.logoEscuroUrl, initial: marca.initial }}
     >
       {children}
     </MarcaDaInstalacaoProvider>

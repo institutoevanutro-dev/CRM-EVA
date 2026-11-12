@@ -65,7 +65,7 @@ import { env } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 
-import { contaUrlLigada, dispararMarcaDaConta, lerContaGuardada } from "./conta-armazem";
+import { contaUrlLigada, dispararMarcaDaConta, lerContaGuardada, logoEscuraGuardada } from "./conta-armazem";
 import { invalidarVersaoDoIcone } from "./icone-versao";
 import { ehHexValido, normalizarHex } from "./rampa";
 import type { LinhaDaInstalacao } from "./resolve";
@@ -397,6 +397,7 @@ async function lerOuSemear(): Promise<LinhaDaMarca | null | "erro"> {
     conta_accent_hex: conta.conta_accent_hex,
     conta_logo_path: conta.conta_logo_path,
     conta_icone_path: conta.conta_icone_path ?? null,
+    conta_logo_escuro_path: logoEscuraGuardada(conta),
   };
 }
 
