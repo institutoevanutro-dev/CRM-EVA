@@ -10633,6 +10633,10 @@ alter table public.agent_inbox_items
     -- aviso na Central apontando para a conversa, com push no celular
     -- (`somDoAviso`). Entra NESTA lista (bloco único por constraint, #159).
     'followup_notify_team',
+    -- (migration 0407) O paciente informou, numa conversa atendida pela
+    -- equipe, um dado diferente do cadastro: a sugestão espera na ficha.
+    -- Entra NESTA lista (bloco único por constraint, #159).
+    'contact_data_divergent',
     'other'
   ));
 
@@ -11954,10 +11958,12 @@ comment on table public.contact_field_proposals is
 -- apêndice faria este bloco falhar no `update.sh` de um clone cuja fila já
 -- tenha uma proposta de nascimento. Quem já instalou recebe a mudança porque o
 -- `update.sh` reaplica o baseline inteiro, este bloco incluído.
+-- 0407 (extração silenciosa de cadastro): `cpf` e `endereco` entram AQUI, no
+-- mesmo bloco único, pelo mesmo motivo do `birthdate` acima.
 alter table public.contact_field_proposals
   drop constraint if exists contact_field_proposals_campo_check,
   add constraint contact_field_proposals_campo_check check (
-    campo = any (array['email', 'name', 'phone_number', 'birthdate']::text[])
+    campo = any (array['email', 'name', 'phone_number', 'birthdate', 'cpf', 'endereco']::text[])
   );
 
 alter table public.contact_field_proposals
@@ -20145,6 +20151,12 @@ returns jsonb language plpgsql security definer set search_path=public as $$
 declare e public.event_log; a public.calendar_appointments; r public.appointment_recovery_receipts;
  contact uuid; rev bigint; result text; candidates uuid[]; pointer uuid; agent uuid; version uuid; node text; boundary jsonb; enrollment uuid;
  attended boolean; v_status text; v_kind text; pinned uuid;
+ -- 0410: janela em que uma inscrição anterior no MESMO fluxo pós-consulta impede outra.
+ janela_pos_consulta constant interval := interval '30 days';
+ -- 0410: tipos da linha do tempo (lib/leads/activity-vocabulary.ts, ATIVIDADE_POS_CONSULTA_*).
+ c_tl_trocado constant text := 'followup_superseded';
+ c_tl_mantido constant text := 'followup_not_reopened';
+ ant_id uuid; ant_inicio timestamptz; trocada uuid; trocada_consulta uuid; trocada_no text;
 begin
  select * into e from public.event_log where organization_id=p_org and id=p_event and event_type in ('appointment.outcome_confirmed','appointment.attended') and entity_kind='appointment';
  if not found then raise exception 'appointment_source_event_missing' using errcode='P0002'; end if;
@@ -20173,7 +20185,42 @@ begin
      and v.followup->'enabled'='true'::jsonb and v.followup->'flow_pointer_ids' ? p.id::text);
   result:=case when coalesce(cardinality(candidates),0)=0 then 'not_configured' when cardinality(candidates)>1 then 'ambiguous' else null end;
  end if;
- -- 0373: presença NOVA recomeça a régua pós-consulta. A inscrição viva de uma
+ -- 0410: presença não abre inscrição duplicada no MESMO fluxo pós-consulta.
+ -- Incidente de 11/11: presença marcada em lote em consultas antigas abriu uma
+ -- segunda inscrição para quem já estava no fluxo (ou já tinha recebido as
+ -- mensagens dele), e a régua inteira saiu de novo. Contam: a inscrição VIVA no
+ -- mesmo fluxo e a iniciada nele dentro da janela que enviou ao menos uma
+ -- mensagem (encerrada sem envio — cancelada antes, ou com as ações puladas por
+ -- prazo vencido — não chegou ao paciente). Decide a DATA DA CONSULTA: se a
+ -- consulta desta presença não é mais recente que a de alguma delas (ou se uma
+ -- delas não tem consulta), nada abre; se é mais recente, abre e a viva (se
+ -- houver) é trocada por ela, logo abaixo. Nos dois casos a linha do tempo do
+ -- negócio diz o porquê. Sem recibo e sem aviso: não é pendência; o retorno
+ -- `already_enrolled` fica no detalhe do consumidor do event_log.
+ if result is null and attended then
+  select x.id,ca.starts_at into ant_id,ant_inicio from public.followup_enrollments x
+   left join public.calendar_appointments ca on ca.organization_id=p_org and ca.id=x.appointment_id
+   where x.organization_id=p_org and x.contact_id=contact and x.pointer_id=candidates[1]
+    and (x.status in ('active','waiting_reply','paused_handoff','paused_manual')
+     or (x.started_at>now()-janela_pos_consulta
+      and exists(select 1 from public.followup_enrollment_events ev
+       where ev.organization_id=p_org and ev.enrollment_id=x.id and ev.event_type='action_sent')))
+   order by ca.starts_at desc nulls first limit 1;
+  if found and (ant_inicio is null or ant_inicio>=a.starts_at) then
+   insert into public.crm_lead_activities(organization_id,lead_id,contact_id,source_module,source_id,type,actor_kind,reason,payload)
+    select p_org,l.id,contact,'followup',a.id,c_tl_mantido,'system',
+     'Presença confirmada numa consulta que não é mais recente que a do pós-consulta em andamento ou já enviado; nada foi aberto.',
+     jsonb_build_object('appointment_id',a.id,'pointer_id',candidates[1],'enrollment_id',ant_id)
+    from public.crm_leads l where l.organization_id=p_org and l.contact_id=contact
+     and not exists(select 1 from public.crm_lead_activities t where t.organization_id=p_org and t.lead_id=l.id and t.type=c_tl_mantido and t.source_id=a.id);
+   return jsonb_build_object('result','already_enrolled');
+  end if;
+  select x.id,x.appointment_id into trocada,trocada_consulta from public.followup_enrollments x
+   where x.organization_id=p_org and x.contact_id=contact and x.pointer_id=candidates[1]
+    and x.status in ('active','waiting_reply','paused_handoff','paused_manual') limit 1;
+ end if;
+ -- 0373: presença NOVA recomeça a régua pós-consulta (no MESMO fluxo, desde a
+ -- 0410, só quando a consulta é mais recente: decidido no bloco acima). A inscrição viva de uma
  -- presença ANTERIOR não é "outro acompanhamento": é cancelada no mesmo bloco
  -- da inscrição nova, logo abaixo. Qualquer outro fluxo vivo continua impedindo.
  if result is null and exists(select 1 from public.followup_enrollments x where x.organization_id=p_org and x.contact_id=contact and x.status in ('active','waiting_reply','paused_handoff','paused_manual')
@@ -20203,6 +20250,18 @@ begin
   exception when serialization_failure or sqlstate 'PT409' then result:='stale'; end;
   if result is null then
    begin
+    -- 0410: a viva do MESMO fluxo, de consulta mais antiga, é trocada pela nova.
+    if trocada is not null then
+     update public.followup_enrollments set status='cancelled',
+      cancel_reason='Presença confirmada numa consulta mais recente; o acompanhamento recomeçou por ela.',
+      completed_at=now(),next_eval_at=null,claimed_until=null
+      where organization_id=p_org and id=trocada and status in ('active','waiting_reply','paused_handoff','paused_manual')
+      returning current_node_id into trocada_no;
+     insert into public.followup_enrollment_events(organization_id,enrollment_id,node_id,event_type,payload,idempotency_key)
+      values(p_org,trocada,trocada_no,'superseded_by_newer_appointment',
+       jsonb_build_object('appointment_id',a.id,'previous_appointment_id',trocada_consulta),'superseded:'||a.id||':'||a.revision)
+      on conflict do nothing;
+    end if;
     if attended then
      update public.followup_enrollments x set status='cancelled',cancel_reason='O paciente compareceu a uma nova consulta; o acompanhamento recomeçou por ela.',
       completed_at=now(),next_eval_at=null,claimed_until=null
@@ -20215,6 +20274,13 @@ begin
     values(p_org,pointer,version,contact,(boundary->>'conversation_id')::uuid,agent,node,boundary,a.id,a.revision) returning id into enrollment;
     insert into public.followup_enrollment_events(organization_id,enrollment_id,node_id,event_type,payload,idempotency_key)
      values(p_org,enrollment,node,'enrolled',jsonb_build_object('trigger_kind',v_kind,'appointment_id',a.id,'appointment_revision',a.revision),'appointment:'||a.id||':'||a.revision);
+    if trocada is not null then
+     insert into public.crm_lead_activities(organization_id,lead_id,contact_id,source_module,source_id,type,actor_kind,reason,payload)
+      select p_org,l.id,contact,'followup',a.id,c_tl_trocado,'system',
+       'Presença confirmada numa consulta mais recente; o pós-consulta anterior foi encerrado e recomeçou por esta.',
+       jsonb_build_object('appointment_id',a.id,'previous_appointment_id',trocada_consulta,'enrollment_id',enrollment,'previous_enrollment_id',trocada)
+      from public.crm_leads l where l.organization_id=p_org and l.contact_id=contact;
+    end if;
     result:='started';
    exception when unique_violation then result:='other_flow'; end;
   end if;
@@ -22469,6 +22535,12 @@ returns jsonb language plpgsql security definer set search_path=public as $$
 declare e public.event_log; a public.calendar_appointments; r public.appointment_recovery_receipts;
  contact uuid; rev bigint; result text; candidates uuid[]; pointer uuid; agent uuid; version uuid; node text; boundary jsonb; enrollment uuid;
  attended boolean; v_status text; v_kind text; pinned uuid;
+ -- 0410: janela em que uma inscrição anterior no MESMO fluxo pós-consulta impede outra.
+ janela_pos_consulta constant interval := interval '30 days';
+ -- 0410: tipos da linha do tempo (lib/leads/activity-vocabulary.ts, ATIVIDADE_POS_CONSULTA_*).
+ c_tl_trocado constant text := 'followup_superseded';
+ c_tl_mantido constant text := 'followup_not_reopened';
+ ant_id uuid; ant_inicio timestamptz; trocada uuid; trocada_consulta uuid; trocada_no text;
 begin
  select * into e from public.event_log where organization_id=p_org and id=p_event and event_type in ('appointment.outcome_confirmed','appointment.attended') and entity_kind='appointment';
  if not found then raise exception 'appointment_source_event_missing' using errcode='P0002'; end if;
@@ -22497,7 +22569,42 @@ begin
      and v.followup->'enabled'='true'::jsonb and v.followup->'flow_pointer_ids' ? p.id::text);
   result:=case when coalesce(cardinality(candidates),0)=0 then 'not_configured' when cardinality(candidates)>1 then 'ambiguous' else null end;
  end if;
- -- 0373: presença NOVA recomeça a régua pós-consulta. A inscrição viva de uma
+ -- 0410: presença não abre inscrição duplicada no MESMO fluxo pós-consulta.
+ -- Incidente de 11/11: presença marcada em lote em consultas antigas abriu uma
+ -- segunda inscrição para quem já estava no fluxo (ou já tinha recebido as
+ -- mensagens dele), e a régua inteira saiu de novo. Contam: a inscrição VIVA no
+ -- mesmo fluxo e a iniciada nele dentro da janela que enviou ao menos uma
+ -- mensagem (encerrada sem envio — cancelada antes, ou com as ações puladas por
+ -- prazo vencido — não chegou ao paciente). Decide a DATA DA CONSULTA: se a
+ -- consulta desta presença não é mais recente que a de alguma delas (ou se uma
+ -- delas não tem consulta), nada abre; se é mais recente, abre e a viva (se
+ -- houver) é trocada por ela, logo abaixo. Nos dois casos a linha do tempo do
+ -- negócio diz o porquê. Sem recibo e sem aviso: não é pendência; o retorno
+ -- `already_enrolled` fica no detalhe do consumidor do event_log.
+ if result is null and attended then
+  select x.id,ca.starts_at into ant_id,ant_inicio from public.followup_enrollments x
+   left join public.calendar_appointments ca on ca.organization_id=p_org and ca.id=x.appointment_id
+   where x.organization_id=p_org and x.contact_id=contact and x.pointer_id=candidates[1]
+    and (x.status in ('active','waiting_reply','paused_handoff','paused_manual')
+     or (x.started_at>now()-janela_pos_consulta
+      and exists(select 1 from public.followup_enrollment_events ev
+       where ev.organization_id=p_org and ev.enrollment_id=x.id and ev.event_type='action_sent')))
+   order by ca.starts_at desc nulls first limit 1;
+  if found and (ant_inicio is null or ant_inicio>=a.starts_at) then
+   insert into public.crm_lead_activities(organization_id,lead_id,contact_id,source_module,source_id,type,actor_kind,reason,payload)
+    select p_org,l.id,contact,'followup',a.id,c_tl_mantido,'system',
+     'Presença confirmada numa consulta que não é mais recente que a do pós-consulta em andamento ou já enviado; nada foi aberto.',
+     jsonb_build_object('appointment_id',a.id,'pointer_id',candidates[1],'enrollment_id',ant_id)
+    from public.crm_leads l where l.organization_id=p_org and l.contact_id=contact
+     and not exists(select 1 from public.crm_lead_activities t where t.organization_id=p_org and t.lead_id=l.id and t.type=c_tl_mantido and t.source_id=a.id);
+   return jsonb_build_object('result','already_enrolled');
+  end if;
+  select x.id,x.appointment_id into trocada,trocada_consulta from public.followup_enrollments x
+   where x.organization_id=p_org and x.contact_id=contact and x.pointer_id=candidates[1]
+    and x.status in ('active','waiting_reply','paused_handoff','paused_manual') limit 1;
+ end if;
+ -- 0373: presença NOVA recomeça a régua pós-consulta (no MESMO fluxo, desde a
+ -- 0410, só quando a consulta é mais recente: decidido no bloco acima). A inscrição viva de uma
  -- presença ANTERIOR não é "outro acompanhamento": é cancelada no mesmo bloco
  -- da inscrição nova, logo abaixo. Qualquer outro fluxo vivo continua impedindo.
  if result is null and exists(select 1 from public.followup_enrollments x where x.organization_id=p_org and x.contact_id=contact and x.status in ('active','waiting_reply','paused_handoff','paused_manual')
@@ -22527,6 +22634,18 @@ begin
   exception when serialization_failure or sqlstate 'PT409' then result:='stale'; end;
   if result is null then
    begin
+    -- 0410: a viva do MESMO fluxo, de consulta mais antiga, é trocada pela nova.
+    if trocada is not null then
+     update public.followup_enrollments set status='cancelled',
+      cancel_reason='Presença confirmada numa consulta mais recente; o acompanhamento recomeçou por ela.',
+      completed_at=now(),next_eval_at=null,claimed_until=null
+      where organization_id=p_org and id=trocada and status in ('active','waiting_reply','paused_handoff','paused_manual')
+      returning current_node_id into trocada_no;
+     insert into public.followup_enrollment_events(organization_id,enrollment_id,node_id,event_type,payload,idempotency_key)
+      values(p_org,trocada,trocada_no,'superseded_by_newer_appointment',
+       jsonb_build_object('appointment_id',a.id,'previous_appointment_id',trocada_consulta),'superseded:'||a.id||':'||a.revision)
+      on conflict do nothing;
+    end if;
     if attended then
      update public.followup_enrollments x set status='cancelled',cancel_reason='O paciente compareceu a uma nova consulta; o acompanhamento recomeçou por ela.',
       completed_at=now(),next_eval_at=null,claimed_until=null
@@ -22539,6 +22658,13 @@ begin
     values(p_org,pointer,version,contact,(boundary->>'conversation_id')::uuid,agent,node,boundary,a.id,a.revision) returning id into enrollment;
     insert into public.followup_enrollment_events(organization_id,enrollment_id,node_id,event_type,payload,idempotency_key)
      values(p_org,enrollment,node,'enrolled',jsonb_build_object('trigger_kind',v_kind,'appointment_id',a.id,'appointment_revision',a.revision),'appointment:'||a.id||':'||a.revision);
+    if trocada is not null then
+     insert into public.crm_lead_activities(organization_id,lead_id,contact_id,source_module,source_id,type,actor_kind,reason,payload)
+      select p_org,l.id,contact,'followup',a.id,c_tl_trocado,'system',
+       'Presença confirmada numa consulta mais recente; o pós-consulta anterior foi encerrado e recomeçou por esta.',
+       jsonb_build_object('appointment_id',a.id,'previous_appointment_id',trocada_consulta,'enrollment_id',enrollment,'previous_enrollment_id',trocada)
+      from public.crm_leads l where l.organization_id=p_org and l.contact_id=contact;
+    end if;
     result:='started';
    exception when unique_violation then result:='other_flow'; end;
   end if;
@@ -32680,67 +32806,9 @@ on conflict (id) do update
 create index if not exists conversations_org_created_idx on public.conversations (organization_id, created_at);
 create index if not exists contacts_org_created_idx on public.contacts (organization_id, created_at);
 
--- A coluna da 0372 (contato oculto do Inbox) nasce TAMBÉM aqui: a função logo
--- abaixo a lê desde a 0372, e `language sql` confere o corpo ao ser criada —
--- numa instalação nova este bloco roda antes do da 0372. Idempotente; o bloco
--- da 0372 repete o mesmo `add column if not exists`.
-alter table public.conversations
-  add column if not exists contato_oculto boolean not null default false;
-
--- Conversas novas por dia no fuso da org. "IA sozinha" = a IA falou e ninguém da
--- equipe; "com a equipe" = alguém da equipe falou; "sem resposta" = nenhum dos dois.
--- Corpo FINAL (migration 0372: conversa de contato oculto do Inbox não conta),
--- o mesmo que o bloco da 0372 repete no fim do arquivo.
-create or replace function public.fn_inicio_conversas_por_dia(p_org uuid, p_inicio timestamptz, p_fim timestamptz, p_fuso text)
-returns table(dia date, ia_sozinha int, com_equipe int, sem_resposta int, soma_primeira_resposta_s float8, respondidas int)
-language sql stable
-set search_path = public
-as $$
-  with conv as (
-    select c.id, (c.created_at at time zone p_fuso)::date as dia
-      from public.conversations c
-     where c.organization_id = p_org and not c.is_group and not c.contato_oculto
-       and c.created_at >= p_inicio and c.created_at < p_fim
-  ), msg as (
-    -- sent_via='ai' cobre QUALQUER ator não humano (lembrete, campanha, automação);
-    -- fala da IA é a marca de autoria, a mesma régua de ehFalaDaIa
-    -- (lib/ai/handoff/aviso-ao-lead.ts). Envio que falhou não é resposta.
-    select m.conversation_id, m.direction, m.sent_at,
-           (m.direction = 'outbound' and m.status <> 'failed'
-             and coalesce(m.metadata->>'aviso_de_escalacao', '') <> 'true'
-             and (jsonb_typeof(m.metadata->'ai_actor_id') = 'string'
-                  or m.metadata->>'ai_generated' = 'true'
-                  or m.metadata->>'texto_escrito_pela_ia' = 'true')) as da_ia,
-           (m.direction = 'outbound' and m.status <> 'failed'
-             and (m.sent_by_user_id is not null or m.sent_via in ('user', 'external_device'))) as da_equipe
-      from public.messages m
-      join conv on conv.id = m.conversation_id
-     where m.organization_id = p_org
-  ), por_conv as (
-    select conv.id, conv.dia,
-           coalesce(bool_or(m.da_ia), false) as ia,
-           coalesce(bool_or(m.da_equipe), false) as humano,
-           min(m.sent_at) filter (where m.direction = 'inbound') as pri_in
-      from conv
-      left join msg m on m.conversation_id = conv.id
-     group by conv.id, conv.dia
-  ), com_resposta as (
-    select p.*,
-           (select min(m.sent_at) from msg m
-             where m.conversation_id = p.id and (m.da_ia or m.da_equipe)
-               and m.sent_at > p.pri_in) as pri_out
-      from por_conv p
-  )
-  select p.dia,
-         (count(*) filter (where p.ia and not p.humano))::int,
-         (count(*) filter (where p.humano))::int,
-         (count(*) filter (where not p.ia and not p.humano))::int,
-         coalesce(sum(extract(epoch from p.pri_out - p.pri_in)) filter (where p.pri_out > p.pri_in), 0)::float8,
-         (count(*) filter (where p.pri_out > p.pri_in))::int
-    from com_resposta p
-   group by p.dia
-   order by p.dia;
-$$;
+-- `fn_inicio_conversas_por_dia` nascia aqui. Saiu na migration 0408 (o gráfico
+-- por dia deu lugar a `fn_inicio_atendimento`); o `drop ... if exists` para quem
+-- já instalou está no bloco da 0408, no fim do arquivo.
 
 -- Agenda por unidade. Comparecimento é calculado na rota: realizadas ÷ (realizadas + faltas).
 create or replace function public.fn_inicio_agenda(p_org uuid, p_inicio timestamptz, p_fim timestamptz)
@@ -32817,11 +32885,9 @@ as $$
    order by 3 desc;
 $$;
 
-revoke execute on function public.fn_inicio_conversas_por_dia(uuid, timestamptz, timestamptz, text) from public, anon;
 revoke execute on function public.fn_inicio_agenda(uuid, timestamptz, timestamptz) from public, anon;
 revoke execute on function public.fn_inicio_funil(uuid, uuid, timestamptz, timestamptz, timestamptz) from public, anon;
 revoke execute on function public.fn_inicio_origem(uuid, timestamptz, timestamptz) from public, anon;
-grant execute on function public.fn_inicio_conversas_por_dia(uuid, timestamptz, timestamptz, text) to authenticated;
 grant execute on function public.fn_inicio_agenda(uuid, timestamptz, timestamptz) to authenticated;
 grant execute on function public.fn_inicio_funil(uuid, uuid, timestamptz, timestamptz, timestamptz) to authenticated;
 grant execute on function public.fn_inicio_origem(uuid, timestamptz, timestamptz) to authenticated;
@@ -36273,8 +36339,6 @@ notify pgrst, 'reload schema';
 -- (o porquê inteiro está no cabeçalho de lá). `contacts.inbox_hidden_at` marca o
 -- contato; `conversations.contato_oculto` é a cópia que o Inbox filtra, mantida
 -- por gatilho dos dois lados (molde da 0332); só o servidor escreve a marca.
--- `fn_inicio_conversas_por_dia` repete aqui o corpo final, que é também o da
--- primeira (e única outra) definição, no bloco da 0330.
 --
 -- ⚠️ ANTES do bloco da VARREDURA anon, que é de propósito o último a criar
 -- função (`tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`).
@@ -36391,58 +36455,9 @@ do $janela$ begin
   revoke all on function public.fn_ocultacao_do_contato_so_o_servidor() from public, anon, authenticated;
 end $janela$;
 
--- O painel de conversas por dia do Início (0330) deixa de contar conversa de
--- contato oculto. Corpo idêntico ao da 0330, com `and not c.contato_oculto`.
-create or replace function public.fn_inicio_conversas_por_dia(p_org uuid, p_inicio timestamptz, p_fim timestamptz, p_fuso text)
-returns table(dia date, ia_sozinha int, com_equipe int, sem_resposta int, soma_primeira_resposta_s float8, respondidas int)
-language sql stable
-set search_path = public
-as $$
-  with conv as (
-    select c.id, (c.created_at at time zone p_fuso)::date as dia
-      from public.conversations c
-     where c.organization_id = p_org and not c.is_group and not c.contato_oculto
-       and c.created_at >= p_inicio and c.created_at < p_fim
-  ), msg as (
-    -- sent_via='ai' cobre QUALQUER ator não humano (lembrete, campanha, automação);
-    -- fala da IA é a marca de autoria, a mesma régua de ehFalaDaIa
-    -- (lib/ai/handoff/aviso-ao-lead.ts). Envio que falhou não é resposta.
-    select m.conversation_id, m.direction, m.sent_at,
-           (m.direction = 'outbound' and m.status <> 'failed'
-             and coalesce(m.metadata->>'aviso_de_escalacao', '') <> 'true'
-             and (jsonb_typeof(m.metadata->'ai_actor_id') = 'string'
-                  or m.metadata->>'ai_generated' = 'true'
-                  or m.metadata->>'texto_escrito_pela_ia' = 'true')) as da_ia,
-           (m.direction = 'outbound' and m.status <> 'failed'
-             and (m.sent_by_user_id is not null or m.sent_via in ('user', 'external_device'))) as da_equipe
-      from public.messages m
-      join conv on conv.id = m.conversation_id
-     where m.organization_id = p_org
-  ), por_conv as (
-    select conv.id, conv.dia,
-           coalesce(bool_or(m.da_ia), false) as ia,
-           coalesce(bool_or(m.da_equipe), false) as humano,
-           min(m.sent_at) filter (where m.direction = 'inbound') as pri_in
-      from conv
-      left join msg m on m.conversation_id = conv.id
-     group by conv.id, conv.dia
-  ), com_resposta as (
-    select p.*,
-           (select min(m.sent_at) from msg m
-             where m.conversation_id = p.id and (m.da_ia or m.da_equipe)
-               and m.sent_at > p.pri_in) as pri_out
-      from por_conv p
-  )
-  select p.dia,
-         (count(*) filter (where p.ia and not p.humano))::int,
-         (count(*) filter (where p.humano))::int,
-         (count(*) filter (where not p.ia and not p.humano))::int,
-         coalesce(sum(extract(epoch from p.pri_out - p.pri_in)) filter (where p.pri_out > p.pri_in), 0)::float8,
-         (count(*) filter (where p.pri_out > p.pri_in))::int
-    from com_resposta p
-   group by p.dia
-   order by p.dia;
-$$;
+-- `fn_inicio_conversas_por_dia` (0330) era redefinida aqui para não contar
+-- conversa de contato oculto. A função saiu na migration 0408; quem a substitui
+-- (`fn_inicio_atendimento`, bloco da 0408) já nasce com `not c.contato_oculto`.
 
 notify pgrst, 'reload schema';
 -- ---- fim: ocultar um contato do Inbox (migration 0372) ----
@@ -36451,6 +36466,12 @@ notify pgrst, 'reload schema';
 -- Derivado de supabase/migrations/20261017120000_0376_inicio_visao_da_clinica.sql
 -- (o porquê inteiro está no cabeçalho de lá). Uma função SECURITY INVOKER nova,
 -- revogada de public e anon. Quem mede: tests/invariants/inicio-visao-da-clinica.test.ts.
+-- A 0408 trocou o corpo AQUI, no lugar: `p_ant_fim` fecha os MESMOS DIAS do mês
+-- anterior, o bloco `leads` virou `vendas` (todos os funis, com desistências e
+-- valor por moeda) e `esperando` foi para `fn_inicio_esperando`. A assinatura
+-- mudou, então a de oito argumentos sai antes.
+drop function if exists public.fn_inicio_resumo_da_clinica(uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz);
+
 create or replace function public.fn_inicio_resumo_da_clinica(
   p_org uuid,
   p_hoje_inicio timestamptz,
@@ -36459,7 +36480,8 @@ create or replace function public.fn_inicio_resumo_da_clinica(
   p_semana_fim timestamptz,
   p_mes_inicio timestamptz,
   p_mes_fim timestamptz,
-  p_ant_inicio timestamptz
+  p_ant_inicio timestamptz,
+  p_ant_fim timestamptz
 )
 returns jsonb
 language sql stable
@@ -36485,37 +36507,33 @@ as $$
            group by a.owner_user_id
         ) p
     ), '[]'::jsonb),
-    'esperando', (
-      select jsonb_build_object(
-               'total', count(*)::int,
-               'sem_responsavel', (count(*) filter (where c.assigned_to_user_id is null))::int,
-               'desde', min(coalesce(c.awaiting_since, c.last_inbound_at)))
-        from public.conversations c
-       where c.organization_id = p_org
-         and not c.is_group
-         and not c.contato_oculto
-         and c.status not in ('resolved', 'closed', 'archived')
-         and c.last_inbound_at is not null
-         and (c.last_outbound_at is null or c.last_inbound_at > c.last_outbound_at)
-    ),
-    'leads', (
+    -- TODOS os funis. `novos_anterior` conta só até `p_ant_fim`: os mesmos dias
+    -- do mês anterior, nunca o mês anterior inteiro contra o mês pela metade.
+    'vendas', (
       select jsonb_build_object(
                'novos_mes', (count(*) filter (where l.created_at >= p_mes_inicio and l.created_at < p_mes_fim))::int,
-               'novos_anterior', (count(*) filter (where l.created_at >= p_ant_inicio and l.created_at < p_mes_inicio))::int,
+               'novos_anterior', (count(*) filter (where l.created_at >= p_ant_inicio and l.created_at < p_ant_fim))::int,
                'ganhos_mes', (count(*) filter (where l.status = 'won'
                                                  and l.closed_at >= p_mes_inicio and l.closed_at < p_mes_fim))::int,
-               'ganhos_anterior', (count(*) filter (where l.status = 'won'
-                                                      and l.closed_at >= p_ant_inicio and l.closed_at < p_mes_inicio))::int)
+               'perdidos_mes', (count(*) filter (where l.status = 'lost'
+                                                   and l.closed_at >= p_mes_inicio and l.closed_at < p_mes_fim))::int,
+               'valor', coalesce((
+                 select jsonb_object_agg(v.moeda, v.total::text)
+                   from (select coalesce(g.currency, 'BRL') as moeda, sum(g.value_cents) as total
+                           from public.crm_leads g
+                          where g.organization_id = p_org and g.status = 'won' and g.value_cents is not null
+                            and g.closed_at >= p_mes_inicio and g.closed_at < p_mes_fim
+                          group by 1) v), '{}'::jsonb))
         from public.crm_leads l
        where l.organization_id = p_org
-         and (l.created_at >= p_ant_inicio or l.closed_at >= p_ant_inicio)
+         and (l.created_at >= p_ant_inicio or l.closed_at >= p_mes_inicio)
     )
   );
 $$;
 
 -- As DUAS origens de EXECUTE saem (CLAUDE.md, item 9); só quem tem sessão chama.
-revoke execute on function public.fn_inicio_resumo_da_clinica(uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz) from public, anon;
-grant execute on function public.fn_inicio_resumo_da_clinica(uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz) to authenticated;
+revoke execute on function public.fn_inicio_resumo_da_clinica(uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz) from public, anon;
+grant execute on function public.fn_inicio_resumo_da_clinica(uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz) to authenticated;
 
 notify pgrst, 'reload schema';
 -- ---- fim: Visão da clínica (migration 0376) ----
@@ -38458,6 +38476,198 @@ alter table public.ai_agent_versions
   check (reply_min_interval_ms is null or (reply_min_interval_ms >= 0 and reply_min_interval_ms <= 600000));
 -- ---- fim: intervalo mínimo entre respostas da IA (migration 0405) ----
 
+-- ---- extração silenciosa de cadastro (migration 0407) ----
+-- O vocábulo novo de `contact_field_proposals.campo` (`cpf`, `endereco`) e o
+-- `kind` novo da Central (`contact_data_divergent`) entraram por EDIÇÃO NO
+-- LUGAR dos blocos únicos dessas constraints (cerca
+-- `baseline-constraint-reconstruida`). Aqui só o que é novo de verdade: a
+-- coluna do CPF cifrado e a constraint que impede CPF em claro nesta fila.
+-- Idempotente: `add column if not exists`, `drop constraint if exists` + `add`.
+-- Nenhuma linha existente viola a constraint: a coluna nasce nula e nenhuma
+-- proposta antiga é de CPF.
+alter table public.contact_field_proposals
+  add column if not exists valor_cifrado bytea;
+
+comment on column public.contact_field_proposals.valor_cifrado is
+  'CPF proposto, cifrado por encrypt_cpf (o mesmo par de contacts.cpf_encrypted). Só em campo = ''cpf''; valor_proposto guarda a máscara.';
+
+alter table public.contact_field_proposals
+  drop constraint if exists contact_field_proposals_cpf_cifrado,
+  add constraint contact_field_proposals_cpf_cifrado check (
+    case when campo = 'cpf'
+      then valor_cifrado is not null
+           and valor_anterior is null
+           and length(regexp_replace(valor_proposto, '[^0-9]', '', 'g')) <= 2
+      else valor_cifrado is null
+    end
+  );
+-- ---- aplicar o CPF de uma proposta ACEITA, sem o número sair do banco ----
+-- A rota de decisão (`app/api/v1/contacts/[id]/proposals/[proposal_id]`) marca
+-- a proposta `accepted` e chama esta função pela service role. Ela decifra
+-- `valor_cifrado` só para calcular o índice (`cpf_indice`) e grava o PAR na
+-- ficha — `contacts_cpf_consistency` exige os dois juntos. Nunca devolve o
+-- CPF: o número não atravessa a rede nem passa pela memória do app.
+-- Só alcança proposta `accepted` da organização pedida (a decisão humana vem
+-- antes) e não grava em contato anonimizado. CPF de outro contato vivo da
+-- organização estoura `uniq_contacts_org_cpf` (23505), que a rota traduz.
+create or replace function public.fn_aplicar_cpf_proposto(p_org uuid, p_proposal uuid) returns boolean
+    language plpgsql volatile security definer
+    set search_path to 'public', 'private', 'extensions', 'pg_temp'
+    as $$
+declare
+  k text := private.fn_oauth_key();
+  v_contato uuid;
+  v_cifra bytea;
+begin
+  if k is null or length(k) < 32 then
+    raise exception 'chave de cifra da instalação ausente — rode o update.sh'
+      using errcode = '55000';
+  end if;
+  select contact_id, valor_cifrado into v_contato, v_cifra
+    from public.contact_field_proposals
+   where id = p_proposal and organization_id = p_org and campo = 'cpf' and status = 'accepted';
+  -- As MESMAS três guardas de forma de `decrypt_cpf` (0275), na mesma ordem
+  -- (`credencial-de-enfeite-nao-derruba-a-leitura.test.ts`): sem proposta ou
+  -- sem cifra, curto demais para ser pacote, sem cara de pacote PGP.
+  if v_cifra is null then
+    return false;
+  end if;
+  if octet_length(v_cifra) < 66 then
+    return false;
+  end if;
+  if get_byte(v_cifra, 0) < 128 then
+    return false;
+  end if;
+  update public.contacts
+     set cpf_encrypted = v_cifra,
+         cpf_hash = public.cpf_indice(pgp_sym_decrypt(v_cifra, 'cpf:' || k))
+   where id = v_contato and organization_id = p_org and not is_anonymized;
+  return found;
+end$$;
+
+revoke execute on function public.fn_aplicar_cpf_proposto(uuid, uuid) from public, anon, authenticated;
+grant  execute on function public.fn_aplicar_cpf_proposto(uuid, uuid) to service_role;
+-- ---- fim: extração silenciosa de cadastro (migration 0407) ----
+
+-- ---- Início claro: espera recente, mediana e mesmos dias do mês anterior (migration 0408) ----
+-- Derivado de supabase/migrations/20261111130000_0408_inicio_claro.sql (o porquê
+-- inteiro está no cabeçalho de lá). Duas funções SECURITY INVOKER novas,
+-- revogadas de public e anon; cria função, então entra ANTES da VARREDURA anon.
+-- `fn_inicio_resumo_da_clinica` foi trocada NO LUGAR, no bloco da 0376, e as
+-- duas definições de `fn_inicio_conversas_por_dia` (blocos da 0330 e da 0372)
+-- saíram do texto: aqui fica só o `drop` para quem já instalou. Quem mede:
+-- tests/invariants/inicio-esperando.test.ts e inicio-paineis.test.ts.
+create or replace function public.fn_inicio_esperando(p_org uuid, p_corte timestamptz)
+returns jsonb
+language sql stable
+set search_path = public
+as $$
+  with esperando as (
+    select c.id, c.contact_id, c.assigned_to_user_id,
+           coalesce(c.awaiting_since, c.last_inbound_at) as desde
+      from public.conversations c
+     where c.organization_id = p_org
+       and not c.is_group
+       and not c.contato_oculto
+       and c.status not in ('resolved', 'closed', 'archived')
+       and c.last_inbound_at is not null
+       and (c.last_outbound_at is null or c.last_inbound_at > c.last_outbound_at)
+  ), marcadas as (
+    select e.*,
+           e.desde >= p_corte as recente,
+           coalesce(e.assigned_to_user_id = auth.uid(), false) as com_voce,
+           e.assigned_to_user_id is null as sem_responsavel
+      from esperando e
+  )
+  select jsonb_build_object(
+    've_sem_responsavel', coalesce(public.fn_can_view_conversation(p_org, null), false),
+    'recentes', jsonb_build_object(
+      'total', (count(*) filter (where m.recente))::int,
+      'com_voce', (count(*) filter (where m.recente and m.com_voce))::int,
+      'sem_responsavel', (count(*) filter (where m.recente and m.sem_responsavel))::int),
+    'antigas', jsonb_build_object(
+      'total', (count(*) filter (where not m.recente))::int,
+      'com_voce', (count(*) filter (where not m.recente and m.com_voce))::int,
+      'sem_responsavel', (count(*) filter (where not m.recente and m.sem_responsavel))::int),
+    'itens', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', i.id, 'desde', i.desde,
+               'name', ct.name, 'display_name', ct.display_name, 'phone_number', ct.phone_number)
+             order by i.desde, i.id)
+        from (
+          select x.id, x.contact_id, x.desde
+            from marcadas x
+           where x.recente and (x.com_voce or x.sem_responsavel)
+           order by x.desde, x.id
+           limit 5
+        ) i
+        left join public.contacts ct on ct.id = i.contact_id and ct.organization_id = p_org
+    ), '[]'::jsonb))
+    from marcadas m;
+$$;
+
+create or replace function public.fn_inicio_atendimento(p_org uuid, p_inicio timestamptz, p_fim timestamptz)
+returns jsonb
+language sql stable
+set search_path = public
+as $$
+  with conv as (
+    select c.id
+      from public.conversations c
+     where c.organization_id = p_org and not c.is_group and not c.contato_oculto
+       and c.created_at >= p_inicio and c.created_at < p_fim
+  ), msg as (
+    -- sent_via='ai' cobre QUALQUER ator não humano (lembrete, campanha, automação);
+    -- fala da IA é a marca de autoria, a mesma régua de ehFalaDaIa
+    -- (lib/ai/handoff/aviso-ao-lead.ts). Envio que falhou não é resposta.
+    select m.conversation_id, m.direction, m.sent_at,
+           (m.direction = 'outbound' and m.status <> 'failed'
+             and coalesce(m.metadata->>'aviso_de_escalacao', '') <> 'true'
+             and (jsonb_typeof(m.metadata->'ai_actor_id') = 'string'
+                  or m.metadata->>'ai_generated' = 'true'
+                  or m.metadata->>'texto_escrito_pela_ia' = 'true')) as da_ia,
+           (m.direction = 'outbound' and m.status <> 'failed'
+             and (m.sent_by_user_id is not null or m.sent_via in ('user', 'external_device'))) as da_equipe
+      from public.messages m
+      join conv on conv.id = m.conversation_id
+     where m.organization_id = p_org
+  ), por_conv as (
+    select conv.id,
+           coalesce(bool_or(m.da_ia), false) as ia,
+           coalesce(bool_or(m.da_equipe), false) as humano,
+           min(m.sent_at) filter (where m.direction = 'inbound') as pri_in
+      from conv
+      left join msg m on m.conversation_id = conv.id
+     group by conv.id
+  ), com_resposta as (
+    select p.*,
+           (select min(m.sent_at) from msg m
+             where m.conversation_id = p.id and (m.da_ia or m.da_equipe)
+               and m.sent_at > p.pri_in) as pri_out
+      from por_conv p
+  )
+  select jsonb_build_object(
+    'ia_sozinha', (count(*) filter (where p.ia and not p.humano))::int,
+    'com_equipe', (count(*) filter (where p.humano))::int,
+    'sem_resposta', (count(*) filter (where not p.ia and not p.humano))::int,
+    -- Mediana, não média: uma conversa esquecida por dias não arrasta o número.
+    'mediana_primeira_resposta_s',
+      percentile_cont(0.5) within group (order by extract(epoch from p.pri_out - p.pri_in))
+        filter (where p.pri_out > p.pri_in))
+    from com_resposta p;
+$$;
+
+drop function if exists public.fn_inicio_conversas_por_dia(uuid, timestamptz, timestamptz, text);
+
+-- As DUAS origens de EXECUTE saem (CLAUDE.md, item 9); só quem tem sessão chama.
+revoke execute on function public.fn_inicio_esperando(uuid, timestamptz) from public, anon;
+revoke execute on function public.fn_inicio_atendimento(uuid, timestamptz, timestamptz) from public, anon;
+grant execute on function public.fn_inicio_esperando(uuid, timestamptz) to authenticated;
+grant execute on function public.fn_inicio_atendimento(uuid, timestamptz, timestamptz) to authenticated;
+
+notify pgrst, 'reload schema';
+-- ---- fim: Início claro (migration 0408) ----
+
 
 
 
@@ -38984,3 +39194,17 @@ begin
   end if;
 end $$;
 -- ---- fim: marca da Conta (migration 0409) ----
+
+-- ---- presença não abre inscrição duplicada no mesmo pós-consulta (migration 0410) ----
+-- Derivado de supabase/migrations/20261111200000_0410_pos_consulta_sem_inscricao_duplicada.sql
+-- (incidente e critério: cabeçalho de lá).
+--
+-- NÃO HÁ CORPO DE FUNÇÃO AQUI, de propósito: a troca de `fn_appointment_recover`
+-- foi feita no lugar, nas DUAS definições desta função acima neste arquivo.
+-- Assim a reaplicação não passa por versão antiga dela
+-- (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`), e a última
+-- definição é igual à da migration 0410
+-- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
+-- Nenhuma função nova, tabela, coluna ou constraint.
+-- Quem mede a regra: `tests/invariants/agenda-presenca-pos-consulta.test.ts`.
+-- ---- fim: presença não abre inscrição duplicada no mesmo pós-consulta (migration 0410) ----

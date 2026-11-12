@@ -96,6 +96,8 @@ export const POLITICAS_DE_AVISO = {
   },
   // A caixa "Avisar a equipe" do follow-up. Sem conversa na inscrição, o contato.
   followup_notify_team: { refs: ["conversation", "contact"], orientacao: "Abra a conversa e fale com o cliente, como o fluxo pediu." },
+  // A extração silenciosa (0407) achou dado diferente do cadastro: a sugestão está na ficha.
+  contact_data_divergent: { refs: ["contact"], orientacao: "Abra a ficha do contato e confirme ou recuse a sugestão." },
   // `conversation`: a resposta da IA cortada no teto de tokens (`inbound-turn.ts`).
   other: { refs: ["lead", "channel_session", "appointment", "ai_agent", "ai_provider_credential", "conversation"], orientacao: "Confira a situação descrita neste aviso com a pessoa responsável." },
 } satisfies Record<InboxKind, Politica>;

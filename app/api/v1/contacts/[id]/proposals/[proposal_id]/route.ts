@@ -31,6 +31,7 @@ import { ApiError } from "@/lib/api/types";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
@@ -138,6 +139,47 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     return ok({ decision: "dismissed", campo: p.campo }, { requestId });
   }
 
+  // ---- accept de CPF (0407): o número nunca sai do banco ----
+  //
+  // A proposta guarda o CPF só cifrado, e o PATCH da ficha pede o número em
+  // claro. Em vez de decifrar aqui, `fn_aplicar_cpf_proposto` grava o par
+  // (cifra + índice) direto na ficha, e só para proposta já `accepted` desta
+  // organização — o UPDATE acima é a decisão humana que a função exige.
+  if (p.campo === "cpf") {
+    const { data: aplicado, error: erroCpf } = await createAdminClient().rpc("fn_aplicar_cpf_proposto", {
+      p_org: orgId,
+      p_proposal: p.id,
+    });
+    if (erroCpf) {
+      if ((erroCpf as { code?: string }).code === "23505") {
+        return fail("contact_exists", t("Este CPF já está no cadastro de outro contato."), 409, { requestId });
+      }
+      return fail("internal_error", t("Não foi possível gravar o dado."), 500, { requestId });
+    }
+    if (aplicado !== true) {
+      // Contato anonimizado (ou apagado) entre a proposta e o clique.
+      return fail("lgpd_anonymization_irreversible", t("Não foi possível gravar."), 403, { requestId });
+    }
+  }
+
+  // ---- endereço (0407): mora em `custom_fields.endereco`, e o PATCH da ficha
+  // troca o `custom_fields` INTEIRO — por isso a mescla com o que já está lá.
+  let customFields: Record<string, unknown> | null = null;
+  if (p.campo === "endereco") {
+    const { data: ficha, error: erroFicha } = await supabase
+      .from("contacts")
+      .select("custom_fields")
+      .eq("organization_id", orgId)
+      .eq("id", contactId)
+      .maybeSingle();
+    if (erroFicha || !ficha) return fail("internal_error", t("Não foi possível gravar o dado."), 500, { requestId });
+    const atual = (ficha as { custom_fields?: unknown }).custom_fields;
+    customFields = {
+      ...(atual && typeof atual === "object" && !Array.isArray(atual) ? (atual as Record<string, unknown>) : {}),
+      endereco: p.valor_proposto,
+    };
+  }
+
   // ---- accept: agora sim escreve, e pelo caminho que já tem as regras ----
   try {
     await patchContactHandler(
@@ -145,7 +187,12 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
       { organization_id: orgId, actor: { type: "user", id: userId }, requestId },
       contactId,
       {
-        [p.campo]: p.valor_proposto,
+        // CPF já foi gravado acima; o PATCH só leva a base legal.
+        ...(p.campo === "cpf"
+          ? {}
+          : p.campo === "endereco"
+            ? { custom_fields: customFields }
+            : { [p.campo]: p.valor_proposto }),
         // A BASE LEGAL, gravada no mesmo ato (spec 17 §4b).
         //
         // Escopo `transactional` por L-05, cuja exceção já cobre comunicação

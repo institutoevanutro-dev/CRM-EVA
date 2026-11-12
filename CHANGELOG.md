@@ -8,6 +8,36 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.9.0] — 2026-11-12
+
+### Adicionado
+
+- **A integração com o Financeiro passa a saber quem assumiu o cliente** A leitura de contato que o Financeiro faz no CRM agora traz também
+  `assigned_email`: o e-mail da pessoa da equipe que assumiu a conversa mais
+  recente do cliente. O Financeiro usa esse e-mail como vendedor das propostas
+  que chegam do Prontuário. Quando ninguém assumiu, ou a conversa está com a IA,
+  o campo vem vazio. Nada muda para quem não usa a integração.
+
+### Corrigido
+
+- **O agendamento de quem veio de anúncio clique-para-WhatsApp volta a chegar à Meta** Quando o paciente veio de um anúncio clique-para-WhatsApp, o aviso de agendamento ia para a Meta com o identificador do clique, mas sem o ID da Página do Facebook. A Meta recusa esse formato (erro 100), então nenhum desses agendamentos chegava lá. Agora, em **Configurações › Conversões**, há o campo **ID da Página do Facebook**: com ele preenchido, o aviso sai ligado ao clique no anúncio. Sem ele, o aviso sai só com o telefone criptografado, que a Meta aceita, em vez de ser recusado. A lista de avisos também passa a mostrar o subcódigo da recusa, para dizer o que faltou. Isso vale também para a conexão do WhatsApp por QR, que recebe o identificador do clique.
+
+- **O pós-consulta não manda mais mensagens atrasadas nem repete a régua para quem já está nela** Quando a presença era marcada semanas depois da consulta, o acompanhamento pós-consulta mandava de uma vez as mensagens cujo prazo já tinha passado (por exemplo, a de 7 e a de 15 dias, minutos depois da marcação). Agora, se uma espera contada a partir da consulta já venceu há mais de um dia, a mensagem seguinte não é enviada: o fluxo segue até a próxima espera que ainda está no futuro, e o histórico da inscrição mostra "Mensagem não enviada: o prazo já tinha passado". Atrasos pequenos, como a janela de horário que solta o envio na manhã seguinte, continuam enviando. Pulada a mensagem, também não há espera pela resposta, nem etiqueta de "sem resposta", nem aviso na Central. Marcar presença também não abre mais uma segunda inscrição no mesmo fluxo pós-consulta para quem já está nele, ou recebeu mensagens dele nos últimos 30 dias: se a consulta marcada é mais antiga (ou do mesmo horário), nada abre; se é mais recente, o acompanhamento recomeça por ela e o anterior é encerrado. Nos dois casos a linha do tempo do negócio diz o que aconteceu. Você não precisa fazer nada: a atualização troca a função do banco sozinha.
+
+## [5.8.0] — 2026-11-11
+
+### Adicionado
+
+- **Leitura do cadastro nas conversas atendidas pela equipe** Quando a equipe atende pelo celular e o cliente manda CPF, e-mail, data de nascimento ou endereço, o CRM pode ler esses dados sozinho e preencher a ficha do contato. Só preenche campo vazio: se a ficha já tem um valor diferente, nada é trocado, o dado vira uma sugestão na ficha (confirmar ou recusar) e aparece um aviso na Central. Nenhuma mensagem é enviada ao cliente e a IA continua parada na conversa. Grupos, contatos bloqueados e anonimizados ficam de fora. O que entra sozinho aparece na linha do tempo do contato (quando ele tem um negócio aberto) e na auditoria, sem o valor do dado. O CPF continua guardado só cifrado, inclusive na sugestão, que mostra apenas os dois últimos dígitos. O endereço usa uma chamada curta de IA, só quando a mensagem tem cara de endereço, e o custo aparece em IA › Uso como "Ler o endereço que o cliente mandou".
+
+  Vem desligado. Para ligar: Configurações › Atendimento › "Ler o cadastro que o cliente manda nas conversas atendidas pela equipe" (só administrador). A atualização acrescenta ao banco a sugestão de CPF e endereço e um tipo de aviso (migration 0407), aplicados pelo `update.sh` como de costume.
+
+## [5.7.0] — 2026-11-11
+
+### Alterado
+
+- **A página Início ficou mais clara — os números dizem o que parecem dizer** A página Início foi reorganizada para ser lida de relance. **Pacientes esperando resposta** agora conta as conversas que estão com você **e as que estão sem responsável**, só as que esperam há até 3 dias; as mais antigas aparecem à parte. **Avisos** vêm separados por assunto (por exemplo, "Paciente pediu para falar com uma pessoa"), em vez de um número só. Na **Visão da clínica**, cada bloco diz o período no título: a clínica hoje, o atendimento dos últimos 30 dias (com a frase "de cada 10 conversas novas…" e o tempo de resposta pela mediana, não pela média) e as vendas do mês somando todos os funis, comparadas com **os mesmos dias** do mês anterior. Em **Gestão**, Sistema, Gasto com IA e "Para arrumar" viraram três quadros pequenos; canal arquivado ou que só guarda histórico deixou de contar como pendência. Você não precisa fazer nada: a atualização troca as funções do banco sozinha.
+
 ## [5.6.0] — 2026-11-11
 
 ### Adicionado
@@ -8951,7 +8981,10 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.6.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.9.0...HEAD
+[5.9.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.8.0...v5.9.0
+[5.8.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.7.0...v5.8.0
+[5.7.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.6.0...v5.7.0
 [5.6.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.5.1...v5.6.0
 [5.5.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.5.0...v5.5.1
 [5.5.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.4.0...v5.5.0

@@ -314,12 +314,20 @@ export const crmSettingsSchema = z
      * spec 17 §4b. NASCE DESLIGADA: só o booleano `true` liga.
      */
     telefone_de_ficha_vazia: z.boolean().catch(false),
+    /**
+     * `extracao_silenciosa` (migration 0407): nas conversas atendidas pela
+     * equipe, o CPF, o e-mail, a data de nascimento e o endereço que o cliente
+     * manda entram na ficha VAZIA sozinhos, e valor diferente vira proposta.
+     * NASCE DESLIGADA: só o booleano `true` liga.
+     */
+    extracao_silenciosa: z.boolean().catch(false),
   })
   .catch({
     cliente_pela_agenda: false,
     paciente_pelo_cadastro: false,
     internal_contact_tags: [],
     telefone_de_ficha_vazia: false,
+    extracao_silenciosa: false,
   });
 
 function crmDe(settings: unknown): z.infer<typeof crmSettingsSchema> {
@@ -357,6 +365,14 @@ export function clientePelaAgendaLigado(settings: unknown): boolean {
  */
 export function telefoneDeFichaVaziaLigado(settings: unknown): boolean {
   return crmDe(settings).telefone_de_ficha_vazia === true;
+}
+
+/**
+ * A extração silenciosa de cadastro está ligada nesta organização? Nunca lança,
+ * e `settings` torto lê como DESLIGADA — é uma escrita sem decisão humana.
+ */
+export function extracaoSilenciosaLigada(settings: unknown): boolean {
+  return crmDe(settings).extracao_silenciosa === true;
 }
 
 /** A regra "paciente pelo cadastro" está ligada nesta organização? Nunca lança. */

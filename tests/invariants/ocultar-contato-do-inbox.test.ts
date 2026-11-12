@@ -16,7 +16,7 @@ import { sql } from "./gov-helpers";
  *   O4  só o servidor marca: a sessão recebe 42501 ao escrever a marca, e continua
  *       editando o resto da ficha
  *   O5  isolamento: ocultar na organização A não toca a B
- *   O6  o painel de conversas por dia do Início não conta a conversa oculta
+ *   O6  o painel de atendimento do Início não conta a conversa oculta
  *   O7  `authenticated` lê a marca (grant de coluna), e as funções de gatilho não
  *       são alcançáveis pela REST
  *   O8  o contato oculto não ganha card no funil (`garantirLeadDaConversa`, a
@@ -164,10 +164,10 @@ describe("0372 — ocultar um contato do Inbox", () => {
     expect(await marcas(DA_B)).toEqual([false]);
   });
 
-  it("O6 · o painel de conversas por dia do Início não conta a conversa oculta", async () => {
+  it("O6 · o painel de atendimento do Início não conta a conversa oculta", async () => {
     const { rows } = await pool.query<{ total: number }>(
-      `select coalesce(sum(ia_sozinha + com_equipe + sem_resposta), 0)::int as total
-         from public.fn_inicio_conversas_por_dia($1, now() - interval '1 day', now() + interval '1 day', 'America/Sao_Paulo')`,
+      `select ((a->>'ia_sozinha')::int + (a->>'com_equipe')::int + (a->>'sem_resposta')::int) as total
+         from public.fn_inicio_atendimento($1, now() - interval '1 day', now() + interval '1 day') a`,
       [A],
     );
     // Na A: a do paciente conta; as do amigo (ocultas), não.

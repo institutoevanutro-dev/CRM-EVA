@@ -414,3 +414,24 @@ describe("passo pulado pelas 24h do Instagram", () => {
     expect(lido.detalhe).toBe("Passo pulado: fora das 24h do Instagram.");
   });
 });
+
+describe("prazo vencido (presença marcada semanas depois da consulta)", () => {
+  it("a espera vencida e a mensagem pulada viram frases, com o prazo devido", () => {
+    const payload = { reason: "prazo_vencido", devido_em: "2026-10-08T03:00:00.000Z", atraso_ms: 20 * 86_400_000 };
+    const espera = descreveEvento(evento({ event_type: "node_advanced", payload: { ...payload, next_node_id: "action-1" } }), nos, "pt-BR");
+    expect(espera.titulo).toBe("O prazo desta espera já tinha passado");
+    expect(espera.detalhe).toContain("a mensagem seguinte não será enviada");
+    const pulada = descreveEvento(
+      evento({ node_id: "action-1", event_type: "action_skipped_overdue", payload: { ...payload, reason: "acao_vencida" } }),
+      nos,
+      "pt-BR",
+    );
+    expect(pulada.titulo).toBe("Mensagem não enviada: o prazo já tinha passado");
+    expect(pulada.detalhe).toContain("o fluxo seguiu até a próxima espera");
+    expect(pulada.detalhe).not.toContain("{quando}");
+    const junto = descreveEvento(evento({ node_id: "action-1", event_type: "node_skipped_overdue", payload }), nos, "pt-BR");
+    expect(junto.titulo).toBe("Passo pulado: a mensagem antes dele não foi enviada");
+    const trocada = descreveEvento(evento({ event_type: "superseded_by_newer_appointment", payload: {} }), nos, "pt-BR");
+    expect(trocada.titulo).toBe("Encerrado: o paciente compareceu a uma consulta mais recente");
+  });
+});

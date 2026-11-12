@@ -118,7 +118,9 @@ async function handle(row: EventRow): Promise<HandlerResult> {
   const email = texto(contato.email);
   if (!telefone && !email) return resultado("skipped", "sem_identificador");
 
-  const { somenteDeAnuncio } = lerPreferencias((dataOrg as { settings?: unknown } | null)?.settings);
+  const { somenteDeAnuncio, paginaMeta, wabaMeta } = lerPreferencias(
+    (dataOrg as { settings?: unknown } | null)?.settings,
+  );
   const origem = lerOrigem(contato.source_metadata);
 
   const conversao: ConversaoDeAgendamento = {
@@ -132,6 +134,8 @@ async function handle(row: EventRow): Promise<HandlerResult> {
     cliqueMeta: origem.cliqueMeta,
     cliqueGoogle: origem.cliqueGoogle,
     braidGoogle: origem.braidGoogle,
+    paginaMeta,
+    wabaMeta,
   };
 
   return despachar({

@@ -3262,6 +3262,7 @@ export type Database = {
           trecho: string | null
           updated_at: string
           valor_anterior: string | null
+          valor_cifrado: string | null
           valor_proposto: string
         }
         Insert: {
@@ -3281,6 +3282,7 @@ export type Database = {
           trecho?: string | null
           updated_at?: string
           valor_anterior?: string | null
+          valor_cifrado?: string | null
           valor_proposto: string
         }
         Update: {
@@ -3300,6 +3302,7 @@ export type Database = {
           trecho?: string | null
           updated_at?: string
           valor_anterior?: string | null
+          valor_cifrado?: string | null
           valor_proposto?: string
         }
         Relationships: [

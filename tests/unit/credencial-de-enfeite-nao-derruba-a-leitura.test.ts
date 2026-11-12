@@ -153,7 +153,12 @@ describe("credencial de enfeite não derruba a leitura (#754)", () => {
     // TRÊS guardas, na mesma ordem: sem isso, uma linha cujo `cpf_encrypted`
     // não é pacote de verdade vira 500 permanente, que é o defeito da #754
     // mudando de lugar. Toda decifra futura entra aqui do mesmo jeito.
-    const GUARDADAS = [...DEFINICOES_BASELINE, ...definicoesDeFuncao(BASELINE, "decrypt_cpf")];
+    const GUARDADAS = [
+      ...DEFINICOES_BASELINE,
+      ...definicoesDeFuncao(BASELINE, "decrypt_cpf"),
+      // 0407: a terceira decifra — o CPF de proposta aceita vai à ficha (3c).
+      ...definicoesDeFuncao(BASELINE, "fn_aplicar_cpf_proposto"),
+    ];
     const ocorrencias = [...BASELINE.matchAll(/pgp_sym_decrypt\s*\(/g)].map((m) => m.index ?? 0);
     expect(ocorrencias.length, "sumiu o pgp_sym_decrypt do baseline?").toBeGreaterThan(0);
     for (const i of ocorrencias) {
@@ -165,10 +170,10 @@ describe("credencial de enfeite não derruba a leitura (#754)", () => {
     }
   });
 
-  it("3b. a segunda decifra (decrypt_cpf) tem as MESMAS três guardas, na mesma ordem", () => {
-    const defs = definicoesDeFuncao(BASELINE, "decrypt_cpf");
+  it.each(["decrypt_cpf", "fn_aplicar_cpf_proposto"])("3b. a decifra de CPF %s tem as MESMAS três guardas, na mesma ordem", (nome) => {
+    const defs = definicoesDeFuncao(BASELINE, nome);
     const efetiva = defs[defs.length - 1];
-    expect(efetiva, "decrypt_cpf não aparece no baseline — o self-host não receberia a função").toBeDefined();
+    expect(efetiva, `${nome} não aparece no baseline — o self-host não receberia a função`).toBeDefined();
     const corpo = efetiva!.corpo;
 
     const iNull = corpo.search(/is null/);

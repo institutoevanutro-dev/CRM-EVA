@@ -4,25 +4,26 @@ import type { NextRequest } from "next/server";
 import { ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import {
+  deCadaDez,
   janelasDosPaineis,
   origemDoContato,
-  preencherDias,
   ROTULO_DA_ORIGEM,
   type Origem,
 } from "@/lib/inicio/paineis";
-import { janelaDeHoje } from "@/lib/inicio/tipos";
+import { corteDaEsperaRecente, janelaDeHoje } from "@/lib/inicio/tipos";
 import { createClient } from "@/lib/supabase/server";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 
 /**
  * GET /api/v1/inicio/paineis — a "Visão da clínica" do Início, só para gestor
- * (spec docs/superpowers/specs/2026-10-07-inicio-paineis-design.md).
+ * (specs docs/superpowers/specs/2026-10-07-inicio-paineis-design.md e
+ * 2026-11-11-inicio-claro.md).
  *
  * Gestão decidida AQUI: esconder na tela não é permissão. Os números vêm das
- * funções SECURITY INVOKER da migration 0330 (agregam no banco; o PostgREST
- * cortaria a leitura em 1000 linhas). Cada painel roda isolado: um que falha vira
- * `{ ok:false }` e a tela avisa só nele, como os blocos de `/api/v1/inicio`.
+ * funções SECURITY INVOKER das migrations 0330, 0376 e 0408 (agregam no banco; o
+ * PostgREST cortaria a leitura em 1000 linhas). Cada painel roda isolado: um que
+ * falha vira `{ ok:false }` e a tela avisa só nele, como os blocos de `/api/v1/inicio`.
  */
 type Falha = { ok: false };
 const FALHA: Falha = { ok: false };
@@ -41,13 +42,11 @@ function exigir<T>(r: { data: T | null; error: { message: string } | null }): T 
   return r.data as T;
 }
 
-interface LinhaDeConversas {
-  dia: string;
+interface Atendimento {
   ia_sozinha: number;
   com_equipe: number;
   sem_resposta: number;
-  soma_primeira_resposta_s: number;
-  respondidas: number;
+  mediana_primeira_resposta_s: number | null;
 }
 interface LinhaDaAgenda {
   unit_id: string | null;
@@ -57,11 +56,6 @@ interface LinhaDaAgenda {
   realizadas: number;
   faltas: number;
   canceladas: number;
-}
-interface BlocoDoFunil {
-  ganhos: number;
-  perdidos: number;
-  valor: Record<string, string>;
 }
 interface Resumo {
   profissionais: Array<{
@@ -73,13 +67,14 @@ interface Resumo {
     canceladas: number;
     minutos: number;
   }>;
-  esperando: { total: number; sem_responsavel: number; desde: string | null };
-  leads: { novos_mes: number; novos_anterior: number; ganhos_mes: number; ganhos_anterior: number };
+  vendas: { novos_mes: number; novos_anterior: number; ganhos_mes: number; perdidos_mes: number; valor: Record<string, string> };
+}
+interface Esperando {
+  recentes: { total: number; sem_responsavel: number };
+  antigas: { total: number };
 }
 interface Funil {
   etapas: Array<{ id: string; nome: string; abertos: number }>;
-  mes: BlocoDoFunil;
-  anterior: BlocoDoFunil;
 }
 
 export async function GET(req: NextRequest): Promise<Response> {
@@ -88,13 +83,13 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (!authz.ok) return authz.response;
   const orgId = authz.org.orgId;
   const fuso = fusoUtilizavel(authz.org.timezone);
-  const j = janelasDosPaineis(new Date(), fuso);
+  const agora = new Date();
+  const j = janelasDosPaineis(agora, fuso);
+  const hoje = janelaDeHoje(agora, fuso);
   const db = await createClient();
 
-  const hoje = janelaDeHoje(new Date(), fuso);
-
-  const [resumo, conversas, agenda, funil, origem] = await Promise.all([
-    // Migration 0376: agenda por profissional, espera agora e leads do mês.
+  const [resumo, atendimento, esperando, agenda, funil, origem] = await Promise.all([
+    // Agenda por profissional e vendas do mês, de todos os funis (0376, corpo da 0408).
     isolado(async () => {
       const r = exigir<Resumo>(
         await db.rpc("fn_inicio_resumo_da_clinica", {
@@ -106,6 +101,8 @@ export async function GET(req: NextRequest): Promise<Response> {
           p_mes_inicio: j.mes.inicio,
           p_mes_fim: j.mes.fim,
           p_ant_inicio: j.mesAnterior.inicio,
+          // Os MESMOS DIAS do mês anterior, não o mês anterior inteiro.
+          p_ant_fim: j.mesAnterior.fim,
         }),
       );
       // Uma chamada por profissional distinto (poucos numa clínica); sem service
@@ -114,25 +111,31 @@ export async function GET(req: NextRequest): Promise<Response> {
       return {
         ok: true as const,
         profissionais: r.profissionais.map((p) => ({ ...p, nome: p.user_id ? (nomes.get(p.user_id) ?? null) : null })),
-        esperando: r.esperando,
-        leads: r.leads,
+        vendas: r.vendas,
       };
     }),
     isolado(async () => {
-      const linhas = exigir<LinhaDeConversas[]>(
-        await db.rpc("fn_inicio_conversas_por_dia", {
-          p_org: orgId,
-          p_inicio: j.conversas.inicio,
-          p_fim: j.conversas.fim,
-          p_fuso: fuso,
-        }),
-      ) ?? [];
-      const soma = linhas.reduce((s, l) => s + Number(l.soma_primeira_resposta_s), 0);
-      const respondidas = linhas.reduce((s, l) => s + l.respondidas, 0);
+      const a = exigir<Atendimento>(
+        await db.rpc("fn_inicio_atendimento", { p_org: orgId, p_inicio: j.conversas.inicio, p_fim: j.conversas.fim }),
+      );
+      const faixas = { equipe: a.com_equipe, ia: a.ia_sozinha, semResposta: a.sem_resposta };
       return {
         ok: true as const,
-        dias: preencherDias(j.conversas.dias, linhas),
-        primeiraRespostaMediaS: respondidas ? Math.round(soma / respondidas) : null,
+        ...faixas,
+        deCadaDez: deCadaDez(faixas),
+        medianaPrimeiraRespostaS: a.mediana_primeira_resposta_s,
+      };
+    }),
+    // A mesma função do "Meu dia", com o mesmo corte: gestor lê a clínica toda pela RLS.
+    isolado(async () => {
+      const e = exigir<Esperando>(
+        await db.rpc("fn_inicio_esperando", { p_org: orgId, p_corte: corteDaEsperaRecente(agora) }),
+      );
+      return {
+        ok: true as const,
+        recentes: e.recentes.total,
+        semResponsavel: e.recentes.sem_responsavel,
+        antigas: e.antigas.total,
       };
     }),
     isolado(async () => {
@@ -162,7 +165,9 @@ export async function GET(req: NextRequest): Promise<Response> {
       const pedido = req.nextUrl.searchParams.get("funil");
       const escolhido = funis.find((f) => f.id === pedido) ?? funis.find((f) => f.is_default) ?? funis[0];
       if (!escolhido) return { ok: true as const, semFunil: true as const, funis: lista };
-      const dados = exigir<Funil>(
+      // Só as etapas saem daqui: ganhos, perdidos e valor que a função também
+      // devolve são DESTE funil, e o bloco de vendas soma todos (`resumo.vendas`).
+      const { etapas } = exigir<Funil>(
         await db.rpc("fn_inicio_funil", {
           p_org: orgId,
           p_pipeline: escolhido.id,
@@ -171,7 +176,7 @@ export async function GET(req: NextRequest): Promise<Response> {
           p_ant_inicio: j.mesAnterior.inicio,
         }),
       );
-      return { ok: true as const, funilId: escolhido.id, funis: lista, ...dados };
+      return { ok: true as const, funilId: escolhido.id, funis: lista, etapas };
     }),
     isolado(async () => {
       const linhas = exigir<Array<{ origem: string; utm_source: string | null; total: number }>>(
@@ -194,5 +199,8 @@ export async function GET(req: NextRequest): Promise<Response> {
     }),
   ]);
 
-  return ok({ resumo, conversas, agenda, funil, origem }, { requestId });
+  return ok(
+    { periodo: { mes: j.mes.de, mesAnterior: j.mesAnterior.de }, resumo, atendimento, esperando, agenda, funil, origem },
+    { requestId },
+  );
 }

@@ -370,6 +370,16 @@ export function descreveEvento(
           ...motor,
         };
       }
+      if (texto(p.reason) === "prazo_vencido") {
+        const devido = quandoLegivel(p.devido_em, idioma);
+        return {
+          titulo: "O prazo desta espera já tinha passado",
+          detalhe: devido
+            ? traduzir("devia terminar em {quando}; a mensagem seguinte não será enviada", idioma as Idioma).replace("{quando}", devido)
+            : null,
+          ...motor,
+        };
+      }
       if (p.aviso_equipe === true) {
         return { titulo: "Avisou a equipe na Central", detalhe: `foi para ${refDoNo(texto(p.next_node_id), nos)}`, ...motor };
       }
@@ -454,6 +464,27 @@ export function descreveEvento(
         detalhe: texto(p.via) === "modelo_de_reserva" ? "pelo modelo de reserva: a IA não escreveu a mensagem" : null,
         ...motor,
       };
+    case "action_skipped_overdue": {
+      // Pular NÃO é falhar: a espera ancorada na consulta venceu há mais de um
+      // dia (ex.: presença marcada semanas depois), e a mensagem falaria de um
+      // momento que já passou. Sem esta linha o paciente "sumiria" do fluxo.
+      const devido = quandoLegivel(p.devido_em, idioma);
+      return {
+        titulo: "Mensagem não enviada: o prazo já tinha passado",
+        detalhe: devido
+          ? traduzir("era para {quando}; o fluxo seguiu até a próxima espera", idioma as Idioma).replace("{quando}", devido)
+          : null,
+        ...motor,
+      };
+    }
+    case "node_skipped_overdue":
+      // A mensagem antes deste passo não saiu (prazo vencido): esperar a resposta
+      // dela, marcar "sem resposta" ou avisar a equipe seria afirmar algo falso.
+      return {
+        titulo: "Passo pulado: a mensagem antes dele não foi enviada",
+        detalhe: "nada foi feito aqui; o fluxo seguiu para o próximo passo",
+        ...motor,
+      };
     case "action_pulado":
       return { titulo: "Passo pulado, o fluxo seguiu", detalhe: texto(p.reason), ...motor };
     case "ai_classified":
@@ -505,6 +536,14 @@ export function descreveEvento(
       };
     case "turn_skipped":
       return {titulo:"Acompanhamento encerrado sem novo envio",detalhe:texto(p.reason),...motor};
+    case "superseded_by_newer_appointment":
+      // Migration 0410: a presença numa consulta mais recente recomeçou o
+      // pós-consulta por ela. Sem esta linha, o fluxo "sumiria" no meio.
+      return {
+        titulo: "Encerrado: o paciente compareceu a uma consulta mais recente",
+        detalhe: "o acompanhamento recomeçou pela consulta nova",
+        ...motor,
+      };
     case "cancelled_manual":
       return { titulo: "Cancelado por uma pessoa da equipe", detalhe: null, ...pessoa };
     case "paused_manual":

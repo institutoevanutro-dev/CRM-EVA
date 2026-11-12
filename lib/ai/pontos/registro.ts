@@ -306,6 +306,18 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     registraEm: "llm_calls",
   },
   {
+    id: "extracao_de_cadastro",
+    rotulo: "Ler o endereço que o cliente mandou",
+    oQueFaz:
+      "Nas conversas atendidas pela equipe, separa o endereço que o cliente escreveu para preencher a ficha. Só roda quando a extração silenciosa de cadastro está ligada e a mensagem tem cara de endereço.",
+    papel: "entender",
+    exige: {},
+    emissor: "lib/contacts/extracao-silenciosa.ts",
+    sintomaDeFalha:
+      "O endereço que o cliente manda para a equipe não entra sozinho na ficha; CPF, e-mail e nascimento continuam entrando, porque não usam IA.",
+    registraEm: "llm_calls",
+  },
+  {
     id: "followup_classify",
     rotulo: "Ler a resposta ao follow-up",
     oQueFaz:
