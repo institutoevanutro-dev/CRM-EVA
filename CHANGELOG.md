@@ -8,6 +8,22 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.9.0] — 2026-11-12
+
+### Adicionado
+
+- **A integração com o Financeiro passa a saber quem assumiu o cliente** A leitura de contato que o Financeiro faz no CRM agora traz também
+  `assigned_email`: o e-mail da pessoa da equipe que assumiu a conversa mais
+  recente do cliente. O Financeiro usa esse e-mail como vendedor das propostas
+  que chegam do Prontuário. Quando ninguém assumiu, ou a conversa está com a IA,
+  o campo vem vazio. Nada muda para quem não usa a integração.
+
+### Corrigido
+
+- **O agendamento de quem veio de anúncio clique-para-WhatsApp volta a chegar à Meta** Quando o paciente veio de um anúncio clique-para-WhatsApp, o aviso de agendamento ia para a Meta com o identificador do clique, mas sem o ID da Página do Facebook. A Meta recusa esse formato (erro 100), então nenhum desses agendamentos chegava lá. Agora, em **Configurações › Conversões**, há o campo **ID da Página do Facebook**: com ele preenchido, o aviso sai ligado ao clique no anúncio. Sem ele, o aviso sai só com o telefone criptografado, que a Meta aceita, em vez de ser recusado. A lista de avisos também passa a mostrar o subcódigo da recusa, para dizer o que faltou. Isso vale também para a conexão do WhatsApp por QR, que recebe o identificador do clique.
+
+- **O pós-consulta não manda mais mensagens atrasadas nem repete a régua para quem já está nela** Quando a presença era marcada semanas depois da consulta, o acompanhamento pós-consulta mandava de uma vez as mensagens cujo prazo já tinha passado (por exemplo, a de 7 e a de 15 dias, minutos depois da marcação). Agora, se uma espera contada a partir da consulta já venceu há mais de um dia, a mensagem seguinte não é enviada: o fluxo segue até a próxima espera que ainda está no futuro, e o histórico da inscrição mostra "Mensagem não enviada: o prazo já tinha passado". Atrasos pequenos, como a janela de horário que solta o envio na manhã seguinte, continuam enviando. Pulada a mensagem, também não há espera pela resposta, nem etiqueta de "sem resposta", nem aviso na Central. Marcar presença também não abre mais uma segunda inscrição no mesmo fluxo pós-consulta para quem já está nele, ou recebeu mensagens dele nos últimos 30 dias: se a consulta marcada é mais antiga (ou do mesmo horário), nada abre; se é mais recente, o acompanhamento recomeça por ela e o anterior é encerrado. Nos dois casos a linha do tempo do negócio diz o que aconteceu. Você não precisa fazer nada: a atualização troca a função do banco sozinha.
+
 ## [5.8.0] — 2026-11-11
 
 ### Adicionado
@@ -8965,7 +8981,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.8.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.9.0...HEAD
+[5.9.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.8.0...v5.9.0
 [5.8.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.7.0...v5.8.0
 [5.7.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.6.0...v5.7.0
 [5.6.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.5.1...v5.6.0
