@@ -6697,7 +6697,7 @@ export const DICIONARIO: Traducoes = {
   "Adiado: a equipe ainda vai responder um caso aberto": { es: "Pospuesto: el equipo aún va a responder un caso abierto" },
   "envia em {ate}": { es: "envía el {ate}" },
   "Segurou o fluxo por causa de um retorno agendado": { es: "Frenó el flujo por un regreso programado" },
-  "volta a andar em {ate}, um dia depois do retorno": { es: "vuelve a avanzar el {ate}, un día después del regreso" },
+  "volta a andar em {ate}, depois do retorno": { es: "vuelve a avanzar el {ate}, después del regreso" },
   "Passo pulado, o fluxo seguiu": { es: "Paso omitido, el flujo siguió" },
   "O prazo desta espera já tinha passado": { es: "El plazo de esta espera ya había pasado" },
   "devia terminar em {quando}; a mensagem seguinte não será enviada": {

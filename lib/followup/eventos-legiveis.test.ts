@@ -135,7 +135,7 @@ describe("descreveEvento", () => {
       "pt-BR",
     );
     expect(r.titulo).toBe("Segurou o fluxo por causa de um retorno agendado");
-    expect(r.detalhe).toMatch(/^volta a andar em .+, um dia depois do retorno$/);
+    expect(r.detalhe).toMatch(/^volta a andar em .+, depois do retorno$/);
   });
 
   it("a falha carrega a mensagem E o passo — nunca uma sem a outra", () => {
