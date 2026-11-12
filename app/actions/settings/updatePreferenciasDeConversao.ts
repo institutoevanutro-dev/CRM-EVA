@@ -9,6 +9,8 @@
  *    de ser etapa da PRÓPRIA organização (conferido aqui, com o filtro de
  *    organização, porque o client é service-role); id de fora recusa tudo.
  *    A auditoria grava os ids, nunca o nome da etapa.
+ *  - o ID da Página do Facebook e o da conta do WhatsApp Business que a Meta
+ *    exige junto do clique do anúncio (porte do upstream #2098). Vazio apaga.
  *
  * Mesmo gate da conexão (admin da organização, sem escrita de suporte, MFA
  * quando houver fator) e auditada com o valor novo — não é segredo.
@@ -20,7 +22,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { loadAuthUser, mfaEmDivida, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK, escreveComoPlatformAdmin } from "@/lib/auth/types";
-import { MAXIMO_DE_ETAPAS_DE_SINAL, settingsComPreferencias } from "@/lib/conversoes/preferencias";
+import { FORMA_DO_ID_META, MAXIMO_DE_ETAPAS_DE_SINAL, settingsComPreferencias } from "@/lib/conversoes/preferencias";
 import { supportWriteError } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -37,15 +39,24 @@ export type UpdatePreferenciasDeConversaoResult =
         | "erro_ao_gravar";
     };
 
+/** Vazio apaga; preenchido tem a MESMA forma que a leitura aceita (senão salvaria e leria vazio). */
+const idMeta = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || FORMA_DO_ID_META.test(v))
+  .transform((v) => v || null);
+
 const entradaSchema = z
   .object({
     somente_de_anuncio: z.boolean().optional(),
     etapas_de_sinal_pago: z.array(z.string().uuid()).max(MAXIMO_DE_ETAPAS_DE_SINAL).optional(),
+    meta_page_id: idMeta.optional(),
+    meta_whatsapp_business_account_id: idMeta.optional(),
   })
-  .refine((v) => v.somente_de_anuncio !== undefined || v.etapas_de_sinal_pago !== undefined);
+  .refine((v) => Object.values(v).some((x) => x !== undefined));
 
 export async function updatePreferenciasDeConversao(
-  input: z.infer<typeof entradaSchema>,
+  input: z.input<typeof entradaSchema>,
 ): Promise<UpdatePreferenciasDeConversaoResult> {
   const parsed = entradaSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "validation_failed" };
@@ -85,6 +96,8 @@ export async function updatePreferenciasDeConversao(
       settings: settingsComPreferencias((data as { settings?: unknown }).settings, {
         somenteDeAnuncio: parsed.data.somente_de_anuncio,
         etapasDeSinalPago: etapas,
+        paginaMeta: parsed.data.meta_page_id,
+        wabaMeta: parsed.data.meta_whatsapp_business_account_id,
       }),
     } as never)
     .eq("id", activeOrg.orgId);
@@ -103,6 +116,10 @@ export async function updatePreferenciasDeConversao(
     metadata: {
       ...(parsed.data.somente_de_anuncio !== undefined ? { somente_de_anuncio: parsed.data.somente_de_anuncio } : {}),
       ...(etapas !== undefined ? { etapas_de_sinal_pago: etapas } : {}),
+      ...(parsed.data.meta_page_id !== undefined ? { meta_page_id: parsed.data.meta_page_id } : {}),
+      ...(parsed.data.meta_whatsapp_business_account_id !== undefined
+        ? { meta_whatsapp_business_account_id: parsed.data.meta_whatsapp_business_account_id }
+        : {}),
     },
   });
 

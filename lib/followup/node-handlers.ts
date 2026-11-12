@@ -100,7 +100,19 @@ export type NodeResult =
   // `class` só aparece quando o avanço É uma classificação decidida pelo motor:
   // o `ai_classify` que sai por "sem resposta" porque a carência venceu. Vai para
   // o payload do evento e é o que `ultimoDesfechoDe` lê.
-  | { kind: "advance"; next_node_id: string; next_eval_at: Date; reason?: "plan_timeout"; repeat?: { index: number; total: number }; class?: string }
+  //
+  // `prazo_vencido` (espera ancorada na consulta que já passou da tolerância) e
+  // `acao_vencida` (a mensagem que vinha depois dela, pulada) levam `vencido`:
+  // o prazo devido e o atraso, para o histórico dizer por que nada saiu.
+  | {
+      kind: "advance";
+      next_node_id: string;
+      next_eval_at: Date;
+      reason?: "plan_timeout" | "prazo_vencido" | "acao_vencida" | "pulado_com_a_acao";
+      vencido?: PrazoVencido;
+      repeat?: { index: number; total: number };
+      class?: string;
+    }
   // stays on the node. `wake_status` parks `match_reply` in waiting_reply without a job.
   | { kind: "wait"; next_eval_at: Date; wake_status?: "active" | "waiting_reply" }
   | {
@@ -116,6 +128,100 @@ export type NodeResult =
   // outcome is nullable for the 'custom' end-node case (cancel_reason carries the note instead).
   | { kind: "complete"; outcome: EnrollmentOutcome | null; cancel_reason?: string }
   | { kind: "fail"; error: string };
+
+/** O prazo devido de uma espera ancorada e quanto ele já tinha passado ao ser avaliado. */
+export type PrazoVencido = { devido_em: string; atraso_ms: number };
+
+/**
+ * Espera ancorada na consulta vencida há mais que isto: a mensagem seguinte NÃO
+ * sai. Incidente de 11/11: presença marcada em lote em consultas de quase quatro
+ * semanas atrás abriu inscrições cujas esperas de 7 e 15 dias já tinham passado,
+ * e o motor mandou as duas mensagens em sequência, minutos depois da marcação.
+ * Um dia cobre os atrasos normais (worker parado alguns minutos, janela do
+ * número que solta o envio na manhã seguinte); acima disso a mensagem fala de
+ * um momento que já passou.
+ */
+export const TOLERANCIA_PRAZO_VENCIDO_MS = 86_400_000;
+
+/**
+ * Só as âncoras que contam DA CONSULTA (pós-consulta). `appointment_created_at`
+ * conta da reserva — cobrança de sinal e lembretes antes da consulta — e fica de
+ * fora: lá o atraso não torna a mensagem sem sentido.
+ */
+const ANCORAS_DA_CONSULTA: ReadonlySet<AppointmentAnchor> = new Set(["appointment_starts_at", "appointment_day"]);
+
+/**
+ * A espera ancorada mais recente que o fluxo atravessou venceu além da
+ * tolerância? Quem pergunta é a ação: vencida, ela não envia e o fluxo segue
+ * até a próxima espera (que decide de novo pelo seu próprio prazo).
+ * `waitNodeIds`: ids dos nós `wait` do grafo pinado.
+ */
+export function prazoVencidoDaUltimaEspera(
+  events: EnrollmentEventRef[],
+  waitNodeIds: ReadonlySet<string>,
+): PrazoVencido | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (!e.node_id || !waitNodeIds.has(e.node_id)) continue;
+    // O resgate de replay do motor pode avançar uma espera sem gravar o seu
+    // `node_advanced`: o último evento dela é então o `wait_started`. Sem prova
+    // de que ESTA espera venceu, envia (nunca herda o vencido de uma anterior).
+    if (e.event_type !== "node_advanced") return null;
+    const p = e.payload ?? {};
+    if (p.reason !== "prazo_vencido" || typeof p.devido_em !== "string" || typeof p.atraso_ms !== "number") return null;
+    return { devido_em: p.devido_em, atraso_ms: p.atraso_ms };
+  }
+  return null;
+}
+
+/**
+ * Nós que só fazem sentido DEPOIS de uma mensagem enviada: esperar a resposta
+ * dela (`match_reply`, `ai_classify`) e o que o ramo "sem resposta" costuma
+ * fazer (`edit_lead_tag`, `notify_team`). Com a mensagem pulada por prazo
+ * vencido, eles também são pulados — sem carência, sem etiqueta "sem resposta"
+ * e sem aviso falso na Central — até o próximo nó de outro tipo (espera, ação,
+ * fim, condição...), que é avaliado normalmente. Uma ação no ramo "sem
+ * resposta" é alcançada e passa pela regra da ação vencida como qualquer outra.
+ */
+const NOS_PULADOS_COM_A_ACAO: ReadonlySet<FlowNode["type"]> = new Set([
+  "match_reply",
+  "ai_classify",
+  "edit_lead_tag",
+  "notify_team",
+]);
+
+/** Eventos que não são passo do fluxo: não interrompem a cadeia de pulo. */
+const EVENTOS_FORA_DO_PASSO = new Set([
+  "inbound_woke",
+  "held_by_return",
+  // Pausa e retomada (passagem para pessoa, intervenção manual) não são passo:
+  // retomar no meio da cadeia não pode trazer de volta carência, etiqueta e aviso.
+  "handoff_paused",
+  "handoff_resumed",
+  "paused_manual",
+  "resumed_manual",
+]);
+
+/**
+ * O nó `nodeId` foi alcançado pela cadeia de uma ação pulada por prazo vencido?
+ * Sim quando o último passo gravado é o pulo (`action_skipped_overdue` ou
+ * `node_skipped_overdue`) e ele apontou para este nó. Devolve o prazo vencido
+ * que a cadeia carrega.
+ */
+export function cadeiaDaAcaoVencida(events: EnrollmentEventRef[], nodeId: string): PrazoVencido | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.event_type && EVENTOS_FORA_DO_PASSO.has(e.event_type)) continue;
+    if (e.event_type !== "action_skipped_overdue" && e.event_type !== "node_skipped_overdue") return null;
+    const p = e.payload ?? {};
+    // O próprio pulo deste nó já gravado (update da inscrição perdido): replay,
+    // e o replay tem de dar o MESMO resultado, senão o passo trava na chave.
+    const desteNo = e.event_type === "node_skipped_overdue" && e.node_id === nodeId;
+    if ((!desteNo && p.next_node_id !== nodeId) || typeof p.devido_em !== "string" || typeof p.atraso_ms !== "number") return null;
+    return { devido_em: p.devido_em, atraso_ms: p.atraso_ms };
+  }
+  return null;
+}
 
 /** Backoff ladder indexed by `attempts - 1` (clamped to the last slot) — 30s..1h. */
 export const BACKOFF_MS = [30_000, 60_000, 300_000, 900_000, 3_600_000] as const;
@@ -413,7 +519,7 @@ function valorDePassos(value: string | number): string | number {
  * (`payload.class`): `ai_classified` (a ponte, quando o modelo classificou) e
  * `node_advanced` com `class` (o motor, quando a carência venceu sem resposta).
  */
-const EVENTOS_DE_DESFECHO = new Set(["ai_classified", "node_advanced"]);
+const EVENTOS_DE_DESFECHO = new Set(["ai_classified", "node_advanced", "node_skipped_overdue"]);
 
 /**
  * O desfecho do último passo que DECIDIU algo: a classe escolhida pelo
@@ -569,6 +675,10 @@ export function processNode(input: {
   repeatTotal?: number | null;
   /** Próximo nó pela aresta `always` — a ação olha o `match_reply` seguinte para pular o envio. */
   proximo?: FlowNode | null;
+  /** action: a última espera ancorada atravessada venceu além da tolerância (`prazoVencidoDaUltimaEspera`). */
+  acaoVencida?: PrazoVencido | null;
+  /** Nó alcançado pela cadeia de uma ação pulada por prazo vencido (`cadeiaDaAcaoVencida`). */
+  puladoComAAcao?: PrazoVencido | null;
 }): NodeResult {
   const {
     node,
@@ -591,6 +701,23 @@ export function processNode(input: {
     repeatTotal,
     proximo,
   } = input;
+
+  if (input.puladoComAAcao && NOS_PULADOS_COM_A_ACAO.has(node.type)) {
+    const edge =
+      node.type === "match_reply" || node.type === "ai_classify"
+        ? selectEdge(edges, node.id, classEdgeMatch(node, NO_REPLY_BRANCH_ID))
+        : selectEdge(edges, node.id, { type: "always" });
+    if (!edge) return { kind: "fail", error: `${node.type} node "${node.id}" has no edge to skip through` };
+    return {
+      kind: "advance",
+      next_node_id: edge.target,
+      next_eval_at: clock(),
+      reason: "pulado_com_a_acao",
+      vencido: input.puladoComAAcao,
+      // Para a `condition` por `last_outcome`: o classify pulado conta como "sem resposta".
+      ...(node.type === "ai_classify" ? { class: NO_REPLY_BRANCH_ID } : {}),
+    };
+  }
 
   switch (node.type) {
     case "trigger": {
@@ -630,6 +757,18 @@ export function processNode(input: {
           : NaN;
         if (Number.isFinite(alvo) && clock().getTime() < alvo) {
           return { kind: "wait", next_eval_at: new Date(alvo) };
+        }
+        const atraso = clock().getTime() - alvo;
+        if (Number.isFinite(alvo) && ANCORAS_DA_CONSULTA.has(node.config.anchor) && atraso > TOLERANCIA_PRAZO_VENCIDO_MS) {
+          const edge = selectEdge(edges, node.id, { type: "always" });
+          if (!edge) return { kind: "fail", error: `wait node "${node.id}" has no outbound edge after elapsing` };
+          return {
+            kind: "advance",
+            next_node_id: edge.target,
+            next_eval_at: clock(),
+            reason: "prazo_vencido",
+            vencido: { devido_em: new Date(alvo).toISOString(), atraso_ms: atraso },
+          };
         }
       }
       // Resposta do lead corta a espera: o timer é teto (ninguém respondeu),
@@ -842,6 +981,11 @@ export function processNode(input: {
       // `${node}:${steps}` idempotency_key was a FRESH key each tick → a 2nd job → a 2nd
       // real send that the send sink's (job_id,seq) dedup can't catch).
       if (!actionEnqueued && !actionCompleted) {
+        if (input.acaoVencida) {
+          const edge = selectEdge(edges, node.id, { type: "always" });
+          if (!edge) return { kind: "fail", error: `action node "${node.id}" has no outbound edge` };
+          return { kind: "advance", next_node_id: edge.target, next_eval_at: clock(), reason: "acao_vencida", vencido: input.acaoVencida };
+        }
         if (
           proximo?.type === "match_reply" &&
           proximo.config.save_to &&

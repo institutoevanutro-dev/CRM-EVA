@@ -30,7 +30,7 @@ import {
   telefoneHashGoogle,
   telefoneHashMeta,
 } from "@/lib/plataformas-de-anuncio/identificadores";
-import { montarCorpoMeta } from "@/lib/plataformas-de-anuncio/meta/conversions";
+import { montarCorpoMeta, transporteMeta } from "@/lib/plataformas-de-anuncio/meta/conversions";
 import type {
   ConversaoDeAgendamento,
   CredencialGoogle,
@@ -142,11 +142,39 @@ describe("o corpo enviado é uma lista fechada", () => {
     expect(chaves(corpo).filter((k) => PROIBIDAS.test(k) && k !== "event_name")).toEqual([]);
   });
 
-  it("Meta com clique: `business_messaging` + WhatsApp + `ctwa_clid`", () => {
-    const evento = (montarCorpoMeta(meta, { ...conversaoBase, cliqueMeta: "CLIQUE" })!.data as Record<string, unknown>[])[0]!;
+  const eventoMeta = (c: Partial<ConversaoDeAgendamento>) =>
+    (montarCorpoMeta(meta, { ...conversaoBase, ...c })!.data as Record<string, unknown>[])[0]!;
+
+  it("Meta com clique e Página: `business_messaging` + WhatsApp + `ctwa_clid` + `page_id`", () => {
+    const evento = eventoMeta({ cliqueMeta: "CLIQUE", paginaMeta: "123456789012345", wabaMeta: "104987654321098" });
     expect(evento.action_source).toBe("business_messaging");
     expect(evento.messaging_channel).toBe("whatsapp");
-    expect((evento.user_data as Record<string, unknown>).ctwa_clid).toBe("CLIQUE");
+    const ud = evento.user_data as Record<string, unknown>;
+    expect(ud.ctwa_clid).toBe("CLIQUE");
+    expect(ud.page_id).toBe("123456789012345");
+    // Um ou outro, nunca os dois (upstream #2098).
+    expect(ud).not.toHaveProperty("whatsapp_business_account_id");
+  });
+
+  it("Meta com clique e só a WABA: a WABA vai no lugar da Página", () => {
+    const ud = eventoMeta({ cliqueMeta: "CLIQUE", wabaMeta: "104987654321098" }).user_data as Record<string, unknown>;
+    expect(ud.whatsapp_business_account_id).toBe("104987654321098");
+    expect(ud).not.toHaveProperty("page_id");
+  });
+
+  it("Meta com clique SEM Página nem WABA: vai como `chat`, sem o clique (a Meta recusaria com 2804116)", () => {
+    const evento = eventoMeta({ cliqueMeta: "CLIQUE" });
+    expect(evento.action_source).toBe("chat");
+    expect(evento).not.toHaveProperty("messaging_channel");
+    expect(Object.keys(evento.user_data as object).sort()).toEqual(["em", "ph"]);
+  });
+
+  it("Meta: a recusa guarda o subcódigo, que diz o que faltou", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: 100, error_subcode: 2804116 } }), { status: 400 }),
+    );
+    const r = await transporteMeta.enviar(meta, { ...conversaoBase, ocorridoEm: new Date() });
+    expect(r).toEqual({ tipo: "permanente", codigo: "meta_100_2804116" });
   });
 
   it("Google: ação, hora, orderId e identificadores hasheados — sem valor", () => {
@@ -481,6 +509,25 @@ describe("leituras", () => {
     expect(lerOrigem({ ad_platform: "outra" }).plataforma).toBeNull();
   });
 
+  it("a Página e a WABA nascem vazias, e id torto é lido como vazio", () => {
+    expect(lerPreferencias(undefined)).toMatchObject({ paginaMeta: null, wabaMeta: null });
+    expect(lerPreferencias({ conversoes: { meta_page_id: "12a4" } }).paginaMeta).toBeNull();
+    expect(lerPreferencias({ conversoes: { meta_page_id: "123456789012345" } }).paginaMeta).toBe("123456789012345");
+    expect(settingsComPreferencias({ conversoes: { somente_de_anuncio: false } }, { paginaMeta: "123456789012345" })).toEqual({
+      conversoes: { somente_de_anuncio: false, meta_page_id: "123456789012345" },
+    });
+  });
+
+  it("o handler leva a Página da organização junto do clique do contato", async () => {
+    redeQueResponde();
+    banco.settings = { conversoes: { meta_page_id: "123456789012345" } };
+    banco.contato = { ...banco.contato!, source_metadata: { ad_platform: "meta_ads", ad_raw: { ctwaClid: "CLIQUE_REAL" } } };
+    await conversaoDeAgendamentoHandler.handle(evento());
+    const enviado = JSON.parse(corpos.find((c) => c.includes("CLIQUE_REAL")) ?? "{}");
+    expect(enviado.data?.[0]?.action_source).toBe("business_messaging");
+    expect(enviado.data?.[0]?.user_data?.page_id).toBe("123456789012345");
+  });
+
   it("a preferência nasce ligada e sobrevive a lixo", () => {
     expect(lerPreferencias(undefined).somenteDeAnuncio).toBe(true);
     expect(lerPreferencias({ conversoes: { somente_de_anuncio: "não" } }).somenteDeAnuncio).toBe(true);
@@ -637,6 +684,6 @@ describe("sinal pago", () => {
     expect(lerPreferencias({ conversoes: { etapas_de_sinal_pago: [ETAPA_SINAL] } }).etapasDeSinalPago).toEqual([ETAPA_SINAL]);
     // Gravar uma preferência não apaga a outra.
     const s = settingsComPreferencias(settingsComPreferencias({}, { somenteDeAnuncio: false }), { etapasDeSinalPago: [ETAPA_SINAL] });
-    expect(lerPreferencias(s)).toEqual({ somenteDeAnuncio: false, etapasDeSinalPago: [ETAPA_SINAL] });
+    expect(lerPreferencias(s)).toEqual({ somenteDeAnuncio: false, etapasDeSinalPago: [ETAPA_SINAL], paginaMeta: null, wabaMeta: null });
   });
 });

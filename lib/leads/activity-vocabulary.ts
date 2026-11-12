@@ -218,7 +218,27 @@ export type ActivityType =
    */
   /** Ligação registrada pela fila do bônus da equipe (migration 0392). O resumo fica no item da fila. */
   | "call_logged"
-  | "contact_field_auto_applied";
+  | "contact_field_auto_applied"
+  /**
+   * PÓS-CONSULTA E PRESENÇA (migration 0410). Emitidos por
+   * `fn_appointment_recover` quando a presença encontra o contato já no mesmo
+   * fluxo pós-consulta: `followup_superseded` — a consulta nova é mais recente
+   * e o acompanhamento recomeçou por ela; `followup_not_reopened` — a consulta
+   * é mais antiga (ou igual) que a do acompanhamento vivo ou recém-enviado, e
+   * nada foi aberto. Sem a linha, "por que o pós-consulta mudou / não abriu"
+   * fica sem resposta na tela.
+   *
+   * ⚠️ O emissor é SQL: a função grava o literal (constantes
+   * `c_tl_trocado`/`c_tl_mantido` no corpo dela). Renomear aqui exige renomear
+   * lá; `tests/invariants/agenda-presenca-pos-consulta.test.ts` lê as linhas
+   * pelas constantes abaixo e reprova a divergência.
+   */
+  | "followup_superseded"
+  | "followup_not_reopened";
+
+/** Tipos que `fn_appointment_recover` grava (migration 0410). */
+export const ATIVIDADE_POS_CONSULTA_TROCADO = "followup_superseded" satisfies ActivityType;
+export const ATIVIDADE_POS_CONSULTA_NAO_REABERTO = "followup_not_reopened" satisfies ActivityType;
 
 export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   lead_created: "Entrou pelo WhatsApp",
@@ -333,6 +353,8 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   // e endereço pela mesma linha — o `reason` diz qual campo.
   contact_field_auto_applied: "Dado informado pelo cliente aplicado automaticamente",
   call_logged: "Ligação registrada",
+  followup_superseded: "Pós-consulta recomeçou pela consulta mais recente",
+  followup_not_reopened: "Pós-consulta não foi aberto de novo",
 };
 
 /** Quando o tipo é legado/desconhecido, a linha ainda é honesta — sem jargão. */

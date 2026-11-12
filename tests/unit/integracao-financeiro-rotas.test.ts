@@ -76,7 +76,7 @@ it("exportação rejeita token de outra organização antes do banco", async () 
   expect((await contact(new Request("https://crm.test"), ctx)).status).toBe(403);
   expect(mocks.db).not.toHaveBeenCalled();
 });
-it("exporta somente os cinco campos comerciais e recusa anonimizado", async () => {
+it("exporta somente os campos comerciais e quem assumiu, e recusa anonimizado", async () => {
   database({
     id,
     organization_id: org,
@@ -96,6 +96,7 @@ it("exporta somente os cinco campos comerciais e recusa anonimizado", async () =
     name: "Fictício",
     phone: "+5527999993333",
     email: null,
+    assigned_email: null,
   });
   database({ id, is_anonymized: true });
   expect((await contact(new Request("https://crm.test"), ctx)).status).toBe(404);

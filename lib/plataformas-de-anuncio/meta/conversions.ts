@@ -10,12 +10,19 @@
  * `ph`/`em` em SHA-256 e, quando houver, o `ctwa_clid`. Não há `custom_data`:
  * valor, tipo de consulta e procedimento não saem.
  *
- * ─── `action_source` depende de haver clique ────────────────────────────────
+ * ─── `action_source` depende de haver clique E Página/WABA ──────────────────
  *
  * `business_messaging` + `messaging_channel: whatsapp` é o que aceita o
- * `ctwa_clid` como identidade e liga o agendamento ao anúncio. Sem clique (o
- * caso do transporte por QR, que não recebe o `ctwa_clid`), o evento vai como
- * `chat` e a Meta tenta casar só pelo telefone hasheado.
+ * `ctwa_clid` como identidade e liga o agendamento ao anúncio — e a Meta só o
+ * aceita com `page_id` OU `whatsapp_business_account_id` junto (porte do
+ * upstream #2098: sem eles, HTTP 400, code 100, subcode 2804116). Os ids são
+ * da organização (Configurações › Conversões); vai a Página, e a WABA só sem
+ * Página. Sem clique, ou sem nenhum dos dois ids, o evento vai como `chat`,
+ * sem `ctwa_clid`, e a Meta casa só pelo telefone hasheado: mandar o clique
+ * sem a identidade é recusa certa, e o agendamento não chegaria lá.
+ *
+ * O transporte por QR (WAHA) TAMBÉM recebe o `ctwa_clid` (`externalAdReply`,
+ * medido desde 09/10/2026), então o caminho com clique vale para os dois.
  *
  * ─── Regras da plataforma que quebram calado ────────────────────────────────
  *
@@ -45,19 +52,27 @@ export function montarCorpoMeta(
   const em = emailHashMeta(conversao.email);
   if (!ph && !em) return null;
 
+  const pagina = conversao.paginaMeta ?? null;
+  const waba = pagina ? null : (conversao.wabaMeta ?? null);
+  const clique = conversao.cliqueMeta && (pagina || waba) ? conversao.cliqueMeta : null;
+
   const userData: Record<string, unknown> = {};
   if (ph) userData.ph = [ph];
   if (em) userData.em = [em];
-  if (conversao.cliqueMeta) userData.ctwa_clid = conversao.cliqueMeta;
+  if (clique) {
+    userData.ctwa_clid = clique;
+    if (pagina) userData.page_id = pagina;
+    else if (waba) userData.whatsapp_business_account_id = waba;
+  }
 
   const evento: Record<string, unknown> = {
     event_name: conversao.evento,
     event_time: Math.floor(conversao.ocorridoEm.getTime() / 1000),
     event_id: conversao.eventoId,
-    action_source: conversao.cliqueMeta ? "business_messaging" : "chat",
+    action_source: clique ? "business_messaging" : "chat",
     user_data: userData,
   };
-  if (conversao.cliqueMeta) evento.messaging_channel = "whatsapp";
+  if (clique) evento.messaging_channel = "whatsapp";
 
   const corpo: Record<string, unknown> = { data: [evento] };
   if (credencial.testEventCode) corpo.test_event_code = credencial.testEventCode;
@@ -110,9 +125,11 @@ async function enviar(
   }
 
   let codigo: number | null = null;
+  let subcodigo: number | null = null;
   try {
-    const json = (await resposta.json()) as { error?: { code?: unknown } };
+    const json = (await resposta.json()) as { error?: { code?: unknown; error_subcode?: unknown } };
     if (typeof json.error?.code === "number") codigo = json.error.code;
+    if (typeof json.error?.error_subcode === "number") subcodigo = json.error.error_subcode;
   } catch {
     // Corpo não-JSON: gateway/WAF no meio. Fica só o status.
   }
@@ -121,13 +138,17 @@ async function enviar(
   logger.warn("[conversoes.meta] envio recusado", {
     status: resposta.status,
     codigo,
+    subcodigo,
     alvoId: conversao.alvoId,
   });
 
   if (resposta.status === 429 || resposta.status >= 500) {
     return { tipo: "transitorio", codigo: `http_${resposta.status}` };
   }
-  return classifica4xx(codigo, resposta.status);
+  const r = classifica4xx(codigo, resposta.status);
+  // O subcódigo é número da Meta, não dado do paciente, e é o que diz O QUE
+  // faltou: `meta_100` sozinho foi o que escondeu o #2098 por semanas.
+  return r.tipo !== "ok" && subcodigo !== null ? { ...r, codigo: `${r.codigo}_${subcodigo}` } : r;
 }
 
 export const transporteMeta: TransporteDeConversao<CredencialMeta> = {

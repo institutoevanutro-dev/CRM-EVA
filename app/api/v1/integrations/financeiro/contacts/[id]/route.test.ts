@@ -22,13 +22,17 @@ const mocked = vi.hoisted(() => ({
   rate: vi.fn(),
   rows: [] as unknown[],
   filters: [] as unknown[][],
+  tabelas: {} as Record<string, Record<string, unknown>[] | "erro">,
+  getUser: vi.fn(),
 }));
 vi.mock("@/lib/mcp/auth", async (original) => ({
   ...(await original<typeof Auth>()),
   validateBearerToken: mocked.validate,
 }));
 vi.mock("@/lib/ai/dispatcher/rate-limit", () => ({ checkRateLimit: mocked.rate }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: mocked.from }) }));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({ from: mocked.from, auth: { admin: { getUserById: mocked.getUser } } }),
+}));
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const OUTRA_ORG = "44444444-4444-4444-8444-444444444444";
@@ -69,7 +73,13 @@ beforeEach(() => {
   mocked.rows = [{ data: CONTATO, error: null }];
   mocked.filters = [];
   mocked.rate.mockResolvedValue({ allowed: true });
-  mocked.from.mockImplementation(() => {
+  mocked.tabelas = { conversations: [], user_organizations: [] };
+  mocked.getUser.mockImplementation(async (id: string) => ({
+    data: { user: { id, email: `${id.slice(0, 4)}@clinica.example.test` } },
+    error: null,
+  }));
+  mocked.from.mockImplementation((tabela: string) => {
+    if (tabela !== "contacts") return tabelaFalsa(tabela);
     const chain = {
       select: () => chain,
       eq: (...args: unknown[]) => {
@@ -83,8 +93,49 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 
+/** Tabela em memória que respeita `eq` e `order`: o vazamento entre organizações é medido, não suposto. */
+function tabelaFalsa(tabela: string) {
+  const conds: [string, unknown][] = [];
+  const ordens: [string, boolean][] = [];
+  const chain = {
+    select: () => chain,
+    eq: (col: string, val: unknown) => (conds.push([col, val]), chain),
+    order: (col: string, opts?: { ascending?: boolean }) => (ordens.push([col, opts?.ascending ?? true]), chain),
+    limit: () => chain,
+    maybeSingle: async () => {
+      const linhas = mocked.tabelas[tabela];
+      if (linhas === "erro") return { data: null, error: { message: "fora do ar" } };
+      const achadas = (linhas ?? [])
+        .filter((l) => conds.every(([c, v]) => l[c] === v))
+        .sort((a, b) => {
+          for (const [col, asc] of ordens) {
+            const x = String(a[col] ?? ""), y = String(b[col] ?? "");
+            if (x !== y) return (x < y ? -1 : 1) * (asc ? 1 : -1);
+          }
+          return 0;
+        });
+      return { data: achadas[0] ?? null, error: null };
+    },
+  };
+  return chain;
+}
+
+const ATENDENTE = "55555555-5555-4555-8555-555555555555";
+const OUTRO_ATENDENTE = "66666666-6666-4666-8666-666666666666";
+function conversa(extra: Record<string, unknown>) {
+  return {
+    organization_id: ORG,
+    contact_id: ID,
+    assigned_to_user_id: null,
+    assignee_kind: null,
+    last_message_at: "2026-11-01T10:00:00Z",
+    updated_at: "2026-11-01T10:00:00Z",
+    ...extra,
+  };
+}
+
 describe("GET /api/v1/integrations/financeiro/contacts/[id]", () => {
-  it("a chave dedicada financeiro:contatos lê os cinco campos do contato da organização", async () => {
+  it("a chave dedicada financeiro:contatos lê os campos do contato da organização", async () => {
     comEscopos(["financeiro:contatos"]);
     const res = await pedir();
     expect(res.status).toBe(200);
@@ -95,6 +146,7 @@ describe("GET /api/v1/integrations/financeiro/contacts/[id]", () => {
       name: "Paciente Fictícia",
       phone: "+5527999990000",
       email: "ficticia@example.test",
+      assigned_email: null,
     });
     expect(mocked.filters).toContainEqual(["organization_id", ORG]);
     expect(mocked.filters).toContainEqual(["id", ID]);
@@ -154,5 +206,59 @@ describe("GET /api/v1/integrations/financeiro/contacts/[id]", () => {
     expect(outraOrg.status).toBe(403);
     expect(await codigo(outraOrg)).toBe("forbidden");
     expect(mocked.from).not.toHaveBeenCalled();
+  });
+
+  describe("assigned_email: quem assumiu o cliente vira o vendedor da proposta no Financeiro", () => {
+    async function assumido(): Promise<unknown> {
+      mocked.rows = [{ data: CONTATO, error: null }];
+      comEscopos(["financeiro:contatos"]);
+      const res = await pedir();
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { data: { assigned_email: unknown } }).data.assigned_email;
+    }
+
+    it("devolve o e-mail de quem assumiu a conversa mais recente do contato", async () => {
+      mocked.tabelas.conversations = [
+        conversa({ assigned_to_user_id: OUTRO_ATENDENTE, assignee_kind: "user", last_message_at: "2026-10-01T10:00:00Z" }),
+        conversa({ assigned_to_user_id: ATENDENTE, assignee_kind: "user", last_message_at: "2026-11-05T10:00:00Z" }),
+      ];
+      mocked.tabelas.user_organizations = [
+        { organization_id: ORG, user_id: ATENDENTE },
+        { organization_id: ORG, user_id: OUTRO_ATENDENTE },
+      ];
+      expect(await assumido()).toBe("5555@clinica.example.test");
+      expect(mocked.getUser).toHaveBeenCalledWith(ATENDENTE);
+    });
+
+    it("sem conversa, sem assumido ou com a IA no comando devolve null", async () => {
+      expect(await assumido()).toBeNull();
+      mocked.tabelas.conversations = [conversa({})];
+      expect(await assumido()).toBeNull();
+      mocked.tabelas.conversations = [conversa({ assignee_kind: "ai" })];
+      expect(await assumido()).toBeNull();
+      expect(mocked.getUser).not.toHaveBeenCalled();
+    });
+
+    it("conversa de outra organização não vaza, nem atendente que não é membro da organização", async () => {
+      mocked.tabelas.conversations = [
+        conversa({ organization_id: OUTRA_ORG, assigned_to_user_id: OUTRO_ATENDENTE, assignee_kind: "user", last_message_at: "2026-11-07T10:00:00Z" }),
+      ];
+      mocked.tabelas.user_organizations = [{ organization_id: OUTRA_ORG, user_id: OUTRO_ATENDENTE }];
+      expect(await assumido()).toBeNull();
+
+      mocked.tabelas.conversations = [conversa({ assigned_to_user_id: OUTRO_ATENDENTE, assignee_kind: "user" })];
+      expect(await assumido()).toBeNull();
+      expect(mocked.getUser).not.toHaveBeenCalled();
+    });
+
+    it("falha ao buscar o assumido nunca derruba o contato: devolve null e segue", async () => {
+      mocked.tabelas.conversations = "erro";
+      expect(await assumido()).toBeNull();
+
+      mocked.tabelas.conversations = [conversa({ assigned_to_user_id: ATENDENTE, assignee_kind: "user" })];
+      mocked.tabelas.user_organizations = [{ organization_id: ORG, user_id: ATENDENTE }];
+      mocked.getUser.mockRejectedValueOnce(new Error("GoTrue fora"));
+      expect(await assumido()).toBeNull();
+    });
   });
 });

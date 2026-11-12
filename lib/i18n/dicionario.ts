@@ -215,7 +215,14 @@ export const DICIONARIO: Traducoes = {
   "Nada de quem está bloqueado, marcado como sempre atendimento humano, oculto ou anonimizado.": { es: "Nada de quien está bloqueado, marcado como siempre atención humana, oculto o anonimizado." },
   "Nada quando o agendamento é cancelado depois: o que já saiu fica, e nada novo é enviado.": { es: "Nada cuando la cita se cancela después: lo que ya salió queda, y no se envía nada nuevo." },
   "Modo de teste da Meta ligado: os agendamentos vão marcados como teste e não contam para a otimização.": { es: "Modo de prueba de Meta activado: las citas se envían marcadas como prueba y no cuentan para la optimización." },
-  "Limite conhecido: a conexão do WhatsApp por QR não recebe o identificador do clique do anúncio, e nenhum caminho captura o do Google ainda. Sem ele, a plataforma tenta casar só pelo telefone criptografado, e parte dos agendamentos pode não ser atribuída ao anúncio.": { es: "Límite conocido: la conexión de WhatsApp por QR no recibe el identificador del clic del anuncio, y ningún camino captura todavía el de Google. Sin él, la plataforma intenta la coincidencia solo por el teléfono cifrado, y parte de las citas puede no atribuirse al anuncio." },
+  "Limite conhecido: o identificador do clique só existe para quem chegou por anúncio clique-para-WhatsApp, e só sai para a Meta com o ID da Página preenchido acima. Sem ele, a plataforma tenta casar só pelo telefone criptografado, e parte dos agendamentos pode não ser atribuída ao anúncio.": { es: "Límite conocido: el identificador del clic solo existe para quien llegó por un anuncio de clic a WhatsApp, y solo sale hacia Meta con el ID de la Página completado arriba. Sin él, la plataforma intenta la coincidencia solo por el teléfono cifrado, y parte de las citas puede no atribuirse al anuncio." },
+  "Página do anúncio clique-para-WhatsApp": { es: "Página del anuncio de clic a WhatsApp" },
+  "Para ligar o agendamento ao clique no anúncio, a Meta exige o ID da Página do Facebook junto. Sem ele, o agendamento sai só com o telefone criptografado, e a Meta pode não atribuí-lo ao anúncio.": { es: "Para vincular la cita al clic en el anuncio, Meta exige el ID de la Página de Facebook junto. Sin él, la cita sale solo con el teléfono cifrado, y Meta puede no atribuirla al anuncio." },
+  "ID da Página do Facebook": { es: "ID de la Página de Facebook" },
+  "Só números. Na Página, em Sobre › Transparência da Página, ou no Gerenciador de Anúncios, na identidade do anúncio.": { es: "Solo números. En la Página, en Información › Transparencia de la página, o en el Administrador de anuncios, en la identidad del anuncio." },
+  "ID da conta do WhatsApp Business (opcional)": { es: "ID de la cuenta de WhatsApp Business (opcional)" },
+  "Só para quem usa a API oficial e não tem Página a informar. Com a Página preenchida, este campo não é usado.": { es: "Solo para quien usa la API oficial y no tiene Página que informar. Con la Página completada, este campo no se usa." },
+  "Salvar Página": { es: "Guardar Página" },
   "enviados com sucesso": { es: "enviados con éxito" },
   "Plataforma": { es: "Plataforma" },
   "Confira a conexão da plataforma em Configurações › Conversões.": { es: "Revise la conexión de la plataforma en Configuración › Conversiones." },
@@ -6689,6 +6696,22 @@ export const DICIONARIO: Traducoes = {
   "Segurou o fluxo por causa de um retorno agendado": { es: "Frenó el flujo por un regreso programado" },
   "volta a andar em {ate}, um dia depois do retorno": { es: "vuelve a avanzar el {ate}, un día después del regreso" },
   "Passo pulado, o fluxo seguiu": { es: "Paso omitido, el flujo siguió" },
+  "O prazo desta espera já tinha passado": { es: "El plazo de esta espera ya había pasado" },
+  "devia terminar em {quando}; a mensagem seguinte não será enviada": {
+    es: "debía terminar el {quando}; el mensaje siguiente no se enviará",
+  },
+  "Mensagem não enviada: o prazo já tinha passado": { es: "Mensaje no enviado: el plazo ya había pasado" },
+  "Passo pulado: a mensagem antes dele não foi enviada": { es: "Paso omitido: el mensaje anterior no se envió" },
+  "Encerrado: o paciente compareceu a uma consulta mais recente": {
+    es: "Cerrado: el paciente asistió a una consulta más reciente",
+  },
+  "o acompanhamento recomeçou pela consulta nova": { es: "el seguimiento reinició por la consulta nueva" },
+  "nada foi feito aqui; o fluxo seguiu para o próximo passo": {
+    es: "no se hizo nada aquí; el flujo siguió al siguiente paso",
+  },
+  "era para {quando}; o fluxo seguiu até a próxima espera": {
+    es: "era para el {quando}; el flujo siguió hasta la próxima espera",
+  },
   "Passo pulado: fora das 24h do Instagram.": { es: "Paso omitido: fuera de las 24 h de Instagram." },
   "O agente interpretou a resposta": { es: "El agente interpretó la respuesta" },
   "Fluxo concluído": { es: "Flujo concluido" },
@@ -11930,6 +11953,8 @@ export const DICIONARIO: Traducoes = {
   "Erro ao registrar a ligação.": { es: "Error al registrar la llamada." },
   // O rótulo e os motivos da atividade `call_logged` na linha do tempo.
   "Ligação registrada": { es: "Llamada registrada" },
+  "Pós-consulta recomeçou pela consulta mais recente": { es: "El posconsulta reinició por la consulta más reciente" },
+  "Pós-consulta não foi aberto de novo": { es: "El posconsulta no se abrió de nuevo" },
   "Ligação registrada: atendeu": { es: "Llamada registrada: atendió" },
   "Ligação registrada: não atendeu": { es: "Llamada registrada: no atendió" },
   // Análise › Bônus (migration 0392).

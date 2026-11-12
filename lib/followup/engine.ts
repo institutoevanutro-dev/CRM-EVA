@@ -37,6 +37,8 @@ import {
   pisoDoInboundDaEspera,
   actionTurnCompleted,
   processNode,
+  prazoVencidoDaUltimaEspera,
+  cadeiaDaAcaoVencida,
   repeatTakenFromEvents,
   repeatTotalFromEvents,
   resolveWaitPhase,
@@ -258,7 +260,11 @@ function eventTypeFor(result: NodeResult): string {
       // O trigger desistiu de esperar o plano de tempo. Evento PRÓPRIO porque a
       // consequência é visível pro operador (as esperas do fluxo saem no máximo);
       // enterrá-lo como mais um `node_advanced` esconderia o motivo.
-      return result.reason === "plan_timeout" ? "timing_plan_desistido" : "node_advanced";
+      if (result.reason === "plan_timeout") return "timing_plan_desistido";
+      // A mensagem não saiu porque a espera ancorada antes dela já tinha vencido.
+      if (result.reason === "acao_vencida") return "action_skipped_overdue";
+      // Esperar resposta / etiqueta / aviso de uma mensagem que não saiu: pulado junto.
+      return result.reason === "pulado_com_a_acao" ? "node_skipped_overdue" : "node_advanced";
     case "wait":
       return "wait_started";
     case "enqueue_turn":
@@ -282,6 +288,7 @@ function eventPayload(result: NodeResult): Record<string, unknown> {
       return {
         next_node_id: result.next_node_id,
         ...(result.reason !== undefined ? { reason: result.reason } : {}),
+        ...(result.vencido !== undefined ? result.vencido : {}),
         ...(result.repeat !== undefined
           ? { repeat_index: result.repeat.index, repeat_total: result.repeat.total }
           : {}),
@@ -472,7 +479,7 @@ async function applyResult(
       ...eventPayload(result),
       ...(result.kind === "enqueue_turn" && node.type === "action" && node.config.mode === "media" ? { mode: "media" } : {}),
       // O histórico legível diz "avisou a equipe" em vez de "seguiu em frente".
-      ...(result.kind === "advance" && node.type === "notify_team" ? { aviso_equipe: true } : {}),
+      ...(result.kind === "advance" && node.type === "notify_team" && result.reason !== "pulado_com_a_acao" ? { aviso_equipe: true } : {}),
     },
     idempotency_key: idemKey,
   });
@@ -524,6 +531,7 @@ async function applyResult(
   if (
     result.kind === "advance" &&
     !isReplay &&
+    result.reason !== "pulado_com_a_acao" &&
     (node.type === "move_lead" || node.type === "edit_lead_tag" || node.type === "notify_team")
   ) {
     try {
@@ -629,6 +637,7 @@ async function applyResult(
   if (
     result.kind === "advance" &&
     !isReplay &&
+    result.reason !== "pulado_com_a_acao" &&
     respostaParaGravar &&
     node.type === "match_reply" &&
     node.config.save_to &&
@@ -776,6 +785,9 @@ async function processEnrollment(
     node.type === "match_reply" ||
     node.type === "action" ||
     node.type === "repeat" ||
+    // A cadeia de pulo da ação vencida (`cadeiaDaAcaoVencida`) também passa por eles.
+    node.type === "edit_lead_tag" ||
+    node.type === "notify_team" ||
     // `condition` lê eventos por causa de `last_outcome`: o desfecho do passo
     // anterior mora no evento `ai_classified`, não na linha do lead.
     node.type === "condition";
@@ -894,6 +906,11 @@ async function processEnrollment(
     repeatTaken,
     repeatTotal,
     proximo,
+    acaoVencida:
+      node.type === "action"
+        ? prazoVencidoDaUltimaEspera(events, new Set(graph.nodes.filter((n) => n.type === "wait").map((n) => n.id)))
+        : undefined,
+    puladoComAAcao: cadeiaDaAcaoVencida(events, node.id),
   });
   await applyResult(
     deps,

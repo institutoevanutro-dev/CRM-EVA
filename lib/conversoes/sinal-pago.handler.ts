@@ -71,7 +71,7 @@ async function handle(row: EventRow): Promise<HandlerResult> {
     .eq("id", org)
     .maybeSingle();
   if (erroOrg) return resultado("retry", "leitura_da_organizacao", agora + ESPERA_DE_LEITURA_MS);
-  const { somenteDeAnuncio, etapasDeSinalPago } = lerPreferencias(
+  const { somenteDeAnuncio, etapasDeSinalPago, paginaMeta, wabaMeta } = lerPreferencias(
     (dataOrg as { settings?: unknown } | null)?.settings,
   );
 
@@ -130,6 +130,8 @@ async function handle(row: EventRow): Promise<HandlerResult> {
     cliqueMeta: origem.cliqueMeta,
     cliqueGoogle: origem.cliqueGoogle,
     braidGoogle: origem.braidGoogle,
+    paginaMeta,
+    wabaMeta,
   };
 
   return despachar({
