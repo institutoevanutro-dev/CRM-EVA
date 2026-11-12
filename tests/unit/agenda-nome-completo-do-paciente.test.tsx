@@ -56,7 +56,7 @@ const ANA = "11111111-1111-4111-8111-111111111111";
 const CONTATO = "44444444-4444-4444-8444-444444444444";
 const PESSOAS = [{ id: ANA, nome: "Dra. Ana Teste", trilha: 1 }] as unknown as Pessoa[];
 const TIPOS = [
-  { id: "t-ana", nome: "Avaliação facial", duracaoMin: 45, donoId: ANA, localDetalhes: null },
+  { id: "t-ana", nome: "Avaliação facial", duracaoMin: 45, donoId: ANA, localDetalhes: null, exigePaciente: false },
 ];
 const INSTANTE = "2026-10-22T16:00:00.000Z";
 

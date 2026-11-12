@@ -73,7 +73,19 @@ async function tipoDeAtendimento(orgId: string, donoId: string | null): Promise<
     .eq("organization_id", orgId)
     .eq("slug", TIPO_SLUG)
     .maybeSingle();
-  if (existente) return (existente as { id: string }).id;
+  // `requires_patient: false` (0411): as jornadas que usam este tipo marcam sem
+  // paciente porque testam grade e horário, não vínculo. A regra do paciente tem
+  // cobertura própria (`tests/unit/pessoa-marca-fora-da-grade.test.ts`,
+  // `tests/unit/agenda-marcacao-simples.test.tsx`). O update cobre banco já semeado.
+  if (existente) {
+    const { error } = await admin
+      .from("calendar_event_types")
+      .update({ requires_patient: false } as never)
+      .eq("organization_id", orgId)
+      .eq("id", (existente as { id: string }).id);
+    if (error) throw new Error(`calendar_event_types: ${error.message}`);
+    return (existente as { id: string }).id;
+  }
 
   const { data, error } = await admin
     .from("calendar_event_types")
@@ -86,6 +98,7 @@ async function tipoDeAtendimento(orgId: string, donoId: string | null): Promise<
       minimum_notice_minutes: 60,
       booking_window_days: 60,
       is_active: true,
+      requires_patient: false,
       ...(donoId ? { default_owner_user_id: donoId } : {}),
     } as never)
     .select("id")

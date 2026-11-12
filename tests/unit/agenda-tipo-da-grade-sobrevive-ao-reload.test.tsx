@@ -167,6 +167,7 @@ const TIPOS = [
     donoId: null,
     localKind: null,
     localDetalhes: null,
+    exigePaciente: false,
   },
   {
     id: "tipo-2",
@@ -175,6 +176,7 @@ const TIPOS = [
     donoId: null,
     localKind: null,
     localDetalhes: null,
+    exigePaciente: false,
   },
 ];
 

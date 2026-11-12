@@ -14543,9 +14543,9 @@ begin
     ) as t(nome, slug, categoria, duracao, posicao)
   loop
     insert into public.calendar_event_types
-      (organization_id, name, slug, category, duration_minutes, position)
+      (organization_id, name, slug, category, duration_minutes, position, requires_patient)
     values
-      (p_organization_id, r.nome, r.slug, r.categoria, r.duracao, r.posicao)
+      (p_organization_id, r.nome, r.slug, r.categoria, r.duracao, r.posicao, r.categoria <> 'reuniao')
     on conflict (organization_id, slug) do nothing;
 
     if found then
@@ -16297,6 +16297,33 @@ comment on column public.calendar_appointments.notes is
   'Anotação livre do atendimento — numa clínica, queixa clínica. É dado pessoal: o trigger trg_redigir_agenda_ao_anonimizar (migration 0184) a apaga quando o contato é anonimizado, junto com title, description, location_details, meeting_url e cancellation_reason. Horário, status e dono são PRESERVADOS: o que aconteceu e quando é registro de operação.';
 
 notify pgrst, 'reload schema';
+
+-- ---- tipo de compromisso exige paciente (migration 0411) ----
+-- Derivado de supabase/migrations/20261112120000_0411_agenda_tipo_exige_paciente.sql
+-- (incidente e critério: cabeçalho de lá). AQUI, antes do backfill da 0185, e
+-- não no fim: `fn_semear_tipos_de_agendamento` (trocada no lugar, acima) grava
+-- `requires_patient`, e o backfill logo abaixo a chama — num clone antigo a
+-- coluna tem de existir antes. Nenhum GRANT (os da tabela valem), nenhuma
+-- função nova.
+do $$
+begin
+  -- Só na criação da coluna: o tipo semeado "Reunião" (categoria `reuniao`)
+  -- é reunião interna e continua sem paciente. Reaplicar não desfaz quem
+  -- religou o interruptor depois.
+  if not exists (
+    select 1 from information_schema.columns
+     where table_schema = 'public' and table_name = 'calendar_event_types'
+       and column_name = 'requires_patient'
+  ) then
+    alter table public.calendar_event_types
+      add column requires_patient boolean not null default true;
+    update public.calendar_event_types set requires_patient = false where category = 'reuniao';
+  end if;
+end $$;
+
+comment on column public.calendar_event_types.requires_patient is
+  'Compromisso deste tipo só nasce com paciente (contact_id). Desligue para reunião interna. Migration 0411.';
+-- ---- fim: tipo de compromisso exige paciente (migration 0411) ----
 
 -- ---- a agenda nasce com o que marcar: trigger e backfill (migration 0185) ----
 --
@@ -39208,3 +39235,4 @@ end $$;
 -- Nenhuma função nova, tabela, coluna ou constraint.
 -- Quem mede a regra: `tests/invariants/agenda-presenca-pos-consulta.test.ts`.
 -- ---- fim: presença não abre inscrição duplicada no mesmo pós-consulta (migration 0410) ----
+

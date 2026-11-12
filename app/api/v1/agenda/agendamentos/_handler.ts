@@ -169,7 +169,7 @@ async function executarCriacaoDeAgendamento(
   const { data: tipo, error: erroTipo } = await supabase
     .from("calendar_event_types")
     .select(
-      "id, name, is_active, duration_minutes, catalog_product_id, default_owner_user_id, requires_confirmation, location_kind, location_details, required_room_kind",
+      "id, name, is_active, duration_minutes, catalog_product_id, default_owner_user_id, requires_confirmation, location_kind, location_details, required_room_kind, requires_patient",
     )
     .eq("organization_id", ctx.organization_id)
     .eq("id", input.event_type_id)
@@ -180,6 +180,18 @@ async function executarCriacaoDeAgendamento(
   }
   if (!tipo.is_active) {
     throw new ApiError(422, "agenda_tipo_desativado", undefined, ctx.requestId, `"${tipo.name}" está desativado.`);
+  }
+
+  // Consulta sem paciente vira "Paciente não informado" no Prontuário (0411).
+  // Aqui, e não na tela: tela, REST e ferramenta da IA passam por este handler.
+  if (tipo.requires_patient && !input.contact_id) {
+    throw new ApiError(
+      422,
+      "patient_required",
+      undefined,
+      ctx.requestId,
+      "Escolha o paciente para marcar uma consulta.",
+    );
   }
 
   const donoId = input.owner_user_id ?? tipo.default_owner_user_id;

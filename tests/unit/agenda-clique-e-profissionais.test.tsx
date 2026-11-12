@@ -161,7 +161,7 @@ vi.mock("@/components/agenda/MarcacaoSimples", () => ({
 }));
 
 const TIPOS = [
-  { id: "tipo-1", nome: "Consulta", duracaoMin: 30, donoId: "p-ana", localKind: null, localDetalhes: null },
+  { id: "tipo-1", nome: "Consulta", duracaoMin: 30, donoId: "p-ana", localKind: null, localDetalhes: null, exigePaciente: false },
 ];
 const USUARIO = "u-recepcao";
 const CHAVE = `agenda.pessoas.v1:${USUARIO}`;

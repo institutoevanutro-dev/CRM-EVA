@@ -51,9 +51,9 @@ function Secao({
 
 /** Procedimentos de mentira: um de cada dono e um sem dono (aparece para todos). */
 const PROCEDIMENTOS = [
-  { id: "t-aval", nome: "Avaliação facial", duracaoMin: 45, donoId: "ana", localDetalhes: null },
-  { id: "t-ret", nome: "Retorno", duracaoMin: 30, donoId: "bruno", localDetalhes: null },
-  { id: "t-apl", nome: "Aplicação intramuscular", duracaoMin: 15, donoId: null, localDetalhes: null },
+  { id: "t-aval", nome: "Avaliação facial", duracaoMin: 45, donoId: "ana", localDetalhes: null, exigePaciente: true },
+  { id: "t-ret", nome: "Retorno", duracaoMin: 30, donoId: "bruno", localDetalhes: null, exigePaciente: true },
+  { id: "t-apl", nome: "Aplicação intramuscular", duracaoMin: 15, donoId: null, localDetalhes: null, exigePaciente: true },
 ];
 
 /** O modal simples de marcar, solto na página para ser julgado sem abrir nada. */
