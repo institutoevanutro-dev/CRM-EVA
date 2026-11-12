@@ -255,6 +255,72 @@ describe("rodada nova", () => {
   });
 });
 
+describe("logo escura (fundo escuro, menu lateral)", () => {
+  const ESCURA = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9, 9]);
+  const comAs2 = () => corpo({ logos: { escuro: sha(ESCURA), claro: sha(PNG) } });
+
+  it("envia a escura no mesmo padrão de caminho e guarda o caminho em conta_logos.escuro_path", async () => {
+    const { rodarMarcaDaConta, logoEscuraGuardada } = await armazem();
+    await rodarMarcaDaConta(CONTA, () => {}, { fetch: contaFalsa(comAs2(), { claro: PNG, escuro: ESCURA }).f });
+    expect(banco.uploads.map((u) => u.caminho).sort()).toEqual(
+      [`platform/conta-${sha(PNG)}.png`, `platform/conta-${sha(ESCURA)}.png`].sort(),
+    );
+    expect(banco.linha).toMatchObject({
+      conta_logo_path: `platform/conta-${sha(PNG)}.png`,
+      conta_logos: { escuro: sha(ESCURA), claro: sha(PNG), escuro_path: `platform/conta-${sha(ESCURA)}.png` },
+    });
+    expect(logoEscuraGuardada(banco.linha as never)).toBe(`platform/conta-${sha(ESCURA)}.png`);
+  });
+
+  it("Conta só com a clara: a escura é a clara, enviada uma vez só", async () => {
+    const { rodarMarcaDaConta } = await armazem();
+    await rodarMarcaDaConta(CONTA, () => {}, { fetch: contaFalsa(corpo()).f });
+    expect(banco.uploads).toHaveLength(1);
+    expect((banco.linha?.conta_logos as Record<string, unknown>).escuro_path).toBe(`platform/conta-${sha(PNG)}.png`);
+  });
+
+  it("linha da 5.10.0 (sha da escura sem caminho): baixa a escura mesmo com o mesmo ETag", async () => {
+    banco.linha = {
+      ...LOCAL,
+      conta_nome: "Clínica Exemplo",
+      conta_accent_hex: "#27463b",
+      conta_logo_path: `platform/conta-${sha(PNG)}.png`,
+      conta_logos: { escuro: sha(ESCURA), claro: sha(PNG), icone: null },
+      conta_etag: '"v1"',
+      conta_atualizado_em: "2026-11-10T12:00:00Z",
+    };
+    const { rodarMarcaDaConta } = await armazem();
+    const { f, chamadas } = contaFalsa(comAs2(), { claro: PNG, escuro: ESCURA });
+    expect(await rodarMarcaDaConta(CONTA, () => {}, { fetch: f })).toBe("gravou");
+    expect(chamadas).toContain(`${CONTA}/marca/logo/escuro`);
+    expect(chamadas).not.toContain(`${CONTA}/marca/logo/claro`); // a clara já está guardada
+    expect((banco.linha?.conta_logos as Record<string, unknown>).escuro_path).toBe(`platform/conta-${sha(ESCURA)}.png`);
+  });
+
+  it("caminho fora da forma no jsonb não é usado", async () => {
+    const { logoEscuraGuardada } = await armazem();
+    expect(logoEscuraGuardada({ conta_logos: { escuro_path: "../../outra/coisa.png" } } as never)).toBeNull();
+  });
+
+  it("a limpeza do bucket nunca apaga a escura em uso", async () => {
+    const escura = `platform/conta-${sha(ESCURA)}.png`;
+    const velha = `platform/conta-${"b".repeat(64)}.png`;
+    banco.noBucket = [escura, velha];
+    banco.linha = {
+      ...LOCAL,
+      conta_logo_path: `platform/conta-${"a".repeat(64)}.png`,
+      conta_logos: { escuro: sha(ESCURA), claro: "a".repeat(64), escuro_path: escura },
+      conta_atualizado_em: "x",
+    };
+    const { rodarMarcaDaConta } = await armazem();
+    // Só a clara muda; a escura é "mesma".
+    await rodarMarcaDaConta(CONTA, () => {}, { fetch: contaFalsa(comAs2(), { claro: PNG, escuro: ESCURA }).f });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(banco.removidos).toEqual([velha]);
+    expect((banco.linha?.conta_logos as Record<string, unknown>).escuro_path).toBe(escura);
+  });
+});
+
 describe("limpeza do bucket entre processos", () => {
   it("logo gravada por OUTRO processo durante a limpeza não é apagada", async () => {
     const velha = `platform/conta-${"b".repeat(64)}.png`;

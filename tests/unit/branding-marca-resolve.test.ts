@@ -388,4 +388,32 @@ describe("camada da Conta (Plano 6) — acima da organização e da instalação
       );
     }
   });
+  it("logo ESCURA da Conta vai para logoEscuroUrl (menu verde); a clara fica em logoUrl; um lado ausente usa o outro", () => {
+    vi.stubGlobal("__PUBLIC_ENV__", { NEXT_PUBLIC_SUPABASE_URL: "https://projeto.exemplo.test" });
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://projeto.exemplo.test");
+    const escura = `platform/conta-${"e".repeat(64)}.png`;
+    const resolver = (l: Record<string, unknown>) =>
+      resolverMarca(pilhaComConta(l, [camadaDaInstalacao(l), camadaDoAmbiente(AMBIENTE)]), REGUA);
+
+    const as2 = resolver({ ...LINHA, ...CONTA, conta_logo_escuro_path: escura });
+    expect(as2.logoUrl).toContain(CONTA.conta_logo_path);
+    expect(as2.logoEscuroUrl).toContain(escura);
+
+    // Sem escura guardada (linha da 5.10.0): o menu usa a clara.
+    const soClara = resolver({ ...LINHA, ...CONTA });
+    expect(soClara.logoEscuroUrl).toBe(soClara.logoUrl);
+
+    // Só a escura: a clara também é ela (regra 2.6) — e a Conta está em vigor.
+    const soEscura = resolver({ ...LINHA, ...CONTA, conta_nome: null, conta_accent_hex: null, conta_logo_path: null, conta_logo_escuro_path: escura });
+    expect(soEscura.logoUrl).toContain(escura);
+    expect(soEscura.logoEscuroUrl).toContain(escura);
+    expect(soEscura.origens.logoUrl).toBe("conta");
+
+    // Sem Conta: o logo local serve aos dois.
+    const local = resolver(LINHA);
+    expect(local.logoEscuroUrl).toBe("https://cdn.exemplo.test/l.png");
+    expect(local.logoUrl).toBe("https://cdn.exemplo.test/l.png");
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
 });

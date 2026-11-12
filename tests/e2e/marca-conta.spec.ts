@@ -91,6 +91,9 @@ function pngSolido(lado: number, cor: [number, number, number]): Buffer {
 }
 const LOGO = pngSolido(48, [0x27, 0x46, 0x3b]);
 const SHA = createHash("sha256").update(LOGO).digest("hex");
+// A logo para FUNDO ESCURO, de outra cor: é ela que o menu verde tem de mostrar.
+const LOGO_ESCURA = pngSolido(48, [0xf5, 0xef, 0xd9]);
+const SHA_ESCURA = createHash("sha256").update(LOGO_ESCURA).digest("hex");
 // Plano 7: o ícone da aba, quadrado e de outra cor, para não confundir com a logo.
 const ICONE = pngSolido(180, [0xd8, 0xb4, 0x5a]);
 const SHA_ICONE = createHash("sha256").update(ICONE).digest("hex");
@@ -105,11 +108,11 @@ async function ligarMarcaNaConta(): Promise<void> {
         frase_clinica: null,
         paleta: { id: "verde-dourado" },
         cores: { principal: "#27463b", funda: "#1d352c", destaque: "#d8b45a" },
-        logos: { escuro: null, claro: SHA },
+        logos: { escuro: SHA_ESCURA, claro: SHA },
         icone: SHA_ICONE,
         atualizado_em: new Date().toISOString(),
       },
-      logos: { claro: LOGO.toString("base64"), icone: ICONE.toString("base64") },
+      logos: { claro: LOGO.toString("base64"), escuro: LOGO_ESCURA.toString("base64"), icone: ICONE.toString("base64") },
     }),
   });
   expect(res.status, "a Conta falsa não aceitou a marca de teste").toBe(204);
@@ -200,12 +203,13 @@ test.describe("marca da clínica pela Conta", () => {
     await expect(page.getByLabel("Nome da sua empresa")).toHaveCount(0);
     await expect(page.getByLabel("Cor da sua marca")).toHaveCount(0);
     await expect(page.getByLabel("Cor do menu lateral")).toBeVisible();
-    // A logo da Conta pinta o menu lateral (guardada no bucket pelo sha). O aviso
+    // A logo ESCURA da Conta pinta o menu lateral, que é verde (guardada no bucket
+    // pelo sha; a clara é a das superfícies claras). O aviso
     // lê o banco; o menu lê o memo de 30 s, e na volta em que a rodada grava o
     // layout já renderizou com o memo anterior. Recarrega até o menu alcançar.
     await expect(async () => {
       await page.reload();
-      await expect(page.locator("aside img").first()).toHaveAttribute("src", new RegExp(`platform/conta-${SHA}\\.png`), { timeout: 2_000 });
+      await expect(page.locator("aside img").first()).toHaveAttribute("src", new RegExp(`platform/conta-${SHA_ESCURA}\\.png`), { timeout: 2_000 });
     }).toPass({ timeout: 45_000, intervals: [3_000] });
     await page.screenshot({ path: path.join(EVIDENCIA, "1-organizacao.png"), fullPage: true });
 

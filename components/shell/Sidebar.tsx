@@ -134,7 +134,9 @@ export function SidebarContent({
 
   const brand = useMarcaDaInstalacao();
   const nome = activeOrg?.marca?.nome ?? brand.name;
-  const logo = activeOrg?.marca?.logoUrl || brand.logoUrl;
+  // O menu é verde nos dois temas: da instalação vale o logo para FUNDO ESCURO (a
+  // logo "escuro" da Conta); o da organização continua na frente, como sempre.
+  const logo = activeOrg?.marca?.logoUrl || brand.logoEscuroUrl || brand.logoUrl;
   const marcaDoProduto = marcaEhADoProduto({ name: nome, logoUrl: logo ?? null });
 
   const estiloDoItem = (ativo: boolean) =>
