@@ -19,6 +19,8 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser: async () => ({ data: { user: null } }) } }),
 }));
 vi.mock("@/components/auth/LoginForm", () => ({ LoginForm: () => null }));
+// A página lê a marca resolvida (`marcaDaSaida`); sem banco nos testes.
+vi.mock("@/lib/branding/instalacao", () => ({ marcaDaInstalacao: async () => null }));
 const evalink = vi.hoisted(() => ({ ligado: false }));
 vi.mock("@/lib/evalink/config", () => ({ configEvalink: () => (evalink.ligado ? { url: "https://conta.exemplo" } : null) }));
 

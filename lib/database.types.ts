@@ -6642,6 +6642,14 @@ export type Database = {
         Row: {
           accent_hex: string | null
           app_name: string | null
+          conta_accent_hex: string | null
+          conta_atualizado_em: string | null
+          conta_etag: string | null
+          conta_lida_em: string | null
+          conta_icone_path: string | null
+          conta_logo_path: string | null
+          conta_logos: Json | null
+          conta_nome: string | null
           fallback_at: string | null
           fallback_reason: string | null
           id: number
@@ -6657,6 +6665,14 @@ export type Database = {
         Insert: {
           accent_hex?: string | null
           app_name?: string | null
+          conta_accent_hex?: string | null
+          conta_atualizado_em?: string | null
+          conta_etag?: string | null
+          conta_lida_em?: string | null
+          conta_icone_path?: string | null
+          conta_logo_path?: string | null
+          conta_logos?: Json | null
+          conta_nome?: string | null
           fallback_at?: string | null
           fallback_reason?: string | null
           id?: number
@@ -6672,6 +6688,14 @@ export type Database = {
         Update: {
           accent_hex?: string | null
           app_name?: string | null
+          conta_accent_hex?: string | null
+          conta_atualizado_em?: string | null
+          conta_etag?: string | null
+          conta_lida_em?: string | null
+          conta_icone_path?: string | null
+          conta_logo_path?: string | null
+          conta_logos?: Json | null
+          conta_nome?: string | null
           fallback_at?: string | null
           fallback_reason?: string | null
           id?: number

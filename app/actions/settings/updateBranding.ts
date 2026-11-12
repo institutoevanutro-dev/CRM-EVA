@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 
 import { audit } from "@/lib/audit";
 import { escritaDeAdminOuRecusa } from "@/lib/auth/escritaDeAdminOuRecusa";
+import { contaUrlEmVigor } from "@/lib/branding/conta-armazem";
 import { invalidarMarcaDaInstalacao } from "@/lib/branding/instalacao";
 import { normalizarHex } from "@/lib/branding/rampa";
 import { platformBrandingSchema, type PlatformBrandingInput } from "@/lib/schemas/settings";
@@ -88,27 +89,45 @@ export async function updateBranding(
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   const userAgent = hdrs.get("user-agent") ?? null;
 
-  const valores = {
-    app_name: parsed.data.app_name,
-    logo_url: parsed.data.logo_url,
-    // Normaliza porque o CHECK do banco é `^#[0-9a-f]{6}$`: `#FFF` e `#FFFFFF`
-    // passam pelo Zod (o validador do domínio aceita as duas formas) e só um dos
-    // dois passa pelo banco. Normalizar aqui é o que faz "mudou?" ser uma
-    // pergunta com resposta — duas grafias da mesma cor mentiriam.
-    accent_hex: parsed.data.accent_hex === null ? null : normalizarHex(parsed.data.accent_hex),
-    show_powered_by: parsed.data.show_powered_by,
-    // A linha passa a ser HUMANA. É o que impede a semeadura do `.env` de
-    // reescrever a escolha no render seguinte — inclusive quando a escolha foi
-    // apagar tudo para voltar ao padrão do produto. Ver `precisaSemear`.
-    seeded_from_env: false,
-    updated_by: authUser.id,
-    // Uma configuração nova apaga o alarme da anterior. Se a cor gravada agora
-    // também for recusada, `EstiloDaMarca` reacende no primeiro render — o que
-    // não pode acontecer é o operador corrigir o valor e continuar vendo a
-    // recusa de ontem.
-    fallback_at: null,
-    fallback_reason: null,
-  };
+  // ── Com a marca da Conta em vigor (Plano 6; ver `contaEmVigor`) ───────────
+  // Nome, cor e logo da clínica vêm da Conta Eva Link; aqui só `show_powered_by`.
+  // Campo de marca PREENCHIDO é recusado com nome (`marca_na_conta`) — uma aba
+  // aberta antes de ligar a Conta não pode achar que salvou. `null` quer dizer
+  // "não mandei", e NÃO apaga: a marca local é a rede quando a Conta cai.
+  // Guardado ilegível com a Conta ligada: falha fechado (ver `contaUrlEmVigor`).
+  const conta = await contaUrlEmVigor();
+  if (conta === "erro") return { ok: false, error: "db_error" };
+  const naConta = conta !== null;
+  if (
+    naConta &&
+    (parsed.data.app_name !== null || parsed.data.logo_url !== null || parsed.data.accent_hex !== null)
+  ) {
+    return { ok: false, error: "marca_na_conta" };
+  }
+
+  const valores = naConta
+    ? { show_powered_by: parsed.data.show_powered_by, updated_by: authUser.id }
+    : {
+        app_name: parsed.data.app_name,
+        logo_url: parsed.data.logo_url,
+        // Normaliza porque o CHECK do banco é `^#[0-9a-f]{6}$`: `#FFF` e `#FFFFFF`
+        // passam pelo Zod (o validador do domínio aceita as duas formas) e só um dos
+        // dois passa pelo banco. Normalizar aqui é o que faz "mudou?" ser uma
+        // pergunta com resposta — duas grafias da mesma cor mentiriam.
+        accent_hex: parsed.data.accent_hex === null ? null : normalizarHex(parsed.data.accent_hex),
+        show_powered_by: parsed.data.show_powered_by,
+        // A linha passa a ser HUMANA. É o que impede a semeadura do `.env` de
+        // reescrever a escolha no render seguinte — inclusive quando a escolha foi
+        // apagar tudo para voltar ao padrão do produto. Ver `precisaSemear`.
+        seeded_from_env: false,
+        updated_by: authUser.id,
+        // Uma configuração nova apaga o alarme da anterior. Se a cor gravada agora
+        // também for recusada, `EstiloDaMarca` reacende no primeiro render — o que
+        // não pode acontecer é o operador corrigir o valor e continuar vendo a
+        // recusa de ontem.
+        fallback_at: null,
+        fallback_reason: null,
+      };
 
   const { error } = await createAdminClient()
     .from("platform_branding")
@@ -149,9 +168,10 @@ export async function updateBranding(
       // Quais campos foram DECLARADOS, nunca os valores. O hex da marca é
       // identidade, e a auditoria é lida por quem opera a plataforma — mesma
       // disciplina de `resolve.ts` ("emite FORMA, nunca IDENTIDADE").
-      fields_changed: Object.keys(parsed.data),
+      fields_changed: naConta ? ["show_powered_by"] : Object.keys(parsed.data),
       accent_definido: parsed.data.accent_hex !== null,
       logo_definido: parsed.data.logo_url !== null,
+      ...(naConta ? { marca_na_conta: true } : {}),
     },
   });
 

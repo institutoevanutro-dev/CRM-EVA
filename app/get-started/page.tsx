@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { branding } from "@/lib/branding";
+import { marcaDaSaida } from "@/lib/branding/saida";
 import { RecoverOrganizationForm } from "@/components/auth/RecoverOrganizationForm";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
@@ -48,7 +48,7 @@ export default async function GetStartedPage() {
         <div className="w-full max-w-md space-y-6 rounded-lg border bg-background p-6 shadow-sm">
           <div className="space-y-2">
             <p className="rotulo-secao text-muted-foreground">
-              {branding().name}
+              {(await marcaDaSaida(null)).nome}
             </p>
             <h1 className="titulo-tela">
               {t("Configure sua organização")}

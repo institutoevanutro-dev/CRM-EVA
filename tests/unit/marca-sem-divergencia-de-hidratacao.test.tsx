@@ -236,13 +236,11 @@ describe("catraca: `branding()` é server-only", () => {
     // A guarda contra o erro NOVO que o corte por bloco introduz: se o regex de
     // `/* … */` engolisse código, esta lista esvaziaria e a catraca ficaria verde
     // por cegueira — o mesmo defeito que ela existe para impedir, do lado do
-    // instrumento. Estes quatro são servidores e DEVEM chamar `branding()`.
-    const esperados = [
-      "app/(public)/login/page.tsx",
-      "app/(public)/signup/page.tsx",
-      "app/onboarding/layout.tsx",
-      "lib/legal/operador.ts",
-    ];
+    // instrumento. Este é servidor e DEVE chamar `branding()`: nos documentos
+    // legais o nome é o do SOFTWARE ("o X é um software de código aberto…").
+    // As telas públicas e de onboarding passaram a usar o nome resolvido
+    // (`marcaDaSaida(null).nome`, a mesma pilha do título da aba).
+    const esperados = ["lib/legal/operador.ts"];
     const vistos = varridos.filter(chamaBranding).map((f) => relativoEmBarraNormal(RAIZ, f));
     expect(esperados.filter((e) => !vistos.includes(e))).toEqual([]);
   });

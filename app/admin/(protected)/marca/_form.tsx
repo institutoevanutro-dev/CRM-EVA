@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { updateBranding } from "@/app/actions/settings/updateBranding";
 import { AmostrasDePaleta } from "@/components/branding/AmostrasDePaleta";
+import { AvisoDaMarcaNaConta } from "@/components/branding/AvisoDaMarcaNaConta";
 import { CampoDeLogo } from "@/components/branding/CampoDeLogo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -54,6 +55,16 @@ interface Props {
   readonly definidoNestaTela: boolean;
   readonly fallbackEm: string | null;
   readonly fallbackMotivo: string | null;
+  /**
+   * `CONTA_URL` quando a marca da Conta está ligada (Plano 6): nome, cor e logo
+   * são editados lá, e esta tela vira o aviso mais o diagnóstico. O ícone da aba
+   * continua (fica fora deste formulário, na página). `show_powered_by` também
+   * continua aceito pela action, mas segue sem controle na tela — ver o
+   * `handleSubmit`: ele não tem consumidor no produto.
+   */
+  readonly contaUrl?: string | null;
+  /** A cor guardada da Conta, para o diagnóstico mostrar a escala que pinta. */
+  readonly corDaConta?: string | null;
 }
 
 /** Mensagem por código de recusa da server action. */
@@ -62,6 +73,8 @@ const ERRO_EM_PORTUGUES: Record<string, string> = {
   validation_failed: "Algum campo não está no formato esperado.",
   unauthenticated: "Sua sessão expirou. Entre de novo para salvar.",
   forbidden_role: "Só quem administra a instalação pode mudar a marca.",
+  marca_na_conta:
+    "O nome e a cor da clínica agora são configurados na Conta Eva Link. Recarregue a página.",
 };
 
 /** Cinza médio para o seletor visual quando o campo ainda não tem cor válida. */
@@ -76,6 +89,8 @@ export function FormularioDaMarca({
   definidoNestaTela,
   fallbackEm,
   fallbackMotivo,
+  contaUrl = null,
+  corDaConta = null,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -86,6 +101,8 @@ export function FormularioDaMarca({
 
   const hexLimpo = hex.trim();
   const hexValido = hexLimpo.length === 0 || ehHexValido(hexLimpo);
+  // Com a Conta guardada é a cor DELA que pinta — o diagnóstico mostra essa.
+  const hexDaPrevia = contaUrl && corDaConta ? corDaConta : hexLimpo;
 
   /**
    * A resolução AO VIVO, pelo mesmo caminho que o servidor usa no render.
@@ -102,10 +119,15 @@ export function FormularioDaMarca({
   const resolvida = useMemo(
     () =>
       resolverMarca(
-        [{ origem: "tela", cor: hexLimpo.length > 0 ? envelopeDeSemente(hexLimpo) : undefined }],
+        [
+          {
+            origem: "tela",
+            cor: hexDaPrevia.length > 0 ? envelopeDeSemente(hexDaPrevia) : undefined,
+          },
+        ],
         REGUA_DO_PRODUTO,
       ),
-    [hexLimpo],
+    [hexDaPrevia],
   );
 
   // A mesma serialização que decide se a cor chega ao `<style>` da página —
@@ -209,6 +231,28 @@ export function FormularioDaMarca({
       // ao servidor. Falhar fechado na ação, aberto na informação.
       if (!ERRO_EM_PORTUGUES[resultado.error]) setErroTecnico(resultado.error);
     });
+  }
+
+  const estado = (
+    <EstadoDaMarca
+      origens={origens}
+      definidoNestaTela={definidoNestaTela}
+      fallbackEm={fallbackEm}
+      fallbackMotivo={fallbackMotivo}
+      derivada={derivada}
+      avisos={avisos}
+      seriaAplicada={serializacao.css !== null}
+    />
+  );
+
+  // Com a Conta não há o que salvar aqui: só o aviso e de onde vem cada coisa.
+  if (contaUrl) {
+    return (
+      <div className="max-w-3xl space-y-6">
+        <AvisoDaMarcaNaConta contaUrl={contaUrl} />
+        {estado}
+      </div>
+    );
   }
 
   return (
@@ -350,15 +394,7 @@ export function FormularioDaMarca({
         />
       </Card>
 
-      <EstadoDaMarca
-        origens={origens}
-        definidoNestaTela={definidoNestaTela}
-        fallbackEm={fallbackEm}
-        fallbackMotivo={fallbackMotivo}
-        derivada={derivada}
-        avisos={avisos}
-        seriaAplicada={serializacao.css !== null}
-      />
+      {estado}
 
       <div className="flex items-center justify-end gap-3">
         {erroTecnico ? (

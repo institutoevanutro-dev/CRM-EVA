@@ -22,7 +22,8 @@ const chave = Symbol.for("crm.icone.versao");
 const g = globalThis as unknown as Record<symbol, Memo | undefined>;
 
 export function versaoDoCaminho(caminho: string | null | undefined): string {
-  const uuid = (caminho ?? "").match(/^platform\/([0-9a-f]{8})/)?.[1];
+  // `platform/<uuid>` (ícone enviado) ou `platform/conta-<sha>` (ícone da Conta).
+  const uuid = (caminho ?? "").match(/^platform\/(?:conta-)?([0-9a-f]{8})/)?.[1];
   return uuid ?? "d";
 }
 
@@ -36,7 +37,12 @@ export async function versaoDoIcone(): Promise<string> {
       .select("icone_path")
       .eq("id", 1)
       .maybeSingle();
-    valor = versaoDoCaminho((data as { icone_path?: string | null } | null)?.icone_path);
+    // Mesma ordem de `app/icon.tsx`: ícone da Conta, depois o enviado.
+    const enviado = (data as { icone_path?: string | null } | null)?.icone_path;
+    // Import dinâmico: `instalacao.ts` importa `invalidarVersaoDoIcone` daqui
+    // (a rodada da Conta zera esta versão), e um import estático fecharia o ciclo.
+    const { marcaDaInstalacao } = await import("@/lib/branding/instalacao");
+    valor = versaoDoCaminho((await marcaDaInstalacao())?.conta_icone_path || enviado);
   } catch {
     valor = memo?.valor ?? "d";
   }

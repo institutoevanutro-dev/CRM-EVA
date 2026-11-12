@@ -424,6 +424,15 @@ const schema = z.object({
   APP_ACCENT_HEX: z.string().optional().default(""),
 
   /**
+   * Endereço da Conta Eva Link. Opcional, e `z.string()` pelo mesmo motivo de
+   * `APP_ACCENT_HEX`: uma URL inválida não pode derrubar o import do módulo.
+   * Quem valida é `contaUrlDaMarca` (`lib/branding/conta.ts`), que desliga a
+   * marca da Conta e segue. O login EvaLink lê a mesma variável crua em
+   * `lib/evalink/config.ts`, com a mesma régua (`ehUrl`).
+   */
+  CONTA_URL: z.string().optional().default(""),
+
+  /**
    * Com o que a instalação NASCE quanto a cadastro: `aberto` (padrão) ou
    * `so_convite`. Vazio = `aberto`, que é como o produto sempre funcionou.
    *

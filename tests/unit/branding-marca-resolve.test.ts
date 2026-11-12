@@ -1,9 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { derivarMarca } from "@/lib/branding/contraste";
 import { REGUA_DO_PRODUTO } from "@/lib/branding/regua-do-produto";
 import {
+  marcaDaOrganizacaoDeSettings,
+  menuDaOrganizacaoDeSettings,
+  resolverMarcaDaOrganizacao,
+} from "@/lib/branding/organizacao";
+import {
+  camadaDaInstalacao,
+  camadaDaOrganizacao,
   camadaDoAmbiente,
+  pilhaComConta,
   resolverMarca,
   type CamadaDeMarca,
 } from "@/lib/branding/resolve";
@@ -300,5 +308,84 @@ describe("memoização da derivação", () => {
       REGUA,
     );
     expect(pelaCamada.cor?.derivada).toEqual(direto);
+  });
+});
+
+describe("camada da Conta (Plano 6) — acima da organização e da instalação", () => {
+  const AMBIENTE = { APP_NAME: "Do Env", APP_ACCENT_HEX: "#6b2737" };
+  const LINHA = { app_name: "Da Instalação", accent_hex: "#3a3f47", logo_path: null, logo_url: "https://cdn.exemplo.test/l.png" };
+  const ORG = { branding: { app_name: "Da Organização", accent_hex: "#8a3f26", logo_path: "org/1.png", menu_hex: "#123456" } };
+  const CONTA = {
+    conta_nome: "Clínica da Conta",
+    conta_accent_hex: "#27463b",
+    conta_logo_path: `platform/conta-${"a".repeat(64)}.png`,
+  };
+
+  it("nome, cor e logo da Conta vencem a organização e a instalação", () => {
+    // jsdom: `baseDoStorage` lê a base do `window` (ver `lib/branding/logo.ts`).
+    vi.stubGlobal("__PUBLIC_ENV__", { NEXT_PUBLIC_SUPABASE_URL: "https://projeto.exemplo.test" });
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://projeto.exemplo.test");
+    const m = resolverMarcaDaOrganizacao(ORG, { ...LINHA, ...CONTA }, AMBIENTE);
+    expect(m.name).toBe("CRM · Clínica da Conta");
+    expect(m.cor?.semente).toBe("#27463b");
+    expect(m.logoUrl).toContain(CONTA.conta_logo_path);
+    expect(m.origens).toEqual({ nome: "conta", logoUrl: "conta", cor: "conta" });
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("Conta ligada SEM logo: nem o logo da organização nem o local reaparecem", () => {
+    vi.stubGlobal("__PUBLIC_ENV__", { NEXT_PUBLIC_SUPABASE_URL: "https://projeto.exemplo.test" });
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://projeto.exemplo.test");
+    const linha = { ...LINHA, logo_path: "platform/11111111-1111-4111-8111-111111111111.png", ...CONTA, conta_logo_path: null };
+    const comLogoNoEnv = { ...AMBIENTE, APP_LOGO_URL: "https://cdn.exemplo.test/env.png" };
+    for (const m of [
+      resolverMarcaDaOrganizacao(ORG, linha, comLogoNoEnv),
+      resolverMarca(pilhaComConta(linha, [camadaDaInstalacao(linha), camadaDoAmbiente(comLogoNoEnv)]), REGUA),
+    ]) {
+      expect(m.logoUrl).toBeNull();
+      expect(m.origens.logoUrl).toBe("padrao");
+      expect(m.name).toBe("CRM · Clínica da Conta");
+      expect(m.origens.cor).toBe("conta");
+    }
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("Conta ligada sem nome: só o nome do módulo — nem o local nem o da organização", () => {
+    for (const nome of [null, "   "]) {
+      const m = resolverMarcaDaOrganizacao(ORG, { ...LINHA, ...CONTA, conta_nome: nome }, AMBIENTE);
+      expect(m.name).toBe("CRM");
+      expect(m.origens.nome).toBe("conta");
+    }
+  });
+
+  it("a cor do menu da organização continua (não passa pelo resolvedor)", () => {
+    expect(menuDaOrganizacaoDeSettings(ORG)).toBe("#123456");
+  });
+
+  it("Conta com nome: \"CRM · <clínica>\", aparado, nas duas pilhas", () => {
+    const linha = { ...LINHA, ...CONTA, conta_nome: "  Clínica X  " };
+    expect(resolverMarcaDaOrganizacao(null, linha, AMBIENTE).name).toBe("CRM · Clínica X");
+    expect(resolverMarca(pilhaComConta(linha, [camadaDaInstalacao(linha), camadaDoAmbiente(AMBIENTE)]), REGUA).name).toBe(
+      "CRM · Clínica X",
+    );
+  });
+
+  it("sem conta_* guardado, o resultado é IDÊNTICO à pilha de antes", () => {
+    const linhas = [null, LINHA, { ...LINHA, accent_hex: "" }, { app_name: null, accent_hex: "#zzz" }];
+    const settings = [null, ORG, { branding: { accent_hex: "#ffff00" } }, { branding: "lixo" }];
+    for (const linha of linhas) {
+      for (const s of settings) {
+        const antes = resolverMarca(
+          [camadaDaOrganizacao(marcaDaOrganizacaoDeSettings(s)), camadaDaInstalacao(linha), camadaDoAmbiente(AMBIENTE)],
+          REGUA,
+        );
+        expect(resolverMarcaDaOrganizacao(s, linha, AMBIENTE)).toEqual(antes);
+      }
+      expect(resolverMarca(pilhaComConta(linha, [camadaDaInstalacao(linha), camadaDoAmbiente(AMBIENTE)]), REGUA)).toEqual(
+        resolverMarca([camadaDaInstalacao(linha), camadaDoAmbiente(AMBIENTE)], REGUA),
+      );
+    }
   });
 });

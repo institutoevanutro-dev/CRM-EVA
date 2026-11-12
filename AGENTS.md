@@ -234,7 +234,9 @@ duas origens de `EXECUTE`.
 "Deskcomm"/"DeskcommCRM" em código que alcança o usuário: `tests/unit/branding.test.ts` varre
 `app|components|lib|workers|hooks` e reprova (a allowlist só encolhe). A marca resolve do banco
 (`platform_branding`, `organizations.settings.branding`); `APP_NAME`/`APP_LOGO_URL`/`APP_ACCENT_HEX`
-no `.env` são semente e piso de rollback. Fora do DOM (e-mail, ícone, `issuer` do MFA) use
+no `.env` são semente e piso de rollback. Com `CONTA_URL`, a marca da Conta Eva Link fica no topo da pilha
+(`lib/branding/conta-armazem.ts` guarda a última boa em `platform_branding.conta_*`; o render nunca a
+espera). Fora do DOM (e-mail, ícone, `issuer` do MFA) use
 `marcaDaSaida()` de `lib/branding/saida.ts`. O resolvedor **nunca lança** — ele roda em
 `app/layout.tsx` e um throw ali é 500 em todas as telas. O PDF de LGPD não leva marca: ele nomeia
 o controlador (`organizations.legal_name`) e o DPO.

@@ -231,12 +231,15 @@ export type PlatformBrandingInput = z.infer<typeof platformBrandingSchema>;
  * admin receberia um `22023` cru na tela em vez de "essa cor não é válida".
  */
 export const marcaDaOrganizacaoSchema = z.object({
-  app_name: z.string().trim().min(1).max(120).nullable(),
+  // `null` = apagar o campo; AUSENTE = manter o gravado (a tela com a marca da
+  // Conta não manda nome nem cor — ver `updateMarcaDaOrganizacao`).
+  app_name: z.string().trim().min(1).max(120).nullable().optional(),
   accent_hex: z
     .string()
     .trim()
     .refine(ehHexValido, { message: "Use uma cor no formato #rrggbb" })
-    .nullable(),
+    .nullable()
+    .optional(),
   /**
    * A cor do menu lateral. Mesmo validador do `accent_hex`, e já normalizada
    * aqui (`#FFF` vira `#ffffff`): a função SQL não confere esta chave, então o

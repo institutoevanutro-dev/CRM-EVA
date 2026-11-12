@@ -3,6 +3,7 @@ import { ImageResponse } from "next/og";
 import { marcaEhADoProduto } from "@/lib/branding";
 import { CORES_DA_MARCA, SIMBOLO } from "@/lib/branding/desenho";
 import { letraDoIcone } from "@/lib/branding/icone";
+import { marcaDaInstalacao } from "@/lib/branding/instalacao";
 import { marcaDaSaida, NEUTROS_DE_SAIDA } from "@/lib/branding/saida";
 import { BUCKET_DE_LOGOS } from "@/lib/branding/logo";
 import { logger } from "@/lib/logger";
@@ -79,10 +80,17 @@ export const size = { width: 64, height: 64 };
 export const contentType = "image/png";
 
 export default async function Icon() {
-  // O ícone ENVIADO pela tela (migration 0291) vence o desenhado. Lido do
-  // bucket do próprio projeto pelo cliente admin — caminho validado por CHECK
-  // no banco, nunca uma URL digitada —, então continua sem SSRF. Qualquer falha
-  // cai no desenho de sempre: o ícone da aba nunca pode virar erro.
+  // 1º o ícone da CONTA (Plano 7): a marca central da clínica vence tudo.
+  // `conta_icone_path` só vem preenchido com `CONTA_URL` ligada, e é caminho do
+  // bucket com CHECK (`platform/conta-<sha>.png`), nunca URL: sem SSRF. NUNCA a
+  // logo da Conta no lugar — a logo é comprida e fica ilegível na aba (contrato).
+  const caminhoDaConta = (await marcaDaInstalacao())?.conta_icone_path;
+  const daConta = caminhoDaConta ? await baixar(caminhoDaConta) : null;
+  if (daConta) return new Response(daConta, { headers: { "content-type": "image/png", ...CACHE } });
+  // Depois o ícone ENVIADO pela tela (migration 0291), que vence o desenhado.
+  // Lido do bucket do próprio projeto pelo cliente admin — caminho validado por
+  // CHECK no banco, nunca uma URL digitada —, então continua sem SSRF. Qualquer
+  // falha cai no desenho de sempre: o ícone da aba nunca pode virar erro.
   const enviado = await iconeEnviado();
   if (enviado) {
     return new Response(enviado, { headers: { "content-type": "image/png", ...CACHE } });
@@ -158,14 +166,23 @@ async function iconeEnviado(): Promise<ArrayBuffer | null> {
     const { data, error } = await admin.from("platform_branding").select("icone_path").eq("id", 1).maybeSingle();
     const caminho = (data as { icone_path?: string | null } | null)?.icone_path;
     if (error || !caminho) return null;
-    const { data: arquivo, error: erroArquivo } = await admin.storage.from(BUCKET_DE_LOGOS).download(caminho);
-    if (erroArquivo || !arquivo) {
-      logger.warn("[icon] ícone enviado não pôde ser lido; usando o desenhado", { detalhe: erroArquivo?.message });
+    return await baixar(caminho);
+  } catch (e) {
+    logger.warn("[icon] falha ao buscar o ícone enviado; usando o desenhado", { detalhe: String(e) });
+    return null;
+  }
+}
+
+async function baixar(caminho: string): Promise<ArrayBuffer | null> {
+  try {
+    const { data: arquivo, error } = await createAdminClient().storage.from(BUCKET_DE_LOGOS).download(caminho);
+    if (error || !arquivo) {
+      logger.warn("[icon] ícone não pôde ser lido do bucket; usando o desenhado", { detalhe: error?.message });
       return null;
     }
     return await arquivo.arrayBuffer();
   } catch (e) {
-    logger.warn("[icon] falha ao buscar o ícone enviado; usando o desenhado", { detalhe: String(e) });
+    logger.warn("[icon] falha ao baixar o ícone; usando o desenhado", { detalhe: String(e) });
     return null;
   }
 }

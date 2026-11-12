@@ -1,4 +1,4 @@
-<!-- traduzido-de: docs/white-label.md@8972939195fc -->
+<!-- traduzido-de: docs/white-label.md@1cdd3309b1b6 -->
 
 [🇧🇷 Português](white-label.md) · [🇺🇸 English](white-label.en.md) · 🇪🇸 Español
 
@@ -11,6 +11,8 @@ La licencia es MIT: puedes modificarlo, alojarlo para terceros, revenderlo y cob
 ---
 
 ## Cambiar la marca
+
+> ¿Instalación con la Cuenta Eva Link (`CONTA_URL` en el `.env`)? La marca viene de la Cuenta — ver [Con la Cuenta Eva Link](#con-la-cuenta-eva-link). El resto de esta sección vale para la instalación sin ella.
 
 **Desde la pantalla, y sin reiniciar nada.** En `/admin/marca` cambias el **nombre del sistema** y el **color de la marca**. Guardas, recargas, y la interfaz entera ya está repintada — la barra lateral, los botones, el anillo de foco, el título de la pestaña y el icono del navegador.
 
@@ -86,6 +88,20 @@ Directo, para que no lo descubras delante del cliente. Cada línea trae la razó
 - **El informe de LGPD del titular no lleva tu marca — y es a propósito.** Ver la sección propia más abajo.
 - **La alarma de presupuesto de IA** todavía sale con nuestra marca. Es la única fuga conocida, y se queda: hoy esa alarma no tiene ninguna programación conectada, así que arreglar su marca no cambiaría nada que alguien vea. Sale cuando la alarma tenga un cron de verdad.
 - **Dos nombres técnicos no cambian**: la cabecera `X-Deskcomm-Signature` de los webhooks de salida y la cookie de sesión. El primero es un contrato con sistemas de terceros que ya verifican ese nombre; renombrarlo tumbaría la integración de un cliente **en silencio** — el receptor no da error, simplemente deja de reconocer.
+
+---
+
+## Con la Cuenta Eva Link
+
+Si la instalación usa la **Cuenta Eva Link** — el `.env` tiene `CONTA_URL`, la misma variable del inicio de sesión por la Cuenta —, **la marca pasa a configurarse en la Cuenta, no en el CRM.** El nombre pasa a ser **CRM · <nombre de la clínica>** (solo **CRM** cuando la Cuenta no tiene nombre de clínica), y él, el color y el logo de allí valen en todas partes: inicio de sesión, menú, pestaña, icono y correos, por encima de la marca de la instalación y de la marca de cada organización. Lo único de la organización que sigue valiendo es el **color del menú lateral**. El **icono de la pestaña** es el icono cuadrado de la Cuenta (tarjeta "Icono de la pestaña" de su pantalla Marca); sin él, vale el icono subido en el CRM o el dibujado, nunca el logo alargado.
+
+- **Cuánto tarda:** el CRM le pregunta a la Cuenta como máximo una vez por minuto, fuera de la carga de la página. Un cambio hecho en la Cuenta aparece en hasta dos minutos.
+- **Cuenta caída:** queda la última marca buena que el CRM guardó en su propia base. Si nunca hubo una, vale la marca local, como sin la Cuenta.
+- **Logo rechazado:** solo PNG o JPEG, hasta 1 MiB, verificado por los bytes y por el hash que anuncia la Cuenta. Un logo fuera de eso, o adulterado en el camino, se rechaza y queda el anterior; nombre y color entran igual. Un color que no pasa el contraste de 4,5:1 rechaza la ronda entera.
+- **Las pantallas de marca** (`/admin/marca` y `/app/settings/marca`) muestran un aviso que apunta a la Cuenta, y guardar desde ellas se rechaza. En la marca de la organización solo queda el color del menú.
+- **Para volver a la marca local:** vacía `CONTA_URL` y reinicia la app. Nada local se borra mientras manda la Cuenta.
+- **Base de datos:** la actualización solo agrega columnas (migration 0409). En una instalación con `CONTA_URL` que todavía no aplicó la base nueva, la marca local sigue apareciendo, pero las pantallas rechazan guardar hasta que corra `update.sh`.
+- **Los correos de acceso** (confirmación de cuenta y recuperación de contraseña) no siguen a la Cuenta: mantienen la marca del `.env`, por el mismo motivo de la sección de arriba.
 
 ---
 

@@ -40,6 +40,7 @@ import {
   camadaDaInstalacao,
   camadaDaOrganizacao,
   camadaDoAmbiente,
+  pilhaComConta,
   resolverMarca,
   type LinhaDaInstalacao,
   type MarcaDaOrganizacao,
@@ -104,7 +105,7 @@ export function menuDaOrganizacaoDeSettings(settings: unknown): string | null {
 }
 
 /**
- * A pilha inteira: ORGANIZAÇÃO acima, instalação no meio, `.env` embaixo.
+ * A pilha inteira: CONTA no topo (só com `CONTA_URL`), ORGANIZAÇÃO, instalação, `.env` embaixo.
  *
  * Precedência POR CAMPO (`primeiroDefinido`, em `resolve.ts`): a organização que
  * definiu só a cor continua com o nome E o logo do revendedor. Desde a onda do
@@ -117,11 +118,13 @@ export function resolverMarcaDaOrganizacao(
   ambiente: AmbienteDaMarca,
 ): MarcaResolvida {
   return resolverMarca(
-    [
+    // A Conta (quando ligada e guardada) tira a organização da pilha — ver
+    // `pilhaComConta`. Vazia, a pilha é a de antes.
+    pilhaComConta(linha, [
       camadaDaOrganizacao(marcaDaOrganizacaoDeSettings(settings)),
       camadaDaInstalacao(linha),
       camadaDoAmbiente(ambiente),
-    ],
+    ]),
     REGUA_DO_PRODUTO,
   );
 }

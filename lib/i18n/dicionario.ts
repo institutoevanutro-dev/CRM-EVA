@@ -3859,6 +3859,9 @@ export const DICIONARIO: Traducoes = {
   "O nome e a cor que este sistema mostra para todo mundo que usa esta instalação.": {
     es: "El nombre y el color que este sistema muestra a todo el mundo que usa esta instalación.",
   },
+  "A aba está usando o ícone da Conta Eva Link. O ícone abaixo só vale se a Conta ficar sem ícone.": {
+    es: "La pestaña está usando el icono de la Cuenta Eva Link. El icono de abajo solo vale si la Cuenta se queda sin icono.",
+  },
   "Sua cor": { es: "Tu color" },
   "fora da escala — fica só no logo": { es: "fuera de la escala — solo queda en el logo" },
   "Botões no modo claro": { es: "Botones en el modo claro" },
@@ -10986,6 +10989,18 @@ export const DICIONARIO: Traducoes = {
     es: "El CRM necesita al menos un administrador en cada organización. En la Cuenta, mantenga su rol como administrador o déselo a otra persona antes.",
   },
   "Entre pelo botão Entrar com o EvaLink.": { es: "Ingrese con el botón Entrar con EvaLink." },
+  // Plano 6: marca da clínica configurada na Conta Eva Link.
+  "A marca da clínica é configurada na Conta Eva Link": {
+    es: "La marca de la clínica se configura en la Cuenta Eva Link",
+  },
+  "Nome, cor e logo são lidos de lá e aparecem aqui sozinhos pouco depois de salvos.": {
+    es: "Nombre, color y logo se leen de allí y aparecen aquí solos poco después de guardarlos.",
+  },
+  "Abrir a marca na Conta Eva Link": { es: "Abrir la marca en la Cuenta Eva Link" },
+  "vem da Conta Eva Link": { es: "viene de la Cuenta Eva Link" },
+  "O nome e a cor da clínica agora são configurados na Conta Eva Link. Recarregue a página.": {
+    es: "El nombre y el color de la clínica ahora se configuran en la Cuenta Eva Link. Recargue la página.",
+  },
   "Contato não encontrado nesta organização.": { es: "Contacto no encontrado en esta organización." },
   "Erro ao verificar o agente.": { es: "Error al verificar el agente." },
   "Só quem administra a organização pode conectar a loja.": {

@@ -58,6 +58,22 @@
       "label": "GoTrue (Supabase Auth)",
       "sublabel": "templates de confirmação e recuperação — processo de terceiro, nenhum TypeScript nosso roda ali"
     },
+    {
+      "id": "contaevalink",
+      "lane": "config",
+      "col": 2,
+      "type": "external",
+      "label": "Conta Eva Link (CONTA_URL)",
+      "sublabel": "GET /api/marca (ETag/304) + /marca/logo/{escuro|claro} · a MESMA CONTA_URL do login EvaLink; vazia, nada disto existe"
+    },
+    {
+      "id": "marcadaconta",
+      "lane": "resolver",
+      "col": 3,
+      "type": "service",
+      "label": "lib/branding/conta.ts + conta-armazem.ts",
+      "sublabel": "leitor (prazo 3 s, logo ≤1 MiB PNG/JPEG pelos bytes, sha256, contraste 4,5:1) + armazém (1 rodada/60 s, teto 20 s, só a geração mais nova grava) · NUNCA LANÇA, log 1×/10 min"
+    },
 
     { "id": "registry", "lane": "humano", "col": 0, "type": "frontend", "label": "lib/navigation/registry.ts", "sublabel": "a PORTA: /app/settings/marca no grupo Configurações, sidebar:false (tarefa de uma vez)" },
     { "id": "adminmarca", "lane": "humano", "col": 1, "type": "frontend", "label": "/admin/marca", "sublabel": "marca da INSTALAÇÃO · tira de tons + estado do degrade (fallback_at/fallback_reason)" },
@@ -172,6 +188,12 @@
     { "id": "e65", "from": "platformbranding", "to": "nomeapresentacao", "label": "select próprio de nome_da_apresentacao, fora do select de instalacao.ts: 42703 numa coluna ausente perderia a marca do banco em toda tela" },
     { "id": "e66", "from": "saida", "to": "nomeapresentacao", "label": "coluna vazia, ausente ou ilegível: marcaDaSaida(null).nome, o nome da marca da instalação" },
     { "id": "e67", "from": "nomeapresentacao", "to": "sobre", "label": "o <h1> e o título da aba de /legal/about; instalação que já existia foi semeada com o nome que o Google verificou, então a página dela não muda" },
+    { "id": "e69", "from": "contaevalink", "to": "marcadaconta", "label": "nome da clínica, cores.principal (semente) e as logos; falha, 404 de logo anunciada ou contraste reprovado: a rodada falha e a última marca boa fica" },
+    { "id": "e70", "from": "instalacao", "to": "marcadaconta", "label": "marcaDaInstalacao() dispara a rodada SEM await: o render nunca espera a Conta" },
+    { "id": "e71", "from": "marcadaconta", "to": "platformbranding", "label": "grava conta_nome/conta_accent_hex/conta_logo_path/conta_etag (0409) — select próprio, fora do COLUNAS: clone sem a 0409 (42703) segue com a marca local" },
+    { "id": "e72", "from": "marcadaconta", "to": "bucketlogos", "label": "platform/conta-<sha>.png|jpg, e poda as anteriores — só sob o próprio prefixo" },
+    { "id": "e73", "from": "platformbranding", "to": "resolver", "label": "camadaDaConta()/pilhaComConta(): com a Conta em vigor ela fica no topo, a org sai da pilha (menu_hex fica) — vale também para marcaDaSaida(), então e-mail e worker leem a última marca boa do banco" },
+    { "id": "e74", "from": "marcadaconta", "to": "adminmarca", "label": "contaEmVigor(): /admin/marca e /app/settings/marca viram aviso, e as escritas respondem 409 marca_na_conta (503 fail-closed se conta_* ilegível com CONTA_URL)", "route": "highlight" },
     { "id": "e68", "from": "sobre", "to": "aba", "label": "título no formato que o Google verificou, herdando o sufixo de marca do layout raiz" }
   ],
   "cards": [
@@ -209,6 +231,7 @@
         "FONTE por tenant: fora. next/font resolve em BUILD time e a imagem é pré-buildada — um seletor de fonte seria controle decorativo",
         "X-Deskcomm-Signature e sb-deskcomm-auth NÃO são renomeados: o primeiro é contrato de fio com receptores de terceiros, o segundo é a sessão de quem está logado. 'Completar o whitelabel' ali derruba integração de cliente em silêncio",
         "lib/email/templates/ai-budget-alarm.tsx segue com a nossa marca: não tem rota de cron, não tem linha no docker/scheduler/entrypoint.sh e, desde a limpeza do teto de orçamento (0159), não tem chamador nenhum — workers/ai-budget-checker.cron.ts, o único, foi apagado. Dívida D1, com a condição de saída escrita",
+        "a Conta Eva Link NÃO alcança os e-mails de ACESSO (GoTrue): marca-emails.sh segue lendo o .env, como já não acompanhava /admin/marca — ajuste APP_ACCENT_HEX e rode o script para eles seguirem a Conta",
         "quem envia e-mail é o APP (via event-log-drain, batido pelo scheduler), NUNCA o contêiner worker — que roda o agent-engine e não importa e-mail nenhum. Quem for provar reiniciando 'o worker' reinicia o processo errado"
       ]
     }

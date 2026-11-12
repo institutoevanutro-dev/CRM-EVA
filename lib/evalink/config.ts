@@ -24,7 +24,7 @@ const avisar = (msg: string) => {
 
 const semBarra = (u: string) => u.replace(/\/+$/, "");
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ehUrl = (u: string) => {
+export const ehUrl = (u: string) => {
   try {
     return /^https?:$/.test(new URL(u).protocol);
   } catch {

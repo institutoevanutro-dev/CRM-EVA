@@ -376,7 +376,81 @@ export type LinhaDaInstalacao = {
    */
   readonly logo_path?: string | null;
   readonly accent_hex?: string | null;
+  /**
+   * A última marca boa lida da Conta (migration 0409). Só vêm preenchidas com
+   * `CONTA_URL` ligada — `instalacao.ts` nem as lê sem ela —, e é isso que
+   * mantém o caminho sem Conta idêntico ao de antes. Quem lê é `camadaDaConta`.
+   */
+  readonly conta_nome?: string | null;
+  readonly conta_accent_hex?: string | null;
+  readonly conta_logo_path?: string | null;
+  /** Ícone da aba vindo da Conta (Plano 7). Só `app/icon.tsx` e `icone-versao.ts` leem. */
+  readonly conta_icone_path?: string | null;
 };
+
+/** O nome fixo deste módulo na família Eva Link (spec §2 item 8). */
+export const NOME_DO_MODULO = "CRM";
+
+/**
+ * A camada da CONTA — a marca central da clínica, acima de tudo (spec 3.5).
+ *
+ * Vem das colunas `conta_*` já GUARDADAS, nunca da rede: a leitura da Conta
+ * acontece fora do render (`conta-armazem.ts`). Fica acima da organização: com a
+ * Conta ligada, nome, cor e logo da organização deixam de sobrepor a clínica. A
+ * cor do menu (`menu_hex`) não passa pelo resolvedor e continua da organização.
+ *
+ * Sem nada guardado devolve a camada que não fala de nada — a pilha fica igual à
+ * de antes, campo a campo.
+ */
+export function camadaDaConta(linha: LinhaDaInstalacao | null): CamadaDeMarca {
+  const hex = (linha?.conta_accent_hex ?? "").trim();
+  const nome = linha?.conta_nome ?? null;
+  const caminho = linha?.conta_logo_path ?? null;
+  const clinica = (nome ?? "").trim();
+  if (!hex && !clinica && !(caminho ?? "").trim()) return { origem: "conta" };
+  // Decisão do André (11/11, spec §2 item 8): "CRM · <clínica>", como os outros
+  // módulos; sem nome de clínica na Conta, só o nome do módulo — o nome local
+  // NÃO volta.
+  const base = {
+    origem: "conta",
+    nome: clinica ? `${NOME_DO_MODULO} · ${clinica}` : NOME_DO_MODULO,
+    logoUrl: logoDaCamada(caminho, null),
+  };
+  return hex ? { ...base, cor: envelopeDeSemente(hex) } : base;
+}
+
+/**
+ * A Conta GOVERNA a marca: há marca dela guardada (só lida com `CONTA_URL`).
+ * É a mesma condição de `pilhaComConta`, e é ela — não `CONTA_URL` sozinha —
+ * que trava as telas e as escritas de nome, cor e logo: com a Conta ainda sem
+ * resposta (primeiro boot, clone sem a 0409), quem vale é a marca local, e
+ * travá-la deixaria a clínica sem marca editável em lugar nenhum.
+ */
+export function contaEmVigor(linha: LinhaDaInstalacao | null): boolean {
+  return Object.keys(camadaDaConta(linha)).length > 1;
+}
+
+/**
+ * Monta a pilha com a Conta no topo — o ÚNICO lugar que sabe a regra da spec 3.5.
+ *
+ * Conta guardada (camada não vazia): a organização SAI da pilha (nome, cor e logo
+ * dela deixam de valer; `menu_hex` não passa por aqui e continua), e o logo das
+ * camadas de baixo é suprimido — Conta sem logo quer dizer "sem logo", não "o
+ * logo local". O nome é "CRM · <clínica>", ou só "CRM" sem nome na Conta.
+ *
+ * Conta vazia (sem `CONTA_URL`, ou nada guardado): a pilha volta intacta.
+ */
+export function pilhaComConta(
+  linha: LinhaDaInstalacao | null,
+  abaixo: readonly CamadaDeMarca[],
+): CamadaDeMarca[] {
+  if (!contaEmVigor(linha)) return [...abaixo];
+  const conta = camadaDaConta(linha);
+  return [
+    conta,
+    ...abaixo.filter((c) => c.origem !== "organizacao").map((c) => ({ ...c, logoUrl: null })),
+  ];
+}
 
 /**
  * A camada do BANCO — a configuração viva da instalação, acima do `.env`.

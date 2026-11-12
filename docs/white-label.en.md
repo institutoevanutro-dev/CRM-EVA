@@ -1,4 +1,4 @@
-<!-- traduzido-de: docs/white-label.md@8972939195fc -->
+<!-- traduzido-de: docs/white-label.md@1cdd3309b1b6 -->
 
 [🇧🇷 Português](white-label.md) · 🇺🇸 English · [🇪🇸 Español](white-label.es.md)
 
@@ -11,6 +11,8 @@ The license is MIT: you may modify it, host it for third parties, resell it and 
 ---
 
 ## Changing the brand
+
+> Installation with the Eva Link Account (`CONTA_URL` in the `.env`)? The brand comes from the Account — see [With the Eva Link Account](#with-the-eva-link-account). The rest of this section applies to installations without it.
 
 **From the screen, and without restarting anything.** In `/admin/marca` you change the **system name** and the **brand color**. You save, you reload, and the whole interface is already repainted — the sidebar, the buttons, the focus ring, the tab title and the browser icon.
 
@@ -86,6 +88,20 @@ Straight to the point, so that you do not find out in front of the client. Each 
 - **The LGPD data-subject report does not carry your brand — and that is on purpose.** See its own section below.
 - **The AI budget alarm** still goes out with our brand. It is the only known leak, and it stays: today that alarm has no schedule wired to it at all, so fixing its brand would change nothing anyone sees. It goes out when the alarm gets a real cron.
 - **Two technical names do not change**: the `X-Deskcomm-Signature` header of outbound webhooks and the session cookie. The first is a contract with third-party systems that already check that name; renaming it would break a client's integration **silently** — the receiver raises no error, it merely stops recognizing.
+
+---
+
+## With the Eva Link Account
+
+If the installation uses the **Eva Link Account** — the `.env` has `CONTA_URL`, the same variable as the Account sign-in —, **the brand is configured in the Account, not in the CRM.** The name becomes **CRM · <clinic name>** (just **CRM** when the Account has no clinic name), and it, the color and the logo from there apply everywhere: sign-in, menu, tab, icon and e-mails, over the installation brand and over each organization's brand. The only thing from the organization that still applies is the **side menu color**. The **tab icon** is the Account's square icon (the "Tab icon" card on its Brand screen); without it, the icon uploaded in the CRM or the drawn one applies, never the wide logo.
+
+- **How long it takes:** the CRM asks the Account at most once a minute, outside the page load. A change made in the Account shows up within two minutes.
+- **Account down:** the last good brand the CRM stored in its own database stays. If there never was one, the local brand applies, as without the Account.
+- **Logo refused:** only PNG or JPEG, up to 1 MiB, checked by its bytes and by the hash the Account announces. A logo outside that, or tampered with on the way, is refused and the previous one stays; name and color go in anyway. A color that fails the 4.5:1 contrast refuses the whole round.
+- **The brand screens** (`/admin/marca` and `/app/settings/marca`) show a notice pointing to the Account, and saving through them is refused. In the organization brand only the menu color is left.
+- **To go back to the local brand:** empty `CONTA_URL` and restart the app. Nothing local is deleted while the Account is in charge.
+- **Database:** the update only adds columns (migration 0409). On an installation with `CONTA_URL` that has not applied the new database yet, the local brand keeps showing, but the screens refuse to save until `update.sh` runs.
+- **The access e-mails** (account confirmation and password recovery) do not follow the Account: they keep the `.env` brand, for the same reason as in the section above.
 
 ---
 

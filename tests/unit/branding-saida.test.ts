@@ -54,6 +54,8 @@ let linhaDaInstalacao: {
   app_name?: string | null;
   logo_url?: string | null;
   accent_hex?: string | null;
+  conta_nome?: string | null;
+  conta_accent_hex?: string | null;
 } | null = null;
 
 vi.mock("@/lib/branding/instalacao", () => ({
@@ -231,6 +233,23 @@ describe("marcaDaSaida — NUNCA LANÇA", () => {
     expect(marca.nome).toBe("Acme");
     expect(marca.accent).toBe(ACCENT_DO_PRODUTO);
     expect(marca.origens.cor).toBe("padrao");
+  });
+});
+
+describe("marcaDaSaida — a última marca boa da Conta (Plano 6)", () => {
+  it("usa nome e cor da Conta guardados, nas duas classes, sem chamar fetch", async () => {
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    linhaDaInstalacao = { app_name: "Local", accent_hex: "#1f4e5f", conta_nome: "Clínica da Conta", conta_accent_hex: "#27463b" };
+    respostaDaOrganizacao = { data: { settings: { branding: { app_name: "Org", accent_hex: "#8a3f26" } } }, error: null };
+    const { marcaDaSaida } = await carregar();
+    for (const org of [null, "00000000-0000-4000-8000-000000000001"]) {
+      const marca = await marcaDaSaida(org);
+      expect(marca.nome).toBe("CRM · Clínica da Conta");
+      expect(marca.origens).toEqual({ nome: "conta", cor: "conta" });
+    }
+    expect(f).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });
 

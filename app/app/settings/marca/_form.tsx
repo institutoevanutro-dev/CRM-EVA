@@ -24,6 +24,7 @@ import { toast } from "sonner";
 
 import { updateMarcaDaOrganizacao } from "@/app/actions/settings/updateMarcaDaOrganizacao";
 import { AmostrasDePaleta } from "@/components/branding/AmostrasDePaleta";
+import { AvisoDaMarcaNaConta } from "@/components/branding/AvisoDaMarcaNaConta";
 import { CampoDaCorDoMenu } from "@/components/branding/CampoDaCorDoMenu";
 import { CampoDeLogo } from "@/components/branding/CampoDeLogo";
 import { TiraDeTons, type ItemDaLegenda } from "@/components/branding/TiraDeTons";
@@ -32,13 +33,19 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cssDaMarca, ESCOPO_DA_ORGANIZACAO } from "@/lib/branding/css";
-import { avisosDaMarca, type Aviso, type DistanciaAteSuaCor, type Tom } from "@/lib/branding/linguagem";
+import {
+  avisosDaMarca,
+  type Aviso,
+  type DistanciaAteSuaCor,
+  type Tom,
+} from "@/lib/branding/linguagem";
 import { ehHexValido, K, normalizarHex } from "@/lib/branding/rampa";
 import { REGUA_DO_PRODUTO } from "@/lib/branding/regua-do-produto";
 import {
   camadaDaInstalacao,
   camadaDaOrganizacao,
   camadaDoAmbiente,
+  pilhaComConta,
   resolverMarca,
   type LinhaDaInstalacao,
 } from "@/lib/branding/resolve";
@@ -70,6 +77,11 @@ interface Props {
     readonly APP_LOGO_URL?: string;
     readonly APP_ACCENT_HEX?: string;
   };
+  /**
+   * `CONTA_URL` quando a marca da Conta está ligada (Plano 6). Aí nome, cor e
+   * logo são da Conta Eva Link: a tela mostra o aviso e só a cor do menu.
+   */
+  readonly contaUrl?: string | null;
 }
 
 /** Mensagem por código de recusa da server action. */
@@ -86,6 +98,8 @@ const ERRO_EM_PORTUGUES: Record<string, string> = {
   // gravação não casou nenhuma linha, e a tela dizer "salvo" quando nada foi
   // gravado é a forma exata do defeito que a função SQL veio fechar.
   nao_gravou: "A alteração não chegou ao banco — nada foi mudado. Tente de novo.",
+  marca_na_conta:
+    "O nome e a cor da clínica agora são configurados na Conta Eva Link. Recarregue a página.",
 };
 
 const CLASSE_DO_TOM: Record<Tom, string> = {
@@ -111,6 +125,7 @@ function origemEmPortugues(
   t: (texto: string) => string = (texto) => texto,
 ): string {
   if (origem === "organizacao") return t("você definiu aqui");
+  if (origem === "conta") return t("vem da Conta Eva Link");
   if (origem === "padrao") return t("é o padrão do sistema");
   return t("veio de quem instalou o sistema");
 }
@@ -124,7 +139,12 @@ function LinhaDeOrigem({ campo, valor }: { campo: string; valor: string }) {
   );
 }
 
-export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }: Props) {
+export function FormularioDaMarcaDaOrganizacao({
+  gravada,
+  instalacao,
+  ambiente,
+  contaUrl = null,
+}: Props) {
   const t = useT();
   const router = useRouter();
   const [nome, setNome] = useState(gravada.app_name ?? "");
@@ -148,12 +168,17 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
   );
 
   /** O que a empresa mostraria com os campos vazios — vira placeholder, nunca texto fixo. */
-  const semAOrganizacao = useMemo(() => resolverMarca(abaixo, REGUA_DO_PRODUTO), [abaixo]);
+  const semAOrganizacao = useMemo(
+    () => resolverMarca(pilhaComConta(instalacao, abaixo), REGUA_DO_PRODUTO),
+    [instalacao, abaixo],
+  );
 
   const resolvida = useMemo(
     () =>
       resolverMarca(
-        [
+        // `pilhaComConta`: a MESMA regra do layout de `/app`. Com a Conta
+        // guardada, a camada da organização sai e a prévia mostra a Conta.
+        pilhaComConta(instalacao, [
           camadaDaOrganizacao({
             app_name: nomeLimpo.length > 0 ? nomeLimpo : null,
             accent_hex: hexLimpo.length > 0 ? hexLimpo : null,
@@ -163,10 +188,10 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
             logo_path: gravada.logo_path,
           }),
           ...abaixo,
-        ],
+        ]),
         REGUA_DO_PRODUTO,
       ),
-    [nomeLimpo, hexLimpo, gravada.logo_path, abaixo],
+    [nomeLimpo, hexLimpo, gravada.logo_path, instalacao, abaixo],
   );
 
   // A MESMA serialização, com o MESMO escopo, que o layout de `/app` roda no
@@ -233,11 +258,18 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
 
     // Os dois campos vazios = "volte ao que vem do sistema". A action traduz esse
     // par de `null` em apagar a chave inteira, e não em gravar um envelope vazio.
-    const lido = marcaDaOrganizacaoSchema.safeParse({
-      app_name: nomeLimpo.length > 0 ? nomeLimpo : null,
-      accent_hex: hexLimpo.length > 0 ? hexLimpo : null,
-      menu_hex: menuLimpo.length > 0 ? menuLimpo : null,
-    });
+    // Com a Conta, nome e cor não são deste formulário: as chaves NÃO vão, e a
+    // action mantém o que estiver gravado (`null` significaria apagar).
+    const menuEnviado = menuLimpo.length > 0 ? menuLimpo : null;
+    const lido = marcaDaOrganizacaoSchema.safeParse(
+      contaUrl
+        ? { menu_hex: menuEnviado }
+        : {
+            app_name: nomeLimpo.length > 0 ? nomeLimpo : null,
+            accent_hex: hexLimpo.length > 0 ? hexLimpo : null,
+            menu_hex: menuEnviado,
+          },
+    );
     if (!lido.success) {
       toast.error(t("Confira os campos: algum valor não está no formato esperado."));
       return;
@@ -264,73 +296,79 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
 
   return (
     <form onSubmit={handleSubmit} className="max-w-3xl space-y-6">
+      {contaUrl ? <AvisoDaMarcaNaConta contaUrl={contaUrl} /> : null}
       <Card className="space-y-4 p-6">
         <h2 className="text-base font-semibold tracking-tight text-text">
           {t("Como sua empresa aparece")}
         </h2>
 
-        <div className="space-y-2">
-          <Label htmlFor="org_app_name">{t("Nome da sua empresa")}</Label>
-          <Input
-            id="org_app_name"
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-            // O placeholder é o nome EM VIGOR sem esta camada, e não um texto
-            // fixo: é assim que o campo vazio responde "e se eu não preencher?".
-            placeholder={semAOrganizacao.name}
-            maxLength={120}
-            autoComplete="off"
-          />
-          <p className="text-xs text-text-muted">
-            {t("Aparece no menu lateral, para quem trabalha aqui. Deixe em branco para usar")}{" "}
-            {semAOrganizacao.name}.
-          </p>
-        </div>
+        {/* Com a Conta, nome, cor e logo saem desta tela: só fica a cor do menu. */}
+        {contaUrl ? null : (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="org_app_name">{t("Nome da sua empresa")}</Label>
+              <Input
+                id="org_app_name"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                // O placeholder é o nome EM VIGOR sem esta camada, e não um texto
+                // fixo: é assim que o campo vazio responde "e se eu não preencher?".
+                placeholder={semAOrganizacao.name}
+                maxLength={120}
+                autoComplete="off"
+              />
+              <p className="text-xs text-text-muted">
+                {t("Aparece no menu lateral, para quem trabalha aqui. Deixe em branco para usar")}{" "}
+                {semAOrganizacao.name}.
+              </p>
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="org_accent_hex">{t("Cor da sua marca")}</Label>
-          <AmostrasDePaleta hex={hex} onEscolher={setHex} />
-          <div className="flex items-center gap-3">
-            {/* Atalho, nunca o controle principal: o seletor do navegador escolhe
+            <div className="space-y-2">
+              <Label htmlFor="org_accent_hex">{t("Cor da sua marca")}</Label>
+              <AmostrasDePaleta hex={hex} onEscolher={setHex} />
+              <div className="flex items-center gap-3">
+                {/* Atalho, nunca o controle principal: o seletor do navegador escolhe
                 UM pixel e não mostra o que o sistema faz com ele. Quem ensina é a
                 escala abaixo. */}
-            <label
-              className="relative h-10 w-10 shrink-0 cursor-pointer overflow-hidden rounded-sm border border-border"
-              style={{
-                backgroundColor: ehHexValido(hexLimpo)
-                  ? normalizarHex(hexLimpo)
-                  : COR_NEUTRA_DO_SELETOR,
-              }}
-            >
-              <span className="sr-only">{t("Escolher a cor visualmente")}</span>
-              <input
-                type="color"
-                value={ehHexValido(hexLimpo) ? normalizarHex(hexLimpo) : COR_NEUTRA_DO_SELETOR}
-                onChange={(e) => setHex(e.target.value)}
-                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-              />
-            </label>
-            <Input
-              id="org_accent_hex"
-              value={hex}
-              onChange={(e) => setHex(e.target.value)}
-              placeholder="#7a5cd6"
-              spellCheck={false}
-              autoComplete="off"
-              aria-invalid={!hexValido}
-              aria-describedby="ajuda-da-cor-da-organizacao"
-              className="w-36 font-mono"
-            />
-            {hexLimpo.length > 0 && !hexValido ? (
-              <span className="text-sm text-error-fg">
-                {t("Use um código de cor como #7a5cd6.")}
-              </span>
-            ) : null}
-          </div>
-          <p id="ajuda-da-cor-da-organizacao" className="text-xs text-text-muted">
-            {t("Deixe em branco para voltar à cor que o sistema já usa.")}
-          </p>
-        </div>
+                <label
+                  className="relative h-10 w-10 shrink-0 cursor-pointer overflow-hidden rounded-sm border border-border"
+                  style={{
+                    backgroundColor: ehHexValido(hexLimpo)
+                      ? normalizarHex(hexLimpo)
+                      : COR_NEUTRA_DO_SELETOR,
+                  }}
+                >
+                  <span className="sr-only">{t("Escolher a cor visualmente")}</span>
+                  <input
+                    type="color"
+                    value={ehHexValido(hexLimpo) ? normalizarHex(hexLimpo) : COR_NEUTRA_DO_SELETOR}
+                    onChange={(e) => setHex(e.target.value)}
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  />
+                </label>
+                <Input
+                  id="org_accent_hex"
+                  value={hex}
+                  onChange={(e) => setHex(e.target.value)}
+                  placeholder="#7a5cd6"
+                  spellCheck={false}
+                  autoComplete="off"
+                  aria-invalid={!hexValido}
+                  aria-describedby="ajuda-da-cor-da-organizacao"
+                  className="w-36 font-mono"
+                />
+                {hexLimpo.length > 0 && !hexValido ? (
+                  <span className="text-sm text-error-fg">
+                    {t("Use um código de cor como #7a5cd6.")}
+                  </span>
+                ) : null}
+              </div>
+              <p id="ajuda-da-cor-da-organizacao" className="text-xs text-text-muted">
+                {t("Deixe em branco para voltar à cor que o sistema já usa.")}
+              </p>
+            </div>
+          </>
+        )}
 
         <CampoDaCorDoMenu
           valor={menu}
@@ -338,7 +376,7 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
           corDaMarca={resolvida.cor?.semente ?? null}
         />
 
-        {derivada ? (
+        {derivada && !contaUrl ? (
           <div className="space-y-2">
             <p className="text-sm text-text-muted">
               {t(
@@ -363,19 +401,21 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
           aparece"). O que o separa é o mecanismo — ele sobe na hora, sem passar
           pelo Salvar —, e isso a própria caixa explica.
         */}
-        <CampoDeLogo
-          escopo="organizacao"
-          // Literal, nunca memoizado: a identidade deste objeto é o que diz ao
-          // campo que houve render NOVO do servidor. Ver os Props de CampoDeLogo.
-          logoDaCamada={{
-            url: resolvida.origens.logoUrl === "organizacao" ? resolvida.logoUrl : null,
-          }}
-          logoHerdado={semAOrganizacao.logoUrl}
-          // Texto-fonte cru, não traduzido aqui: CampoDeLogo já chama t()
-          // internamente sobre esta prop (ver componente compartilhado).
-          origemDoHerdado="de quem instalou o sistema"
-          nomeEmVigor={resolvida.name}
-        />
+        {contaUrl ? null : (
+          <CampoDeLogo
+            escopo="organizacao"
+            // Literal, nunca memoizado: a identidade deste objeto é o que diz ao
+            // campo que houve render NOVO do servidor. Ver os Props de CampoDeLogo.
+            logoDaCamada={{
+              url: resolvida.origens.logoUrl === "organizacao" ? resolvida.logoUrl : null,
+            }}
+            logoHerdado={semAOrganizacao.logoUrl}
+            // Texto-fonte cru, não traduzido aqui: CampoDeLogo já chama t()
+            // internamente sobre esta prop (ver componente compartilhado).
+            origemDoHerdado="de quem instalou o sistema"
+            nomeEmVigor={resolvida.name}
+          />
+        )}
       </Card>
 
       {/*
@@ -398,10 +438,7 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
         </div>
 
         <div>
-          <LinhaDeOrigem
-            campo={t("Nome")}
-            valor={origemEmPortugues(resolvida.origens.nome, t)}
-          />
+          <LinhaDeOrigem campo={t("Nome")} valor={origemEmPortugues(resolvida.origens.nome, t)} />
           <LinhaDeOrigem campo={t("Cor")} valor={origemEmPortugues(resolvida.origens.cor, t)} />
           <LinhaDeOrigem
             campo={t("Cor do menu lateral")}
@@ -440,22 +477,23 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
         algum canto do produto e conclui que não funcionou — e "não funcionou" é
         o que ela vai repetir para o fornecedor dela.
       */}
-      <Card className="space-y-2 p-6">
-        <h2 className="text-base font-semibold tracking-tight text-text">
-          {t("O que isto ainda não muda")}
-        </h2>
-        <ul className="list-disc space-y-1 pl-5 text-sm text-text-muted">
-          <li>
-            {t(
-              "O título da aba do navegador continua com o nome do sistema, e não com o da sua empresa.",
-            )}
-          </li>
-          <li>
-            {t(
-              "A tela de entrada é sempre a do sistema: quando alguém digita a senha, ainda não dá para saber de qual empresa ele é.",
-            )}
-          </li>
-          {/*
+      {contaUrl ? null : (
+        <Card className="space-y-2 p-6">
+          <h2 className="text-base font-semibold tracking-tight text-text">
+            {t("O que isto ainda não muda")}
+          </h2>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-text-muted">
+            <li>
+              {t(
+                "O título da aba do navegador continua com o nome do sistema, e não com o da sua empresa.",
+              )}
+            </li>
+            <li>
+              {t(
+                "A tela de entrada é sempre a do sistema: quando alguém digita a senha, ainda não dá para saber de qual empresa ele é.",
+              )}
+            </li>
+            {/*
             Este item dizia "os e-mails, o PDF de LGPD e o autenticador também
             usam o nome do sistema", e a Fase 4 tornou as duas primeiras partes
             falsas: `marcaDaSaida(organizationId)` resolve a organização
@@ -463,34 +501,35 @@ export function FormularioDaMarcaDaOrganizacao({ gravada, instalacao, ambiente }
             (razão social) de propósito — nomear a marca ali inverteria os
             papéis num documento com peso legal.
           */}
-          <li>
-            {t(
-              "Os e-mails que este sistema envia (convite de time, pedidos de LGPD) já saem com o nome da sua empresa.",
-            )}
-          </li>
-          <li>
-            {t(
-              'O relatório de LGPD entregue ao cliente traz a RAZÃO SOCIAL da sua empresa, e não o nome aqui de cima — é ela que responde legalmente pelos dados. Confira o campo "Razão social" em Configurações → Organização.',
-            )}
-          </li>
-          <li>
-            {t(
-              "O aplicativo de verificação em duas etapas continua registrando o nome do sistema: o cadastro acontece antes de saber de qual empresa a pessoa é.",
-            )}
-          </li>
-          {/*
+            <li>
+              {t(
+                "Os e-mails que este sistema envia (convite de time, pedidos de LGPD) já saem com o nome da sua empresa.",
+              )}
+            </li>
+            <li>
+              {t(
+                'O relatório de LGPD entregue ao cliente traz a RAZÃO SOCIAL da sua empresa, e não o nome aqui de cima — é ela que responde legalmente pelos dados. Confira o campo "Razão social" em Configurações → Organização.',
+              )}
+            </li>
+            <li>
+              {t(
+                "O aplicativo de verificação em duas etapas continua registrando o nome do sistema: o cadastro acontece antes de saber de qual empresa a pessoa é.",
+              )}
+            </li>
+            {/*
             Esta linha dizia "o logo continua sendo o de quem instalou o
             sistema". Deixou de ser verdade no instante em que o campo de logo
             acima passou a existir — e frase honesta que envelheceu é pior que
             frase ausente, porque quem a lê para de procurar o campo.
           */}
-          <li>
-            {t(
-              "O logo que você subir aqui aparece no menu lateral, para quem trabalha nesta empresa. A tela de entrada continua com o logo de quem instalou o sistema: ali ainda não dá para saber de qual empresa a pessoa é.",
-            )}
-          </li>
-        </ul>
-      </Card>
+            <li>
+              {t(
+                "O logo que você subir aqui aparece no menu lateral, para quem trabalha nesta empresa. A tela de entrada continua com o logo de quem instalou o sistema: ali ainda não dá para saber de qual empresa a pessoa é.",
+              )}
+            </li>
+          </ul>
+        </Card>
+      )}
 
       <div className="flex items-center justify-end gap-3">
         {erroTecnico ? (

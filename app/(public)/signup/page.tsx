@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { SignupForm } from "@/components/auth/SignupForm";
 import { Button } from "@/components/ui/button";
-import { branding } from "@/lib/branding";
+import { marcaDaSaida } from "@/lib/branding/saida";
 import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
 import { createClient } from "@/lib/supabase/server";
@@ -86,7 +86,7 @@ export default async function SignupPage({
         <p className="text-sm text-muted-foreground">
           {convite
             ? t("Crie sua senha para entrar na empresa que te convidou")
-            : `${t("Comece a usar o")} ${branding().name} ${t("em minutos")}`}
+            : `${t("Comece a usar o")} ${(await marcaDaSaida(null)).nome} ${t("em minutos")}`}
         </p>
       </div>
 

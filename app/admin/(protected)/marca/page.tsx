@@ -3,7 +3,14 @@ import { notFound } from "next/navigation";
 import { loadAuthUser } from "@/lib/auth/server";
 import { marcaDaInstalacao } from "@/lib/branding/instalacao";
 import { REGUA_DO_PRODUTO } from "@/lib/branding/regua-do-produto";
-import { camadaDaInstalacao, camadaDoAmbiente, resolverMarca } from "@/lib/branding/resolve";
+import { contaUrlLigada } from "@/lib/branding/conta-armazem";
+import {
+  camadaDaInstalacao,
+  camadaDoAmbiente,
+  contaEmVigor,
+  pilhaComConta,
+  resolverMarca,
+} from "@/lib/branding/resolve";
 import { env } from "@/lib/env";
 import { tagDeIdioma } from "@/lib/i18n/datas";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
@@ -64,11 +71,12 @@ export default async function Page() {
   const idioma = normalizarIdioma(usuario.locale);
 
   const linha = await marcaDaInstalacao();
-  // A MESMA pilha do `app/layout.tsx` — banco acima, arquivo de instalação
-  // embaixo. Montar outra aqui faria a tela relatar uma precedência que o
-  // produto não usa, que é a pior mentira possível numa tela de diagnóstico.
+  // A MESMA pilha do `app/layout.tsx` — Conta no topo (só com `CONTA_URL`),
+  // banco, arquivo de instalação embaixo. Montar outra aqui faria a tela relatar
+  // uma precedência que o produto não usa, que é a pior mentira possível numa
+  // tela de diagnóstico.
   const marca = resolverMarca(
-    [camadaDaInstalacao(linha), camadaDoAmbiente(env)],
+    pilhaComConta(linha, [camadaDaInstalacao(linha), camadaDoAmbiente(env)]),
     REGUA_DO_PRODUTO,
   );
 
@@ -78,7 +86,10 @@ export default async function Page() {
   // precedência: quem herda pode ser a URL colada no banco ou a do arquivo de
   // instalação, e só o resolvedor sabe qual das duas.
   const semOArquivo = resolverMarca(
-    [camadaDaInstalacao(linha ? { ...linha, logo_path: null } : null), camadaDoAmbiente(env)],
+    pilhaComConta(linha, [
+      camadaDaInstalacao(linha ? { ...linha, logo_path: null } : null),
+      camadaDoAmbiente(env),
+    ]),
     REGUA_DO_PRODUTO,
   );
 
@@ -123,8 +134,20 @@ export default async function Page() {
         definidoNestaTela={linha !== null && !linha.seeded_from_env}
         fallbackEm={instanteLegivel(linha?.fallback_at ?? null, tagDeIdioma(idioma))}
         fallbackMotivo={linha?.fallback_reason ?? null}
+        // Trava com a marca da Conta EM VIGOR (guardada), não só com `CONTA_URL`.
+        contaUrl={contaEmVigor(linha) ? contaUrlLigada() : null}
+        corDaConta={linha?.conta_accent_hex ?? null}
       />
 
+      {/* Plano 7: o ícone da Conta vence este; sem o aviso, quem envia aqui não vê mudança nenhuma na aba. */}
+      {linha?.conta_icone_path ? (
+        <p className="text-sm text-text-muted" data-testid="icone-da-conta-em-vigor">
+          {traduzir(
+            "A aba está usando o ícone da Conta Eva Link. O ícone abaixo só vale se a Conta ficar sem ícone.",
+            idioma,
+          )}
+        </p>
+      ) : null}
       <CampoDeIcone iconeUrl={iconePath ? urlPublicaDoLogo(iconePath, baseDoStorage()) : null} />
     </div>
   );

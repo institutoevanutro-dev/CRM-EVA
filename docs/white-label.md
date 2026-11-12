@@ -10,6 +10,8 @@ A licença é MIT: você pode modificar, hospedar para terceiros, revender e cob
 
 ## Trocar a marca
 
+> Instalação com a Conta Eva Link (`CONTA_URL` no `.env`)? A marca vem da Conta — ver [Com a Conta Eva Link](#com-a-conta-eva-link). O resto desta seção vale para a instalação sem ela.
+
 **Pela tela, e sem reiniciar nada.** Em `/admin/marca` você troca o **nome do sistema** e a **cor da marca**. Salvou, recarregou, a interface inteira já está repintada — a barra lateral, os botões, o anel de foco, o título da aba e o ícone do navegador.
 
 A cor é **derivada**, não aplicada crua: de um hex saem onze tons nos dois temas (claro e escuro), com um piso de contraste calculado por papel e por superfície. Se a cor que você escolheu ficaria ilegível como texto de botão no tema escuro, o sistema anda os degraus necessários e a tela **te mostra** em qual tom cada coisa vai pousar, antes de salvar. Nada de "escolhi amarelo e o botão ficou branco no branco".
@@ -84,6 +86,20 @@ Sendo direto, para você não descobrir na frente do cliente. Cada linha traz a 
 - **O relatório de LGPD do titular não leva a sua marca — e isso é de propósito.** Ver a seção própria abaixo.
 - **O alarme de orçamento de IA** ainda sai com a nossa marca. É o único vazamento conhecido, e ele fica: hoje esse alarme não tem agendamento nenhum ligado, então consertar a marca dele não mudaria nada que alguém veja. Sai quando o alarme ganhar cron de verdade.
 - **Dois nomes técnicos não mudam**: o cabeçalho `X-Deskcomm-Signature` dos webhooks de saída e o cookie de sessão. O primeiro é contrato com sistemas de terceiros que já conferem esse nome; renomear derrubaria integração de cliente **em silêncio** — o receptor não dá erro, apenas deixa de reconhecer.
+
+---
+
+## Com a Conta Eva Link
+
+Se a instalação usa a **Conta Eva Link** — o `.env` tem `CONTA_URL`, a mesma variável do login pela Conta —, **a marca passa a ser configurada na Conta, não no CRM.** O nome passa a ser **CRM · <nome da clínica>** (só **CRM** quando a Conta não tem nome de clínica), e ele, a cor e o logo de lá valem em todo lugar acima: login, menu, aba, ícone e e-mails, por cima da marca da instalação e da marca de cada organização. A única coisa da organização que continua valendo é a **cor do menu lateral**. O **ícone da aba** é o ícone quadrado da Conta (cartão "Ícone da aba" da tela Marca dela); sem ele, vale o ícone enviado no CRM ou o desenhado, nunca a logo comprida.
+
+- **Quanto demora:** o CRM pergunta à Conta no máximo uma vez por minuto, fora do carregamento da página. Uma troca feita na Conta aparece em até dois minutos.
+- **Conta fora do ar:** fica a última marca boa que o CRM guardou no próprio banco. Se nunca houve uma, vale a marca local, como sem a Conta.
+- **Logo recusado:** só PNG ou JPEG, até 1 MiB, conferido pelos bytes e pelo hash que a Conta anuncia. Logo fora disso, ou adulterado no caminho, é recusado e o anterior fica; nome e cor entram assim mesmo. Cor que não passa no contraste de 4,5:1 recusa a rodada inteira.
+- **As telas de marca** (`/admin/marca` e `/app/settings/marca`) mostram um aviso apontando para a Conta, e salvar por elas é recusado. Na marca da organização sobra só a cor do menu.
+- **Para voltar à marca local:** esvazie `CONTA_URL` e reinicie o app. Nada local é apagado enquanto a Conta manda.
+- **Banco:** a atualização só acrescenta colunas (migration 0409). Numa instalação com `CONTA_URL` que ainda não aplicou o banco novo, a marca local continua aparecendo, mas as telas recusam salvar até o `update.sh` rodar.
+- **Os e-mails de acesso** (confirmação de conta e recuperação de senha) não seguem a Conta: continuam com a marca do `.env`, pelo mesmo motivo da seção acima.
 
 ---
 
