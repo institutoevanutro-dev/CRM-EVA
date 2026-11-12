@@ -2757,6 +2757,7 @@ export type Database = {
           reminder_extra_offsets_minutes: number[]
           reminder_template_name: string | null
           requires_confirmation: boolean
+          requires_patient: boolean
           slot_interval_minutes: number | null
           slug: string
           updated_at: string
@@ -2787,6 +2788,7 @@ export type Database = {
           reminder_extra_offsets_minutes?: number[]
           reminder_template_name?: string | null
           requires_confirmation?: boolean
+          requires_patient?: boolean
           slot_interval_minutes?: number | null
           slug: string
           updated_at?: string
@@ -2817,6 +2819,7 @@ export type Database = {
           reminder_extra_offsets_minutes?: number[]
           reminder_template_name?: string | null
           requires_confirmation?: boolean
+          requires_patient?: boolean
           slot_interval_minutes?: number | null
           slug?: string
           updated_at?: string

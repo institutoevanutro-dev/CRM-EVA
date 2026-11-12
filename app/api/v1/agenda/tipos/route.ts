@@ -74,6 +74,8 @@ const camposDoTipo = {
   location_details: z.string().trim().max(300).nullish(),
   default_owner_user_id: z.string().uuid().nullish(),
   requires_confirmation: z.boolean().optional(),
+  /** Desligado = reunião interna, marca sem paciente (0411). Ausente = default do banco (true). */
+  requires_patient: z.boolean().optional(),
   buffer_before_minutes: z.number().int().min(0).max(720).optional(),
   buffer_after_minutes: z.number().int().min(0).max(720).optional(),
   minimum_notice_minutes: z.number().int().min(0).max(43_200).optional(),
@@ -245,6 +247,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       location_details: t.localDetalhes,
       default_owner_user_id: t.donoPadraoId,
       requires_confirmation: t.precisaConfirmacao,
+      requires_patient: t.exigePaciente,
       is_active: t.ativo,
       buffer_before_minutes: t.bufferAntesMin,
       buffer_after_minutes: t.bufferDepoisMin,

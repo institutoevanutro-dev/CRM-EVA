@@ -59,7 +59,7 @@ function montar(props: Partial<ComponentProps<typeof MarcacaoSimples>> = {}) {
     agora: new Date(2026, 9, 22, 8),
     usuarioId: ANA,
     pessoas: PESSOAS,
-    tipos: [{ id: "t-ana", nome: "Avaliação facial", duracaoMin: 45, donoId: ANA, localDetalhes: null }],
+    tipos: [{ id: "t-ana", nome: "Avaliação facial", duracaoMin: 45, donoId: ANA, localDetalhes: null, exigePaciente: false }],
     profissionalId: ANA,
     onProfissional: vi.fn(),
     tipoId: "t-ana",

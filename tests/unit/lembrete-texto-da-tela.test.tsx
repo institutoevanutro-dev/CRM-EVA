@@ -33,6 +33,7 @@ const TIPO: TipoRow = {
   location_details: "Rua das Flores, 100",
   default_owner_user_id: null,
   requires_confirmation: false,
+  requires_patient: true,
   is_active: true,
   reminder_enabled: true,
   reminder_minutes_before: 1440,

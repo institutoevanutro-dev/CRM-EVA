@@ -62,6 +62,7 @@ const OUTRO_DONO = "bbbbbbbb-0000-4000-8000-0000000000bb";
 const TIPO = "cccccccc-0000-4000-8000-00000000000c";
 const CONEXAO = "eeeeeeee-0000-4000-8000-00000000000e";
 const MEU_COMPROMISSO = "ffffffff-0000-4000-8000-00000000000f";
+const CONTATO = "dddddddd-0000-4000-8000-00000000000d";
 
 const PESSOA: Actor = { type: "user", id: DONO, role: "admin" };
 const AGENTE: Actor = { type: "ai_agent", id: "run-1", role: "agent" };
@@ -232,6 +233,8 @@ function agenda(
     bufferAntesMin?: number;
     /** Intervalo depois do atendimento (`buffer_after_minutes`). */
     bufferDepoisMin?: number;
+    /** `requires_patient` (0411). Ausente = coluna fora do dublê, como os casos antigos. */
+    exigePaciente?: boolean;
   } = {},
 ): Banco {
   return bancoEmMemoria({
@@ -251,8 +254,10 @@ function agenda(
         requires_confirmation: false,
         location_kind: "in_person",
         location_details: null,
+        ...(args.exigePaciente === undefined ? {} : { requires_patient: args.exigePaciente }),
       },
     ],
+    contacts: [{ id: CONTATO, organization_id: ORG }],
     attendant_availability: [
       {
         organization_id: ORG,
@@ -630,5 +635,40 @@ describe("o intervalo antes do atendimento vale na ESCRITA, não só na leitura 
       marcarAgendamentoHandler(banco.client, ctx(AGENTE), { event_type_id: TIPO, starts_at: NA_GRADE }),
     ).rejects.toMatchObject(RECUSA);
     expect(criados(banco)).toHaveLength(0);
+  });
+});
+
+describe("consulta exige paciente (migration 0411)", () => {
+  it("tipo com requires_patient recusa marcar sem contato, com 422 patient_required", async () => {
+    const banco = agenda({ exigePaciente: true });
+    await expect(
+      marcarAgendamentoHandler(banco.client, ctx(PESSOA), { event_type_id: TIPO, starts_at: NA_GRADE }),
+    ).rejects.toMatchObject({ status: 422, code: "patient_required" });
+    expect(criados(banco), "a consulta nasceu sem paciente").toHaveLength(0);
+  });
+
+  it("CONTROLE: o mesmo tipo, com contato, marca", async () => {
+    const banco = agenda({ exigePaciente: true });
+    await marcarAgendamentoHandler(banco.client, ctx(PESSOA), {
+      event_type_id: TIPO,
+      starts_at: NA_GRADE,
+      contact_id: CONTATO,
+    });
+    expect(criados(banco)).toHaveLength(1);
+    expect(criados(banco)[0]?.contact_id).toBe(CONTATO);
+  });
+
+  it("tipo com requires_patient desligado (reunião interna) marca sem contato", async () => {
+    const banco = agenda({ exigePaciente: false });
+    await marcarAgendamentoHandler(banco.client, ctx(PESSOA), { event_type_id: TIPO, starts_at: NA_GRADE });
+    expect(criados(banco)).toHaveLength(1);
+    expect(criados(banco)[0]?.contact_id).toBeNull();
+  });
+
+  it("a IA recebe a mesma recusa (a ferramenta passa pelo mesmo handler)", async () => {
+    const banco = agenda({ exigePaciente: true });
+    await expect(
+      marcarAgendamentoHandler(banco.client, ctx(AGENTE), { event_type_id: TIPO, starts_at: NA_GRADE }),
+    ).rejects.toMatchObject({ status: 422, code: "patient_required" });
   });
 });

@@ -47,6 +47,7 @@ const TIPO: TipoRow = {
   location_details: null,
   default_owner_user_id: null,
   requires_confirmation: false,
+  requires_patient: true,
   is_active: true,
   reminder_enabled: false,
   reminder_minutes_before: 60,

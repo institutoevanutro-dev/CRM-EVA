@@ -72,6 +72,7 @@ function tipo(over: Partial<TipoDeAtendimento> = {}): TipoDeAtendimento {
     localKind: "in_person",
     localDetalhes: "Sala 2",
     precisaConfirmacao: false,
+    exigePaciente: true,
     ativo: true,
     donoPadraoId: "22222222-2222-4222-8222-222222222222",
     bufferAntesMin: 0,

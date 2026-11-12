@@ -46,6 +46,8 @@ type Tipo = {
   duracaoMin: number;
   donoId: string | null;
   localDetalhes: string | null;
+  /** `requires_patient` (0411): sem paciente, a tela nem envia. */
+  exigePaciente: boolean;
 };
 
 type Unidade = { id: string; name: string; active: boolean };
@@ -146,6 +148,10 @@ export function MarcacaoSimples({
   const [marcado, setMarcado] = React.useState<HorarioLivre | null>(null);
   const [recusa, setRecusa] = React.useState<{ instante: string; mensagem: string } | null>(null);
   const [enviando, setEnviando] = React.useState(false);
+  // O tipo em que se pediu para confirmar sem paciente (tela ou 422 `patient_required`).
+  // Some sozinho ao escolher o paciente ou trocar de procedimento.
+  const [semPacienteNoTipo, setSemPacienteNoTipo] = React.useState<string | null>(null);
+  const faltaPaciente = !contactId && semPacienteNoTipo !== null && semPacienteNoTipo === tipo?.id;
   const [encaixeAberto, setEncaixeAberto] = React.useState(false);
   const [horaDoEncaixe, setHoraDoEncaixe] = React.useState("");
   const [observacao, setObservacao] = React.useState("");
@@ -248,6 +254,10 @@ export function MarcacaoSimples({
 
   const confirmar = async () => {
     if (!horario || !pronto) return;
+    if (tipo?.exigePaciente && !contactId) {
+      setSemPacienteNoTipo(tipo.id);
+      return;
+    }
     setEnviando(true);
     try {
       // O nome vai ANTES do agendamento, pelo caminho de sempre da ficha
@@ -263,6 +273,10 @@ export function MarcacaoSimples({
       setRecusa(null);
       setMarcado(horario);
     } catch (err) {
+      if (err instanceof ApiError && err.code === "patient_required" && tipo) {
+        setSemPacienteNoTipo(tipo.id);
+        return;
+      }
       setRecusa({
         instante: horario.instante,
         mensagem:
@@ -413,6 +427,11 @@ export function MarcacaoSimples({
                 onChange={onVinculo}
                 onContato={setContato}
               />
+              {faltaPaciente ? (
+                <p data-testid="falta-paciente-na-marcacao" role="alert" className="-mt-1 text-xs text-warning-fg">
+                  {t("Escolha o paciente para marcar uma consulta.")}
+                </p>
+              ) : null}
 
               {pedeNome ? (
                 <NomeCompletoDoPaciente

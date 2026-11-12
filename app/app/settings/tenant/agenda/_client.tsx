@@ -32,6 +32,7 @@ export interface TipoRow {
   location_details: string | null;
   default_owner_user_id: string | null;
   requires_confirmation: boolean;
+  requires_patient: boolean;
   is_active: boolean;
   reminder_enabled: boolean;
   reminder_minutes_before: number;
@@ -77,6 +78,7 @@ interface Rascunho {
   catalog_product_id: string;
   required_room_kind: string;
   concurrency_key: string;
+  requires_patient: boolean;
 }
 
 const VAZIO: Rascunho = {
@@ -88,6 +90,7 @@ const VAZIO: Rascunho = {
   catalog_product_id: "",
   required_room_kind: "",
   concurrency_key: "",
+  requires_patient: true,
 };
 
 /**
@@ -364,6 +367,7 @@ export function TiposDeAgendamentoClient({
                       catalog_product_id: rascunho.catalog_product_id || null,
                       required_room_kind: rascunho.required_room_kind || null,
                       concurrency_key: rascunho.concurrency_key || null,
+                      requires_patient: rascunho.requires_patient,
                       ...(rascunho.default_owner_user_id
                         ? { default_owner_user_id: rascunho.default_owner_user_id }
                         : {}),
@@ -469,6 +473,17 @@ export function TiposDeAgendamentoClient({
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-text-muted sm:col-span-2">
+                <input
+                  type="checkbox"
+                  data-testid="novo-tipo-exige-paciente"
+                  checked={rascunho.requires_patient}
+                  onChange={(e) => setRascunho((r) => ({ ...r, requires_patient: e.target.checked }))}
+                  className="size-4 rounded-sm border-border accent-accent"
+                />
+                {t("Exige paciente")}
+                <span className="text-text-subtle">{t("Desligue para reuniões internas.")}</span>
               </label>
               <div className="flex justify-end gap-2 sm:col-span-2">
                 <Button type="button" variant="ghost" size="sm" onClick={() => setCriando(false)}>
@@ -576,6 +591,11 @@ export function TiposDeAgendamentoClient({
                   {tipo.reminder_body ? ` · ${t("texto próprio")}` : ""}
                 </span>
               ) : null}
+              {!tipo.requires_patient ? (
+                <span data-testid={`sem-paciente-${tipo.id}`} className="text-xs text-text-muted">
+                  {t("marca sem paciente")}
+                </span>
+              ) : null}
               {!tipo.is_active ? <span className="text-xs text-text-subtle">{t("desativado")}</span> : null}
               {podeEditar ? (
                 <span className="ml-auto flex gap-1">
@@ -662,6 +682,7 @@ export function TiposDeAgendamentoClient({
                         // Caixa desmarcada não aparece no `FormData` — daí a
                         // comparação, e não um `Boolean(...)` do valor ausente.
                         reminder_enabled: dados.get("reminder_enabled") === "on",
+                        requires_patient: dados.get("requires_patient") === "on",
                         // O campo desabilitado também não aparece, e omitir é o
                         // certo: desligar o aviso não pode apagar a antecedência
                         // que alguém escolheu (ver `LembreteDoCompromisso`).
@@ -726,6 +747,17 @@ export function TiposDeAgendamentoClient({
                       </option>
                     ))}
                   </select>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-text-muted sm:col-span-3">
+                  <input
+                    type="checkbox"
+                    name="requires_patient"
+                    defaultChecked={tipo.requires_patient}
+                    data-testid={`editar-exige-paciente-${tipo.id}`}
+                    className="size-4 rounded-sm border-border accent-accent"
+                  />
+                  {t("Exige paciente")}
+                  <span className="text-text-subtle">{t("Desligue para reuniões internas.")}</span>
                 </label>
                 <LembreteDoCompromisso
                   tipo={tipo}
