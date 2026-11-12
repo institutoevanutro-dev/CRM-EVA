@@ -200,8 +200,13 @@ test.describe("marca da clínica pela Conta", () => {
     await expect(page.getByLabel("Nome da sua empresa")).toHaveCount(0);
     await expect(page.getByLabel("Cor da sua marca")).toHaveCount(0);
     await expect(page.getByLabel("Cor do menu lateral")).toBeVisible();
-    // A logo da Conta pinta o menu lateral (guardada no bucket pelo sha).
-    await expect(page.locator("aside img").first()).toHaveAttribute("src", new RegExp(`platform/conta-${SHA}\\.png`));
+    // A logo da Conta pinta o menu lateral (guardada no bucket pelo sha). O aviso
+    // lê o banco; o menu lê o memo de 30 s, e na volta em que a rodada grava o
+    // layout já renderizou com o memo anterior. Recarrega até o menu alcançar.
+    await expect(async () => {
+      await page.reload();
+      await expect(page.locator("aside img").first()).toHaveAttribute("src", new RegExp(`platform/conta-${SHA}\\.png`), { timeout: 2_000 });
+    }).toPass({ timeout: 45_000, intervals: [3_000] });
     await page.screenshot({ path: path.join(EVIDENCIA, "1-organizacao.png"), fullPage: true });
 
     // Plano 7: a aba e o atalho apontam para /icon com a versão do ícone da
