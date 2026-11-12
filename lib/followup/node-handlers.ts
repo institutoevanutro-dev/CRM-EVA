@@ -191,7 +191,16 @@ const NOS_PULADOS_COM_A_ACAO: ReadonlySet<FlowNode["type"]> = new Set([
 ]);
 
 /** Eventos que não são passo do fluxo: não interrompem a cadeia de pulo. */
-const EVENTOS_FORA_DO_PASSO = new Set(["inbound_woke", "held_by_return"]);
+const EVENTOS_FORA_DO_PASSO = new Set([
+  "inbound_woke",
+  "held_by_return",
+  // Pausa e retomada (passagem para pessoa, intervenção manual) não são passo:
+  // retomar no meio da cadeia não pode trazer de volta carência, etiqueta e aviso.
+  "handoff_paused",
+  "handoff_resumed",
+  "paused_manual",
+  "resumed_manual",
+]);
 
 /**
  * O nó `nodeId` foi alcançado pela cadeia de uma ação pulada por prazo vencido?
@@ -205,7 +214,10 @@ export function cadeiaDaAcaoVencida(events: EnrollmentEventRef[], nodeId: string
     if (e.event_type && EVENTOS_FORA_DO_PASSO.has(e.event_type)) continue;
     if (e.event_type !== "action_skipped_overdue" && e.event_type !== "node_skipped_overdue") return null;
     const p = e.payload ?? {};
-    if (p.next_node_id !== nodeId || typeof p.devido_em !== "string" || typeof p.atraso_ms !== "number") return null;
+    // O próprio pulo deste nó já gravado (update da inscrição perdido): replay,
+    // e o replay tem de dar o MESMO resultado, senão o passo trava na chave.
+    const desteNo = e.event_type === "node_skipped_overdue" && e.node_id === nodeId;
+    if ((!desteNo && p.next_node_id !== nodeId) || typeof p.devido_em !== "string" || typeof p.atraso_ms !== "number") return null;
     return { devido_em: p.devido_em, atraso_ms: p.atraso_ms };
   }
   return null;
@@ -507,7 +519,7 @@ function valorDePassos(value: string | number): string | number {
  * (`payload.class`): `ai_classified` (a ponte, quando o modelo classificou) e
  * `node_advanced` com `class` (o motor, quando a carência venceu sem resposta).
  */
-const EVENTOS_DE_DESFECHO = new Set(["ai_classified", "node_advanced"]);
+const EVENTOS_DE_DESFECHO = new Set(["ai_classified", "node_advanced", "node_skipped_overdue"]);
 
 /**
  * O desfecho do último passo que DECIDIU algo: a classe escolhida pelo
@@ -696,7 +708,15 @@ export function processNode(input: {
         ? selectEdge(edges, node.id, classEdgeMatch(node, NO_REPLY_BRANCH_ID))
         : selectEdge(edges, node.id, { type: "always" });
     if (!edge) return { kind: "fail", error: `${node.type} node "${node.id}" has no edge to skip through` };
-    return { kind: "advance", next_node_id: edge.target, next_eval_at: clock(), reason: "pulado_com_a_acao", vencido: input.puladoComAAcao };
+    return {
+      kind: "advance",
+      next_node_id: edge.target,
+      next_eval_at: clock(),
+      reason: "pulado_com_a_acao",
+      vencido: input.puladoComAAcao,
+      // Para a `condition` por `last_outcome`: o classify pulado conta como "sem resposta".
+      ...(node.type === "ai_classify" ? { class: NO_REPLY_BRANCH_ID } : {}),
+    };
   }
 
   switch (node.type) {

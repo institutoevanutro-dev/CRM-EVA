@@ -267,6 +267,15 @@ describe("cadeiaDaAcaoVencida", () => {
     const woke = { node_id: "r7", idempotency_key: "r7:4:wake", event_type: "inbound_woke", payload: {} };
     expect(cadeiaDaAcaoVencida([pulo, woke], "r7")).toEqual({ devido_em: "2026-10-08T03:00:00.000Z", atraso_ms: DIA * 2 });
   });
+  it("replay do próprio pulo (update perdido) repete o pulo; pausa e retomada no meio não quebram a cadeia", () => {
+    const proprio = { node_id: "r7", idempotency_key: "r7:4", event_type: "node_skipped_overdue", payload: { next_node_id: "t7", devido_em: "2026-10-08T03:00:00.000Z", atraso_ms: DIA * 2 } };
+    expect(cadeiaDaAcaoVencida([pulo, proprio], "r7")).not.toBeNull();
+    expect(cadeiaDaAcaoVencida([pulo, proprio], "t7")).not.toBeNull();
+    const pausa = { node_id: "r7", idempotency_key: "p", event_type: "handoff_paused", payload: {} };
+    const volta = { node_id: "r7", idempotency_key: "v", event_type: "handoff_resumed", payload: {} };
+    expect(cadeiaDaAcaoVencida([pulo, pausa, volta], "r7")).not.toBeNull();
+  });
+
   it("outro nó, ou um passo normal depois do pulo, encerra a cadeia", () => {
     expect(cadeiaDaAcaoVencida([pulo], "t7")).toBeNull();
     const passo = { node_id: "r7", idempotency_key: "r7:4", event_type: "wait_started", payload: {} };

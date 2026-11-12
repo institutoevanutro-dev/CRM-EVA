@@ -479,7 +479,7 @@ async function applyResult(
       ...eventPayload(result),
       ...(result.kind === "enqueue_turn" && node.type === "action" && node.config.mode === "media" ? { mode: "media" } : {}),
       // O histórico legível diz "avisou a equipe" em vez de "seguiu em frente".
-      ...(result.kind === "advance" && node.type === "notify_team" ? { aviso_equipe: true } : {}),
+      ...(result.kind === "advance" && node.type === "notify_team" && result.reason !== "pulado_com_a_acao" ? { aviso_equipe: true } : {}),
     },
     idempotency_key: idemKey,
   });

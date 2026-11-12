@@ -6699,8 +6699,8 @@ export const DICIONARIO: Traducoes = {
     es: "Cerrado: el paciente asistió a una consulta más reciente",
   },
   "o acompanhamento recomeçou pela consulta nova": { es: "el seguimiento reinició por la consulta nueva" },
-  "nada foi feito aqui; o fluxo seguiu até a próxima espera": {
-    es: "no se hizo nada aquí; el flujo siguió hasta la próxima espera",
+  "nada foi feito aqui; o fluxo seguiu para o próximo passo": {
+    es: "no se hizo nada aquí; el flujo siguió al siguiente paso",
   },
   "era para {quando}; o fluxo seguiu até a próxima espera": {
     es: "era para el {quando}; el flujo siguió hasta la próxima espera",

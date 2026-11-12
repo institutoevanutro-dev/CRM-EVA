@@ -482,7 +482,7 @@ export function descreveEvento(
       // dela, marcar "sem resposta" ou avisar a equipe seria afirmar algo falso.
       return {
         titulo: "Passo pulado: a mensagem antes dele não foi enviada",
-        detalhe: "nada foi feito aqui; o fluxo seguiu até a próxima espera",
+        detalhe: "nada foi feito aqui; o fluxo seguiu para o próximo passo",
         ...motor,
       };
     case "action_pulado":
