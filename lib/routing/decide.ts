@@ -10,6 +10,8 @@
 import type { Json } from "@/lib/database.types";
 import type { RoutingConfig, RoutingMode } from "@/lib/schemas/routing";
 
+import type { MotivoDoCaso } from "./caso-da-conversa";
+
 /** Um atendente já FILTRADO por elegibilidade (§5: disponível ∧ horário ∧ folga). */
 export interface RoutingCandidate {
   userId: string;
@@ -38,6 +40,12 @@ export interface DecideRoutingInput {
   /** attempts atual do event_log (antes deste processamento). */
   attempts: number;
   now: Date;
+  /**
+   * O CASO DESTA CONVERSA TIRA ELA DA FILA? — `null`/ausente = não. Quem responde
+   * é `motivoParaNaoRotear` (`./caso-da-conversa`), a partir do caso mais recente
+   * lido pelo worker; vem pronto para a decisão continuar sem banco.
+   */
+  motivoDoCaso?: MotivoDoCaso | null;
 }
 
 /**
@@ -59,6 +67,12 @@ export function selectRoundRobin(eligibles: RoutingCandidate[]): string | null {
 export function decideRouting(input: DecideRoutingInput): RoutingAction {
   // Idempotência (acceptance 3): conversa que já ganhou dono não é reatribuída.
   if (input.alreadyAssigned) return { kind: "skip", reason: "already_assigned" };
+
+  // O CASO MANDA ANTES DA FILA (PR #3739 do original). Caso que não pede pessoa
+  // agora — `awaiting_lead` ou concluído sem entrada nova do cliente — tira a
+  // conversa da fila mesmo `open` e sem dono. Depois da idempotência (conversa
+  // com dono não é assunto da fila), antes do modo.
+  if (input.motivoDoCaso) return { kind: "skip", reason: input.motivoDoCaso };
 
   // Modo manual (acceptance 5): worker não roteia.
   if (input.mode === "manual") return { kind: "skip", reason: "manual_mode" };
