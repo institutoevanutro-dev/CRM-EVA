@@ -268,6 +268,71 @@ export function FormularioMeta({ estado, idioma }: { estado: EstadoMeta; idioma:
   );
 }
 
+/**
+ * O ID da Página (ou da conta do WhatsApp Business) que a Meta exige junto do
+ * clique do anúncio clique-para-WhatsApp (porte do upstream #2098). Mora nas
+ * preferências da organização, não na conexão: é da empresa, não do token.
+ */
+export function IdentidadeDaMeta({
+  paginaMeta,
+  wabaMeta,
+  idioma,
+}: {
+  paginaMeta: string | null;
+  wabaMeta: string | null;
+  idioma: Idioma;
+}) {
+  const { t, isPending, salvar } = useSalvar(idioma);
+  const [pagina, setPagina] = useState(paginaMeta ?? "");
+  const [waba, setWaba] = useState(wabaMeta ?? "");
+  return (
+    <Card className="p-6">
+      <form
+        className="flex flex-col gap-5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          salvar(() =>
+            updatePreferenciasDeConversao({
+              meta_page_id: pagina.trim(),
+              meta_whatsapp_business_account_id: waba.trim(),
+            }),
+          );
+        }}
+      >
+        <div className="flex flex-col gap-1">
+          <h2 className="text-lg font-semibold">{t("Página do anúncio clique-para-WhatsApp")}</h2>
+          <p className="text-sm text-muted-foreground">
+            {t(
+              "Para ligar o agendamento ao clique no anúncio, a Meta exige o ID da Página do Facebook junto. Sem ele, o agendamento sai só com o telefone criptografado, e a Meta pode não atribuí-lo ao anúncio.",
+            )}
+          </p>
+        </div>
+        <Campo
+          id="meta_page_id"
+          rotulo={t("ID da Página do Facebook")}
+          valor={pagina}
+          onChange={setPagina}
+          placeholder="123456789012345"
+          ajuda={t("Só números. Na Página, em Sobre › Transparência da Página, ou no Gerenciador de Anúncios, na identidade do anúncio.")}
+        />
+        <Campo
+          id="meta_waba_id"
+          rotulo={t("ID da conta do WhatsApp Business (opcional)")}
+          valor={waba}
+          onChange={setWaba}
+          placeholder="104987654321098"
+          ajuda={t("Só para quem usa a API oficial e não tem Página a informar. Com a Página preenchida, este campo não é usado.")}
+        />
+        <div>
+          <Button type="submit" disabled={isPending}>
+            {isPending ? t("Salvando…") : t("Salvar Página")}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
 export function FormularioGoogle({ estado, idioma }: { estado: EstadoGoogle; idioma: Idioma }) {
   const { t, isPending, salvar } = useSalvar(idioma);
   const [customerId, setCustomerId] = useState(estado.customerId ?? "");

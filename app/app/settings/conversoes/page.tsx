@@ -36,6 +36,7 @@ import {
   EtapasDeSinalPago,
   FormularioGoogle,
   FormularioMeta,
+  IdentidadeDaMeta,
   PreferenciaDeOrigem,
 } from "./_form";
 
@@ -112,11 +113,16 @@ export default async function ConversoesPage() {
       )}
 
       <FormularioMeta estado={estado.meta} idioma={idioma} />
+      <IdentidadeDaMeta
+        paginaMeta={estado.preferencias.paginaMeta}
+        wabaMeta={estado.preferencias.wabaMeta}
+        idioma={idioma}
+      />
       <FormularioGoogle estado={estado.google} idioma={idioma} />
 
       <p className="max-w-3xl text-xs text-muted-foreground">
         {t(
-          "Limite conhecido: a conexão do WhatsApp por QR não recebe o identificador do clique do anúncio, e nenhum caminho captura o do Google ainda. Sem ele, a plataforma tenta casar só pelo telefone criptografado, e parte dos agendamentos pode não ser atribuída ao anúncio.",
+          "Limite conhecido: o identificador do clique só existe para quem chegou por anúncio clique-para-WhatsApp, e só sai para a Meta com o ID da Página preenchido acima. Sem ele, a plataforma tenta casar só pelo telefone criptografado, e parte dos agendamentos pode não ser atribuída ao anúncio.",
         )}
       </p>
 

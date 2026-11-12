@@ -66,6 +66,14 @@ export interface ConversaoDeAgendamento {
   cliqueGoogle: string | null;
   /** `gbraid`/`wbraid` (clique em iOS), quando não há `gclid`. */
   braidGoogle: { campo: "gbraid" | "wbraid"; valor: string } | null;
+  /**
+   * Da ORGANIZAÇÃO, não do paciente: o ID da Página (ou da conta do WhatsApp
+   * Business) que a Meta exige junto do `ctwa_clid` (upstream #2098). Gravado
+   * em Configurações › Conversões; ausente = o clique não sai (ver
+   * `meta/conversions.ts`).
+   */
+  paginaMeta?: string | null;
+  wabaMeta?: string | null;
 }
 
 /**
