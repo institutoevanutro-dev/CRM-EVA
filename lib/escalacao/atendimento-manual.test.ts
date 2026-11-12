@@ -51,6 +51,28 @@ function adminStub(
   return { admin: { from: vi.fn(() => chain) } as never, updates };
 }
 
+/**
+ * Dublê com RESPOSTAS EM SEQUÊNCIA: cada escrita em `conversations` consome o
+ * próximo número de `linhas`, e cada leitura de `conversations` o próximo item de
+ * `leituras`. A tabela `organizations` (ajuste da pausa) responde vazia.
+ */
+function adminSequencia({ linhas, leituras }: { linhas: number[]; leituras: Array<Record<string, unknown> | null> }) {
+  const updates: Array<Record<string, unknown>> = [];
+  const org = { select: () => org, eq: () => org, maybeSingle: () => Promise.resolve({ data: null, error: null }) };
+  const conv = {
+    select: () => conv,
+    update: (patch: Record<string, unknown>) => (updates.push(patch), conv),
+    eq: () => conv,
+    maybeSingle: () => Promise.resolve({ data: leituras.shift() ?? null, error: null }),
+    then: (r: (v: unknown) => unknown) =>
+      Promise.resolve({
+        data: Array.from({ length: linhas.shift() ?? 0 }, (_, i) => ({ id: `linha-${i}` })),
+        error: null,
+      }).then(r),
+  };
+  return { admin: { from: (t: string) => (t === "organizations" ? org : conv) } as never, updates };
+}
+
 /** O instante que a chamada gravou em `bot_silenced_until`. */
 function silenciadaAte(patch: Record<string, unknown>): Date {
   return new Date(String(patch.bot_silenced_until));
@@ -205,20 +227,63 @@ function adminComAjuste(
  * afetadas, a função dizia "pausei" sem ter gravado.
  */
 describe("pausarIaPorAtendimentoManual — a pausa precisa ser OBSERVÁVEL (#534)", () => {
-  it("update sem linha afetada NÃO é pausa: warn com rows 0 e devolve false", async () => {
+  it("update sem linha afetada, duas vezes, NÃO é pausa: repete UMA vez e falha com corrida_persistente", async () => {
     const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(logger, "error").mockImplementation(() => {});
     try {
       const { admin, updates } = adminStub(null, {}, 0);
       const pausou = await pausarIaPorAtendimentoManual(admin, { organizationId: ORG, conversationId: CONV, agora: T0 });
 
       expect(pausou).toBe(false);
-      expect(updates).toHaveLength(1);
+      expect(updates).toHaveLength(2);
       expect(warn).toHaveBeenCalledWith(
         expect.stringContaining("nenhuma linha afetada"),
         expect.objectContaining({ rows: 0 }),
       );
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining("PAUSA NÃO GARANTIDA"),
+        expect.objectContaining({ motivo: "corrida_persistente", tentativas: 2 }),
+      );
     } finally {
       warn.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  /**
+   * PR #4296 do original: zero linhas na primeira escrita com a conversa AINDA
+   * lá é corrida — a segunda escrita pega e a IA fica pausada.
+   */
+  it("corrida: a primeira escrita não pega, a segunda pega — IA pausada", async () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+    try {
+      const { admin, updates } = adminSequencia({ linhas: [0, 1], leituras: [{ bot_silenced_until: null }, { id: CONV }] });
+      const pausou = await pausarIaPorAtendimentoManual(admin, { organizationId: ORG, conversationId: CONV, agora: T0 });
+
+      expect(pausou).toBe(true);
+      expect(updates).toHaveLength(2);
+      expect(silenciadaAte(updates[1]!).getTime()).toBe(T0.getTime() + PRAZO_DO_SILENCIO_MS);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("conversa que sumiu: relê, não repete a escrita e falha com conversa_inexistente", async () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(logger, "error").mockImplementation(() => {});
+    try {
+      const { admin, updates } = adminSequencia({ linhas: [0], leituras: [{ bot_silenced_until: null }, null] });
+      const pausou = await pausarIaPorAtendimentoManual(admin, { organizationId: ORG, conversationId: CONV, agora: T0 });
+
+      expect(pausou).toBe(false);
+      expect(updates).toHaveLength(1);
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining("PAUSA NÃO GARANTIDA"),
+        expect.objectContaining({ motivo: "conversa_inexistente" }),
+      );
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
     }
   });
 
