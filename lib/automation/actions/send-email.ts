@@ -34,6 +34,7 @@ import { renderTemplate } from "@/lib/automation/template";
 import { isEmailConfigured, sendEmail } from "@/lib/email/resend";
 import { marcaDaSaida } from "@/lib/branding/saida";
 import { checkRateLimit, peekRateLimit } from "@/lib/ai/dispatcher/rate-limit";
+import { recusaRegistrada } from "@/lib/lgpd/recusa-registrada";
 
 /**
  * Tetos por janela de uma hora. O remetente é da INSTALAÇÃO, então uma regra
@@ -92,7 +93,7 @@ interface ContatoDoContexto {
   id: string;
   is_blocked?: boolean;
   email?: string | null;
-  consent?: { marketing?: { declined_at?: string | null } | null } | null;
+  consent?: unknown;
 }
 
 /** O veredito do destinatário: o `motivo` é o que vira `detail.reason`. */
@@ -171,7 +172,8 @@ async function resolverDestinatario(
   if (!contact) return { ok: false, motivo: "no_contact" };
   if (contact.is_blocked) return { ok: false, motivo: "contact_blocked" };
   // Recusa registrada: não "grant ausente". Ver `guarda-do-contato.ts`.
-  if (contact.consent?.marketing?.declined_at) return { ok: false, motivo: "consent_declined" };
+  // Nos DOIS formatos (`lib/lgpd/recusa-registrada.ts`).
+  if (recusaRegistrada(contact.consent)) return { ok: false, motivo: "consent_declined" };
   const email = emailValido(contact.email);
   return email ? { ok: true, endereco: email } : { ok: false, motivo: "no_email" };
 }

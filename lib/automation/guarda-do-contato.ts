@@ -55,6 +55,7 @@
  */
 import type { ActionCtx } from "@/lib/automation/types";
 import { contatoEstaOculto } from "@/lib/inbox/contato-oculto";
+import { recusaRegistrada } from "@/lib/lgpd/recusa-registrada";
 
 export type MotivoDeBloqueio =
   | "no_contact"
@@ -74,7 +75,7 @@ interface ContatoDoContexto {
   /** Oculto do Inbox (migration 0372): automação não manda mensagem. */
   inbox_hidden_at?: string | null;
   phone_number?: string | null;
-  consent?: { marketing?: { granted_at?: string | null; declined_at?: string | null } | null } | null;
+  consent?: unknown;
 }
 
 export type ResultadoDaGuarda =
@@ -93,6 +94,7 @@ export function checarGuardasDeContato(ctx: ActionCtx): ResultadoDaGuarda {
   if (contatoEstaOculto(contact)) return { ok: false, reason: "contato_oculto" };
   if (!contact.phone_number) return { ok: false, reason: "no_phone" };
   // Recusa registrada — não "grant ausente". Ver o cabeçalho.
-  if (contact.consent?.marketing?.declined_at) return { ok: false, reason: "consent_declined" };
+  // Nos DOIS formatos: `declined_at` da captação e `granted: false` da ficha (`lib/lgpd/recusa-registrada.ts`).
+  if (recusaRegistrada(contact.consent)) return { ok: false, reason: "consent_declined" };
   return { ok: true, contact: { id: contact.id, phone_number: contact.phone_number } };
 }
