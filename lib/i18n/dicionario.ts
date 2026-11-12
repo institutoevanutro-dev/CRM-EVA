@@ -6695,6 +6695,10 @@ export const DICIONARIO: Traducoes = {
   },
   "Mensagem não enviada: o prazo já tinha passado": { es: "Mensaje no enviado: el plazo ya había pasado" },
   "Passo pulado: a mensagem antes dele não foi enviada": { es: "Paso omitido: el mensaje anterior no se envió" },
+  "Encerrado: o paciente compareceu a uma consulta mais recente": {
+    es: "Cerrado: el paciente asistió a una consulta más reciente",
+  },
+  "o acompanhamento recomeçou pela consulta nova": { es: "el seguimiento reinició por la consulta nueva" },
   "nada foi feito aqui; o fluxo seguiu até a próxima espera": {
     es: "no se hizo nada aquí; el flujo siguió hasta la próxima espera",
   },
@@ -11942,6 +11946,8 @@ export const DICIONARIO: Traducoes = {
   "Erro ao registrar a ligação.": { es: "Error al registrar la llamada." },
   // O rótulo e os motivos da atividade `call_logged` na linha do tempo.
   "Ligação registrada": { es: "Llamada registrada" },
+  "Pós-consulta recomeçou pela consulta mais recente": { es: "El posconsulta reinició por la consulta más reciente" },
+  "Pós-consulta não foi aberto de novo": { es: "El posconsulta no se abrió de nuevo" },
   "Ligação registrada: atendeu": { es: "Llamada registrada: atendió" },
   "Ligação registrada: não atendeu": { es: "Llamada registrada: no atendió" },
   // Análise › Bônus (migration 0392).

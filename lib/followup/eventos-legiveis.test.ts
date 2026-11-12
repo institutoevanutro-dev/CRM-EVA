@@ -431,5 +431,7 @@ describe("prazo vencido (presença marcada semanas depois da consulta)", () => {
     expect(pulada.detalhe).not.toContain("{quando}");
     const junto = descreveEvento(evento({ node_id: "action-1", event_type: "node_skipped_overdue", payload }), nos, "pt-BR");
     expect(junto.titulo).toBe("Passo pulado: a mensagem antes dele não foi enviada");
+    const trocada = descreveEvento(evento({ event_type: "superseded_by_newer_appointment", payload: {} }), nos, "pt-BR");
+    expect(trocada.titulo).toBe("Encerrado: o paciente compareceu a uma consulta mais recente");
   });
 });

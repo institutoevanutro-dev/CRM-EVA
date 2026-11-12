@@ -536,6 +536,14 @@ export function descreveEvento(
       };
     case "turn_skipped":
       return {titulo:"Acompanhamento encerrado sem novo envio",detalhe:texto(p.reason),...motor};
+    case "superseded_by_newer_appointment":
+      // Migration 0410: a presença numa consulta mais recente recomeçou o
+      // pós-consulta por ela. Sem esta linha, o fluxo "sumiria" no meio.
+      return {
+        titulo: "Encerrado: o paciente compareceu a uma consulta mais recente",
+        detalhe: "o acompanhamento recomeçou pela consulta nova",
+        ...motor,
+      };
     case "cancelled_manual":
       return { titulo: "Cancelado por uma pessoa da equipe", detalhe: null, ...pessoa };
     case "paused_manual":

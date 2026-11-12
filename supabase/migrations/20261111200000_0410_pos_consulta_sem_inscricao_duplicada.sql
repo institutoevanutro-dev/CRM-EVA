@@ -7,16 +7,24 @@
 -- fluxo: quem já tinha recebido as mensagens de 7 e 15 dias recebeu tudo de
 -- novo.
 --
--- `fn_appointment_recover` passa a NÃO inscrever no mesmo fluxo quando o
--- contato já tem nele inscrição viva (active, waiting_reply, paused_handoff,
--- paused_manual) ou uma iniciada dentro de `janela_pos_consulta` (30 dias) que
+-- `fn_appointment_recover`, no MESMO fluxo pós-consulta, passa a olhar as
+-- inscrições que contam: a viva (active, waiting_reply, paused_handoff,
+-- paused_manual) e a iniciada dentro de `janela_pos_consulta` (30 dias) que
 -- enviou ao menos uma mensagem (`action_sent`). Encerrada sem envio — cancelada
 -- antes de qualquer envio, ou concluída com todas as ações puladas por prazo
--- vencido — não chegou ao paciente, e contá-la o deixaria sem pós-consulta. O retorno é
--- `{"result":"already_enrolled"}`, sem recibo e sem aviso na Central (como a
--- presença sem fluxo armado: não é pendência); o consumidor do event_log grava
--- o motivo no detalhe. A inscrição viva em OUTRO fluxo pós-consulta continua
--- sendo cancelada e trocada, como na 0373. Falta (`appointment_no_show`) não muda.
+-- vencido — não chegou ao paciente e não conta. Decide a DATA DA CONSULTA:
+--   * consulta desta presença NÃO mais recente que a de alguma delas (ou uma
+--     delas sem consulta): nada abre. Retorno `{"result":"already_enrolled"}`,
+--     sem recibo e sem aviso na Central (não é pendência), e uma linha
+--     `followup_not_reopened` na linha do tempo de cada negócio do contato;
+--   * MAIS recente: abre ancorada nela, e a viva (se houver) é encerrada com
+--     cancel_reason próprio e evento `superseded_by_newer_appointment`; a linha
+--     do tempo ganha `followup_superseded`.
+-- Os tipos da linha do tempo são constantes no corpo (`c_tl_*`), espelho de
+-- `ATIVIDADE_POS_CONSULTA_*` em lib/leads/activity-vocabulary.ts; a coluna é de
+-- vocabulário aberto (sem CHECK), e `cancel_reason` é texto livre (sem CHECK).
+-- A inscrição viva em OUTRO fluxo pós-consulta segue a 0373. Falta
+-- (`appointment_no_show`) não muda.
 --
 -- Nenhuma tabela, coluna, constraint ou função nova: só o corpo. No baseline a
 -- troca foi feita NO LUGAR, nas duas definições desta função
@@ -32,6 +40,10 @@ declare e public.event_log; a public.calendar_appointments; r public.appointment
  attended boolean; v_status text; v_kind text; pinned uuid;
  -- 0410: janela em que uma inscrição anterior no MESMO fluxo pós-consulta impede outra.
  janela_pos_consulta constant interval := interval '30 days';
+ -- 0410: tipos da linha do tempo (lib/leads/activity-vocabulary.ts, ATIVIDADE_POS_CONSULTA_*).
+ c_tl_trocado constant text := 'followup_superseded';
+ c_tl_mantido constant text := 'followup_not_reopened';
+ ant_id uuid; ant_inicio timestamptz; trocada uuid; trocada_consulta uuid; trocada_no text;
 begin
  select * into e from public.event_log where organization_id=p_org and id=p_event and event_type in ('appointment.outcome_confirmed','appointment.attended') and entity_kind='appointment';
  if not found then raise exception 'appointment_source_event_missing' using errcode='P0002'; end if;
@@ -63,22 +75,39 @@ begin
  -- 0410: presença não abre inscrição duplicada no MESMO fluxo pós-consulta.
  -- Incidente de 11/11: presença marcada em lote em consultas antigas abriu uma
  -- segunda inscrição para quem já estava no fluxo (ou já tinha recebido as
- -- mensagens dele), e a régua inteira saiu de novo. Impede: inscrição VIVA no
- -- mesmo fluxo, ou iniciada nele dentro da janela E que enviou ao menos uma
- -- mensagem: encerrada sem envio (cancelada antes, ou com todas as ações
- -- puladas por prazo vencido) não chegou ao paciente. Sem recibo e sem aviso,
- -- como a presença sem fluxo: não é pendência. O motivo fica no retorno, que o
- -- consumidor do event_log grava.
- if result is null and attended and exists(select 1 from public.followup_enrollments x
-    where x.organization_id=p_org and x.contact_id=contact and x.pointer_id=candidates[1]
-     and (x.status in ('active','waiting_reply','paused_handoff','paused_manual')
-      or (x.started_at>now()-janela_pos_consulta
-       and exists(select 1 from public.followup_enrollment_events ev
-        where ev.organization_id=p_org and ev.enrollment_id=x.id and ev.event_type='action_sent')))) then
-  return jsonb_build_object('result','already_enrolled');
+ -- mensagens dele), e a régua inteira saiu de novo. Contam: a inscrição VIVA no
+ -- mesmo fluxo e a iniciada nele dentro da janela que enviou ao menos uma
+ -- mensagem (encerrada sem envio — cancelada antes, ou com as ações puladas por
+ -- prazo vencido — não chegou ao paciente). Decide a DATA DA CONSULTA: se a
+ -- consulta desta presença não é mais recente que a de alguma delas (ou se uma
+ -- delas não tem consulta), nada abre; se é mais recente, abre e a viva (se
+ -- houver) é trocada por ela, logo abaixo. Nos dois casos a linha do tempo do
+ -- negócio diz o porquê. Sem recibo e sem aviso: não é pendência; o retorno
+ -- `already_enrolled` fica no detalhe do consumidor do event_log.
+ if result is null and attended then
+  select x.id,ca.starts_at into ant_id,ant_inicio from public.followup_enrollments x
+   left join public.calendar_appointments ca on ca.organization_id=p_org and ca.id=x.appointment_id
+   where x.organization_id=p_org and x.contact_id=contact and x.pointer_id=candidates[1]
+    and (x.status in ('active','waiting_reply','paused_handoff','paused_manual')
+     or (x.started_at>now()-janela_pos_consulta
+      and exists(select 1 from public.followup_enrollment_events ev
+       where ev.organization_id=p_org and ev.enrollment_id=x.id and ev.event_type='action_sent')))
+   order by ca.starts_at desc nulls first limit 1;
+  if found and (ant_inicio is null or ant_inicio>=a.starts_at) then
+   insert into public.crm_lead_activities(organization_id,lead_id,contact_id,source_module,source_id,type,actor_kind,reason,payload)
+    select p_org,l.id,contact,'followup',a.id,c_tl_mantido,'system',
+     'Presença confirmada numa consulta que não é mais recente que a do pós-consulta em andamento ou já enviado; nada foi aberto.',
+     jsonb_build_object('appointment_id',a.id,'pointer_id',candidates[1],'enrollment_id',ant_id)
+    from public.crm_leads l where l.organization_id=p_org and l.contact_id=contact
+     and not exists(select 1 from public.crm_lead_activities t where t.organization_id=p_org and t.lead_id=l.id and t.type=c_tl_mantido and t.source_id=a.id);
+   return jsonb_build_object('result','already_enrolled');
+  end if;
+  select x.id,x.appointment_id into trocada,trocada_consulta from public.followup_enrollments x
+   where x.organization_id=p_org and x.contact_id=contact and x.pointer_id=candidates[1]
+    and x.status in ('active','waiting_reply','paused_handoff','paused_manual') limit 1;
  end if;
- -- 0373: presença NOVA recomeça a régua pós-consulta (desde a 0410, só a de
- -- OUTRO fluxo pós-consulta: o mesmo fluxo já parou no bloco acima). A inscrição viva de uma
+ -- 0373: presença NOVA recomeça a régua pós-consulta (no MESMO fluxo, desde a
+ -- 0410, só quando a consulta é mais recente: decidido no bloco acima). A inscrição viva de uma
  -- presença ANTERIOR não é "outro acompanhamento": é cancelada no mesmo bloco
  -- da inscrição nova, logo abaixo. Qualquer outro fluxo vivo continua impedindo.
  if result is null and exists(select 1 from public.followup_enrollments x where x.organization_id=p_org and x.contact_id=contact and x.status in ('active','waiting_reply','paused_handoff','paused_manual')
@@ -108,6 +137,18 @@ begin
   exception when serialization_failure or sqlstate 'PT409' then result:='stale'; end;
   if result is null then
    begin
+    -- 0410: a viva do MESMO fluxo, de consulta mais antiga, é trocada pela nova.
+    if trocada is not null then
+     update public.followup_enrollments set status='cancelled',
+      cancel_reason='Presença confirmada numa consulta mais recente; o acompanhamento recomeçou por ela.',
+      completed_at=now(),next_eval_at=null,claimed_until=null
+      where organization_id=p_org and id=trocada and status in ('active','waiting_reply','paused_handoff','paused_manual')
+      returning current_node_id into trocada_no;
+     insert into public.followup_enrollment_events(organization_id,enrollment_id,node_id,event_type,payload,idempotency_key)
+      values(p_org,trocada,trocada_no,'superseded_by_newer_appointment',
+       jsonb_build_object('appointment_id',a.id,'previous_appointment_id',trocada_consulta),'superseded:'||a.id||':'||a.revision)
+      on conflict do nothing;
+    end if;
     if attended then
      update public.followup_enrollments x set status='cancelled',cancel_reason='O paciente compareceu a uma nova consulta; o acompanhamento recomeçou por ela.',
       completed_at=now(),next_eval_at=null,claimed_until=null
@@ -120,6 +161,13 @@ begin
     values(p_org,pointer,version,contact,(boundary->>'conversation_id')::uuid,agent,node,boundary,a.id,a.revision) returning id into enrollment;
     insert into public.followup_enrollment_events(organization_id,enrollment_id,node_id,event_type,payload,idempotency_key)
      values(p_org,enrollment,node,'enrolled',jsonb_build_object('trigger_kind',v_kind,'appointment_id',a.id,'appointment_revision',a.revision),'appointment:'||a.id||':'||a.revision);
+    if trocada is not null then
+     insert into public.crm_lead_activities(organization_id,lead_id,contact_id,source_module,source_id,type,actor_kind,reason,payload)
+      select p_org,l.id,contact,'followup',a.id,c_tl_trocado,'system',
+       'Presença confirmada numa consulta mais recente; o pós-consulta anterior foi encerrado e recomeçou por esta.',
+       jsonb_build_object('appointment_id',a.id,'previous_appointment_id',trocada_consulta,'enrollment_id',enrollment,'previous_enrollment_id',trocada)
+      from public.crm_leads l where l.organization_id=p_org and l.contact_id=contact;
+    end if;
     result:='started';
    exception when unique_violation then result:='other_flow'; end;
   end if;
