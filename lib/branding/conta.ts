@@ -9,7 +9,8 @@ import { ehUrl } from "@/lib/evalink/config";
 /**
  * Leitor da marca da Conta Eva Link (Plano 6). Só servidor.
  *
- * Contrato: `GET {CONTA_URL}/api/marca` (com ETag/304) e `GET {CONTA_URL}/marca/logo/{escuro|claro}`.
+ * Contrato: `GET {CONTA_URL}/api/marca` (com ETag/304), `GET {CONTA_URL}/marca/logo/{escuro|claro}` e,
+ * desde o Plano 7, `GET {CONTA_URL}/marca/icone` (ícone da aba: só PNG).
  * Uma rodada tem um prazo ÚNICO (3 s) que cobre cabeçalhos, corpo e logos. NUNCA LANÇA:
  * todo erro vira `{ tipo: "falha" }`. Não escreve log — devolve motivos; quem guarda e
  * avisa (uma vez a cada 10 min) é o chamador, que também mantém a última marca boa.
@@ -19,6 +20,8 @@ export type MarcaDaConta = {
   nomeClinica: string | null; // trim, até 80, vazio → null
   corPrincipal: string; // hex minúsculo #rrggbb
   logos: { escuro: string | null; claro: string | null }; // sha256 anunciado
+  /** sha256 do ícone da aba; `undefined` = Conta anterior ao Plano 7 (campo ausente: não mexer). */
+  icone?: string | null;
   atualizadoEm: string | null;
 };
 
@@ -42,6 +45,12 @@ export type RodadaDaConta =
       marca: MarcaDaConta;
       etag: string | null;
       logos: { escuro: LogoDaRodada; claro: LogoDaRodada };
+      /**
+       * Mesmas regras de `LogoDaRodada`, com `marca.icone` no lugar dos shas das logos:
+       * `null` com `marca.icone` null = a Conta não tem ícone (apague e volte ao padrão);
+       * `null` com sha = recusado (mantenha o anterior). `undefined` = campo ausente na Conta.
+       */
+      icone?: LogoDaRodada;
       avisos: string[];
     }
   | { tipo: "igual"; etag: string | null } // 304
@@ -50,7 +59,7 @@ export type RodadaDaConta =
 
 export type AnteriorDaConta = {
   etag: string | null;
-  logos: { escuro: string | null; claro: string | null };
+  logos: { escuro: string | null; claro: string | null; icone?: string | null };
 } | null;
 
 const PRAZO_MS = 3000;
@@ -72,6 +81,8 @@ const CorpoDaMarca = z.object({
   paleta: z.union([z.object({ id: z.string() }), z.object({ principal: HEX, destaque: HEX.optional() })]),
   cores: z.object({ principal: HEX, funda: HEX, destaque: HEX }),
   logos: z.object({ escuro: SHA, claro: SHA }),
+  // Plano 7: ausente numa Conta antiga (optional), null = sem ícone.
+  icone: SHA.optional(),
   atualizado_em: z.string().nullable(),
 });
 
@@ -125,6 +136,7 @@ async function baixarLogo(
   url: string,
   shaAnunciado: string,
   signal: AbortSignal,
+  soPng = false,
 ): Promise<LogoBaixada> {
   const res = await f(url, { signal, cache: "no-store" });
   // 404 de uma logo anunciada também é recusa: a anterior fica.
@@ -132,6 +144,8 @@ async function baixarLogo(
   const bytes = await lerAte(res, TAMANHO_MAXIMO_DA_LOGO_DA_CONTA);
   const tipo = farejarTipo(bytes); // só PNG e JPEG, como o bucket; WebP e SVG caem aqui
   if (!tipo) throw new Recusa("não é PNG nem JPEG");
+  // O ícone vai para o apple-touch-icon, que o iPhone só aceita em PNG (contrato do Plano 7).
+  if (soPng && tipo !== "image/png") throw new Recusa("ícone não é PNG");
   if (createHash("sha256").update(bytes).digest("hex") !== shaAnunciado) throw new Recusa("sha256 não confere");
   return { sha: shaAnunciado, tipo: tipo === "image/png" ? "png" : "jpeg", bytes };
 }
@@ -168,6 +182,7 @@ async function rodada(
     nomeClinica: nome,
     corPrincipal: c.cores.principal.toLowerCase(),
     logos: c.logos,
+    ...(c.icone !== undefined && { icone: c.icone }),
     atualizadoEm: c.atualizado_em,
   };
 
@@ -191,9 +206,26 @@ async function rodada(
     }
     return p;
   };
-  const [escuro, claro] = await Promise.all([resolver("escuro"), resolver("claro")]);
+  const icone = async (): Promise<LogoDaRodada | undefined> => {
+    if (c.icone === undefined) return undefined;
+    if (c.icone === null) return null;
+    if (anterior?.logos.icone === c.icone) return "mesma";
+    return baixarLogo(f, `${contaUrl}/marca/icone`, c.icone, signal, true).catch((e: unknown) => {
+      if (!(e instanceof Recusa)) throw e;
+      avisos.push(`ícone recusado: ${e.message}`);
+      return null;
+    });
+  };
+  const [escuro, claro, ic] = await Promise.all([resolver("escuro"), resolver("claro"), icone()]);
   // Logo recusada: sem ETag, senão a próxima rodada recebe 304 e nunca tenta a logo de novo.
-  return { tipo: "nova", marca, etag: avisos.length > 0 ? null : etag, logos: { escuro, claro }, avisos };
+  return {
+    tipo: "nova",
+    marca,
+    etag: avisos.length > 0 ? null : etag,
+    logos: { escuro, claro },
+    ...(ic !== undefined && { icone: ic }),
+    avisos,
+  };
 }
 
 export async function lerMarcaDaConta(

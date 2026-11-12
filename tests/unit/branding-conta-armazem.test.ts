@@ -107,6 +107,7 @@ const CONTA = "https://conta.exemplo.test";
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 7, 7, 7]);
 const WEBP = new TextEncoder().encode("RIFF\x00\x00\x00\x00WEBPVP8 ");
+const ICONE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 5, 5, 5]);
 const sha = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
 
 function corpo(extra: Record<string, unknown> = {}) {
@@ -384,11 +385,11 @@ describe("teto da rodada", () => {
 });
 
 describe("versão do ícone acompanha a gravação da Conta", () => {
-  it("uma rodada que grava logo nova muda versaoDoIcone() na hora, sem esperar 30 s", async () => {
+  it("uma rodada que grava ícone novo muda versaoDoIcone() na hora, sem esperar 30 s", async () => {
     vi.stubEnv("CONTA_URL", CONTA);
-    vi.stubGlobal("fetch", contaFalsa(corpo()).f);
-    const antiga = `platform/conta-${"a".repeat(64)}.png`;
-    banco.linha = { ...LOCAL, conta_logo_path: antiga, conta_logos: { escuro: null, claro: "a".repeat(64) }, conta_atualizado_em: "x" };
+    vi.stubGlobal("fetch", contaFalsa(corpo({ icone: sha(ICONE) }), { claro: PNG, icone: ICONE }).f);
+    const antigo = `platform/conta-${"a".repeat(64)}.png`;
+    banco.linha = { ...LOCAL, conta_icone_path: antigo, conta_logos: { escuro: null, claro: null, icone: "a".repeat(64) }, conta_atualizado_em: "x" };
     vi.resetModules();
     const { versaoDoIcone, invalidarVersaoDoIcone } = await import("@/lib/branding/icone-versao");
     const { marcaDaInstalacao } = await import("@/lib/branding/instalacao");
@@ -396,12 +397,56 @@ describe("versão do ícone acompanha a gravação da Conta", () => {
     // Primeiro a versão vigente fica no memo (rodada bloqueada pela janela de 60 s).
     globalThis.__rodadaDaConta = { ultima: Date.now(), emVoo: false, geracao: 0 };
     expect(await versaoDoIcone()).toBe("aaaaaaaa");
-    // Agora a rodada roda e grava a logo nova.
+    // Agora a rodada roda e grava o ícone novo.
     globalThis.__rodadaDaConta = undefined;
     await marcaDaInstalacao();
-    await vi.waitFor(() => expect(banco.linha?.conta_logo_path).toBe(`platform/conta-${sha(PNG)}.png`));
+    await vi.waitFor(() => expect(banco.linha?.conta_icone_path).toBe(`platform/conta-${sha(ICONE)}.png`));
     globalThis.__rodadaDaConta = { ultima: Date.now(), emVoo: false, geracao: 0 };
-    expect(await versaoDoIcone()).toBe(sha(PNG).slice(0, 8));
+    expect(await versaoDoIcone()).toBe(sha(ICONE).slice(0, 8));
+  });
+});
+
+describe("ícone da Conta no armazém (Plano 7)", () => {
+  const caminho = `platform/conta-${sha(ICONE)}.png`;
+
+  it("ícone anunciado → envia platform/conta-<sha>.png e guarda caminho e sha", async () => {
+    const { rodarMarcaDaConta } = await armazem();
+    const b = corpo({ icone: sha(ICONE) });
+    expect(await rodarMarcaDaConta(CONTA, () => {}, { fetch: contaFalsa(b, { claro: PNG, icone: ICONE }).f })).toBe("gravou");
+    expect(banco.uploads).toContainEqual({ caminho, tipo: "image/png" });
+    expect(banco.linha).toMatchObject({ conta_icone_path: caminho, conta_logos: { escuro: sha(PNG), claro: sha(PNG), icone: sha(ICONE) } });
+  });
+
+  it("icone null depois de ter tido → apaga caminho e sha (volta ao ícone próprio)", async () => {
+    banco.linha = { ...LOCAL, conta_icone_path: caminho, conta_logos: { escuro: sha(PNG), claro: sha(PNG), icone: sha(ICONE) }, conta_logo_path: `platform/conta-${sha(PNG)}.png`, conta_atualizado_em: "x" };
+    const { rodarMarcaDaConta } = await armazem();
+    await rodarMarcaDaConta(CONTA, () => {}, { fetch: contaFalsa(corpo({ icone: null })).f });
+    expect(banco.linha).toMatchObject({ conta_icone_path: null, conta_logos: { icone: null } });
+  });
+
+  it("campo ausente (Conta antiga) → o ícone guardado fica", async () => {
+    banco.linha = { ...LOCAL, conta_icone_path: caminho, conta_logos: { escuro: sha(PNG), claro: sha(PNG), icone: sha(ICONE) }, conta_atualizado_em: "x" };
+    const { rodarMarcaDaConta } = await armazem();
+    await rodarMarcaDaConta(CONTA, () => {}, { fetch: contaFalsa(corpo()).f });
+    expect(banco.linha).toMatchObject({ conta_icone_path: caminho, conta_logos: { icone: sha(ICONE) } });
+  });
+
+  it("ícone recusado (404) → o anterior fica e o ETag sai, para tentar de novo", async () => {
+    banco.linha = { ...LOCAL, conta_icone_path: caminho, conta_logos: { escuro: null, claro: null, icone: sha(ICONE) }, conta_atualizado_em: "x" };
+    const { rodarMarcaDaConta } = await armazem();
+    await rodarMarcaDaConta(CONTA, () => {}, { fetch: contaFalsa(corpo({ icone: "e".repeat(64) })).f });
+    expect(banco.linha).toMatchObject({ conta_icone_path: caminho, conta_logos: { icone: sha(ICONE) }, conta_etag: null });
+  });
+
+  it("a limpeza do bucket nunca apaga o ícone em uso", async () => {
+    const velha = `platform/conta-${"b".repeat(64)}.png`;
+    banco.noBucket = [velha, caminho];
+    banco.linha = { ...LOCAL, conta_icone_path: caminho, conta_logo_path: velha, conta_logos: { escuro: null, claro: "b".repeat(64), icone: sha(ICONE) }, conta_atualizado_em: "x" };
+    const { rodarMarcaDaConta } = await armazem();
+    await rodarMarcaDaConta(CONTA, () => {}, { fetch: contaFalsa(corpo({ icone: sha(ICONE) }), { claro: PNG, icone: ICONE }).f });
+    await vi.waitFor(() => expect(banco.uploads.length).toBeGreaterThan(0));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(banco.removidos).not.toContain(caminho);
   });
 });
 
@@ -454,26 +499,33 @@ describe("ícone da aba com a Conta", () => {
   });
 
   const daConta = `platform/conta-${"c".repeat(64)}.png`;
+  const logoDaConta = `platform/conta-${"d".repeat(64)}.png`;
+  const enviado = "platform/11111111-1111-4111-8111-111111111111.png";
 
-  it("sem icone_path e com a logo da Conta, /icon serve a logo clara guardada", async () => {
-    banco.linha = { icone_path: null };
-    const Icon = await icone({ conta_logo_path: daConta });
+  it("o ícone da Conta vence o enviado pela tela (a Conta é a fonte da marca)", async () => {
+    banco.linha = { icone_path: enviado };
+    const Icon = await icone({ conta_icone_path: daConta, conta_logo_path: logoDaConta });
     const res = await Icon();
     expect(res.headers.get("content-type")).toBe("image/png");
     expect(await res.text()).toBe(`bytes:${daConta}`);
   });
 
-  it("o ícone enviado pelo super-admin vence a logo da Conta", async () => {
-    const enviado = "platform/11111111-1111-4111-8111-111111111111.png";
+  it("sem ícone da Conta, o enviado; a logo da Conta NUNCA vai para a aba", async () => {
     banco.linha = { icone_path: enviado };
-    const Icon = await icone({ conta_logo_path: daConta });
+    const Icon = await icone({ conta_icone_path: null, conta_logo_path: logoDaConta });
     expect(await (await Icon()).text()).toBe(`bytes:${enviado}`);
   });
 
-  it("a versão do ícone segue o sha da logo da Conta quando não há ícone enviado", async () => {
+  it("sem ícone nenhum e com logo da Conta, desenha (não usa a logo comprida)", async () => {
+    banco.linha = { icone_path: null };
+    const Icon = await icone({ conta_icone_path: null, conta_logo_path: logoDaConta });
+    expect(await (await Icon()).text()).not.toBe(`bytes:${logoDaConta}`);
+  });
+
+  it("a versão do ícone segue o caminho do ícone", async () => {
     const { versaoDoCaminho } = await import("@/lib/branding/icone-versao");
     expect(versaoDoCaminho(daConta)).toBe("cccccccc");
-    expect(versaoDoCaminho("platform/11111111-1111-4111-8111-111111111111.png")).toBe("11111111");
+    expect(versaoDoCaminho(enviado)).toBe("11111111");
     expect(versaoDoCaminho(null)).toBe("d");
   });
 });

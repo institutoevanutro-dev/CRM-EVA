@@ -93,7 +93,7 @@ Directo, para que no lo descubras delante del cliente. Cada línea trae la razó
 
 ## Con la Cuenta Eva Link
 
-Si la instalación usa la **Cuenta Eva Link** — el `.env` tiene `CONTA_URL`, la misma variable del inicio de sesión por la Cuenta —, **la marca pasa a configurarse en la Cuenta, no en el CRM.** El nombre pasa a ser **CRM · <nombre de la clínica>** (solo **CRM** cuando la Cuenta no tiene nombre de clínica), y él, el color y el logo de allí valen en todas partes: inicio de sesión, menú, pestaña, icono y correos, por encima de la marca de la instalación y de la marca de cada organización. Lo único de la organización que sigue valiendo es el **color del menú lateral**.
+Si la instalación usa la **Cuenta Eva Link** — el `.env` tiene `CONTA_URL`, la misma variable del inicio de sesión por la Cuenta —, **la marca pasa a configurarse en la Cuenta, no en el CRM.** El nombre pasa a ser **CRM · <nombre de la clínica>** (solo **CRM** cuando la Cuenta no tiene nombre de clínica), y él, el color y el logo de allí valen en todas partes: inicio de sesión, menú, pestaña, icono y correos, por encima de la marca de la instalación y de la marca de cada organización. Lo único de la organización que sigue valiendo es el **color del menú lateral**. El **icono de la pestaña** es el icono cuadrado de la Cuenta (tarjeta "Icono de la pestaña" de su pantalla Marca); sin él, vale el icono subido en el CRM o el dibujado, nunca el logo alargado.
 
 - **Cuánto tarda:** el CRM le pregunta a la Cuenta como máximo una vez por minuto, fuera de la carga de la página. Un cambio hecho en la Cuenta aparece en hasta dos minutos.
 - **Cuenta caída:** queda la última marca buena que el CRM guardó en su propia base. Si nunca hubo una, vale la marca local, como sin la Cuenta.

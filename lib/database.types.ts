@@ -6643,6 +6643,7 @@ export type Database = {
           conta_atualizado_em: string | null
           conta_etag: string | null
           conta_lida_em: string | null
+          conta_icone_path: string | null
           conta_logo_path: string | null
           conta_logos: Json | null
           conta_nome: string | null
@@ -6665,6 +6666,7 @@ export type Database = {
           conta_atualizado_em?: string | null
           conta_etag?: string | null
           conta_lida_em?: string | null
+          conta_icone_path?: string | null
           conta_logo_path?: string | null
           conta_logos?: Json | null
           conta_nome?: string | null
@@ -6687,6 +6689,7 @@ export type Database = {
           conta_atualizado_em?: string | null
           conta_etag?: string | null
           conta_lida_em?: string | null
+          conta_icone_path?: string | null
           conta_logo_path?: string | null
           conta_logos?: Json | null
           conta_nome?: string | null

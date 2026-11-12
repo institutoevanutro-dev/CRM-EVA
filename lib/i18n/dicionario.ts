@@ -3790,6 +3790,9 @@ export const DICIONARIO: Traducoes = {
   "O nome e a cor que este sistema mostra para todo mundo que usa esta instalação.": {
     es: "El nombre y el color que este sistema muestra a todo el mundo que usa esta instalación.",
   },
+  "A aba está usando o ícone da Conta Eva Link. O ícone abaixo só vale se a Conta ficar sem ícone.": {
+    es: "La pestaña está usando el icono de la Cuenta Eva Link. El icono de abajo solo vale si la Cuenta se queda sin icono.",
+  },
   "Sua cor": { es: "Tu color" },
   "fora da escala — fica só no logo": { es: "fuera de la escala — solo queda en el logo" },
   "Botões no modo claro": { es: "Botones en el modo claro" },

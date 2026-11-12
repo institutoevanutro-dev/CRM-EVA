@@ -14,6 +14,10 @@
  *    logo por camada. A clara ausente já chega como a escura (regra 2.6, no
  *    leitor). O sha da escura fica em `conta_logos.escuro` só para não baixá-la
  *    de novo a cada mudança.
+ *  - O ícone da aba (Plano 7) é a coluna `conta_icone_path`, mesmo padrão de
+ *    caminho das logos (`platform/conta-<sha>.png`); o sha fica em
+ *    `conta_logos.icone`. Campo ausente na Conta (versão anterior) não mexe nele;
+ *    `icone: null` apaga e volta ao ícone próprio do CRM.
  *  - `igual` (304) não grava nada: `conta_lida_em` marca a última rodada ACEITA.
  *  - Rodada que daria o mesmo estado não grava (logo recusada é relida a cada
  *    60 s, porque o leitor tira o ETag; sem esta guarda seria uma escrita por
@@ -34,15 +38,16 @@ export type ContaGuardada = {
   readonly conta_nome: string | null;
   readonly conta_accent_hex: string | null;
   readonly conta_logo_path: string | null;
+  readonly conta_icone_path?: string | null;
   readonly conta_logos: unknown;
   readonly conta_etag: string | null;
   readonly conta_atualizado_em: string | null;
 };
 
-type Logos = { escuro: string | null; claro: string | null };
+type Logos = { escuro: string | null; claro: string | null; icone: string | null };
 
 const COLUNAS_DA_CONTA =
-  "conta_nome, conta_accent_hex, conta_logo_path, conta_logos, conta_etag, conta_atualizado_em";
+  "conta_nome, conta_accent_hex, conta_logo_path, conta_icone_path, conta_logos, conta_etag, conta_atualizado_em";
 const INTERVALO_MS = 60_000;
 /** Teto da rodada inteira (banco + Conta + bucket): só a Conta tem prazo próprio. */
 export const PRAZO_DA_RODADA_MS = 20_000;
@@ -121,10 +126,10 @@ export async function lerContaGuardada(): Promise<ContaGuardada | null | "erro">
 
 function logosGuardados(g: ContaGuardada | null): Logos {
   const l = g?.conta_logos;
-  if (typeof l !== "object" || l === null) return { escuro: null, claro: null };
+  if (typeof l !== "object" || l === null) return { escuro: null, claro: null, icone: null };
   const o = l as Record<string, unknown>;
   const sha = (v: unknown) => (typeof v === "string" ? v : null);
-  return { escuro: sha(o.escuro), claro: sha(o.claro) };
+  return { escuro: sha(o.escuro), claro: sha(o.claro), icone: sha(o.icone) };
 }
 
 function caminhoDaLogo(logo: LogoBaixada): string {
@@ -170,7 +175,7 @@ async function limparLogosVelhas(manter: readonly (string | null)[]): Promise<vo
     // nova entre a nossa gravação e esta limpeza, e ela nunca pode sair.
     const atual = await lerContaGuardada();
     if (atual === "erro") return;
-    const fica = [...manter, atual?.conta_logo_path ?? null];
+    const fica = [...manter, atual?.conta_logo_path ?? null, atual?.conta_icone_path ?? null];
     const velhas = data
       .map((o) => `${PREFIXO}${o.name}`)
       .filter((c) => /^platform\/conta-[0-9a-f]{64}\.(png|jpg)$/.test(c) && !fica.includes(c));
@@ -188,6 +193,7 @@ type Estado = {
   conta_nome: string | null;
   conta_accent_hex: string | null;
   conta_logo_path: string | null;
+  conta_icone_path: string | null;
   conta_logos: Logos | null;
   conta_etag: string | null;
   conta_atualizado_em: string | null;
@@ -197,6 +203,7 @@ const VAZIO: Estado = {
   conta_nome: null,
   conta_accent_hex: null,
   conta_logo_path: null,
+  conta_icone_path: null,
   conta_logos: null,
   conta_etag: null,
   conta_atualizado_em: null,
@@ -204,13 +211,15 @@ const VAZIO: Estado = {
 
 function mesmoEstado(a: Estado, g: ContaGuardada | null): boolean {
   const b = logosGuardados(g);
-  const la = a.conta_logos ?? { escuro: null, claro: null };
+  const la = a.conta_logos ?? { escuro: null, claro: null, icone: null };
   return (
     a.conta_nome === (g?.conta_nome ?? null) &&
     a.conta_accent_hex === (g?.conta_accent_hex ?? null) &&
     a.conta_logo_path === (g?.conta_logo_path ?? null) &&
+    a.conta_icone_path === (g?.conta_icone_path ?? null) &&
     la.escuro === b.escuro &&
     la.claro === b.claro &&
+    la.icone === b.icone &&
     a.conta_etag === (g?.conta_etag ?? null) &&
     a.conta_atualizado_em === (g?.conta_atualizado_em ?? null)
   );
@@ -274,10 +283,26 @@ async function estadoDaNova(
     }
     // `null` com sha anunciado = recusada (motivo nos avisos): caminho e sha ficam.
   }
+  let icone = g?.conta_icone_path ?? null;
+  if (r.marca.icone === null) {
+    // A Conta não tem ícone: volta ao ícone próprio do CRM (contrato do Plano 7).
+    icone = null;
+    logos.icone = null;
+  } else if (r.icone && r.icone !== "mesma") {
+    const enviado = await enviarLogo(r.icone);
+    if (enviado) {
+      icone = enviado;
+      logos.icone = r.icone.sha;
+    } else {
+      etag = null;
+    }
+  }
+  // `undefined` (Conta antiga) ou recusado: caminho e sha do ícone ficam.
   return {
     conta_nome: r.marca.nomeClinica,
     conta_accent_hex: r.marca.corPrincipal,
     conta_logo_path: caminho,
+    conta_icone_path: icone,
     conta_logos: logos,
     conta_etag: etag,
     conta_atualizado_em: r.marca.atualizadoEm,
@@ -323,8 +348,14 @@ export async function rodarMarcaDaConta(
     if (mesmoEstado(estado, g) || !vigente()) return "nada";
     if (!(await gravar(estado, r.tipo === "nova"))) return "falha";
     aoGravar();
-    if (vigente() && estado.conta_logo_path !== (g?.conta_logo_path ?? null)) {
-      void limparLogosVelhas([estado.conta_logo_path, g?.conta_logo_path ?? null]);
+    const trocouIcone = estado.conta_icone_path !== (g?.conta_icone_path ?? null);
+    if (vigente() && (estado.conta_logo_path !== (g?.conta_logo_path ?? null) || trocouIcone)) {
+      void limparLogosVelhas([
+        estado.conta_logo_path,
+        g?.conta_logo_path ?? null,
+        estado.conta_icone_path,
+        g?.conta_icone_path ?? null,
+      ]);
     }
     return "gravou";
   } catch (e) {

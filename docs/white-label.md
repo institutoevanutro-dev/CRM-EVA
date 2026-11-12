@@ -91,7 +91,7 @@ Sendo direto, para você não descobrir na frente do cliente. Cada linha traz a 
 
 ## Com a Conta Eva Link
 
-Se a instalação usa a **Conta Eva Link** — o `.env` tem `CONTA_URL`, a mesma variável do login pela Conta —, **a marca passa a ser configurada na Conta, não no CRM.** O nome passa a ser **CRM · <nome da clínica>** (só **CRM** quando a Conta não tem nome de clínica), e ele, a cor e o logo de lá valem em todo lugar acima: login, menu, aba, ícone e e-mails, por cima da marca da instalação e da marca de cada organização. A única coisa da organização que continua valendo é a **cor do menu lateral**.
+Se a instalação usa a **Conta Eva Link** — o `.env` tem `CONTA_URL`, a mesma variável do login pela Conta —, **a marca passa a ser configurada na Conta, não no CRM.** O nome passa a ser **CRM · <nome da clínica>** (só **CRM** quando a Conta não tem nome de clínica), e ele, a cor e o logo de lá valem em todo lugar acima: login, menu, aba, ícone e e-mails, por cima da marca da instalação e da marca de cada organização. A única coisa da organização que continua valendo é a **cor do menu lateral**. O **ícone da aba** é o ícone quadrado da Conta (cartão "Ícone da aba" da tela Marca dela); sem ele, vale o ícone enviado no CRM ou o desenhado, nunca a logo comprida.
 
 - **Quanto demora:** o CRM pergunta à Conta no máximo uma vez por minuto, fora do carregamento da página. Uma troca feita na Conta aparece em até dois minutos.
 - **Conta fora do ar:** fica a última marca boa que o CRM guardou no próprio banco. Se nunca houve uma, vale a marca local, como sem a Conta.

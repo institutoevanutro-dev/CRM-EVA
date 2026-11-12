@@ -396,6 +396,7 @@ async function lerOuSemear(): Promise<LinhaDaMarca | null | "erro"> {
     conta_nome: conta.conta_nome,
     conta_accent_hex: conta.conta_accent_hex,
     conta_logo_path: conta.conta_logo_path,
+    conta_icone_path: conta.conta_icone_path ?? null,
   };
 }
 

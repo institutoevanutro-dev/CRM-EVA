@@ -91,6 +91,9 @@ function pngSolido(lado: number, cor: [number, number, number]): Buffer {
 }
 const LOGO = pngSolido(48, [0x27, 0x46, 0x3b]);
 const SHA = createHash("sha256").update(LOGO).digest("hex");
+// Plano 7: o ícone da aba, quadrado e de outra cor, para não confundir com a logo.
+const ICONE = pngSolido(180, [0xd8, 0xb4, 0x5a]);
+const SHA_ICONE = createHash("sha256").update(ICONE).digest("hex");
 
 async function ligarMarcaNaConta(): Promise<void> {
   const res = await fetch(`${CONTA}/__teste/marca`, {
@@ -103,9 +106,10 @@ async function ligarMarcaNaConta(): Promise<void> {
         paleta: { id: "verde-dourado" },
         cores: { principal: "#27463b", funda: "#1d352c", destaque: "#d8b45a" },
         logos: { escuro: null, claro: SHA },
+        icone: SHA_ICONE,
         atualizado_em: new Date().toISOString(),
       },
-      logos: { claro: LOGO.toString("base64") },
+      logos: { claro: LOGO.toString("base64"), icone: ICONE.toString("base64") },
     }),
   });
   expect(res.status, "a Conta falsa não aceitou a marca de teste").toBe(204);
@@ -121,6 +125,7 @@ async function desligarMarcaNaConta(): Promise<void> {
       conta_nome: null,
       conta_accent_hex: null,
       conta_logo_path: null,
+      conta_icone_path: null,
       conta_logos: null,
       conta_etag: null,
       conta_atualizado_em: null,
@@ -199,6 +204,13 @@ test.describe("marca da clínica pela Conta", () => {
     await expect(page.locator("aside img").first()).toHaveAttribute("src", new RegExp(`platform/conta-${SHA}\\.png`));
     await page.screenshot({ path: path.join(EVIDENCIA, "1-organizacao.png"), fullPage: true });
 
+    // Plano 7: a aba e o atalho apontam para /icon com a versão do ícone da
+    // Conta, e /icon entrega exatamente os bytes do ícone (nunca a logo).
+    await expect(page.locator('link[rel="icon"]').first()).toHaveAttribute("href", new RegExp(`v=${SHA_ICONE.slice(0, 8)}`));
+    const aba = await page.request.get((await page.locator('link[rel="icon"]').first().getAttribute("href"))!);
+    expect(aba.headers()["content-type"]).toBe("image/png");
+    expect(createHash("sha256").update(await aba.body()).digest("hex")).toBe(SHA_ICONE);
+
     // A cor do menu continua salvando pela tela — e volta pela tela.
     await page.getByLabel("Cor do menu lateral").fill("#334455");
     await page.getByRole("button", { name: "Salvar" }).click();
@@ -214,6 +226,7 @@ test.describe("marca da clínica pela Conta", () => {
     await expect(page.getByText(AVISO)).toBeVisible();
     await expect(page.getByLabel("Nome do sistema")).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Ícone da aba" })).toBeVisible();
+    await expect(page.getByTestId("icone-da-conta-em-vigor")).toBeVisible();
     await page.screenshot({ path: path.join(EVIDENCIA, "2-instalacao.png"), fullPage: true });
 
     // 4. A rota do logo recusa nos dois escopos, com o código nomeado.

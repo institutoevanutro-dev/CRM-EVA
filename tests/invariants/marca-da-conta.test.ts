@@ -31,6 +31,7 @@ const COLUNAS = {
   conta_etag: "text",
   conta_atualizado_em: "timestamp with time zone",
   conta_lida_em: "timestamp with time zone",
+  conta_icone_path: "text",
 } as const;
 
 const SHA = "a".repeat(64);
@@ -106,13 +107,22 @@ describe("os CHECKs da 0409", () => {
     }
   });
 
+  it("`conta_icone_path` aceita só `platform/conta-<sha256>.png` e NULL (Plano 7)", () => {
+    expect(erroAo(`update public.${TABELA} set conta_icone_path = 'platform/conta-${SHA}.png' where id = 1;`)).toBeNull();
+    expect(erroAo(`update public.${TABELA} set conta_icone_path = null where id = 1;`)).toBeNull();
+    for (const ruim of [`platform/conta-${SHA}.jpg`, `platform/conta-${SHA}.webp`, `platform/${SHA}.png`, `https://exemplo.com/conta-${SHA}.png`]) {
+      const erro = erroAo(`update public.${TABELA} set conta_icone_path = '${ruim}' where id = 1;`);
+      expect(erro, `deveria recusar ${JSON.stringify(ruim)}`).toContain("platform_branding_conta_icone_path");
+    }
+  });
+
   it("cada CHECK existe uma vez só — reaplicar o baseline não duplica", () => {
     const quantos = sql(`
       select count(*) from pg_constraint
        where conrelid = 'public.${TABELA}'::regclass
-         and conname in ('platform_branding_conta_accent_hex', 'platform_branding_conta_logo_path');
+         and conname in ('platform_branding_conta_accent_hex', 'platform_branding_conta_logo_path', 'platform_branding_conta_icone_path');
     `).trim();
-    expect(quantos).toBe("2");
+    expect(quantos).toBe("3");
   });
 });
 

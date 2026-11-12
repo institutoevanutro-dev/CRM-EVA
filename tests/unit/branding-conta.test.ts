@@ -265,3 +265,62 @@ describe("paresDoGuiaQueFalham", () => {
     expect(falhas).toHaveLength(2);
   });
 });
+
+describe("ícone da aba (Plano 7)", () => {
+  const ICONE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7, 7]);
+  const JPG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+  const comIcone = (b: Uint8Array, anunciado = sha(b)) =>
+    padrao(corpo({ icone: anunciado }), { [`${CONTA}/marca/icone`]: () => bytes(b) });
+
+  it("campo ausente (Conta antiga) → nem marca.icone nem icone na rodada; não pede /marca/icone", async () => {
+    const { f, chamadas } = padrao();
+    const r = nova(await lerMarcaDaConta(CONTA, null, { fetch: f }));
+    expect("icone" in r.marca).toBe(false);
+    expect("icone" in r).toBe(false);
+    expect(chamadas.some((c) => c.url.endsWith("/marca/icone"))).toBe(false);
+  });
+
+  it("sha anunciado → baixa /marca/icone e confere o sha", async () => {
+    const { f } = comIcone(ICONE);
+    const r = nova(await lerMarcaDaConta(CONTA, null, { fetch: f }));
+    expect(r.marca.icone).toBe(sha(ICONE));
+    expect(r.icone).toEqual({ sha: sha(ICONE), tipo: "png", bytes: ICONE });
+    expect(r.etag).toBe('"v1"');
+  });
+
+  it("mesmo sha que o anterior → \"mesma\", sem baixar", async () => {
+    const { f, chamadas } = comIcone(ICONE);
+    const anterior = { etag: null, logos: { escuro: sha(PNG), claro: sha(PNG_CLARO), icone: sha(ICONE) } };
+    const r = nova(await lerMarcaDaConta(CONTA, anterior, { fetch: f }));
+    expect(r.icone).toBe("mesma");
+    expect(chamadas.some((c) => c.url.endsWith("/marca/icone"))).toBe(false);
+  });
+
+  it("icone null → null na rodada (a Conta não tem ícone)", async () => {
+    const { f } = padrao(corpo({ icone: null }));
+    const r = nova(await lerMarcaDaConta(CONTA, null, { fetch: f }));
+    expect(r.marca.icone).toBeNull();
+    expect(r.icone).toBeNull();
+    expect(r.avisos).toEqual([]);
+  });
+
+  it.each([
+    ["sha diferente", ICONE, "f".repeat(64), "sha256 não confere"],
+    ["JPEG (o apple-touch-icon só aceita PNG)", JPG, undefined, "ícone não é PNG"],
+    ["WebP", WEBP, undefined, "não é PNG nem JPEG"],
+  ])("%s → recusado: null, aviso e sem ETag", async (_, b, anunciado, motivo) => {
+    const { f } = comIcone(b, anunciado ?? sha(b));
+    const r = nova(await lerMarcaDaConta(CONTA, null, { fetch: f }));
+    expect(r.icone).toBeNull();
+    expect(r.marca.icone).not.toBeNull();
+    expect(r.avisos).toEqual([`ícone recusado: ${motivo}`]);
+    expect(r.etag).toBeNull();
+  });
+
+  it("404 do ícone anunciado → recusado, a rodada segue", async () => {
+    const { f } = padrao(corpo({ icone: sha(ICONE) }));
+    const r = nova(await lerMarcaDaConta(CONTA, null, { fetch: f }));
+    expect(r.icone).toBeNull();
+    expect(r.avisos).toEqual(["ícone recusado: HTTP 404"]);
+  });
+});

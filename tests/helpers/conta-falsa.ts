@@ -48,6 +48,12 @@ export async function sobeContaFalsa(porta = 0) {
       if (!marca) { res.writeHead(404).end(); return; }
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(marca.corpo)); return;
     }
+    // Plano 7: o ícone da aba vem em `logos.icone` da porta de teste.
+    if (u.pathname === "/marca/icone") {
+      const bytes = marca?.logos.icone;
+      if (!bytes) { res.writeHead(404).end(); return; }
+      res.writeHead(200, { "content-type": "image/png" }).end(bytes); return;
+    }
     const logo = /^\/marca\/logo\/(escuro|claro)$/.exec(u.pathname);
     if (logo) {
       const bytes = marca?.logos[logo[1]!];

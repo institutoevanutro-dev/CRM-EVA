@@ -384,6 +384,8 @@ export type LinhaDaInstalacao = {
   readonly conta_nome?: string | null;
   readonly conta_accent_hex?: string | null;
   readonly conta_logo_path?: string | null;
+  /** Ícone da aba vindo da Conta (Plano 7). Só `app/icon.tsx` e `icone-versao.ts` leem. */
+  readonly conta_icone_path?: string | null;
 };
 
 /** O nome fixo deste módulo na família Eva Link (spec §2 item 8). */

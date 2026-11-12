@@ -80,22 +80,20 @@ export const size = { width: 64, height: 64 };
 export const contentType = "image/png";
 
 export default async function Icon() {
-  // O ícone ENVIADO pela tela (migration 0291) vence o desenhado. Lido do
-  // bucket do próprio projeto pelo cliente admin — caminho validado por CHECK
-  // no banco, nunca uma URL digitada —, então continua sem SSRF. Qualquer falha
-  // cai no desenho de sempre: o ícone da aba nunca pode virar erro.
+  // 1º o ícone da CONTA (Plano 7): a marca central da clínica vence tudo.
+  // `conta_icone_path` só vem preenchido com `CONTA_URL` ligada, e é caminho do
+  // bucket com CHECK (`platform/conta-<sha>.png`), nunca URL: sem SSRF. NUNCA a
+  // logo da Conta no lugar — a logo é comprida e fica ilegível na aba (contrato).
+  const caminhoDaConta = (await marcaDaInstalacao())?.conta_icone_path;
+  const daConta = caminhoDaConta ? await baixar(caminhoDaConta) : null;
+  if (daConta) return new Response(daConta, { headers: { "content-type": "image/png", ...CACHE } });
+  // Depois o ícone ENVIADO pela tela (migration 0291), que vence o desenhado.
+  // Lido do bucket do próprio projeto pelo cliente admin — caminho validado por
+  // CHECK no banco, nunca uma URL digitada —, então continua sem SSRF. Qualquer
+  // falha cai no desenho de sempre: o ícone da aba nunca pode virar erro.
   const enviado = await iconeEnviado();
   if (enviado) {
     return new Response(enviado, { headers: { "content-type": "image/png", ...CACHE } });
-  }
-  // Sem ícone enviado e com a Conta ligada, a logo CLARA guardada da Conta
-  // (`conta_logo_path`, só preenchida com `CONTA_URL`). Também do bucket, por
-  // caminho com CHECK (`platform/conta-<sha>.png|jpg`): sem SSRF.
-  const caminhoDaConta = (await marcaDaInstalacao())?.conta_logo_path;
-  const daConta = caminhoDaConta ? await baixar(caminhoDaConta) : null;
-  if (caminhoDaConta && daConta) {
-    const tipo = caminhoDaConta.endsWith(".jpg") ? "image/jpeg" : "image/png";
-    return new Response(daConta, { headers: { "content-type": tipo, ...CACHE } });
   }
 
   const marca = await marcaDaSaida(null);

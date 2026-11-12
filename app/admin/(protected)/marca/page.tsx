@@ -139,6 +139,15 @@ export default async function Page() {
         corDaConta={linha?.conta_accent_hex ?? null}
       />
 
+      {/* Plano 7: o ícone da Conta vence este; sem o aviso, quem envia aqui não vê mudança nenhuma na aba. */}
+      {linha?.conta_icone_path ? (
+        <p className="text-sm text-text-muted" data-testid="icone-da-conta-em-vigor">
+          {traduzir(
+            "A aba está usando o ícone da Conta Eva Link. O ícone abaixo só vale se a Conta ficar sem ícone.",
+            idioma,
+          )}
+        </p>
+      ) : null}
       <CampoDeIcone iconeUrl={iconePath ? urlPublicaDoLogo(iconePath, baseDoStorage()) : null} />
     </div>
   );
