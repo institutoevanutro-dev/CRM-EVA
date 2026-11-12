@@ -6,6 +6,41 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 export const dynamic = "force-dynamic";
+
+type Admin = ReturnType<typeof createAdminClient>;
+
+/**
+ * E-mail de quem ASSUMIU a conversa mais recente do contato: é o vendedor da
+ * proposta que o Prontuário manda ao Financeiro. Só humano (`assignee_kind =
+ * 'user'`) e membro desta organização. Campo acessório: qualquer falha vira
+ * `null`, nunca derruba a leitura do contato.
+ */
+async function emailDoAssumido(db: Admin, org: string, contactId: string): Promise<string | null> {
+  try {
+    const conv = await db
+      .from("conversations")
+      .select("assigned_to_user_id,assignee_kind")
+      .eq("organization_id", org)
+      .eq("contact_id", contactId)
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const userId = conv.data?.assignee_kind === "user" ? conv.data.assigned_to_user_id : null;
+    if (conv.error || !userId) return null;
+    const member = await db
+      .from("user_organizations")
+      .select("user_id")
+      .eq("organization_id", org)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (member.error || !member.data) return null;
+    const { data, error } = await db.auth.admin.getUserById(userId);
+    return error ? null : (data.user?.email ?? null);
+  } catch {
+    return null;
+  }
+}
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const requestId = randomUUID();
   try {
@@ -24,7 +59,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       .uuid()
       .safeParse((await ctx.params).id);
     if (!id.success) return fail("validation_failed", "Contato inválido.", 422, { requestId });
-    const { data, error } = await createAdminClient()
+    const db = createAdminClient();
+    const { data, error } = await db
       .from("contacts")
       .select("id,organization_id,name,display_name,phone_number,email,is_anonymized")
       .eq("organization_id", auth.organizationId)
@@ -33,6 +69,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     if (error) return fail("internal_error", "Consulta indisponível.", 503, { requestId });
     if (!data || data.is_anonymized)
       return fail("not_found", "Contato indisponível.", 404, { requestId });
+    const assignedEmail = await emailDoAssumido(db, auth.organizationId, data.id);
     const response = ok(
       {
         id: data.id,
@@ -40,6 +77,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         name: rotuloDoContato(data),
         phone: data.phone_number,
         email: data.email,
+        assigned_email: assignedEmail,
       },
       { requestId },
     );
