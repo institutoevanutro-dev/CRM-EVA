@@ -9,6 +9,9 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/api\/v1\/prontuario\/contacts\/[0-9a-f-]+$/i,
   /^\/api\/v1\/prontuario\/contacts\/[0-9a-f-]+\/midias$/i,
   /^\/api\/v1\/prontuario\/midias\/[0-9a-f-]+$/i,
+  // Desvincular do Prontuário: sessão (manager+) OU Bearer `prontuario:contacts:write`,
+  // os dois conferidos na rota (`resolveAuthDual`).
+  /^\/api\/v1\/contacts\/[0-9a-f-]+\/prontuario-link$/i,
   // Credencial de leitura validada dentro da rota; não dispensa auth de subrotas.
   /^\/api\/v1\/integrations\/financeiro\/contacts\/[0-9a-f-]+$/i,
   /^\/api\/v1\/integrations\/marketing\/report$/,

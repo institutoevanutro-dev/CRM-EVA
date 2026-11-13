@@ -34,6 +34,12 @@ describe("isPublicPath", () => {
     expect(isPublicPath(`/api/v1/prontuario/contacts/${U}/midias/extra`)).toBe(false);
     expect(isPublicPath(`/api/v1/prontuario/contacts/${U}/outra`)).toBe(false);
   });
+  it("desvincular do Prontuário atravessa o proxy (sessão ou Bearer conferidos na rota), sem sub-path", () => {
+    const U = "11111111-1111-4111-8111-111111111111";
+    expect(isPublicPath(`/api/v1/contacts/${U}/prontuario-link`)).toBe(true);
+    expect(isPublicPath(`/api/v1/contacts/${U}/prontuario-link/extra`)).toBe(false);
+    expect(isPublicPath(`/api/v1/contacts/${U}`)).toBe(false);
+  });
   it("libera o heartbeat do agente do host (bearer, sem cookie)", () => {
     expect(isPublicPath("/api/v1/system/agent")).toBe(true);
   });
