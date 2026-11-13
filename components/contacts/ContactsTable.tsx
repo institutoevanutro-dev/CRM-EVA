@@ -33,7 +33,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
-import { useDeleteContact } from "@/hooks/contacts/useDeleteContact";
+import { bloqueioDaExclusao, useDeleteContact, type BloqueioDaExclusao } from "@/hooks/contacts/useDeleteContact";
+import { ApiError } from "@/lib/api/types";
 import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
 import type { ContactOrderBy } from "@/lib/schemas/contacts";
 import type { Contact } from "@/lib/types/contacts";
@@ -124,6 +125,9 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
   const vocabularioDeEtiquetas = useContactTagVocabulary(orgAtiva?.orgId ?? null);
   const del = useDeleteContact();
   const [alvo, setAlvo] = useState<Contact | null>(null);
+  // A Agenda segurou a exclusão: o aviso fica DENTRO do diálogo, que é modal
+  // (um toast fora dele não recebia o clique em "Abrir Agenda").
+  const [bloqueio, setBloqueio] = useState<BloqueioDaExclusao | null>(null);
   // Editar pela linha, sem abrir a ficha. Sem `customFieldDefs`: os campos do
   // funil continuam na ficha (porte do upstream #2717).
   const [contatoEmEdicao, setContatoEmEdicao] = useState<Contact | null>(null);
@@ -162,8 +166,9 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
       await del.mutateAsync(alvo.id);
       toast.success(t("Contato excluído."));
       setAlvo(null);
-    } catch {
-      // hook handles toast
+    } catch (err) {
+      // O resto dos erros o hook já mostrou em toast.
+      if (err instanceof ApiError) setBloqueio(bloqueioDaExclusao(err.details, t));
     }
   }
 
@@ -324,25 +329,53 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
       </TableBody>
     </Table>
 
-    <AlertDialog open={alvo !== null} onOpenChange={(open) => { if (!open) setAlvo(null); }}>
+    <AlertDialog
+      open={alvo !== null}
+      onOpenChange={(open) => {
+        if (!open) {
+          setAlvo(null);
+          setBloqueio(null);
+        }
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t("Excluir contato?")}</AlertDialogTitle>
+          <AlertDialogTitle>
+            {bloqueio ? t("Não é possível excluir este contato") : t("Excluir contato?")}
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            {alvo
-              ? `${t("Isso remove")} ${displayName(alvo, t)} ${t("e a conversa associada, se houver. Esta ação não pode ser desfeita.")}`
-              : null}
+            {bloqueio
+              ? bloqueio.mensagem
+              : alvo
+                ? `${t("Isso remove")} ${displayName(alvo, t)} ${t("e a conversa associada, se houver. Esta ação não pode ser desfeita.")}`
+                : null}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={del.isPending}>{t("Cancelar")}</AlertDialogCancel>
-          <Button
-            variant="destructive"
-            onClick={() => void confirmarExclusao()}
-            disabled={del.isPending}
-          >
-            {del.isPending ? t("Excluindo…") : t("Excluir")}
-          </Button>
+          {bloqueio && alvo ? (
+            <>
+              <AlertDialogCancel>{t("Fechar")}</AlertDialogCancel>
+              {bloqueio.sugerirJuntar ? (
+                <Button asChild variant="outline">
+                  <Link href={`/app/contacts/${alvo.id}`}>{t("Abrir ficha")}</Link>
+                </Button>
+              ) : null}
+              <Button asChild>
+                <Link href={bloqueio.agendaHref}>{t("Abrir Agenda")}</Link>
+              </Button>
+            </>
+          ) : (
+            <>
+              <AlertDialogCancel disabled={del.isPending}>{t("Cancelar")}</AlertDialogCancel>
+              <Button
+                variant="destructive"
+                onClick={() => void confirmarExclusao()}
+                disabled={del.isPending}
+              >
+                {del.isPending ? t("Excluindo…") : t("Excluir")}
+              </Button>
+            </>
+          )}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

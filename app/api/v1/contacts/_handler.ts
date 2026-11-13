@@ -887,29 +887,59 @@ function throwOnDbError(
 }
 
 /**
- * Os vínculos `on delete restrict` que apontam para `contacts` e que este
- * handler NÃO apaga de propósito.
+ * O vínculo `on delete restrict` para `contacts` que este handler
+ * NÃO apaga por conta própria é `calendar_appointments.contact_id` (0177);
+ * `conversations` e `messages` saem com a ficha, que é o pedido da exclusão.
  *
- * Medido em `supabase/baseline.sql` (não inferido): além de
- * `conversations.contact_id` (linha 3531) e `messages.contact_id` (3781) — o
- * histórico, que sai logo abaixo porque é o pedido da exclusão —, a única FK
- * RESTRICT que sobra é `calendar_appointments.contact_id` (linha 15226, da
- * migração 0177). Ela é da agenda, e a decisão da 0177 foi explícita: o
- * compromisso aconteceu, tem dono e tem texto livre, então ele não cai por
- * cascata junto com a ficha.
+ * A regra de quais compromissos seguram a ficha (migration 0413):
+ *   - EXCLUÍDO (`excluded_at`, 0364), que a Agenda já não mostra e que o Google
+ *     não espera mais, sai JUNTO, dentro de `fn_apagar_contato_com_historico`;
+ *   - excluído com escrita pendente no Google segura: apagar a linha deixaria o
+ *     evento lá sem ninguém para retirá-lo;
+ *   - visível (qualquer situação) segura: é histórico.
  *
- * Conferir esta lista ANTES do primeiro DELETE é o arranjo que a issue #752
- * pede: sem ele, apagar `messages`/`conversations` e só então esbarrar no
- * RESTRICT é destruir o histórico do lead para devolver 409 — o pior dos dois
- * desfechos, porque a ficha continua lá e as mensagens não.
- *
- * Tabela nova com RESTRICT para `contacts` entra aqui como uma linha, e o
- * teste que acompanha este handler (`tests/unit/contato-delete.test.ts`)
- * exercita a contagem com filtro de organização.
+ * Esta conta é a MESMA do `where` da função, e existe só para a mensagem: quem
+ * garante é o banco (o RESTRICT recusa o que sobrar, e a transação desfaz).
+ * Conferir ANTES do primeiro DELETE é o arranjo da issue #752: apagar o
+ * histórico e só então esbarrar no RESTRICT devolveria 409 sem as mensagens.
  */
-const VINCULOS_RESTRICT_NAO_APAGADOS: ReadonlyArray<{ tabela: string; rotulo: string }> = [
-  { tabela: "calendar_appointments", rotulo: "compromisso(s) na agenda" },
-];
+interface CompromissoDoContato {
+  id: string;
+  status: string;
+  excluded_at: string | null;
+  google_event_id: string | null;
+  google_pending_write: unknown;
+  google_local_revision: number | string;
+  google_synced_local_revision: number | string;
+  google_conflict: unknown;
+}
+
+const COLUNAS_DO_COMPROMISSO =
+  "id, status, excluded_at, google_event_id, google_pending_write, google_local_revision, google_synced_local_revision, google_conflict";
+
+/** Excluído que ainda deve algo ao Google — espelho do `where` da 0413. */
+function pendenteNoGoogle(c: CompromissoDoContato): boolean {
+  if (c.google_pending_write != null) return true;
+  if (!c.google_event_id) return false;
+  return (
+    String(c.google_local_revision) !== String(c.google_synced_local_revision) ||
+    c.google_conflict != null
+  );
+}
+
+function classificarCompromissos(compromissos: CompromissoDoContato[]): {
+  visiveis: CompromissoDoContato[];
+  pendentesNoGoogle: CompromissoDoContato[];
+  apagaveis: CompromissoDoContato[];
+} {
+  const visiveis = compromissos.filter((c) => !c.excluded_at);
+  const excluidos = compromissos.filter((c) => c.excluded_at);
+  return {
+    visiveis,
+    pendentesNoGoogle: excluidos.filter(pendenteNoGoogle),
+    apagaveis: excluidos.filter((c) => !pendenteNoGoogle(c)),
+  };
+}
 
 export async function deleteContactHandler(
   supabase: SB,
@@ -938,39 +968,39 @@ export async function deleteContactHandler(
 
   const a = actorAuditPayload(ctx.actor);
 
-  // Pré-checagem dos vínculos que barram o DELETE da ficha (issue #752).
-  //
-  // Só CONTA: quem recusa continua sendo o banco, com o 23503 do RESTRICT. A
-  // contagem existe para saber disso antes de apagar o histórico, e é por isso
-  // que ela vem antes da chamada que apaga — depois não há mais como desfazer.
-  const vinculos: string[] = [];
-  // A contagem crua por tabela é o que a tela traduz e pluraliza; `vinculos`
-  // (texto em pt-BR) segue igual ao da auditoria (DeskcommCRM #1925).
-  const por_tabela: Record<string, number> = {};
-  for (const vinculo of VINCULOS_RESTRICT_NAO_APAGADOS) {
-    const { count, error } = await supabase
-      .from(vinculo.tabela)
-      .select("id", { count: "exact", head: true })
-      .eq("contact_id", contactId)
-      .eq("organization_id", ctx.organization_id);
-    if (error) {
-      // Falha da CONTAGEM não autoriza seguir apagando: seguir aqui é cair no
-      // defeito que esta pré-checagem existe para impedir (histórico
-      // destruído antes de saber se a ficha sai). Um 500 agora é reversível;
-      // mensagem apagada não volta.
-      throw new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
-    }
-    if ((count ?? 0) > 0) {
-      vinculos.push(`${count} ${vinculo.rotulo}`);
-      por_tabela[vinculo.tabela] = count ?? 0;
-    }
+  // Pré-checagem dos compromissos que barram o DELETE da ficha (issue #752,
+  // migration 0413). Só LÊ: quem recusa continua sendo o banco. Vem antes da
+  // chamada que apaga, porque depois não há mais como desfazer.
+  const { data: compromissos, error: errCompromissos } = await supabase
+    .from("calendar_appointments")
+    .select(COLUNAS_DO_COMPROMISSO)
+    .eq("contact_id", contactId)
+    .eq("organization_id", ctx.organization_id);
+  if (errCompromissos) {
+    // Falha da LEITURA não autoriza seguir apagando: um 500 agora é
+    // reversível; mensagem apagada não volta.
+    throw new ApiError(500, "internal_error", undefined, ctx.requestId, errCompromissos.message);
   }
+  const { visiveis, pendentesNoGoogle, apagaveis } = classificarCompromissos(
+    (compromissos ?? []) as CompromissoDoContato[],
+  );
 
-  if (vinculos.length > 0) {
-    // O 409 é o MESMO do caminho de FK (mesma causa, mesmo tratamento no
-    // cliente), mas aqui ele chega com `messages`/`conversations` intactos.
-    // O detalhe que o cliente não vê está na auditoria: `vinculos` diz o que
-    // barrou, `apagados` vazio diz que nada foi tocado.
+  if (visiveis.length > 0 || pendentesNoGoogle.length > 0) {
+    // A tela monta a frase com `agenda` (quantos, em que situação, e qual abrir);
+    // `vinculos` é o texto em pt-BR da auditoria (DeskcommCRM #1925).
+    const por_situacao: Record<string, number> = {};
+    for (const c of visiveis) por_situacao[c.status] = (por_situacao[c.status] ?? 0) + 1;
+    const vinculos: string[] = [];
+    if (visiveis.length > 0) vinculos.push(`${visiveis.length} compromisso(s) na agenda`);
+    if (pendentesNoGoogle.length > 0) {
+      vinculos.push(`${pendentesNoGoogle.length} compromisso(s) excluído(s) ainda pendente(s) no Google`);
+    }
+    const agenda = {
+      por_situacao,
+      pendentes_no_google: pendentesNoGoogle.length,
+      // Com um só compromisso visível, a tela abre ele direto na Agenda.
+      compromisso_id: visiveis.length === 1 ? visiveis[0]!.id : null,
+    };
     await audit({
       action: "contact.delete_blocked",
       actorUserId: a.actorUserId,
@@ -978,12 +1008,16 @@ export async function deleteContactHandler(
       resourceType: "contact",
       resourceId: contactId,
       requestId: ctx.requestId,
-      metadata: { ...a.metadataActor, motivo: "vinculo_restrict", vinculos, apagados: [] },
+      metadata: { ...a.metadataActor, motivo: "vinculo_restrict", vinculos, agenda, apagados: [] },
     });
     throw new ApiError(
       409,
       "state_conflict",
-      { vinculos, por_tabela },
+      {
+        vinculos,
+        por_tabela: { calendar_appointments: visiveis.length + pendentesNoGoogle.length },
+        agenda,
+      },
       ctx.requestId,
       traduzir("Não foi possível excluir: o contato ainda tem registros vinculados.", ctx.idioma ?? "pt-BR"),
     );
@@ -999,7 +1033,8 @@ export async function deleteContactHandler(
   //
   // Agora a rota chama `fn_apagar_contato_com_historico` (migration 0340), que
   // apaga as três na ordem certa do RESTRICT dentro de uma transação só: ou sai
-  // tudo, ou não sai nada. É `security invoker` — a RLS de quem chama continua
+  // tudo, ou não sai nada. Desde a 0413, os compromissos já excluídos na Agenda
+  // (os `apagaveis` acima) saem na mesma transação, antes do histórico. É `security invoker` — a RLS de quem chama continua
   // valendo, e o filtro de `organization_id` é do banco (argumento + where), não
   // do chamador. Nenhum service role entra aqui.
   let apagou = false;
@@ -1061,7 +1096,14 @@ export async function deleteContactHandler(
     resourceType: "contact",
     resourceId: contactId,
     requestId: ctx.requestId,
-    metadata: a.metadataActor,
+    // Os compromissos já excluídos na Agenda que saíram junto (migration 0413).
+    // ponytail: é a conta da pré-checagem; um compromisso excluído no mesmo
+    // instante, entre ela e a função, sai sem entrar aqui.
+    metadata: {
+      ...a.metadataActor,
+      compromissos_excluidos_apagados: apagaveis.length,
+      compromissos_ids: apagaveis.map((c) => c.id),
+    },
   });
 
   return { id: contactId };

@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ContactsTable } from "./ContactsTable";
 import type { Contact } from "@/lib/types/contacts";
+import { ApiError } from "@/lib/api/types";
+import type * as HookDeExclusao from "@/hooks/contacts/useDeleteContact";
 
 // A linha ganha o atalho de edição: presença e ordem dos ícones, e abertura do
 // MESMO diálogo da ficha (EditContactDialog) pré-preenchido.
@@ -16,9 +18,11 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/hooks/auth/AuthProvider", () => ({
   useActiveOrg: () => ({ country: "BR", cliente_pela_agenda: false }),
 }));
-vi.mock("@/hooks/contacts/useDeleteContact", () => ({
-  useDeleteContact: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  mensagemDeBloqueioPorVinculo: vi.fn(() => "mensagem de bloqueio"),
+// O `bloqueioDaExclusao` é o de verdade: o diálogo mostra a frase que a tela mostra.
+const excluirContato = vi.hoisted(() => vi.fn());
+vi.mock("@/hooks/contacts/useDeleteContact", async (original) => ({
+  ...(await original<typeof HookDeExclusao>()),
+  useDeleteContact: () => ({ mutateAsync: excluirContato, isPending: false }),
 }));
 vi.mock("@/lib/api/client", () => ({
   apiClient: {
@@ -124,5 +128,68 @@ describe("ContactsTable — atalho de edição na linha (issue #2715)", () => {
     expect(
       within(linhaDoContato()).getByRole("button", { name: "Editar contato Web Speed" }),
     ).toBeInTheDocument();
+  });
+});
+
+// Incidente de 13/11: o aviso com "Abrir Agenda" saía num toast FORA do diálogo
+// modal, que bloqueia cliques de fora — o botão não respondia. Agora o aviso e os
+// botões ficam DENTRO do diálogo.
+describe("ContactsTable — exclusão barrada pela Agenda", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => cleanup());
+
+  function recusaDaAgenda(agenda: Record<string, unknown>) {
+    return new ApiError(
+      409,
+      "state_conflict",
+      { vinculos: ["1 compromisso(s) na agenda"], por_tabela: { calendar_appointments: 1 }, agenda },
+      "req-1",
+      "Não foi possível excluir: o contato ainda tem registros vinculados.",
+    );
+  }
+
+  it("mostra o aviso dentro do diálogo, com Abrir Agenda e Abrir ficha clicáveis", async () => {
+    const id = "00000000-0000-4000-8000-0000000000e1";
+    excluirContato.mockRejectedValueOnce(
+      recusaDaAgenda({ por_situacao: { confirmed: 1 }, pendentes_no_google: 0, compromisso_id: id }),
+    );
+    const user = userEvent.setup();
+    renderTabela();
+    await user.click(screen.getByRole("button", { name: "Excluir contato Web Speed" }));
+    await user.click(screen.getByRole("button", { name: "Excluir" }));
+
+    const dialogo = await screen.findByRole("alertdialog");
+    expect(within(dialogo).getByText("Não é possível excluir este contato")).toBeInTheDocument();
+    expect(within(dialogo).getByText(/Este contato tem 1 compromisso na Agenda \(1 confirmado\)/)).toBeInTheDocument();
+    // Os destinos são links DENTRO do diálogo modal (o que o toast não era).
+    const agenda = within(dialogo).getByRole("link", { name: "Abrir Agenda" });
+    expect(agenda).toHaveAttribute("href", `/app/agenda?compromisso=${id}`);
+    expect(within(dialogo).getByRole("link", { name: "Abrir ficha" })).toHaveAttribute(
+      "href",
+      `/app/contacts/${contato.id}`,
+    );
+    // E não há mais o que confirmar: o botão Excluir saiu.
+    expect(within(dialogo).queryByRole("button", { name: "Excluir" })).toBeNull();
+    // Ninguém ficou por trás com `pointer-events: none` no caminho do clique.
+    expect(getComputedStyle(agenda).pointerEvents).not.toBe("none");
+  });
+
+  it("Google pendente: só Abrir Agenda; Fechar volta ao normal na próxima vez", async () => {
+    excluirContato.mockRejectedValueOnce(
+      recusaDaAgenda({ por_situacao: {}, pendentes_no_google: 1, compromisso_id: null }),
+    );
+    const user = userEvent.setup();
+    renderTabela();
+    await user.click(screen.getByRole("button", { name: "Excluir contato Web Speed" }));
+    await user.click(screen.getByRole("button", { name: "Excluir" }));
+    const dialogo = await screen.findByRole("alertdialog");
+    expect(within(dialogo).getByText(/ainda não saiu do Google Agenda/)).toBeInTheDocument();
+    expect(within(dialogo).queryByRole("link", { name: "Abrir ficha" })).toBeNull();
+    expect(within(dialogo).getByRole("link", { name: "Abrir Agenda" })).toHaveAttribute("href", "/app/agenda");
+
+    await user.click(within(dialogo).getByRole("button", { name: "Fechar" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Excluir contato Web Speed" }));
+    expect(await screen.findByText("Excluir contato?")).toBeInTheDocument();
   });
 });

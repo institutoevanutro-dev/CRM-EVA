@@ -13,7 +13,7 @@ import { NextRequest } from "next/server";
 import { ApiError } from "@/lib/api/types";
 import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { mensagemDeBloqueioPorVinculo } from "@/hooks/contacts/useDeleteContact";
+import { bloqueioDaExclusao } from "@/hooks/contacts/useDeleteContact";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(async () => ({})) }));
@@ -23,7 +23,11 @@ vi.mock("@/app/api/v1/contacts/_handler", () => ({
     throw new ApiError(
       409,
       "state_conflict",
-      { vinculos: ["2 compromisso(s) na agenda"], por_tabela: { calendar_appointments: 2 } },
+      {
+        vinculos: ["2 compromisso(s) na agenda"],
+        por_tabela: { calendar_appointments: 2 },
+        agenda: { por_situacao: { confirmed: 1, completed: 1 }, pendentes_no_google: 0, compromisso_id: null },
+      },
       "req-1925",
       "Não foi possível excluir: o contato ainda tem registros vinculados.",
     );
@@ -64,32 +68,59 @@ describe("DELETE /api/v1/contacts/[id] — 409 por vínculo", () => {
     expect(body.error.details).toEqual({
       vinculos: ["2 compromisso(s) na agenda"],
       por_tabela: { calendar_appointments: 2 },
+      agenda: { por_situacao: { confirmed: 1, completed: 1 }, pendentes_no_google: 0, compromisso_id: null },
     });
   });
 });
 
-describe("mensagemDeBloqueioPorVinculo", () => {
+describe("bloqueioDaExclusao", () => {
   const pt = (s: string) => traduzir(s, "pt-BR");
   const es = (s: string) => traduzir(s, "es");
+  const JUNTAR =
+    'Compromisso é histórico do contato e impede a exclusão. Se esta ficha é duplicada, abra a ficha e use "Juntar com outra ficha": os compromissos passam para a ficha que fica. Se o compromisso foi lançado por engano, exclua-o na Agenda e tente de novo.';
 
-  it("singular com 1 compromisso", () => {
-    expect(mensagemDeBloqueioPorVinculo({ por_tabela: { calendar_appointments: 1 } }, pt)).toBe(
-      "Este contato tem 1 compromisso na Agenda. Cancele ou apague o compromisso antes de excluir.",
+  it("diz quantos e em que situação, e sugere juntar", () => {
+    const b = bloqueioDaExclusao(
+      { agenda: { por_situacao: { confirmed: 1, completed: 1 }, pendentes_no_google: 0, compromisso_id: null } },
+      pt,
     );
+    expect(b).toEqual({
+      mensagem: `Este contato tem 2 compromissos na Agenda (1 confirmado, 1 realizado). ${JUNTAR}`,
+      agendaHref: "/app/agenda",
+      sugerirJuntar: true,
+    });
   });
 
-  it("plural com o número, e em espanhol sai em espanhol", () => {
-    expect(mensagemDeBloqueioPorVinculo({ por_tabela: { calendar_appointments: 3 } }, pt)).toBe(
-      "Este contato tem 3 compromissos na Agenda. Cancele ou apague os compromissos antes de excluir.",
+  it("um só compromisso: singular e a Agenda abre nele", () => {
+    const id = "c05e7a00-0000-4000-8000-0000000000e9";
+    const b = bloqueioDaExclusao(
+      { agenda: { por_situacao: { no_show: 1 }, pendentes_no_google: 0, compromisso_id: id } },
+      pt,
     );
-    expect(mensagemDeBloqueioPorVinculo({ por_tabela: { calendar_appointments: 3 } }, es)).toBe(
-      "Este contacto tiene 3 citas en la Agenda. Cancela o elimina las citas antes de eliminar el contacto.",
-    );
+    expect(b?.mensagem).toBe(`Este contato tem 1 compromisso na Agenda (1 falta). ${JUNTAR}`);
+    expect(b?.agendaHref).toBe(`/app/agenda?compromisso=${id}`);
   });
 
-  it("sem contagem da Agenda devolve null (a tela cai no texto genérico)", () => {
-    expect(mensagemDeBloqueioPorVinculo(undefined, pt)).toBeNull();
-    expect(mensagemDeBloqueioPorVinculo({ vinculos: ["1 x"] }, pt)).toBeNull();
-    expect(mensagemDeBloqueioPorVinculo({ por_tabela: { outra_tabela: 2 } }, pt)).toBeNull();
+  it("excluído pendente no Google: manda esperar, sem sugerir juntar", () => {
+    expect(bloqueioDaExclusao({ agenda: { por_situacao: {}, pendentes_no_google: 2 } }, pt)).toEqual({
+      mensagem:
+        "2 compromissos já excluídos ainda não saíram do Google Agenda. Tente de novo em alguns minutos.",
+      agendaHref: "/app/agenda",
+      sugerirJuntar: false,
+    });
+  });
+
+  it("em espanhol sai em espanhol", () => {
+    const b = bloqueioDaExclusao(
+      { agenda: { por_situacao: { cancelled: 2 }, pendentes_no_google: 0, compromisso_id: null } },
+      es,
+    );
+    expect(b?.mensagem.startsWith("Este contacto tiene 2 citas en la Agenda (2 canceladas).")).toBe(true);
+  });
+
+  it("sem `agenda` devolve null (a tela cai no texto genérico)", () => {
+    expect(bloqueioDaExclusao(undefined, pt)).toBeNull();
+    expect(bloqueioDaExclusao({ vinculos: ["1 x"], por_tabela: { calendar_appointments: 1 } }, pt)).toBeNull();
+    expect(bloqueioDaExclusao({ agenda: { por_situacao: {}, pendentes_no_google: 0 } }, pt)).toBeNull();
   });
 });

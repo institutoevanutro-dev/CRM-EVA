@@ -22,15 +22,29 @@ const rpcs: Array<{ nome: string; args: Record<string, unknown> | undefined }> =
 
 interface CadeiaContagem {
   eq: (coluna: string, valor: unknown) => CadeiaContagem;
-  maybeSingle: () => Promise<{ data: null; error: null }>;
   then: (resolve: (valor: unknown) => unknown) => unknown;
+}
+
+/** Uma linha de `calendar_appointments` como a pré-checagem a lê. */
+function compromisso(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: "c05e7a00-0000-4000-8000-0000000000e1",
+    status: "confirmed",
+    excluded_at: null,
+    google_event_id: null,
+    google_pending_write: null,
+    google_local_revision: 1,
+    google_synced_local_revision: 0,
+    google_conflict: null,
+    ...over,
+  };
 }
 
 interface OpcoesFake {
   missing?: boolean;
-  /** Quantos vínculos RESTRICT a pré-checagem encontra na agenda. */
-  vinculos?: number;
-  /** A contagem do vínculo falha (tabela/RLS fora do ar). */
+  /** Os compromissos do contato que a pré-checagem lê na agenda. */
+  compromissos?: Array<Record<string, unknown>>;
+  /** A leitura da agenda falha (tabela/RLS fora do ar). */
   erroContagem?: { message: string };
   /** A função nova devolve erro (23503 de corrida, 42501 residual, 500…). */
   rpcErro?: { code?: string; message: string };
@@ -51,22 +65,21 @@ function clienteFalso(opts?: OpcoesFake): unknown {
         then: (r: (v: unknown) => unknown) => r({ error: null }),
       };
       return {
-        // `select("id", {count, head})` é a pré-checagem de vínculo: só conta.
-        select: (_colunas?: string, opcoes?: { count?: string; head?: boolean }) => {
-          if (opcoes?.count) {
+        // A pré-checagem lê os compromissos do contato (migration 0413).
+        select: (_colunas?: string) => {
+          if (tabela === "calendar_appointments") {
             const filtros: Array<[string, unknown]> = [];
             const cadeia: CadeiaContagem = {
               eq: (coluna, valor) => {
                 filtros.push([coluna, valor]);
                 return cadeia;
               },
-              maybeSingle: async () => ({ data: null, error: null }),
               then: (resolve) => {
                 contagens.push({ tabela, filtros });
                 return resolve(
                   opts?.erroContagem
-                    ? { count: null, error: opts.erroContagem }
-                    : { count: opts?.vinculos ?? 0, error: null },
+                    ? { data: null, error: opts.erroContagem }
+                    : { data: opts?.compromissos ?? [], error: null },
                 );
               },
             };
@@ -145,21 +158,32 @@ describe("deleteContactHandler", () => {
     });
   });
 
-  it("contato com compromisso na agenda: 409 e a função nem é chamada (issue #752)", async () => {
+  it("compromissos visíveis: 409 com a contagem por situação, e a função nem é chamada", async () => {
     const { deleteContactHandler } = await import("@/app/api/v1/contacts/_handler");
+    const visiveis = [
+      compromisso({ id: "c05e7a00-0000-4000-8000-0000000000e1", status: "confirmed" }),
+      compromisso({ id: "c05e7a00-0000-4000-8000-0000000000e2", status: "completed" }),
+      // Cancelado SEM `excluded_at` aparece na Agenda: é histórico e segura.
+      compromisso({ id: "c05e7a00-0000-4000-8000-0000000000e3", status: "cancelled" }),
+      // Excluído e quitado com o Google: não segura, mas não salva a ficha.
+      compromisso({ id: "c05e7a00-0000-4000-8000-0000000000e4", status: "cancelled", excluded_at: "2026-11-01T10:00:00Z" }),
+    ];
     await expect(
-      deleteContactHandler(clienteFalso({ vinculos: 1 }) as never, ctxFalso(), CONTATO),
+      deleteContactHandler(clienteFalso({ compromissos: visiveis }) as never, ctxFalso(), CONTATO),
     ).rejects.toMatchObject({
       status: 409,
       code: "state_conflict",
-      // DeskcommCRM #1925: o 409 entrega o QUE barrou em `details.vinculos`, para a
-      // tela montar a frase e o link para a Agenda em vez do texto genérico fixo.
       details: {
-        vinculos: ["1 compromisso(s) na agenda"],
-        por_tabela: { calendar_appointments: 1 },
+        vinculos: ["3 compromisso(s) na agenda"],
+        por_tabela: { calendar_appointments: 3 },
+        agenda: {
+          por_situacao: { confirmed: 1, completed: 1, cancelled: 1 },
+          pendentes_no_google: 0,
+          compromisso_id: null,
+        },
       },
     });
-    // O ponto da issue: nada foi apagado antes de saber que a ficha não sai.
+    // O ponto da issue #752: nada foi apagado antes de saber que a ficha não sai.
     expect(chamadas).toEqual([]);
     expect(rpcs.some((r) => r.nome === FUNCAO)).toBe(false);
     expect(auditSpy).not.toHaveBeenCalledWith(expect.objectContaining({ action: "contact.deleted" }));
@@ -167,8 +191,91 @@ describe("deleteContactHandler", () => {
       action: "contact.delete_blocked",
       resourceId: CONTATO,
       organizationId: ORG,
-      metadata: { motivo: "vinculo_restrict", vinculos: ["1 compromisso(s) na agenda"], apagados: [] },
+      metadata: { motivo: "vinculo_restrict", vinculos: ["3 compromisso(s) na agenda"], apagados: [] },
     });
+  });
+
+  it("um só compromisso visível: o 409 aponta qual abrir na Agenda", async () => {
+    const { deleteContactHandler } = await import("@/app/api/v1/contacts/_handler");
+    const id = "c05e7a00-0000-4000-8000-0000000000e9";
+    await expect(
+      deleteContactHandler(
+        clienteFalso({ compromissos: [compromisso({ id, status: "no_show" })] }) as never,
+        ctxFalso(),
+        CONTATO,
+      ),
+    ).rejects.toMatchObject({
+      status: 409,
+      details: { agenda: { por_situacao: { no_show: 1 }, pendentes_no_google: 0, compromisso_id: id } },
+    });
+  });
+
+  it("só compromissos excluídos: exclui tudo numa chamada e audita a contagem (incidente 13/11)", async () => {
+    const { deleteContactHandler } = await import("@/app/api/v1/contacts/_handler");
+    const excluidos = [
+      // O caso do incidente: cancelado e excluído, nunca foi ao Google.
+      compromisso({ id: "c05e7a00-0000-4000-8000-0000000000f1", status: "cancelled", excluded_at: "2026-11-10T12:00:00Z" }),
+      // Foi ao Google e a retirada já foi confirmada (revisões iguais).
+      compromisso({
+        id: "c05e7a00-0000-4000-8000-0000000000f2",
+        status: "cancelled",
+        excluded_at: "2026-11-11T12:00:00Z",
+        google_event_id: "evento-ficticio",
+        google_local_revision: 3,
+        google_synced_local_revision: 3,
+      }),
+    ];
+    const out = await deleteContactHandler(
+      clienteFalso({ compromissos: excluidos }) as never,
+      ctxFalso(),
+      CONTATO,
+    );
+    expect(out).toEqual({ id: CONTATO });
+    expect(chamadas).toEqual([]);
+    expect(rpcs.filter((r) => r.nome === FUNCAO)).toEqual([
+      { nome: FUNCAO, args: { p_contact_id: CONTATO, p_organization_id: ORG } },
+    ]);
+    expect(ultimaAuditoria()).toMatchObject({
+      action: "contact.deleted",
+      resourceId: CONTATO,
+      metadata: {
+        compromissos_excluidos_apagados: 2,
+        compromissos_ids: ["c05e7a00-0000-4000-8000-0000000000f1", "c05e7a00-0000-4000-8000-0000000000f2"],
+      },
+    });
+  });
+
+  it("excluído com o Google pendente: bloqueia e diz o motivo", async () => {
+    const { deleteContactHandler } = await import("@/app/api/v1/contacts/_handler");
+    const excluido = { status: "cancelled", excluded_at: "2026-11-10T12:00:00Z" };
+    const pendencias = [
+      compromisso({ ...excluido, google_pending_write: { method: "DELETE" } }),
+      compromisso({ ...excluido, google_event_id: "evento-ficticio", google_local_revision: 4, google_synced_local_revision: 3 }),
+      compromisso({ ...excluido, google_event_id: "evento-ficticio", google_local_revision: 3, google_synced_local_revision: 3, google_conflict: { reason: "missing" } }),
+    ];
+    for (const pendente of pendencias) {
+      rpcs.length = 0;
+      await expect(
+        deleteContactHandler(clienteFalso({ compromissos: [pendente] }) as never, ctxFalso(), CONTATO),
+      ).rejects.toMatchObject({
+        status: 409,
+        details: {
+          vinculos: ["1 compromisso(s) excluído(s) ainda pendente(s) no Google"],
+          por_tabela: { calendar_appointments: 1 },
+          agenda: { por_situacao: {}, pendentes_no_google: 1, compromisso_id: null },
+        },
+      });
+      expect(rpcs.some((r) => r.nome === FUNCAO)).toBe(false);
+    }
+  });
+
+  it("isolamento: a leitura da agenda e a função levam a organização da sessão", async () => {
+    const { deleteContactHandler } = await import("@/app/api/v1/contacts/_handler");
+    await deleteContactHandler(clienteFalso() as never, ctxFalso(), CONTATO);
+    expect(contagens).toEqual([
+      { tabela: "calendar_appointments", filtros: [["contact_id", CONTATO], ["organization_id", ORG]] },
+    ]);
+    expect(rpcs.find((r) => r.nome === FUNCAO)?.args).toEqual({ p_contact_id: CONTATO, p_organization_id: ORG });
   });
 
   it("a função falha: audita apagados VAZIO e propaga o 409 (nada saiu pela metade)", async () => {
@@ -202,7 +309,7 @@ describe("deleteContactHandler", () => {
     expect(chamadas).toEqual([]);
   });
 
-  it("falha ao contar o vínculo não segue apagando o histórico", async () => {
+  it("falha ao ler a agenda não segue apagando o histórico", async () => {
     const { deleteContactHandler } = await import("@/app/api/v1/contacts/_handler");
     await expect(
       deleteContactHandler(

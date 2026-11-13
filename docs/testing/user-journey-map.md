@@ -1197,6 +1197,18 @@ Spec: `tests/e2e/agenda-nome-completo.spec.ts` (parte 5 do job e2e). Testes de c
 
 Não executado em tela local nesta rodada: a prova pela tela é o `e2e` do CI (as portas do Supabase local estavam ocupadas por outras sessões). Não coberto: o caminho da IA pedindo o nome na conversa (a ferramenta de marcação não mudou).
 
+## J43 — Excluir um contato duplicado que tem compromisso `[P1]` (2026-11-13)
+
+O caso de campo: em 13/11/2026 a recepção tentou excluir um contato duplicado e recebeu "Este contato tem 1 compromisso na Agenda". O único compromisso estava cancelado e excluído (invisível na Agenda), e o botão "Abrir Agenda" do aviso não respondia: o toast saía atrás do diálogo modal. Foi preciso apagar por SQL.
+
+- `[P1]` Contato só com compromissos já excluídos na Agenda: "Excluir" tira a ficha, o histórico e esses compromissos numa transação (migration 0413); a auditoria `contact.deleted` traz `compromissos_excluidos_apagados` e os ids.
+- `[P1]` Contato com compromisso visível (qualquer situação): o diálogo continua aberto, troca para "Não é possível excluir este contato", diz quantos e em que situação ("2 compromissos na Agenda (1 confirmado, 1 realizado)"), sugere "Juntar com outra ficha" e mostra "Abrir ficha" e "Abrir Agenda" (com um só compromisso, a Agenda abre nele).
+- `[P1]` Compromisso excluído que ainda não saiu do Google Agenda: bloqueia e diz para tentar de novo em alguns minutos.
+
+Provas: `tests/unit/contato-delete.test.ts` (handler), `tests/unit/contato-delete-409-chega-a-tela.test.ts` (rota e frases), `components/contacts/ContactsTable.test.tsx` (diálogo) e `tests/invariants/excluir-contato-com-compromisso-excluido.test.ts` (função no Postgres, com a sessão de um gerente).
+
+Não executado em tela local nesta rodada (ambiente fresco + Safari): fica para a prova antes do deploy.
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,
