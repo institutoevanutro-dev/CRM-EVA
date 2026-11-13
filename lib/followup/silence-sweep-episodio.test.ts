@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { runSilenceSweep, type ContatoEmSilencio, type SilenceSweepDb } from "./silence-sweep";
+import { triggerConfigSchema } from "./api-schemas";
 
 /**
  * As regras de `runSilenceSweep` que decidem SE um contato calado entra:
@@ -21,6 +22,9 @@ function fakeDb(opts: {
   ultimaInscricao?: Map<string, string>;
   vivos?: Set<string>;
   emCooldown?: Set<string>;
+  reentradaMinimaHoras?: number;
+  recentesQueEnviaram?: Set<string>;
+  onReentrada?: (contactIds: string[], desdeIso: string) => void;
   onSilentContacts?: (desdeIso: string | undefined) => void;
   onCooldown?: (contactIds: string[], cutoffIso: string) => void;
   onUltimaInscricao?: (contactIds: string[], desdeIso: string) => void;
@@ -35,6 +39,7 @@ function fakeDb(opts: {
         threshold_minutes: 60,
         segments: [],
         active_since: opts.activeSince ?? "2026-01-01T00:00:00.000Z",
+        ...(opts.reentradaMinimaHoras !== undefined ? { reentrada_minima_horas: opts.reentradaMinimaHoras } : {}),
       },
     ],
     loadSilentContacts: async (_org, _cutoff, _segments, desdeIso) => {
@@ -50,6 +55,10 @@ function fakeDb(opts: {
     loadContactIdsEmCooldown: async (_org, _pointer, contactIds, cutoffIso) => {
       opts.onCooldown?.(contactIds, cutoffIso);
       return opts.emCooldown ?? new Set();
+    },
+    loadContatosComInscricaoRecenteQueEnviou: async (_org, _pointer, contactIds, desdeIso) => {
+      opts.onReentrada?.(contactIds, desdeIso);
+      return opts.recentesQueEnviaram ?? new Set();
     },
     loadTriggerNodeId: async () => "t-1",
     insertEnrollment: insert,
@@ -198,5 +207,76 @@ describe("cooldown pela conclusão: a sequência não encosta na anterior", () =
     });
     await runSilenceSweep({ db, ...DEPS });
     expect(chamadas).toEqual([]);
+  });
+});
+
+describe("teto de recomeço (params.reentrada_minima_horas)", () => {
+  // Medido em produção: cada resposta abria episódio novo e um contato recebeu
+  // 8 mensagens em 4 dias. O teto barra a reinscrição enquanto uma inscrição
+  // deste ponteiro que MANDOU algo começou há menos de N horas. Quem decide
+  // "mandou" e "qualquer status" é a consulta (silence-sweep-consultas.test.ts).
+  const A = () => contato("A", "2026-10-06T12:00:00.000Z");
+  const B = () => contato("B", "2026-10-06T12:00:00.000Z");
+
+  it("sem o parâmetro: nem pergunta, e inscreve como antes", async () => {
+    const perguntas: string[][] = [];
+    const { db, insert } = fakeDb({
+      contatos: [A(), B()],
+      recentesQueEnviaram: new Set(["A"]),
+      onReentrada: (ids) => perguntas.push(ids),
+    });
+    const summary = await runSilenceSweep({ db, ...DEPS });
+    expect(perguntas).toEqual([]);
+    expect(insert).toHaveBeenCalledTimes(2);
+    expect(summary.skipped_reentrada).toBe(0);
+    expect(summary.enrolled).toBe(2);
+  });
+
+  it("com o parâmetro: quem teve inscrição recente que enviou fica fora, conta skipped_reentrada", async () => {
+    const chamadas: Array<{ ids: string[]; desde: string }> = [];
+    const { db, insert } = fakeDb({
+      contatos: [A(), B()],
+      reentradaMinimaHoras: 48,
+      recentesQueEnviaram: new Set(["A"]),
+      onReentrada: (ids, desde) => chamadas.push({ ids, desde }),
+    });
+    const summary = await runSilenceSweep({ db, ...DEPS });
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ contact_id: "B" }));
+    expect(summary.skipped_reentrada).toBe(1);
+    expect(summary.enrolled).toBe(1);
+    // agora (06/10 15:00) − 48 h
+    expect(chamadas).toEqual([{ ids: ["A", "B"], desde: "2026-10-04T15:00:00.000Z" }]);
+  });
+
+  it("só pergunta por quem passou do episódio e do cooldown", async () => {
+    const chamadas: string[][] = [];
+    const { db } = fakeDb({
+      contatos: [A(), B(), contato("C", "2026-10-06T12:00:00.000Z")],
+      ultimaInscricao: new Map([["A", "2026-10-06T12:30:00.000Z"]]), // mesmo episódio
+      emCooldown: new Set(["B"]),
+      reentradaMinimaHoras: 24,
+      onReentrada: (ids) => chamadas.push(ids),
+    });
+    const summary = await runSilenceSweep({ db, ...DEPS });
+    expect(chamadas).toEqual([["C"]]);
+    expect(summary).toMatchObject({ skipped_same_episode: 1, skipped_cooldown: 1, skipped_reentrada: 0, enrolled: 1 });
+  });
+});
+
+describe("schema do gatilho: reentrada_minima_horas", () => {
+  const base = { kind: "silence", params: { threshold_minutes: 60 } } as const;
+  const comHoras = (h: unknown) => ({ ...base, params: { ...base.params, reentrada_minima_horas: h } });
+
+  it("opcional: sem ele o gatilho de hoje continua válido", () => {
+    expect(triggerConfigSchema.safeParse(base).success).toBe(true);
+  });
+
+  it("aceita inteiro positivo; recusa zero, negativo, fração, texto e mais de 30 dias", () => {
+    expect(triggerConfigSchema.safeParse(comHoras(48)).success).toBe(true);
+    expect(triggerConfigSchema.safeParse(comHoras(720)).success).toBe(true);
+    for (const ruim of [0, -1, 1.5, "48", 721]) {
+      expect(triggerConfigSchema.safeParse(comHoras(ruim)).success, String(ruim)).toBe(false);
+    }
   });
 });

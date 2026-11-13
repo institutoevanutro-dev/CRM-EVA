@@ -44,6 +44,14 @@ import { StaleServiceBoundaryError, parseServiceBoundary, assertCurrentServiceBo
  * abria episódio novo na conclusão, com a mensagem 1 encostada na última da
  * sequência anterior. O cooldown conta o limiar a partir do FIM.
  *
+ * Teto de recomeço (opcional, `trigger_config.params.reentrada_minima_horas`):
+ * o episódio e o cooldown deixam cada resposta abrir uma sequência nova — medido
+ * em produção, um contato recebeu 8 mensagens em 4 dias. Com o parâmetro, uma
+ * inscrição DESTE ponteiro iniciada nas últimas N horas que mandou pelo menos
+ * uma mensagem (`action_sent`) barra a próxima, em qualquer status
+ * (`skipped_reentrada`). A cancelada sem envio não conta. Sem o parâmetro,
+ * nada muda.
+ *
  * Trava extra (item texto fixo com travas): a inscrição encerrada por
  * atendimento humano depois da última mensagem do contato também barra a
  * próxima (`encerradaPorHumanoNesteSilencio`).
@@ -114,6 +122,8 @@ export interface SilencePointer {
   segments: string[];
   /** Desde quando o ponteiro vale com o status e o gatilho atuais (migration 0324). */
   active_since: string;
+  /** Teto de recomeço em horas (`params.reentrada_minima_horas`). Ausente = sem teto. */
+  reentrada_minima_horas?: number;
 }
 
 /** DB surface o sweep precisa — narrow por consumidor (mesma doutrina de `AdminClient`/`ReactivityAdminClient`/`FollowupGateDb`). */
@@ -191,6 +201,19 @@ export interface SilenceSweepDb {
     contactIds: string[],
     desdeIso: string,
   ): Promise<Map<string, string>>;
+  /**
+   * Dos `contactIds`, os que têm inscrição DESTE ponteiro com
+   * `started_at >= desdeIso`, em qualquer status, que mandou pelo menos uma
+   * mensagem (evento `action_sent`). Só chamado quando o ponteiro tem
+   * `reentrada_minima_horas`. Opcional só para os dublês de teste: sem o
+   * método, o teto não barra ninguém.
+   */
+  loadContatosComInscricaoRecenteQueEnviou?(
+    orgId: string,
+    pointerId: string,
+    contactIds: string[],
+    desdeIso: string,
+  ): Promise<Set<string>>;
   /** Insere o enrollment nascendo no nó trigger; `inserted:false` = 23505 (já vivo nesse pointer) → skip. */
   insertEnrollment(input: {
     organization_id: string;
@@ -214,6 +237,12 @@ export interface SilenceSweepSummary {
   skipped_same_episode: number;
   /** Episódio novo, mas a inscrição anterior terminou há menos que o limiar — fora da auditoria (2240b215e). */
   skipped_cooldown: number;
+  /**
+   * Episódio novo e fora do cooldown, mas uma inscrição deste ponteiro que
+   * mandou algo começou há menos de `reentrada_minima_horas`. Fora da auditoria,
+   * como o cooldown.
+   */
+  skipped_reentrada: number;
   /** Silenciosos de fora porque um retorno ainda os segura (agendado ou recém-saído, #2907). */
   skipped_pending_return: number;
   /**
@@ -241,6 +270,7 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     skipped_before_activation: 0,
     skipped_same_episode: 0,
     skipped_cooldown: 0,
+    skipped_reentrada: 0,
     skipped_pending_return: 0,
     skipped_resposta_a_automacao: 0,
     skipped_reacao_a_caso_aberto: 0,
@@ -318,9 +348,26 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     // Cooldown pela conclusão: o limiar conta também a partir do FIM da
     // inscrição anterior deste ponteiro, não só da última mensagem.
     const emCooldown = await db.loadContactIdsEmCooldown(pointer.organization_id, pointer.id, episodioNovo, cutoffIso);
-    const contactIds = episodioNovo.filter((id) => {
+    const foraDoCooldown = episodioNovo.filter((id) => {
       if (!emCooldown.has(id)) return true;
       summary.skipped_cooldown++;
+      return false;
+    });
+    if (foraDoCooldown.length === 0) continue;
+    // Teto de recomeço: só com o parâmetro, e só pergunta por quem sobrou.
+    const horas = pointer.reentrada_minima_horas;
+    const recentes =
+      horas !== undefined && db.loadContatosComInscricaoRecenteQueEnviou
+        ? await db.loadContatosComInscricaoRecenteQueEnviou(
+            pointer.organization_id,
+            pointer.id,
+            foraDoCooldown,
+            new Date(clock().getTime() - horas * 3_600_000).toISOString(),
+          )
+        : new Set<string>();
+    const contactIds = foraDoCooldown.filter((id) => {
+      if (!recentes.has(id)) return true;
+      summary.skipped_reentrada++;
       return false;
     });
     if (contactIds.length === 0) continue;
@@ -486,6 +533,9 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
           threshold_minutes: parsed.data.params.threshold_minutes,
           segments: parsed.data.params.segments ?? [],
           active_since: row.active_since,
+          ...(parsed.data.params.reentrada_minima_horas !== undefined
+            ? { reentrada_minima_horas: parsed.data.params.reentrada_minima_horas }
+            : {}),
         });
       }
       return pointers;
@@ -691,6 +741,42 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         }
       }
       return ultima;
+    },
+
+    async loadContatosComInscricaoRecenteQueEnviou(orgId, pointerId, contactIds, desdeIso) {
+      // Índices: idx_followup_enrollments_pointer_contact_cooldown
+      // (organization_id, pointer_id, contact_id, …) para as inscrições — o
+      // started_at filtra sobre poucas linhas por contato — e
+      // idx_followup_events_enrollment_tempo (enrollment_id, created_at) para o
+      // !inner do evento.
+      const recentes = new Set<string>();
+      for (let i = 0; i < contactIds.length; i += LOTE_DE_CONTATOS) {
+        let depois: string | undefined;
+        // Keyset por id; só página VAZIA prova o fim (max_rows ajustável).
+        for (;;) {
+          let consulta = admin
+            .from("followup_enrollments")
+            .select("id, contact_id, followup_enrollment_events!inner(id)")
+            .eq("organization_id", orgId)
+            .eq("pointer_id", pointerId)
+            .in("contact_id", contactIds.slice(i, i + LOTE_DE_CONTATOS))
+            .gte("started_at", desdeIso)
+            .eq("followup_enrollment_events.event_type", "action_sent")
+            .limit(1, { referencedTable: "followup_enrollment_events" })
+            .order("id", { ascending: true })
+            .limit(TAMANHO_DA_PAGINA);
+          if (depois) consulta = consulta.gt("id", depois);
+          const { data, error } = await consulta;
+          if (error) throw new Error(error.message);
+          const pagina = (data ?? []) as Array<{ id: string; contact_id: string }>;
+          if (pagina.length === 0) break;
+          const ultimo = pagina[pagina.length - 1]!.id;
+          if (depois && ultimo <= depois) throw new Error("silence_reentry_page_did_not_advance");
+          for (const row of pagina) recentes.add(row.contact_id);
+          depois = ultimo;
+        }
+      }
+      return recentes;
     },
 
     loadContatosComRetornoVivo(orgId, folgaMs) {

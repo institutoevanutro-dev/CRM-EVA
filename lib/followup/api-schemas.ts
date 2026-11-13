@@ -49,6 +49,9 @@ export const triggerConfigSchema = z.discriminatedUnion("kind", [
     params: z.strictObject({
       threshold_minutes: z.number().int().min(5).max(10_080),
       segments: z.array(z.string()).optional(),
+      // Teto de recomeço: inscrição deste fluxo que mandou algo nas últimas N
+      // horas barra a próxima (silence-sweep.ts). Ausente = sem teto. Máx. 30 dias.
+      reentrada_minima_horas: z.number().int().positive().max(720).optional(),
     }),
     ...CANCEL_ON_REPLY,
   }),
