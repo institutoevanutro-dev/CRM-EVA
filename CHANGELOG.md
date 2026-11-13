@@ -8,6 +8,19 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.14.2] — 2026-11-13
+
+### Corrigido
+
+- **Excluir contato não fica preso a compromisso que o Google não vai mais retirar** Um compromisso já excluído que tinha ido ao Google Agenda podia segurar a ficha
+  para sempre, com o aviso mandando "tentar de novo em alguns minutos". Agora, se a
+  conexão Google desse compromisso foi desligada ou removida, ele sai junto com a
+  ficha (o identificador do evento fica na auditoria, para quem quiser apagá-lo no
+  Google). Se o compromisso está travado por um conflito ou por uma conexão que
+  precisa ser refeita, o aviso diz isso e "Abrir Agenda" leva ao compromisso, onde
+  o motivo aparece. A exclusão também passa a guardar na auditoria o registro das
+  conversões de anúncio já enviadas que saem com o compromisso.
+
 ## [5.14.1] — 2026-11-13
 
 ### Corrigido
@@ -9109,7 +9122,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.2...HEAD
+[5.14.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.1...v5.14.2
 [5.14.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.0...v5.14.1
 [5.14.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.13.0...v5.14.0
 [5.13.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.12.0...v5.13.0
