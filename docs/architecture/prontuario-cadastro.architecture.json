@@ -13,7 +13,8 @@
     { "id": "consumidor", "lane": "prontuario", "col": 3, "type": "external", "label": "Servidor do Prontuário: cifra local e cadastro vinculado (entrega coordenada)" },
     { "id": "conferencia", "lane": "operacao", "col": 4, "type": "frontend", "label": "Auditoria existente do CRM e status do cadastro no Prontuário" },
     { "id": "juntar", "lane": "operacao", "col": 3, "type": "frontend", "label": "Contatos › Duplicados (Parecidos) e Juntar com outra ficha, só gestor" },
-    { "id": "dispensas", "lane": "crm", "col": 4, "type": "database", "label": "merge_queue: dispensa Não são a mesma pessoa" }
+    { "id": "dispensas", "lane": "crm", "col": 4, "type": "database", "label": "merge_queue: dispensa Não são a mesma pessoa" },
+    { "id": "desvincular", "lane": "crm", "col": 5, "type": "backend", "label": "DELETE /api/v1/contacts/{id}/prontuario-link: desfaz vínculo errado com a ficha" }
   ],
   "edges": [
     { "id": "e1", "from": "ficha", "to": "contato", "label": "cadastro mestre; o Novo agendamento grava o nome completo antes de marcar" },
@@ -28,6 +29,9 @@
     { "id": "e10", "from": "juntar", "to": "contato", "label": "POST /contacts/merge: fn_mesclar_contatos; recusa absorver ficha ligada ao prontuário; quem fica herda bloqueio e trava da IA" },
     { "id": "e11", "from": "juntar", "to": "dispensas", "label": "grava 1 linha por par, sob trava" },
     { "id": "e12", "from": "dispensas", "to": "juntar", "label": "a lista esconde o par dispensado, mesmo depois de fusões" },
-    { "id": "e13", "from": "juntar", "to": "auditoria", "label": "contact.listed, contact.viewed, contact.duplicate_dismissed, contact.merged" }
+    { "id": "e13", "from": "juntar", "to": "auditoria", "label": "contact.listed, contact.viewed, contact.duplicate_dismissed, contact.merged" },
+    { "id": "e14", "from": "ficha", "to": "desvincular", "label": "botão Desvincular do Prontuário, só gestor, com confirmação" },
+    { "id": "e15", "from": "consumidor", "to": "desvincular", "label": "Bearer prontuario:contacts:write, o mesmo escopo que liga" },
+    { "id": "e16", "from": "desvincular", "to": "auditoria", "label": "prontuario.contact_unlinked com a cópia do vínculo apagado" }
   ]
 }

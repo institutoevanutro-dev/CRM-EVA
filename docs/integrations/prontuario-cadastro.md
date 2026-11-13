@@ -42,6 +42,17 @@ separadamente; a listagem MCP não recebe esses textos por esta mudança.
 
 O CPF claro serve somente à comunicação entre servidores por HTTPS: o Prontuário precisa cifrá-lo imediatamente com `PATIENT_DATA_KEY`, sem enviá-lo ao navegador ou registrá-lo em logs. Esse comportamento do consumidor depende da entrega correspondente no repositório Prontuario-EVA.
 
+## Desfazer um vínculo errado
+
+`DELETE /api/v1/contacts/{id}/prontuario-link` apaga a linha de `prontuario_contact_links` daquele contato (sem corpo). Serve para quando a ficha foi ligada ao contato errado: enquanto o vínculo existe, ligar a ficha a outro contato falha com `prontuario_link_conflict` (409). Nada é apagado no contato nem no Prontuário.
+
+| Quem | Como |
+| --- | --- |
+| Pessoa | Sessão, papel gestor ou acima. Na ficha do contato, a linha **Prontuário: Ficha vinculada** tem o botão **Desvincular do Prontuário**, com confirmação |
+| Servidor do Prontuário | Bearer com `prontuario:contacts:write`, o mesmo escopo que cria o vínculo; teto de escrita por token e por organização |
+
+Respostas: `200 {data: {contact_id, source_patient_id, unlinked: true}}`; `404 not_found` quando o contato não tem vínculo na organização autenticada (inclusive contato de outra organização); `403` sem papel ou sem escopo; `422` para id inválido. A organização vem da sessão ou da linha do token. Cada remoção grava `prontuario.contact_unlinked` em `api_audit_log` com a cópia da linha apagada em `metadata.vinculo_removido`. Para trocar o contato, o Prontuário desvincula e depois chama `POST /api/v1/prontuario/contacts/link` com o contato certo. Contato anonimizado ou fundido já perde o vínculo sozinho (gatilho `trg_prontuario_desvincular_contato_indisponivel`), assim como contato apagado (FK em cascata).
+
 ## Publicação coordenada
 
 1. Publicar este CRM após os checks, sem migration ou variável nova no CRM.
