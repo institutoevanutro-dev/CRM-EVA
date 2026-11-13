@@ -150,10 +150,19 @@ export function turnoMudoPorCorte(
  *   quis responder e a cadeia barrou de novo com um veto de ensino;
  * - `correcao_sem_resposta`: ela gastou o teto de passos (`PASSOS_DA_CORRECAO`) só em
  *   consultas, sem chegar a responder.
- * A correção que encerra SEM CHAMAR NADA segue sem aviso (silêncio escolhido), e o
- * veto irrevogável continua isentando: `turnoMudoPedeCorrecao` já o lê.
+ * - `correcao_calada_apos_veto`: a resposta principal TENTOU enviar, foi barrada por
+ *   veto de ensino, e a correção encerrou sem chamar nada. O modelo queria responder e
+ *   desistiu depois do veto: não é silêncio escolhido (ex.: o fail-safe de caso humano
+ *   recusou abrir caso e a promessa nunca saiu, #3725).
+ * A correção que encerra SEM CHAMAR NADA, num turno em que nada foi tentado, segue sem
+ * aviso (silêncio escolhido), e o veto irrevogável continua isentando:
+ * `turnoMudoPedeCorrecao` já o lê.
  */
-export type FalhaDoTurnoMudo = 'corte' | 'correcao_barrada' | 'correcao_sem_resposta';
+export type FalhaDoTurnoMudo =
+  | 'corte'
+  | 'correcao_barrada'
+  | 'correcao_sem_resposta'
+  | 'correcao_calada_apos_veto';
 
 export function falhaDoTurnoMudo(
   t: Parameters<typeof turnoMudoPorCorte>[0] & { correcaoTentouEnviar: boolean; tetoNaCorrecao: boolean },
@@ -162,6 +171,7 @@ export function falhaDoTurnoMudo(
   if (!turnoMudoPedeCorrecao(t)) return null;
   if (t.correcaoTentouEnviar) return 'correcao_barrada';
   if (t.tetoNaCorrecao) return 'correcao_sem_resposta';
+  if (t.tentativasDeEnvio > 0) return 'correcao_calada_apos_veto';
   return null;
 }
 

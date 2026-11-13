@@ -11,6 +11,8 @@ export interface NovoAgendamento {
   event_type_id: string;
   /** ISO-8601 com offset. */
   starts_at: string;
+  /** A duração escolhida na tela (upstream #3714); ausente = a do procedimento. */
+  duration_minutes?: number;
   owner_user_id?: string;
   unit_id?: string;
   contact_id?: string;

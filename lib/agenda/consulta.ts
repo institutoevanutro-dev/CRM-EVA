@@ -118,6 +118,11 @@ export interface ParametrosDaConsulta {
   unitId?: string | null;
   de: Date;
   ate: Date;
+  /**
+   * A duração escolhida para ESTE atendimento (porte do upstream #3714) —
+   * ausente, a do tipo. Desce ao motor como o comprimento de cada slot.
+   */
+  duracaoMin?: number | null;
   /** INJETADO, como em `horariosLivres`. Relógio lido aqui dentro é o defeito que `janela-do-canal.ts` documenta. */
   agora: Date;
   /**
@@ -404,6 +409,7 @@ export async function horariosLivresDaOrg(
       intervaloMin: tipo.slot_interval_minutes,
       janelaDias: tipo.booking_window_days,
     },
+    duracaoMin: params.duracaoMin ?? null,
     de: params.de,
     ate: params.ate,
     agora: params.agora,

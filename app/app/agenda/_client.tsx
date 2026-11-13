@@ -21,6 +21,7 @@ import type { Agendamento, HorarioLivre, VisaoDaAgenda } from "@/components/agen
 import { EmptyAgenda } from "@/components/empty";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
 import { ancoraAoFecharPainel } from "@/lib/agenda/ancora-depois-de-marcar";
+import { duracaoDoBloco, duracaoDoCampo } from "@/lib/agenda/duracao-escolhida";
 import { dataDeParede, diaLocalISO, partesNoFuso } from "@/lib/agenda/fuso";
 import { janelaDoMesVisivel } from "@/lib/agenda/janela-do-mes-visivel";
 import { resolverResponsavelDoPainel } from "@/lib/agenda/responsavel-do-painel";
@@ -195,6 +196,8 @@ export function AgendaClient({
   // paciente não deve trocar o que a grade está mostrando atrás do modal.
   const [formDonoId, setFormDonoId] = React.useState("");
   const [formTipoId, setFormTipoId] = React.useState("");
+  // O texto do campo "Duração (min)" da marcação nova; `null` = a do procedimento.
+  const [duracaoEditada, setDuracaoEditada] = React.useState<string | null>(null);
   // REMARCAR reusa o painel de marcação: escolher horário novo é o MESMO gesto
   // de escolher o primeiro, e uma segunda tela para a mesma pergunta seria duas
   // coisas para manter em sincronia. Quando `remarcandoId` está preenchido, a
@@ -385,43 +388,6 @@ export function AgendaClient({
     return { de: de.toISOString(), ate: ate.toISOString() };
   }, [mesDoPainel, agoraDaAbertura]);
 
-  // Os horários vêm da rota real — a mesma que a IA usa, então tela e agente
-  // oferecem exatamente os mesmos horários. Só consulta quando o painel abre.
-  // `isError` junto, e não só `data`: sem ele a tela MENTE por default. O
-  // `publicouHorarios={horarios?.publicou_horarios ?? true}` abaixo transforma
-  // "a consulta falhou" em "publicou, só não tem vaga" — dias travados e aviso
-  // nenhum, que é exatamente o que uma instalação fresca produz (a rota devolve
-  // 422 porque ninguém está em `attendant_availability`).
-  const { data: horarios, isError: horariosFalharam } = useHorariosLivres(
-    marcando && tipoDaMarcacao
-      ? {
-          event_type_id: tipoDaMarcacao.id,
-          owner_user_id: donoDaConsulta,
-          de: janelaDeBusca.de,
-          ate: janelaDeBusca.ate,
-          unit_id: unidadeId || undefined,
-        }
-      : null,
-  );
-
-  const horariosPorDia = React.useMemo(() => {
-    const mapa: Record<string, Array<{ instante: string; rotulo: string }>> = {};
-    for (const s of horarios?.slots ?? []) {
-      const d = new Date(s.inicio);
-      // A CHAVE E O RÓTULO SAEM DO FUSO DA ORGANIZAÇÃO: o slot das 09:00 da
-      // clínica é daquele dia e daquela hora PARA ELA, não para quem está
-      // olhando (issue #1362). O lookup em `PainelDeMarcacao` continua batendo,
-      // porque ele indexa pela data de calendário da mesma âncora.
-      const chave = diaLocalISO(d, fusoDaAgenda);
-      const p = partesNoFuso(d, fusoDaAgenda);
-      const dois = (n: number) => String(n).padStart(2, "0");
-      (mapa[chave] ??= []).push({
-        instante: s.inicio,
-        rotulo: `${dois(p.hora)}:${dois(p.minuto)}`,
-      });
-    }
-    return mapa;
-  }, [horarios, fusoDaAgenda]);
 
   // OS AGENDAMENTOS SÃO REAIS, e agora TAMBÉM se atualizam sem recarregar.
   //
@@ -470,6 +436,60 @@ export function AgendaClient({
       selecionadas.length === 0 ? todos : todos.filter((a) => selecionadas.includes(a.responsavelId)),
     [selecionadas, todos],
   );
+
+  // A duração do compromisso sendo REMARCADO (upstream #3714): o PATCH preserva
+  // o comprimento do bloco, e a lista de horários tem de ser do mesmo tamanho.
+  const duracaoDoCompromisso = React.useMemo(() => {
+    const alvo = remarcandoId ? agendamentos.find((a) => a.id === remarcandoId) : undefined;
+    return alvo ? duracaoDoBloco(alvo.comeca, alvo.termina, 0) || null : null;
+  }, [remarcandoId, agendamentos]);
+  // A duração ESCOLHIDA na marcação nova: `null` = a do procedimento. Texto
+  // inválido também não viaja; a tela trava o Confirmar.
+  const duracaoEscolhida =
+    duracaoEditada !== null && tipoDaMarcacao ? duracaoDoCampo(duracaoEditada, tipoDaMarcacao.duracaoMin) : null;
+
+  // Os horários vêm da rota real — a mesma que a IA usa, então tela e agente
+  // oferecem exatamente os mesmos horários. Só consulta quando o painel abre.
+  // `isError` junto, e não só `data`: sem ele a tela MENTE por default. O
+  // `publicouHorarios={horarios?.publicou_horarios ?? true}` abaixo transforma
+  // "a consulta falhou" em "publicou, só não tem vaga" — dias travados e aviso
+  // nenhum, que é exatamente o que uma instalação fresca produz (a rota devolve
+  // 422 porque ninguém está em `attendant_availability`).
+  const { data: horarios, isError: horariosFalharam } = useHorariosLivres(
+    marcando && tipoDaMarcacao
+      ? {
+          event_type_id: tipoDaMarcacao.id,
+          owner_user_id: donoDaConsulta,
+          de: janelaDeBusca.de,
+          ate: janelaDeBusca.ate,
+          unit_id: unidadeId || undefined,
+          // A DURAÇÃO ENTRA NA CONSULTA (upstream #3714): remarcando, o
+          // comprimento do bloco que vai ser movido; marcando, a escolhida na
+          // tela. Sem escolha não vai nada, e vale a do procedimento (que pode
+          // vir do catálogo, por isso a tela não manda o número dela).
+          duracao_minutos: remarcandoId ? (duracaoDoCompromisso ?? undefined) : (duracaoEscolhida ?? undefined),
+        }
+      : null,
+  );
+
+  const horariosPorDia = React.useMemo(() => {
+    const mapa: Record<string, Array<{ instante: string; rotulo: string }>> = {};
+    for (const s of horarios?.slots ?? []) {
+      const d = new Date(s.inicio);
+      // A CHAVE E O RÓTULO SAEM DO FUSO DA ORGANIZAÇÃO: o slot das 09:00 da
+      // clínica é daquele dia e daquela hora PARA ELA, não para quem está
+      // olhando (issue #1362). O lookup em `PainelDeMarcacao` continua batendo,
+      // porque ele indexa pela data de calendário da mesma âncora.
+      const chave = diaLocalISO(d, fusoDaAgenda);
+      const p = partesNoFuso(d, fusoDaAgenda);
+      const dois = (n: number) => String(n).padStart(2, "0");
+      (mapa[chave] ??= []).push({
+        instante: s.inicio,
+        rotulo: `${dois(p.hora)}:${dois(p.minuto)}`,
+      });
+    }
+    return mapa;
+  }, [horarios, fusoDaAgenda]);
 
   // A GRADE não mostra cancelado — ele fica só na aba "Cancelados" do
   // histórico, que lê `agendamentos` (cheio) e o separa sozinha em `separar()`.
@@ -526,6 +546,7 @@ export function AgendaClient({
             setEmailConvidado("");
             setFormDonoId("");
             setFormTipoId("");
+            setDuracaoEditada(null);
             // E o próprio cliente, que é o pior dos quatro a sobrar: medido numa
             // instalação real em 2026-09-12, "Novo agendamento" abriu com um
             // contato JÁ selecionado, herdado de uma abertura anterior feita a
@@ -794,6 +815,8 @@ export function AgendaClient({
             horarioInicial={horarioEscolhido ?? undefined}
             permiteEncaixe={podeMarcar}
             podeBloquearDeOutros={podeBloquearDeOutros}
+            duracao={duracaoEditada}
+            onDuracao={setDuracaoEditada}
             onConfirmar={(m) => {
               if (!tipoDaMarcacao) return Promise.reject(new Error("procedimento não escolhido"));
               // O DONO é o profissional escolhido no modal, o MESMO que a
@@ -807,6 +830,7 @@ export function AgendaClient({
                   contact_id: contactId || undefined,
                   conversation_id: conversationId || undefined,
                   starts_at: m.instante,
+                  duration_minutes: m.duracaoMin,
                   guest_email: m.convidado,
                   location_details: m.endereco,
                   description: m.observacao || undefined,
@@ -823,6 +847,7 @@ export function AgendaClient({
               setRemarcandoId(null);
               setFormDonoId("");
               setFormTipoId("");
+              setDuracaoEditada(null);
             }}
           />
         </DialogContent>
@@ -921,7 +946,8 @@ export function AgendaClient({
                   })
                 }
                 tipo={tipo.nome}
-                duracaoMin={tipo.duracaoMin}
+                // Remarcar preserva o comprimento do bloco (upstream #3714).
+                duracaoMin={duracaoDoCompromisso ?? tipo.duracaoMin}
                 // A10: quem pediu para não receber mensagens não recebe o
                 // lembrete do novo horário — o painel avisa para confirmar por
                 // telefone, como a marcação simples.

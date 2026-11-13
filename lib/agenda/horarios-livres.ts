@@ -58,6 +58,7 @@
  */
 import type { ScheduleWindow } from "@/lib/schemas/routing";
 
+import { duracaoEscolhidaValida } from "./duracao-escolhida";
 import { diaDaSemanaLocal, diaLocalISO, instanteDe, type HoraDeParede } from "./fuso";
 
 /**
@@ -133,6 +134,12 @@ export interface EntradaDeHorariosLivres {
   excecoes: ExcecaoDeData[];
   ocupados: Ocupado[];
   tipo: TipoDeAgendamento;
+  /**
+   * A duração ESCOLHIDA para este atendimento (porte do upstream #3714) —
+   * ausente ou fora de 5…1440, vale a do tipo. Muda o COMPRIMENTO do slot (e
+   * a colisão); o PASSO da grade continua `intervaloMin ?? tipo.duracaoMin`.
+   */
+  duracaoMin?: number | null;
   de: Date;
   ate: Date;
   /** INJETADO. Nunca `new Date()` aqui dentro. */
@@ -324,7 +331,8 @@ export function horariosLivres(entrada: EntradaDeHorariosLivres): Slot[] {
   const { jornada, excecoes, ocupados, tipo, de, ate, agora } = entrada;
   const fuso = jornada.timezone;
   const passo = tipo.intervaloMin ?? tipo.duracaoMin;
-  if (passo <= 0 || tipo.duracaoMin <= 0) return [];
+  const duracao = duracaoEscolhidaValida(entrada.duracaoMin) ? entrada.duracaoMin : tipo.duracaoMin;
+  if (passo <= 0 || duracao <= 0) return [];
 
   // Os dois cortes do tempo, resolvidos uma vez: o começo é o mais tarde entre
   // o que se pediu e o aviso mínimo; o fim, o mais cedo entre o que se pediu e
@@ -405,7 +413,7 @@ export function horariosLivres(entrada: EntradaDeHorariosLivres): Slot[] {
 
       for (let minuto = faixa.inicio; ; minuto += passo) {
         const inicio = instanteDe(paredeDeMinutos(ano, mes, dia, minuto), fuso).getTime();
-        const fim = inicio + tipo.duracaoMin * MINUTO;
+        const fim = inicio + duracao * MINUTO;
 
         // O slot inteiro precisa caber na faixa publicada. Comparação em
         // INSTANTES, não em minutos de parede: numa virada de horário de verão

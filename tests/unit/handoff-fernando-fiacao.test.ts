@@ -31,7 +31,9 @@ describe("fiação — caso humano aberto move o lead pra etapa de handoff", () 
   it("o fail-safe do case_promise (auto-abre-caso) chama moverParaHandoffBestEffort", () => {
     const i = FONTE_INBOUND.indexOf("chain.status === 'vetoed' && chain.code === 'case_promise_without_case'");
     expect(i).toBeGreaterThan(-1);
-    const janela = FONTE_INBOUND.slice(i, i + 1800);
+    // 2200 (era 1800): a régua do fail-safe (#3725, `podeAbrirCasoNoFailsafe`) alongou o
+    // trecho entre o marcador e o auto-abre-caso; a asserção continua a mesma.
+    const janela = FONTE_INBOUND.slice(i, i + 2200);
     expect(janela).toMatch(/openedCaseThisTurn = true;\s*\n\s*moverParaHandoffBestEffort\(/);
   });
 

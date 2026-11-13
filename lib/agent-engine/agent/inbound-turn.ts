@@ -145,7 +145,7 @@ import {
   matchesHandoffKeyword,
   type PublishedAgentConfig,
 } from './agent-config';
-import { msAteAJanelaAbrir } from './janela-de-atendimento';
+import { msAteAJanelaAbrir, msAteAJanelaAbrirPulandoFeriado } from './janela-de-atendimento';
 import { turnoDisparaNasMensagens } from './palavra-chave-do-gatilho';
 import { enviaAvisoForaDoHorario, portasDeProducao } from './aviso-fora-do-horario';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
@@ -204,6 +204,7 @@ import type { DisclosureMode } from '../guardrails/disclosure/template';
 import { decidePromise } from '../guardrails/promise/engine';
 import { loadPromiseTable } from '../guardrails/promise/table';
 import { classifyPromise, memoizarPorCandidata } from '../guardrails/promise/semantic';
+import { deveAbrirCasoDoFailsafe } from '../guardrails/failsafe-do-caso';
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { diffCheckpoint } from '@/lib/leads/checkpoint-diff';
 import {
@@ -245,6 +246,7 @@ import {
 } from '../guardrails/jailbreak/classifier';
 import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
 import { fusoDaOrganizacao } from './fuso-da-org';
+import { blocoDoFeriado, ehFeriadoNacionalNoFuso, feriadoNacionalNoTurno } from './feriado-nacional';
 import { renderAgora } from '@/lib/tempo/agora';
 import { fusoUtilizavel } from '@/lib/tempo/fusos';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
@@ -910,6 +912,12 @@ const AVISO_DO_TURNO_MUDO: Record<FalhaDoTurnoMudo, { title: string; body: strin
     body:
       'O turno terminou sem mensagem para o cliente e a correção automática da IA gastou todas ' +
       'as etapas em consultas, sem chegar a responder. Abra a conversa e responda o cliente.',
+  },
+  correcao_calada_apos_veto: {
+    title: 'A IA não respondeu um cliente: as regras de segurança barraram a resposta',
+    body:
+      'A IA tentou responder, as regras de segurança barraram a mensagem, e a correção ' +
+      'automática terminou sem enviar nada. Abra a conversa e responda o cliente.',
   },
 };
 
@@ -3062,7 +3070,19 @@ async function executarTurnoDoAgente(
   // attempts (`rescheduleJob`) — quem escreveu 22h é atendido às 8h. O throw é
   // o contrato de `JobSettledError`: o run já dispôs do job, main.ts no-opa.
   if (!preview && liveJob().kind === 'inbound_turn' && agentConfig?.janelaDeAtendimento != null) {
-    const esperaMs = msAteAJanelaAbrir(agentConfig.janelaDeAtendimento, clock());
+    const janela = agentConfig.janelaDeAtendimento;
+    const agora = clock();
+    let esperaMs = msAteAJanelaAbrir(janela, agora);
+    // NÃO ATENDER EM FERIADO NACIONAL (porte do upstream #4469). Opção do
+    // agente, DESLIGADA de fábrica: desligada, o feriado é dia comum. Ligada, o
+    // turno espera a próxima abertura que não é feriado e o aviso de fora do
+    // horário recebe o MESMO fato do dia (sai mesmo dentro da janela semanal).
+    let feriadoHoje: boolean | undefined;
+    if (agentConfig.naoAtenderEmFeriadoNacional === true) {
+      const ehFeriado = (instante: Date) => ehFeriadoNacionalNoFuso(instante, janela.timezone);
+      feriadoHoje = ehFeriado(agora);
+      esperaMs = msAteAJanelaAbrirPulandoFeriado(janela, agora, ehFeriado);
+    }
     if (esperaMs !== null) {
       // O AVISO DE FORA DO HORÁRIO (porte de upstream #2284) —
       // ANTES do adiamento, para sair na hora em que a mensagem chegou. Só sai
@@ -3081,7 +3101,8 @@ async function executarTurnoDoAgente(
             channelSessionId: input.channelSessionId,
             texto: agentConfig.avisoForaDoHorario ?? null,
             janela: agentConfig.janelaDeAtendimento,
-            agora: clock(),
+            agora,
+            ehFeriadoNacional: feriadoHoje,
           },
         );
         runLog.info(
@@ -3105,6 +3126,7 @@ async function executarTurnoDoAgente(
           agent_id: agentConfig.agentId,
           espera_ms: esperaMs,
           janela: `${agentConfig.janelaDeAtendimento.start}-${agentConfig.janelaDeAtendimento.end}`,
+          feriado_nacional_hoje: feriadoHoje ?? null,
         },
       );
       throw new JobSettledError(
@@ -4319,6 +4341,15 @@ async function executarTurnoDoAgente(
               });
             },
           };
+          // #3725 (porte do upstream #3816): o fail-safe abaixo só abre caso humano com
+          // sinal de que o paciente precisa de gente (pedido, ajuda, reclamação, urgência,
+          // sintoma) ou promessa explícita de envolver a equipe. Régua inteira e porquê:
+          // `guardrails/failsafe-do-caso.ts`.
+          const podeAbrirCasoNoFailsafe = deveAbrirCasoDoFailsafe({
+            mensagens: effectiveContext.messages,
+            corpo: body,
+            alvosExtras: agentConfig?.handoffKeywords ?? [],
+          });
           let chain = await runBeforeSend(beforeSendArgs);
           if (chain.status === 'vetoed' && chain.code === 'case_promise_without_case') {
             // Wave 4 — fail-safe da invariante sagrada: o lead NUNCA recebe promessa-de-
@@ -4327,6 +4358,13 @@ async function executarTurnoDoAgente(
             // abre um caso mínimo e libera o envio — nunca deixa a promessa passar sem caso.
             casePromiseVetoCount += 1;
             if (casePromiseVetoCount < 2) {
+              return { ok: false, error: { code: chain.code, message: chain.message } };
+            }
+            if (!podeAbrirCasoNoFailsafe) {
+              // #3725: sem sinal, o caso NÃO abre e a promessa NÃO sai; o veto ensina.
+              runLog.warn('fail-safe de caso: sem sinal de humano, caso não aberto', {
+                vetos: casePromiseVetoCount,
+              });
               return { ok: false, error: { code: chain.code, message: chain.message } };
             }
             const auto = await openCase(
@@ -5402,8 +5440,21 @@ async function executarTurnoDoAgente(
     // ponto só cobre os três — e alcança de carona a chamada de fechamento, que
     // reusa `openingTextOnly` e é onde nasce o `prazo` ISO da declaração.
     const agoraBlock = renderAgora(clock(), fusoDaOrg);
+    // O FERIADO NACIONAL DO TURNO (porte do upstream #3894): logo depois do
+    // relógio, no sufixo por-lead, porque é fato do DIA (muda à meia-noite) e o
+    // prefixo estável não pode carregá-lo.
+    //
+    // ⚠️ SÓ com "Não atender em feriado nacional" LIGADA. `isHolidayBR` conta
+    // Carnaval e Corpus Christi (ponto facultativo), e o bloco proíbe marcar
+    // para amanhã na véspera: de fábrica, a clínica que abre nesses dias
+    // perderia marcação. Desligada (o padrão), o prompt é o de antes do porte.
+    const feriadoBlock =
+      agentConfig?.naoAtenderEmFeriadoNacional === true
+        ? blocoDoFeriado(feriadoNacionalNoTurno(clock(), fusoDaOrg))
+        : '';
     const openingSuffixes = [
       agoraBlock,
+      feriadoBlock,
       matchedSkillsBlock,
       stageHintBlock,
       splitHint,
@@ -5711,7 +5762,8 @@ async function executarTurnoDoAgente(
     // barrou de novo, ou gastou os passos dela sem responder (porte do #4038). Antes o
     // turno acabava mudo com um `info` no log do worker, que ninguém na clínica lê. Vira
     // aviso na Central, um por conversa e motivo enquanto aberto. Não envia nada: nunca
-    // duplica mensagem. O silêncio escolhido na correção segue sem aviso.
+    // duplica mensagem. O silêncio escolhido na correção (sem tentativa barrada antes)
+    // segue sem aviso.
     const falha =
       !preview && liveJob().kind === 'inbound_turn'
         ? falhaDoTurnoMudo({ ...silencioDoTurno(), saidaCortada, correcaoCortada, correcaoTentouEnviar, tetoNaCorrecao })

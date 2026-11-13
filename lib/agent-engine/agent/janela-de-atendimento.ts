@@ -198,3 +198,56 @@ export function inicioDoPeriodoFechado(janela: JanelaDeAtendimento, agora: Date)
 
   return null;
 }
+
+/**
+ * "Não atender em feriado nacional" (porte do upstream #4469):
+ * `trigger_config.filters.business_hours.fechado_em_feriado_nacional`.
+ * DESLIGADA de fábrica: só `=== true` liga; o resto é o feriado como dia comum.
+ */
+export function lerFechadoEmFeriadoNacional(triggerConfig: unknown): boolean {
+  if (typeof triggerConfig !== 'object' || triggerConfig === null) return false;
+  const filters = (triggerConfig as { filters?: unknown }).filters;
+  if (typeof filters !== 'object' || filters === null) return false;
+  const bh = (filters as { business_hours?: unknown }).business_hours;
+  if (typeof bh !== 'object' || bh === null) return false;
+  return (bh as { fechado_em_feriado_nacional?: unknown }).fechado_em_feriado_nacional === true;
+}
+
+/**
+ * Como `msAteAJanelaAbrir`, mas uma abertura que cai em FERIADO não conta: o
+ * turno espera a abertura do próximo dia da janela que não seja feriado.
+ * Dentro da janela num feriado ⇒ espera (nunca `null`); fora de feriado ⇒
+ * idêntica a `msAteAJanelaAbrir`.
+ *
+ * ponytail: salta de abertura em abertura, no máximo 31 vezes (feriados
+ * nacionais seguidos são no máximo dois — Carnaval). Sem achar dia útil, falha
+ * ABERTA para a janela semanal pura.
+ */
+export function msAteAJanelaAbrirPulandoFeriado(
+  janela: JanelaDeAtendimento,
+  agora: Date,
+  ehFeriado: (instante: Date) => boolean,
+): number | null {
+  const semFeriado = msAteAJanelaAbrir(janela, agora);
+  const fim = minutosDe(janela.end);
+  if (fim === null) return semFeriado;
+
+  let referencia = agora;
+  for (let tentativas = 0; tentativas < 31; tentativas += 1) {
+    const espera = msAteAJanelaAbrir(janela, referencia);
+    const abertura = espera === null ? referencia : new Date(referencia.getTime() + espera);
+    if (!ehFeriado(abertura)) {
+      const ms = abertura.getTime() - agora.getTime();
+      return ms > 0 ? ms : null;
+    }
+    // A abertura é num feriado: o próximo candidato vem no FECHAMENTO daquele dia.
+    let local: { dia: number; minutos: number };
+    try {
+      local = relogioLocal(janela.timezone, abertura);
+    } catch {
+      return semFeriado;
+    }
+    referencia = new Date(abertura.getTime() + (fim - local.minutos) * 60_000);
+  }
+  return semFeriado;
+}

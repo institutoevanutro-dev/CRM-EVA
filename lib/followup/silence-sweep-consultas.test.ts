@@ -263,6 +263,60 @@ describe("loadActiveSilencePointers — lê a vigência", () => {
     const pointers = await createSupabaseSilenceSweepDb({ from } as never).loadActiveSilencePointers();
     expect(consultas[0]!.find((c) => c.metodo === "select")?.args[0]).toMatch(/\bactive_since\b/);
     expect(pointers[0]!.active_since).toBe("2026-10-06T12:00:00+00:00");
+    expect(pointers[0]!.reentrada_minima_horas).toBeUndefined();
+  });
+
+  it("repassa params.reentrada_minima_horas quando o fluxo o tem", async () => {
+    const linha = {
+      id: "p-1",
+      organization_id: "org",
+      active_version_id: "v-1",
+      trigger_config: { kind: "silence", params: { threshold_minutes: 30, reentrada_minima_horas: 72 } },
+      active_since: "2026-10-06T12:00:00+00:00",
+    };
+    const { admin } = supabaseRoteirizado([[linha]]);
+    const pointers = await createSupabaseSilenceSweepDb(admin).loadActiveSilencePointers();
+    expect(pointers[0]!.reentrada_minima_horas).toBe(72);
+  });
+});
+
+describe("loadContatosComInscricaoRecenteQueEnviou — a consulta de produção", () => {
+  const DESDE = "2026-10-04T15:00:00.000Z";
+
+  it("ponteiro, contatos, started_at >= desde, qualquer status, só com action_sent (!inner)", async () => {
+    const { admin, consultas } = supabaseRoteirizado([[]]);
+    await createSupabaseSilenceSweepDb(admin).loadContatosComInscricaoRecenteQueEnviou!("org", "p-1", ["c-1"], DESDE);
+    const c = consultas[0]!;
+    expect(c[0]).toEqual({ metodo: "from", args: ["followup_enrollments"] });
+    expect(c.find((x) => x.metodo === "select")?.args[0]).toMatch(/followup_enrollment_events!inner\(/);
+    expect(c).toContainEqual({ metodo: "eq", args: ["organization_id", "org"] });
+    expect(c).toContainEqual({ metodo: "eq", args: ["pointer_id", "p-1"] });
+    expect(c).toContainEqual({ metodo: "in", args: ["contact_id", ["c-1"]] });
+    expect(c).toContainEqual({ metodo: "gte", args: ["started_at", DESDE] });
+    expect(c).toContainEqual({ metodo: "eq", args: ["followup_enrollment_events.event_type", "action_sent"] });
+    expect(c).toContainEqual({ metodo: "order", args: ["id", { ascending: true }] });
+    // qualquer status: a cancelada que ENVIOU conta; a que não enviou cai no !inner
+    expect(c.some((x) => x.args[0] === "status")).toBe(false);
+  });
+
+  it("devolve os contatos e pagina até a página vazia; lista vazia não bate no banco", async () => {
+    const { admin, consultas } = supabaseRoteirizado([
+      [{ id: "e-1", contact_id: "c-1" }, { id: "e-2", contact_id: "c-2" }],
+      [{ id: "e-3", contact_id: "c-1" }],
+    ]);
+    const s = await createSupabaseSilenceSweepDb(admin).loadContatosComInscricaoRecenteQueEnviou!(
+      "org",
+      "p-1",
+      ["c-1", "c-2", "c-3"],
+      DESDE,
+    );
+    expect([...s].sort()).toEqual(["c-1", "c-2"]);
+    expect(consultas).toHaveLength(3);
+    expect(consultas[1]!).toContainEqual({ metodo: "gt", args: ["id", "e-2"] });
+
+    const vazio = supabaseRoteirizado([]);
+    await createSupabaseSilenceSweepDb(vazio.admin).loadContatosComInscricaoRecenteQueEnviou!("org", "p-1", [], DESDE);
+    expect(vazio.consultas).toHaveLength(0);
   });
 });
 

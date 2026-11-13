@@ -120,8 +120,12 @@ describe("a correção barrada de novo vira aviso, em vez de calar o turno (port
     );
   });
 
-  it("controle: veto e depois silêncio escolhido na correção (sem chamar nada): não avisa", () => {
-    expect(falhaDoTurnoMudo({ ...MUDO, ...SINAIS, tentativasDeEnvio: 1 })).toBeNull();
+  it("⭐ veto e depois a correção encerra sem chamar nada: avisa (#3725, turno mudo)", () => {
+    expect(falhaDoTurnoMudo({ ...MUDO, ...SINAIS, tentativasDeEnvio: 1 })).toBe("correcao_calada_apos_veto");
+  });
+
+  it("controle: nada tentado e silêncio escolhido na correção: não avisa", () => {
+    expect(falhaDoTurnoMudo({ ...MUDO, ...SINAIS, tentativasDeEnvio: 0 })).toBeNull();
   });
 
   it.each([

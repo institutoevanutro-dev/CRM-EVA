@@ -25,6 +25,12 @@ import type { Json } from "@/lib/database.types";
  * para o modelo, e nenhum dos dois reimplementa a decisão.
  */
 import { coletaOQueOcupa, horariosLivresDaOrg, resolverDuracaoDoTipo } from "@/lib/agenda/consulta";
+import {
+  DURACAO_MAXIMA_MIN,
+  DURACAO_MINIMA_MIN,
+  duracaoDoBloco,
+  duracaoEscolhidaValida,
+} from "@/lib/agenda/duracao-escolhida";
 import { colide, type Slot } from "@/lib/agenda/horarios-livres";
 import { idsForaDaOrg } from "@/lib/tenancy/pertence-a-org";
 import {
@@ -90,6 +96,12 @@ export interface MarcarInput {
    * pessoa. Quem transforma isto em convite do Google é o worker de push.
    */
   guest_email?: string;
+  /**
+   * A duração DESTE atendimento, em minutos (porte do upstream #3714) —
+   * ausente, a do tipo. Vira o `ends_at`; fora de 5…1440 é recusa nomeada, não
+   * troca silenciosa pelo padrão. A ferramenta da IA não manda este campo.
+   */
+  duration_minutes?: number;
 }
 
 export interface AlterarInput {
@@ -165,6 +177,16 @@ async function executarCriacaoDeAgendamento(
   input: MarcarInput,
 ): Promise<Record<string, unknown>> {
   const inicio = new Date(input.starts_at);
+
+  if (input.duration_minutes !== undefined && !duracaoEscolhidaValida(input.duration_minutes)) {
+    throw new ApiError(
+      422,
+      "agenda_duracao_invalida",
+      undefined,
+      ctx.requestId,
+      `A duração precisa ser um número inteiro de minutos entre ${DURACAO_MINIMA_MIN} e ${DURACAO_MAXIMA_MIN}.`,
+    );
+  }
 
   const { data: tipo, error: erroTipo } = await supabase
     .from("calendar_event_types")
@@ -258,8 +280,8 @@ async function executarCriacaoDeAgendamento(
     if (error) throw new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
     produto = data;
   }
-  const duracaoMin = resolverDuracaoDoTipo(tipo, produto);
-  if (duracaoMin === null) {
+  const duracaoDoTipo = resolverDuracaoDoTipo(tipo, produto);
+  if (duracaoDoTipo === null) {
     throw new ApiError(
       422,
       "agenda_servico_sem_duracao",
@@ -268,12 +290,15 @@ async function executarCriacaoDeAgendamento(
       `O serviço vinculado a "${tipo.name}" não tem duração de agenda configurada no catálogo.`,
     );
   }
+  // A duração ESCOLHIDA na marcação manda; sem ela, a do tipo (upstream #3714).
+  const duracaoMin = input.duration_minutes ?? duracaoDoTipo;
   const fim = new Date(inicio.getTime() + duracaoMin * 60_000);
   const consulta = await exigeHorarioLivre(supabase, ctx, {
     eventTypeId: tipo.id,
     donoId,
     inicio,
     fim,
+    duracaoMin,
     unitId: input.unit_id ?? null,
   });
   const unitId =
@@ -380,6 +405,9 @@ export async function alterarAgendamentoHandler(
     "owner_user_id",
     "contact_id",
     "starts_at",
+    // Remarcar PRESERVA o comprimento do bloco (upstream #3714): sem `ends_at`
+    // um atendimento de 90 minutos voltava a ter a duração do tipo no arrasto.
+    "ends_at",
     "status",
     "time_zone",
   ]);
@@ -422,7 +450,12 @@ export async function alterarAgendamentoHandler(
       throw new ApiError(404, "not_found", undefined, ctx.requestId, "O tipo deste agendamento não existe mais.");
     }
 
-    const novoFim = new Date(novoInicio.getTime() + tipo.duration_minutes * 60_000);
+    const duracaoDoBlocoMin = duracaoDoBloco(
+      atual.starts_at as string,
+      atual.ends_at as string | null,
+      Number(tipo.duration_minutes),
+    );
+    const novoFim = new Date(novoInicio.getTime() + duracaoDoBlocoMin * 60_000);
     // ⚠️ O PRÓPRIO COMPROMISSO OCUPA O HORÁRIO DELE. Remarcar para o mesmo
     // instante é no-op — sem esta guarda ele se veria como conflito e recusaria
     // a si mesmo.
@@ -436,6 +469,7 @@ export async function alterarAgendamentoHandler(
         donoId: atual.owner_user_id as string,
         inicio: novoInicio,
         fim: novoFim,
+        duracaoMin: duracaoDoBlocoMin,
         ignorarAgendamentoId: atual.id as string,
       });
       mudanca.starts_at = novoInicio.toISOString();
@@ -859,6 +893,8 @@ async function exigeHorarioLivre(
     donoId: string;
     inicio: Date;
     fim: Date;
+    /** O comprimento que o pedido exige livre (upstream #3714); ausente = o do tipo. */
+    duracaoMin?: number;
     unitId?: string | null;
     /**
      * O compromisso sendo remarcado: ocupa o horário de ONDE SAI, não o de DESTINO.
@@ -882,6 +918,7 @@ async function exigeHorarioLivre(
     agora: new Date(),
     unitId: args.unitId ?? null,
     ignorarAgendamentoId: args.ignorarAgendamentoId,
+    duracaoMin: args.duracaoMin ?? null,
   });
 
   if (!consulta.ok) {

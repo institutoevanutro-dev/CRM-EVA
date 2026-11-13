@@ -38,6 +38,8 @@ export interface HorariosLivresFiltro {
   /** ISO-8601. */
   de: string;
   ate: string;
+  /** A duração escolhida na marcação (upstream #3714). Entra na chave: trocar 30 por 90 muda os horários. */
+  duracao_minutos?: number;
 }
 
 /**
@@ -57,6 +59,7 @@ export function useHorariosLivres(filtro: HorariosLivresFiltro | null) {
       });
       if (filtro!.owner_user_id) qs.set("owner_user_id", filtro!.owner_user_id);
       if (filtro!.unit_id) qs.set("unit_id", filtro!.unit_id);
+      if (filtro!.duracao_minutos) qs.set("duracao_minutos", String(filtro!.duracao_minutos));
       try {
         const r = await apiClient.get<{ data: HorariosLivresResposta }>(
           `/api/v1/agenda/horarios-livres?${qs.toString()}`,

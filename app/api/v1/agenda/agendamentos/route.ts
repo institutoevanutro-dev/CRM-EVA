@@ -18,6 +18,7 @@ import { z } from "zod";
 
 import { listaAgendamentos, type AgendamentoListado } from "@/lib/agenda/consulta";
 import { donosDaAgenda } from "@/lib/agenda/donos-da-agenda";
+import { DURACAO_MAXIMA_MIN, DURACAO_MINIMA_MIN } from "@/lib/agenda/duracao-escolhida";
 import { lerBloqueiosDaGrade } from "@/lib/agenda/bloqueios-da-grade";
 import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
@@ -91,6 +92,8 @@ const marcarSchema = z.object({
   description: z.string().max(2000).optional(),
   location_details: z.string().max(300).optional(),
   guest_email: emailDoConvidado.optional(),
+  /** A duração DESTE atendimento (porte do upstream #3714); ausente = a do tipo. */
+  duration_minutes: z.number().int().min(DURACAO_MINIMA_MIN).max(DURACAO_MAXIMA_MIN).optional(),
 });
 
 const alterarSchema = z
@@ -99,7 +102,7 @@ const alterarSchema = z
     revision: z.number().int().positive().optional(),
     outcome_message_id: z.string().uuid().optional(),
     confirmation_next_at: z.string().datetime({offset:true}).optional(),
-    /** Remarcar: o novo início. A duração vem do tipo, como na criação. */
+    /** Remarcar: o novo início. O fim conserva o comprimento do bloco (upstream #3714). */
     starts_at: z.string().datetime({ offset: true }).optional(),
     /**
      * `rescheduled` NÃO entra aqui: remarcar se pede mandando `starts_at`, e é
