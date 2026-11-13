@@ -203,6 +203,7 @@ import type { DisclosureMode } from '../guardrails/disclosure/template';
 import { decidePromise } from '../guardrails/promise/engine';
 import { loadPromiseTable } from '../guardrails/promise/table';
 import { classifyPromise, memoizarPorCandidata } from '../guardrails/promise/semantic';
+import { deveAbrirCasoDoFailsafe } from '../guardrails/failsafe-do-caso';
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { diffCheckpoint } from '@/lib/leads/checkpoint-diff';
 import {
@@ -4318,6 +4319,15 @@ async function executarTurnoDoAgente(
               });
             },
           };
+          // #3725 (porte do upstream #3816): o fail-safe abaixo só abre caso humano com
+          // sinal de que o paciente precisa de gente (pedido, ajuda, reclamação, urgência,
+          // sintoma) ou promessa explícita de envolver a equipe. Régua inteira e porquê:
+          // `guardrails/failsafe-do-caso.ts`.
+          const podeAbrirCasoNoFailsafe = deveAbrirCasoDoFailsafe({
+            mensagens: effectiveContext.messages,
+            corpo: body,
+            alvosExtras: agentConfig?.handoffKeywords ?? [],
+          });
           let chain = await runBeforeSend(beforeSendArgs);
           if (chain.status === 'vetoed' && chain.code === 'case_promise_without_case') {
             // Wave 4 — fail-safe da invariante sagrada: o lead NUNCA recebe promessa-de-
@@ -4326,6 +4336,13 @@ async function executarTurnoDoAgente(
             // abre um caso mínimo e libera o envio — nunca deixa a promessa passar sem caso.
             casePromiseVetoCount += 1;
             if (casePromiseVetoCount < 2) {
+              return { ok: false, error: { code: chain.code, message: chain.message } };
+            }
+            if (!podeAbrirCasoNoFailsafe) {
+              // #3725: sem sinal, o caso NÃO abre e a promessa NÃO sai; o veto ensina.
+              runLog.warn('fail-safe de caso: sem sinal de humano, caso não aberto', {
+                vetos: casePromiseVetoCount,
+              });
               return { ok: false, error: { code: chain.code, message: chain.message } };
             }
             const auto = await openCase(

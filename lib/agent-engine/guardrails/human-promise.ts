@@ -54,9 +54,25 @@ const gap = (n: number): string => `[^.!?\\n]{0,${n}}?`;
  * Monta os padrões de promessa-de-humano em cima de um ALVO (`target`)
  * substituível — o TARGET genérico por padrão, ou o TARGET estendido com
  * nome(s) próprio(s) do tenant (ver `detectHumanPromise`).
+ *
+ * DUAS FAMÍLIAS (porte do upstream #3816, issue #3725). A união das duas é o
+ * `detectHumanPromise` de sempre, com o mesmo veredito. A separação existe para o
+ * fail-safe de `case_promise_without_case` (`guardrails/failsafe-do-caso.ts`), que
+ * ABRE CASO HUMANO e avisa o paciente da passagem:
+ *
+ *   - AÇÃO: alguém da equipe é envolvido (encaminhar, consultar com, "a equipe vai
+ *     verificar/resolver/entrar em contato", "em análise pela equipe"...).
+ *   - RETORNO: só a promessa de VOLTAR A FALAR ("a equipe vai te responder outro
+ *     dia", "assim que responderem eu te aviso"). O destino dela é o retorno
+ *     agendado, não a fila humana.
+ *
+ * Mais estreita que o original de propósito (clínica): no upstream todo o padrão
+ * (2) foi para o RETORNO; aqui só os verbos de resposta/retorno (`retorn`,
+ * `respond`) e o subjuntivo (3). "A equipe vai verificar/confirmar/liberar" e
+ * "assim que a equipe conferir" continuam AÇÃO e continuam abrindo caso.
  */
-function buildPatterns(target: string): RegExp[] {
-  return [
+function buildPatterns(target: string): { acao: RegExp[]; retorno: RegExp[] } {
+  const acao = [
     // (1a) encaminhar/passar/acionar/... → alvo humano: "encaminhar pro setor", "acionar o responsavel".
     new RegExp(`\\b(?:encaminh|repass|transfer|acion|escal|direcion|pass|cham)\\w*${gap(20)}\\b${target}\\b`),
     // (1a-bis) mesmo verbo de encaminhamento, mas o ALVO é retomado por PRONOME (eles/elas)
@@ -73,11 +89,12 @@ function buildPatterns(target: string): RegExp[] {
     new RegExp(`\\b(?:verific|fal|confer|confirm|consult|alinh|valid|chec)\\w*${gap(15)}\\bcom\\b${gap(15)}\\b${target}\\b`),
     // (1c) pedir/solicitar pra/ao alvo humano: "vou pedir pra equipe liberar".
     new RegExp(`\\b(?:ped|solicit)\\w*${gap(12)}\\b(?:pra|para|pro|ao|aos|a|as|com)\\b${gap(10)}\\b${target}\\b`),
-    // (2) "<alvo humano> vai/pode <resolver/retornar/...>": "nosso time vai resolver", "um responsavel vai te retornar".
+    // (2) "<alvo humano> vai/pode <resolver/verificar/...>": "nosso time vai resolver".
     //     "nossa equipe ESTA a disposicao" NÃO casa ("esta" fora do grupo vai/vao/pode).
+    //     Os verbos de RETORNO (`retorn`, `respond`) moram em (2-retorno), abaixo.
     new RegExp(
       `\\b${target}\\b${gap(20)}\\b(?:vai|vao|ira|irao|pode|podem|poderao)\\b${gap(10)}` +
-        `(?:\\b(?:te|lhe|se|nos)\\b\\s*)?(?:resolv|retorn|respond|liber|analis|verific|confer|cuid|assum|atend|entr|aprov|confirm|contat|ajud)\\w*`,
+        `(?:\\b(?:te|lhe|se|nos)\\b\\s*)?(?:resolv|liber|analis|verific|confer|cuid|assum|atend|entr|aprov|confirm|contat|ajud)\\w*`,
     ),
     // (2b) "quem resolve/cuida ... e o nosso time": "isso quem resolve e o nosso time".
     new RegExp(
@@ -125,12 +142,6 @@ function buildPatterns(target: string): RegExp[] {
         `(?:encaminhei|repassei|transferi|acionei|escalei)|(?:ja\\s+)?(?:encaminhad|repassad|transferid|acionad|escalad)[oa])` +
         `(?:\\s+(?:aqui|agora|internamente))?\\s*(?:[.!]|$)`,
     ),
-    // (3) deferir a TERCEIROS via subjuntivo 3ª pessoa do plural: "assim que liberarem eu te aviso".
-    //     Não depende de `target` — não repetido no alvo estendido.
-    new RegExp(
-      `\\b(?:assim que|assim q|quando|depois que|logo que|apos)\\b${gap(12)}` +
-        `\\b(?:liber|aprov|autoriz|respond|retorn|verific|analis|resolv|confirm)(?:ar|er)em\\b`,
-    ),
     // (4) condição futura com ALVO coletivo no singular: "assim que a equipe conferir",
     //     "quando o financeiro confirmar". O padrão (3) só cobria o plural sem alvo.
     new RegExp(
@@ -139,10 +150,26 @@ function buildPatterns(target: string): RegExp[] {
         `\\b(?:liber|aprov|autoriz|respond|retorn|verific|analis|resolv|confirm|confer)(?:ar|er|ir)\\b`,
     ),
   ];
+  const retorno = [
+    // (2-retorno) "<alvo humano> vai/pode <retornar/responder>": "um responsavel vai te retornar",
+    //     "nossa equipe vai te responder outro dia".
+    new RegExp(
+      `\\b${target}\\b${gap(20)}\\b(?:vai|vao|ira|irao|pode|podem|poderao)\\b${gap(10)}` +
+        `(?:\\b(?:te|lhe|se|nos)\\b\\s*)?(?:retorn|respond)\\w*`,
+    ),
+    // (3) deferir a TERCEIROS via subjuntivo 3ª pessoa do plural: "assim que liberarem eu te aviso".
+    //     Não depende de `target` — não repetido no alvo estendido.
+    new RegExp(
+      `\\b(?:assim que|assim q|quando|depois que|logo que|apos)\\b${gap(12)}` +
+        `\\b(?:liber|aprov|autoriz|respond|retorn|verific|analis|resolv|confirm)(?:ar|er)em\\b`,
+    ),
+  ];
+  return { acao, retorno };
 }
 
-/** Compilado uma vez no load do módulo — caminho quente sem nome próprio extra. */
-const PATTERNS: readonly RegExp[] = buildPatterns(TARGET);
+/** Compilados uma vez no load do módulo — caminho quente sem nome próprio extra. */
+const FAMILIAS = buildPatterns(TARGET);
+const PATTERNS: readonly RegExp[] = [...FAMILIAS.acao, ...FAMILIAS.retorno];
 
 /** Minúsculas + remove diacríticos (NFD) — casa acento/caixa uniformemente. */
 function normalize(body: string): string {
@@ -222,22 +249,39 @@ function soPedeConsentimento(text: string): boolean {
  * só nomes próprios simples entram no alvo estendido.
  */
 export function detectHumanPromise(body: string, extraHumanNames?: readonly string[]): boolean {
+  return avaliar(body, extraHumanNames, (f) => [...f.acao, ...f.retorno], PATTERNS);
+}
+
+/**
+ * A METADE QUE ABRE CASO HUMANO (porte do upstream #3816, issue #3725): true só
+ * quando a candidata promete ENVOLVER alguém da equipe (família da AÇÃO). A
+ * promessa de só voltar a falar ("nossa equipe vai te responder outro dia")
+ * continua vetada pelo `detectHumanPromise`, mas não é passagem para humano.
+ * Quem lê: `guardrails/failsafe-do-caso.ts`.
+ */
+export function detectHumanHandoffPromise(body: string, extraHumanNames?: readonly string[]): boolean {
+  return avaliar(body, extraHumanNames, (f) => f.acao, FAMILIAS.acao);
+}
+
+function avaliar(
+  body: string,
+  extraHumanNames: readonly string[] | undefined,
+  escolher: (f: ReturnType<typeof buildPatterns>) => RegExp[],
+  compilados: readonly RegExp[],
+): boolean {
   if (body.trim() === "") return false;
   const text = normalize(body);
   if (soPedeConsentimento(text)) return false;
-  if (extraHumanNames === undefined || extraHumanNames.length === 0) {
-    return PATTERNS.some((re) => re.test(text));
-  }
   const names = Array.from(
     new Set(
-      extraHumanNames
+      (extraHumanNames ?? [])
         .map((w) => normalize(w).trim())
         .filter((w) => /^[a-z]{3,}$/.test(w) && !TARGET_WORD_SET.has(w)),
     ),
   );
-  if (names.length === 0) return PATTERNS.some((re) => re.test(text));
+  if (names.length === 0) return compilados.some((re) => re.test(text));
   const extendedTarget = `(?:${TARGET_WORDS.join("|")}|${names.map(escapeRegex).join("|")})`;
-  return buildPatterns(extendedTarget).some((re) => re.test(text));
+  return escolher(buildPatterns(extendedTarget)).some((re) => re.test(text));
 }
 
 /** Detecta promessa da IA de agir depois sem execução agendada que sustente a fala. */
