@@ -123,6 +123,10 @@ const ESCRITORES: Record<string, { agenda: "agora" | "futuro" | "nenhum"; nota: 
     agenda: "nenhum",
     nota: "traduz o campo para a timeline do dossiê; não escreve.",
   },
+  "migrar-versao.ts": {
+    agenda: "nenhum",
+    nota: "troca só version_id; a regra de seguro existe para o próximo passo manter o sentido do horário que já está gravado.",
+  },
 };
 
 function modulosQueMencionam(): string[] {

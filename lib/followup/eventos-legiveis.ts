@@ -562,6 +562,12 @@ export function descreveEvento(
         detalhe: `voltou em ${refDoNo(texto(p.next_node_id), nos)}`,
         ...pessoa,
       };
+    case "version_migrated":
+      return {
+        titulo: "Passou para a versão atual do fluxo",
+        detalhe: `continua em ${refDoNo(texto(p.current_node_id), nos)}; os próximos passos seguem a versão nova`,
+        ...pessoa,
+      };
     case "skipped_manual":
       return {
         titulo: "Passo pulado por uma pessoa da equipe",
