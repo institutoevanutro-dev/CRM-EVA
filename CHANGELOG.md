@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.11.0] — 2026-11-12
+
+### Adicionado
+
+- **Consulta na agenda exige paciente** Um compromisso de tipo que é consulta passa a exigir o paciente: sem ele, a Agenda avisa ao lado do campo ("Escolha o paciente para marcar uma consulta.") e não marca, e a API (`POST /api/v1/agenda/agendamentos`) e a IA recebem a recusa `422 patient_required`. Isso evita consulta que abre no Prontuário como "Paciente não informado". Cada tipo ganhou o interruptor **Exige paciente** em Configurações › Agenda, ligado por padrão, inclusive nos tipos que já existem. O tipo **Reunião** que vem de fábrica (e todo tipo da categoria Reunião que já existe) fica com o interruptor desligado. **Outros tipos usados para reunião interna precisam ter "Exige paciente" desligado à mão**, senão deixam de poder ser marcados sem paciente. Bloquear horário não muda. A atualização cria só uma coluna nova no banco (migration 0411).
+
 ## [5.10.1] — 2026-11-12
 
 ### Corrigido
@@ -8993,7 +8999,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.10.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.11.0...HEAD
+[5.11.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.10.1...v5.11.0
 [5.10.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.10.0...v5.10.1
 [5.10.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.9.0...v5.10.0
 [5.9.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.8.0...v5.9.0
