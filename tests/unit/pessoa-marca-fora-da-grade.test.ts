@@ -672,3 +672,45 @@ describe("consulta exige paciente (migration 0411)", () => {
     ).rejects.toMatchObject({ status: 422, code: "patient_required" });
   });
 });
+
+// Porte do upstream DeskcommCRM #3714: a duração escolhida na marcação é o
+// comprimento do bloco, e a conferência de horário livre usa ESSE comprimento.
+describe("duração escolhida na marcação", () => {
+  it("a pessoa marca 90 minutos: o fim e o retrato da duração saem da escolha", async () => {
+    const banco = agenda();
+    await marcarAgendamentoHandler(banco.client, ctx(PESSOA), {
+      event_type_id: TIPO,
+      starts_at: NA_GRADE,
+      duration_minutes: 90,
+    });
+    expect(criados(banco)[0]).toMatchObject({ ends_at: "2026-10-07T14:30:00.000Z", duration_minutes_snapshot: 90 });
+  });
+
+  it("90 minutos às 10:00 com paciente às 11:00 é recusado (com 60 passaria)", async () => {
+    const outro = agendamento("2026-10-07T14:00:00.000Z", "2026-10-07T15:00:00.000Z");
+    await expect(
+      marcarAgendamentoHandler(agenda({ agendamentos: [outro] }).client, ctx(TOKEN), {
+        event_type_id: TIPO,
+        starts_at: NA_GRADE,
+        duration_minutes: 90,
+      }),
+    ).rejects.toMatchObject(RECUSA);
+    const banco = agenda({ agendamentos: [outro] });
+    await marcarAgendamentoHandler(banco.client, ctx(TOKEN), { event_type_id: TIPO, starts_at: NA_GRADE });
+    expect(criados(banco)).toHaveLength(1);
+  });
+
+  it("duração fora de 5…1440 é recusa nomeada, não troca silenciosa", async () => {
+    await expect(
+      marcarAgendamentoHandler(agenda().client, ctx(PESSOA), { event_type_id: TIPO, starts_at: NA_GRADE, duration_minutes: 3 }),
+    ).rejects.toMatchObject({ status: 422, code: "agenda_duracao_invalida" });
+  });
+
+  it("remarcar preserva o comprimento do bloco (90, num tipo de 60)", async () => {
+    const longo = { ...agendamento(NA_GRADE, "2026-10-07T14:30:00.000Z"), id: MEU_COMPROMISSO };
+    const banco = agenda({ agendamentos: [longo] });
+    await alterarAgendamentoHandler(banco.client, ctx(PESSOA), { id: MEU_COMPROMISSO, starts_at: FORA_DA_GRADE });
+    const linha = banco.tabelas.calendar_appointments!.find((l) => l.id === MEU_COMPROMISSO)!;
+    expect(linha.ends_at).toBe("2026-10-07T15:00:00.000Z");
+  });
+});

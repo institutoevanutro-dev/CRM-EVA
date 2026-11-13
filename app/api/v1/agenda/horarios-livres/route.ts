@@ -42,6 +42,7 @@ import {
   MAXIMO_DE_DIAS,
   type CodigoDeRecusaDaConsulta,
 } from "@/lib/agenda/consulta";
+import { DURACAO_MAXIMA_MIN, DURACAO_MINIMA_MIN } from "@/lib/agenda/duracao-escolhida";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
@@ -53,6 +54,8 @@ const querySchema = z.object({
   owner_user_id: z.string().uuid().optional(),
   de: z.string().datetime({ offset: true }),
   ate: z.string().datetime({ offset: true }),
+  /** A duração escolhida na tela (porte do upstream #3714); ausente = a do tipo. */
+  duracao_minutos: z.coerce.number().int().min(DURACAO_MINIMA_MIN).max(DURACAO_MAXIMA_MIN).optional(),
 });
 
 export async function GET(req: NextRequest): Promise<Response> {
@@ -72,6 +75,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     owner_user_id: url.searchParams.get("owner_user_id") ?? undefined,
     de: url.searchParams.get("de") ?? undefined,
     ate: url.searchParams.get("ate") ?? undefined,
+    duracao_minutos: url.searchParams.get("duracao_minutos") ?? undefined,
   });
   if (!parsed.success) {
     return fail("validation_failed", t("Consulta inválida."), 422, {
@@ -106,6 +110,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     de,
     ate,
     agora: new Date(),
+    duracaoMin: parsed.data.duracao_minutos ?? null,
   });
 
   if (!consulta.ok) {
