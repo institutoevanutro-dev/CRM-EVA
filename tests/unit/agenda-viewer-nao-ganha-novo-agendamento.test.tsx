@@ -122,6 +122,7 @@ const TIPOS = [
     donoId: null,
     localKind: null,
     localDetalhes: null,
+    exigePaciente: false,
   },
 ];
 

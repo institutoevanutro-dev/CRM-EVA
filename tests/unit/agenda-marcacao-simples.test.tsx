@@ -46,9 +46,9 @@ const PESSOAS = [
   { id: BETO, nome: "Dr. Beto Teste", trilha: "b" },
 ] as unknown as Pessoa[];
 const TIPOS = [
-  { id: "t-ana", nome: "Avaliação facial", duracaoMin: 45, donoId: ANA, localDetalhes: null },
-  { id: "t-beto", nome: "Retorno", duracaoMin: 30, donoId: BETO, localDetalhes: null },
-  { id: "t-livre", nome: "Aplicação", duracaoMin: 15, donoId: null, localDetalhes: null },
+  { id: "t-ana", nome: "Avaliação facial", duracaoMin: 45, donoId: ANA, localDetalhes: null, exigePaciente: false },
+  { id: "t-beto", nome: "Retorno", duracaoMin: 30, donoId: BETO, localDetalhes: null, exigePaciente: false },
+  { id: "t-livre", nome: "Aplicação", duracaoMin: 15, donoId: null, localDetalhes: null, exigePaciente: false },
 ];
 
 afterEach(cleanup);
@@ -167,6 +167,48 @@ describe("Novo agendamento: profissional antes do procedimento", () => {
       expect.objectContaining({ instante, endereco: "", observacao: "" }),
     ]);
     await screen.findByTestId("ver-na-agenda");
+  });
+});
+
+describe("consulta exige paciente (migration 0411)", () => {
+  const instante = "2026-10-22T16:00:00.000Z";
+  const tiposQueExigem = TIPOS.map((t) => ({ ...t, exigePaciente: t.id === "t-ana" }));
+  const comHorario = {
+    profissionalId: ANA,
+    tipoId: "t-ana",
+    tipos: tiposQueExigem,
+    horarioInicial: { instante, rotulo: "13:00" },
+    horariosPorDia: { "2026-10-22": [{ instante, rotulo: "13:00" }] },
+  };
+
+  it("sem paciente, Confirmar avisa ao lado do campo e NÃO envia", () => {
+    const onConfirmar = vi.fn(() => Promise.resolve());
+    montarMarcacao({ ...comHorario, onConfirmar });
+    expect(screen.queryByTestId("falta-paciente-na-marcacao")).toBeNull();
+    fireEvent.click(screen.getByTestId("confirmar-marcacao"));
+    expect(screen.getByTestId("falta-paciente-na-marcacao").textContent).toBe(
+      "Escolha o paciente para marcar uma consulta.",
+    );
+    expect(onConfirmar).not.toHaveBeenCalled();
+  });
+
+  it("o 422 patient_required do servidor aparece no mesmo lugar", async () => {
+    const { ApiError } = await import("@/lib/api/types");
+    const onConfirmar = vi.fn(() =>
+      Promise.reject(new ApiError(422, "patient_required", undefined, "req", "Escolha o paciente para marcar uma consulta.")),
+    );
+    // O tipo local diz que não exige (tela defasada); quem decide é o servidor.
+    montarMarcacao({ ...comHorario, tipos: TIPOS, onConfirmar });
+    fireEvent.click(screen.getByTestId("confirmar-marcacao"));
+    await screen.findByTestId("falta-paciente-na-marcacao");
+    expect(screen.queryByTestId("recusa-da-marcacao")).toBeNull();
+  });
+
+  it("tipo que não exige marca sem paciente", async () => {
+    const onConfirmar = vi.fn(() => Promise.resolve());
+    montarMarcacao({ ...comHorario, tipos: TIPOS, onConfirmar });
+    fireEvent.click(screen.getByTestId("confirmar-marcacao"));
+    await waitFor(() => expect(onConfirmar).toHaveBeenCalled());
   });
 });
 

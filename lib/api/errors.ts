@@ -45,6 +45,8 @@ export const ApiErrorCodes = {
   agenda_disponibilidade_invalida: "agenda_disponibilidade_invalida",
   agenda_ja_cancelado: "agenda_ja_cancelado",
   agenda_listagem_sem_recorte: "agenda_listagem_sem_recorte",
+  // 422: tipo com `requires_patient` (migration 0411) marcado sem `contact_id`.
+  patient_required: "patient_required",
   // Código PRÓPRIO, e não o `unprocessable_entity` genérico: quem recebe isto
   // precisa saber que o `lead_id` mandado não é um negócio do funil (é quase
   // sempre um id de CONTATO — ver #509/#540) e que a correção é trocar o

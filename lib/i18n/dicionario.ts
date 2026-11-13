@@ -136,6 +136,10 @@ export const DICIONARIO: Traducoes = {
   "Vai para o cadastro do paciente. Confira nome e sobrenome.": { es: "Va al registro del paciente. Revise nombre y apellido." },
   "Escreva nome e sobrenome.": { es: "Escriba nombre y apellido." },
   "Complete o nome do paciente para marcar.": { es: "Complete el nombre del paciente para agendar." },
+  "Escolha o paciente para marcar uma consulta.": { es: "Elija el paciente para agendar una consulta." },
+  "Exige paciente": { es: "Exige paciente" },
+  "Desligue para reuniões internas.": { es: "Desactívelo para reuniones internas." },
+  "marca sem paciente": { es: "agenda sin paciente" },
   "Falta o nome completo": { es: "Falta el nombre completo" },
   "falta o nome completo": { es: "falta el nombre completo" },
   // A2 (pacote 2 de design): situação e conflito no próprio bloco da grade.

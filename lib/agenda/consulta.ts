@@ -874,6 +874,8 @@ export interface TipoDeAtendimento {
   localDetalhes: string | null;
   /** true = o compromisso nasce aguardando o cliente confirmar (`pending`). */
   precisaConfirmacao: boolean;
+  /** true = compromisso deste tipo só nasce com paciente (0411). */
+  exigePaciente: boolean;
   ativo: boolean;
   /** Sem dono não há jornada, e sem jornada não há horário (`sem_responsavel`). */
   donoPadraoId: string | null;
@@ -935,7 +937,7 @@ export async function listaTiposDeAtendimento(
   let q = supabase
     .from("calendar_event_types")
     .select(
-      "id, name, slug, description, category, duration_minutes, catalog_product_id, required_room_kind, concurrency_key, location_kind, location_details, requires_confirmation, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, slot_interval_minutes, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body",
+      "id, name, slug, description, category, duration_minutes, catalog_product_id, required_room_kind, concurrency_key, location_kind, location_details, requires_confirmation, requires_patient, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, slot_interval_minutes, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body",
     )
     // Service role bypassa a RLS: este filtro é a única proteção no caminho da
     // ferramenta MCP (ver o cabeçalho do arquivo).
@@ -968,6 +970,7 @@ export async function listaTiposDeAtendimento(
       localKind: String(t.location_kind),
       localDetalhes: t.location_details === null ? null : String(t.location_details),
       precisaConfirmacao: Boolean(t.requires_confirmation),
+      exigePaciente: Boolean(t.requires_patient),
       ativo: Boolean(t.is_active),
       donoPadraoId: t.default_owner_user_id === null ? null : String(t.default_owner_user_id),
       bufferAntesMin: Number(t.buffer_before_minutes),

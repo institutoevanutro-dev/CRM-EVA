@@ -122,6 +122,7 @@ export function AgendaClient({
     donoId: string | null;
     localKind: string | null;
     localDetalhes: string | null;
+    exigePaciente: boolean;
   }>;
   /** A semana corrente, resolvida no servidor: `GET /agendamentos` não existe. */
   agendamentosIniciais: Agendamento[];

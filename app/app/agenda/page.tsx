@@ -126,7 +126,7 @@ export default async function AgendaPage() {
   const [{ data: tipos }, { data: linhas }] = await Promise.all([
     supabase
       .from("calendar_event_types")
-      .select("id, name, duration_minutes, location_kind, location_details, is_active, default_owner_user_id")
+      .select("id, name, duration_minutes, location_kind, location_details, is_active, default_owner_user_id, requires_patient")
       .eq("organization_id", activeOrg.orgId)
       .eq("is_active", true)
       .order("name"),
@@ -293,6 +293,7 @@ export default async function AgendaPage() {
         // "Presencial · Sala 2" numa tela real.
         localKind: t.location_kind ?? null,
         localDetalhes: t.location_details ?? null,
+        exigePaciente: t.requires_patient,
       }))}
       agendamentosIniciais={((linhas ?? []).map((a) => ({
         id: a.id,
