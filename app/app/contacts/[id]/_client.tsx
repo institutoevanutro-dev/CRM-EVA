@@ -28,6 +28,7 @@ import { useContact } from "@/hooks/contacts/useContact";
 import { useUnblockContact } from "@/hooks/contacts/useUnblockContact";
 import { useAlwaysHumanContact } from "@/hooks/contacts/useAlwaysHumanContact";
 import { useReiniciarTeste } from "@/hooks/contacts/useReiniciarTeste";
+import { useDesvincularDoProntuario } from "@/hooks/contacts/useDesvincularDoProntuario";
 import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
@@ -82,6 +83,7 @@ export function ContactDetailClient({ contactId }: Props) {
   const desbloquear = useUnblockContact(contactId);
   const reiniciarTeste = useReiniciarTeste(contactId);
   const sempreHumano = useAlwaysHumanContact(contactId);
+  const desvincular = useDesvincularDoProntuario(contactId);
 
   if (q.isLoading) {
     return (
@@ -387,6 +389,42 @@ export function ContactDetailClient({ contactId }: Props) {
                     <dd className="mt-1">{t("Pelo cadastro de paciente")}</dd>
                   </div>
                 )}
+              {/*
+                O vínculo com a ficha do Prontuário (`prontuario_contact_links`).
+                Desvincular é o caminho de volta quando o Prontuário ligou a ficha
+                ao contato duplicado errado: gestor, o mesmo piso de juntar fichas.
+              */}
+              {contact.prontuario_linked && (
+                <div data-testid="vinculo-prontuario">
+                  <dt className="text-xs uppercase text-muted-foreground">{t("Prontuário")}</dt>
+                  <dd className="mt-1 flex flex-wrap items-center gap-2">
+                    <span>{t("Ficha vinculada")}</span>
+                    {podeJuntar && !contact.is_anonymized && user.support?.access_mode !== "support_readonly" && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" size="sm" disabled={desvincular.isPending}>
+                            {t("Desvincular do Prontuário")}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>{t("Desvincular do Prontuário?")}</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {t("A ficha do Prontuário deixa de estar ligada a este contato. Nada é apagado no Prontuário. Depois, a ficha pode ser ligada ao contato certo. A mudança fica registrada no seu nome.")}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => desvincular.mutate()}>
+                              {t("Desvincular")}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt className="text-xs uppercase text-muted-foreground">Tags</dt>
                 <dd className="mt-1 flex flex-wrap gap-1">
