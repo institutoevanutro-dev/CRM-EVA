@@ -2172,8 +2172,8 @@ export const DICIONARIO: Traducoes = {
   "Escolha uma duração entre 5 e 1440 minutos.": { es: "Elige una duración entre 5 y 1440 minutos." },
   // "Não atender em feriado nacional", desligada de fábrica (porte do upstream #4469).
   "Não atender em feriado nacional": { es: "No atender en feriado nacional" },
-  "Ligado, feriado nacional conta como dia fechado: quem escrever recebe a mensagem de fora do horário (se houver) e o agente responde no próximo dia útil. Desligado, o feriado é um dia comum.": {
-    es: "Activado, el feriado nacional cuenta como día cerrado: quien escriba recibe el mensaje de fuera de horario (si lo hay) y el agente responde el próximo día hábil. Desactivado, el feriado es un día común.",
+  "Ligado, feriado nacional (inclui Carnaval e Corpus Christi) conta como dia fechado: quem escrever recebe a mensagem de fora do horário (se houver), o agente responde no próximo dia útil e não marca nada nesses dias. Desligado, o feriado é um dia comum.": {
+    es: "Activado, el feriado nacional (incluye Carnaval y Corpus Christi) cuenta como día cerrado: quien escriba recibe el mensaje de fuera de horario (si lo hay), el agente responde el próximo día hábil y no agenda nada en esos días. Desactivado, el feriado es un día común.",
   },
   "Mínimo (min)": { es: "Mínimo (min)" },
   "Máximo (min)": { es: "Máximo (min)" },

@@ -305,11 +305,13 @@ describe("o prompt do turno carrega a data de hoje", () => {
     expect(promptsVistos[0]).toContain("instante_absoluto: 2026-09-04T17:30:00.000Z");
   });
 
-  it("o feriado nacional vai junto, logo depois do relógio (porte do upstream #3894)", async () => {
+  it("sem \"Não atender em feriado nacional\" (o padrão), o prompt NÃO traz bloco de feriado (porte do upstream #3894)", async () => {
+    // Ligado de fábrica, o bloco proibiria marcar na véspera de Carnaval ou de
+    // Corpus Christi (ponto facultativo) numa clínica que abre nesses dias.
     await rodaTurno(montaHandler(modeloQueGravaOPrompt(), INSTANTE));
 
-    expect(promptsVistos[0]).toContain(
-      "## Feriado nacional\nHoje (04/09/2026) e amanhã (05/09/2026) NÃO são feriados nacionais no Brasil.",
-    );
+    expect(promptsVistos[0]).toContain("## Agora");
+    expect(promptsVistos[0]).not.toContain("## Feriado nacional");
+    expect(promptsVistos[0]).not.toContain("feriados nacionais");
   });
 });

@@ -262,7 +262,7 @@ export function TriggerEditor({ value, onChange, disabled }: Props) {
               </div>
               <p className="text-xs text-muted-foreground">
                 {t(
-                  "Ligado, feriado nacional conta como dia fechado: quem escrever recebe a mensagem de fora do horário (se houver) e o agente responde no próximo dia útil. Desligado, o feriado é um dia comum.",
+                  "Ligado, feriado nacional (inclui Carnaval e Corpus Christi) conta como dia fechado: quem escrever recebe a mensagem de fora do horário (se houver), o agente responde no próximo dia útil e não marca nada nesses dias. Desligado, o feriado é um dia comum.",
                 )}
               </p>
             </div>

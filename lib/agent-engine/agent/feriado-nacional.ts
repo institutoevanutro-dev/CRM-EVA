@@ -14,8 +14,10 @@
  * O fork não tem `organizations.country`: a clínica é brasileira, e o
  * calendário brasileiro vale sempre.
  *
- * Isto INFORMA o modelo. Quem quer o feriado como dia FECHADO liga a opção do
- * agente "Não atender em feriado nacional" (`janela-de-atendimento.ts`).
+ * Tudo isto só vale com a opção do agente "Não atender em feriado nacional"
+ * LIGADA (desligada de fábrica): `isHolidayBR` conta Carnaval e Corpus Christi,
+ * que são ponto facultativo, e o bloco proíbe marcar na véspera. Desligada, o
+ * turno não recebe bloco nenhum (`inbound-turn.ts`).
  */
 import { isHolidayBR } from '@/lib/lgpd/holidays-br';
 import { FUSO_PADRAO, fusoValido } from '@/lib/tempo/fusos';
