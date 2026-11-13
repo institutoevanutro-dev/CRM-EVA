@@ -8,6 +8,68 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.12.0] — 2026-11-13
+
+### Adicionado
+
+- **A duração do atendimento pode ser escolhida na hora de marcar** No "Novo agendamento" da Agenda, depois do procedimento, aparece o campo **Duração (minutos)**, já preenchido com a duração do procedimento. Quem não mexer marca como sempre marcou. Mudando (por exemplo, 90 em vez de 45), a lista de horários passa a mostrar só os horários que têm esse tempo livre, o fim no resumo é recalculado e o compromisso nasce com essa duração. Os horários continuam nos mesmos pontos da grade; muda só quanto cada um precisa ter livre. Valores fora de 5 a 1440 minutos mostram o aviso e travam o Confirmar; trocar a duração limpa o horário escolhido. Remarcar mantém a duração que o compromisso já tinha. A IA continua marcando com a duração do procedimento. A API aceita `duration_minutes` no `POST /api/v1/agenda/agendamentos` e `duracao_minutos` em `GET /api/v1/agenda/horarios-livres`. Sem mudança no banco. Portado do projeto original (DeskcommCRM, PR #3714).
+
+- **Opção por agente para não atender em feriado nacional** Em Agentes › (agente) › Horário de funcionamento há a nova opção **Não atender em feriado nacional**, desligada de fábrica. Desligada, nada muda: o agente atende no horário de sempre e o prompt dele é exatamente o de antes.
+
+  Ligada, três coisas mudam juntas. Num feriado nacional o agente não responde: quem escrever recebe a mensagem de fora do horário (se ela estiver configurada) e a resposta da IA sai na abertura do próximo dia útil (no Carnaval, na quarta). O agente também passa a receber, a cada resposta, se hoje ou amanhã é feriado nacional, na data do fuso da clínica, e deixa de prometer atendimento nesses dias ou marcar compromisso neles sem confirmar com a equipe. O calendário é o mesmo do prazo da LGPD e conta segunda e terça de Carnaval e Corpus Christi como feriado; por isso a opção vem desligada, para não travar a marcação de quem abre nesses dias. Feriados estaduais e municipais não entram. Sem mudança no banco. Portado do projeto original (DeskcommCRM, PRs #3894 e #4469, este com o #4169 de @webtecnica).
+
+- **O fluxo de silêncio pode ter um limite de recomeço, em horas** O fluxo disparado por silêncio recomeça cada vez que o contato responde e volta a ficar calado: com respostas curtas e frequentes, a mesma pessoa podia receber a sequência várias vezes na mesma semana. No gatilho de silêncio do fluxo há agora o campo "Recomeçar no máximo a cada __ horas". Preenchido, um contato que recebeu alguma mensagem deste fluxo numa sequência iniciada dentro desse prazo não começa outra; uma sequência cancelada antes de mandar qualquer mensagem não conta. Vazio, o fluxo funciona exatamente como antes. Os fluxos existentes ficam sem limite até alguém preencher o campo.
+
+### Corrigido
+
+- **As mensagens que o agente escreve num mesmo passo saem na ordem em que ele escreveu** Quando o agente de IA respondia em mais de uma mensagem de uma vez, as mensagens podiam chegar ao paciente embaralhadas: a que abria a resposta às vezes chegava por último. Agora as mensagens de texto, de mídia e de modelo, e a passagem para a equipe, saem uma depois da outra, na ordem em que o agente as escreveu. Com várias mensagens, cada uma passa pelas conferências de envio depois da anterior, um intervalo da mesma ordem do que o envio já espera entre mensagens. O texto das mensagens não muda. Não há nada a fazer.
+
+  Portado do projeto original (DeskcommCRM, PR #4288 de @maclevison).
+
+- **A conversa encerrada volta a reabrir quando a mensagem do paciente chega atrasada** Quando a mensagem do paciente chegava depois de a conversa ter sido encerrada, mas
+  com o horário de envio anterior ao encerramento (entrega atrasada do canal, lote do
+  provedor, relógio do celular atrasado), a conversa continuava encerrada com a
+  mensagem dentro: não aparecia na Fila e a equipe perdia o paciente sem erro em lugar
+  nenhum. Agora a conversa reabre e volta para a Fila, seja qual for a ordem em que a
+  mensagem chegou. O horário original continua ordenando a conversa, e o novo
+  atendimento nunca começa antes do fim do anterior. Reenvio da mesma mensagem não
+  abre atendimento novo, e uma segunda mensagem atrasada não reabre duas vezes. Na
+  atualização não há nada a fazer (migration 0412). Portado do projeto original
+  (DeskcommCRM, PR #3231 de @webtecnica).
+
+- **A IA não diz mais que passou a conversa para um atendente quando o paciente só respondeu "Não"** Quando a IA prometia que "a equipe vai responder depois" sem deixar nada marcado, a
+  proteção automática abria um caso para a equipe e o paciente lia o aviso de que foi
+  passado para um atendente, mesmo tendo respondido só "Não" a uma pergunta de horário.
+  Agora essa proteção só abre o caso quando o paciente pediu para falar com alguém,
+  pediu ajuda, reclamou, relatou urgência ou sintoma (dor, sangramento, febre, alergia,
+  inchaço, falta de ar e afins), ou quando a IA de fato envolveu a equipe ("já encaminhei
+  para a recepção", "a equipe vai verificar"). Sem nenhum desses sinais, a promessa
+  continua barrada e a IA reformula a resposta. Pedido de ligação ou retorno, remarcar ou desmarcar,
+  "não gostei" e sintomas como passar mal, caroço, secreção, coceira e formigamento
+  também contam como sinal. Se a IA tentar responder, for barrada e a correção
+  automática terminar sem enviar nada, a Central recebe um aviso crítico para a equipe
+  responder. O texto do aviso ao paciente não mudou.
+  Na atualização não há nada a fazer. Portado do projeto original (DeskcommCRM, PR #3816
+  de @webtecnica).
+
+- **Depois de um retorno prometido, o follow-up de silêncio espera o próprio gatilho, com mínimo de 4 horas** Quando o agente promete um retorno ("te escrevo às 18h") e esse retorno sai, o follow-up de silêncio fica segurado para não mandar duas mensagens seguidas. Essa espera era fixa em 24 horas para qualquer fluxo: um fluxo de 1 hora ficava um dia inteiro parado, e um de 3 dias voltava a falar já no dia seguinte. Agora o retorno conta como a última conversa e o fluxo espera o próprio gatilho, nunca menos de 4 horas (fluxo de 40 min ou 1 h: 4 horas; fluxo de 3 dias: 3 dias). No histórico do fluxo, a linha "Segurou o fluxo por causa de um retorno agendado" passa a dizer "volta a andar em …, depois do retorno". Não há nada a fazer.
+
+  Portado do projeto original (DeskcommCRM, PR #3808 de @melgarafael, que substitui o PR #3692 de @EduFkn).
+
+- **A pausa da IA no atendimento manual tenta de novo uma vez quando a gravação não pega** Quando alguém da equipe responde pelo próprio WhatsApp, fora do CRM, a IA fica pausada naquela conversa. Se a gravação dessa pausa não pegasse (por uma disputa momentânea no banco), o CRM desistia na primeira tentativa e a IA podia responder por cima de quem atende. Agora ele confere se a conversa ainda existe e, se existir, tenta gravar a pausa mais uma vez. Se nem assim der certo, o registro de erro do servidor diz o motivo. Não há nada a fazer.
+
+  Portado do projeto original (DeskcommCRM, PR #4296 de @webtecnica).
+
+- **O aviso "promessa sem responsável" deixa de disparar por promessas que não eram promessas** No fim de cada resposta, o agente de IA registra o que prometeu à pessoa, e cada promessa sem ninguém responsável vira um aviso "promessa sem responsável" na Central. O agente registrava como promessa coisas que não eram: o retorno que ele estava fazendo naquela mesma mensagem ("te chamei como combinado"), a próxima pergunta normal da conversa e o que a própria pessoa disse que ia fazer ("se eu não conseguir pelo plano, eu retorno"). Agora a instrução diz que promessa é só o que o agente se comprometeu a fazer depois da mensagem e ainda não fez, como "vou verificar e te aviso" ou "te chamo amanhã às 10h", e o que a pessoa disse que fará fica registrado como intenção dela. Os avisos já abertos na Central continuam lá. Não há nada a fazer.
+
+- **Uma recusa de marketing registrada pela ficha do contato passa a bloquear os envios** Quando o consentimento de marketing de um contato era retirado pela ficha dele (`PATCH /api/v1/contacts/{id}`, no formato `{ "granted": false }`), essa recusa não era lida na hora de enviar: as automações (WhatsApp, mensagem escrita pela IA, e-mail) e as campanhas continuavam escrevendo para ele. Só a recusa recebida por um formulário era levada em conta. Agora a recusa é lida nos dois formatos e bloqueia esses envios. Lembretes de compromisso, que são transacionais, continuam saindo. Não há nada a fazer.
+
+  Portado do projeto original (DeskcommCRM, PR #4307 de @FabioMundoDigital).
+
+- **O rodízio não entrega ao atendente conversa cujo caso já não pede uma pessoa** Uma conversa com caso aberto pela IA continuava na fila do rodízio mesmo quando o caso já não pedia ninguém: a bola estava com o paciente (caso "aguardando o cliente") ou o caso já tinha sido concluído ou cancelado sem que a conversa fosse fechada. Horas depois, o rodízio entregava essa conversa a um atendente que não tinha nada a fazer nela. Agora o rodízio confere o caso mais recente da conversa antes de distribuir: casos que pedem a equipe ("aguardando atendimento" ou "escalado") continuam sendo distribuídos como antes, e se o paciente escrever de novo depois do pedido ou da conclusão do caso, a conversa volta à fila normalmente. Conversas sem caso não mudam. Não há nada a fazer.
+
+  Portado do projeto original (DeskcommCRM, PR #3739 de @webtecnica).
+
 ## [5.11.1] — 2026-11-13
 
 ### Corrigido
@@ -9023,7 +9085,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.11.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.12.0...HEAD
+[5.12.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.11.1...v5.12.0
 [5.11.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.11.0...v5.11.1
 [5.11.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.10.1...v5.11.0
 [5.10.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.10.0...v5.10.1
