@@ -3,45 +3,81 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
-import { toast } from "sonner";
-import { traduzir } from "@/lib/i18n/dicionario";
-import { idiomaAtual } from "@/lib/i18n/IdiomaProvider";
 
-/**
- * A pré-checagem do handler põe `{ vinculos, por_tabela }` em `error.details`
- * (DeskcommCRM #1925). Com um compromisso na Agenda barrando, a frase diz O QUE barrou
- * e O QUE fazer; qualquer outro caso devolve null e cai no texto genérico.
- * A frase sai de chave fixa do dicionário (a de `vinculos` vem do servidor em
- * pt-BR e não se traduz).
- */
-export function mensagemDeBloqueioPorVinculo(
-  details: Record<string, unknown> | undefined,
-  t: (texto: string) => string,
-): string | null {
-  const porTabela = details?.por_tabela as Record<string, unknown> | undefined;
-  const n = porTabela?.calendar_appointments;
-  if (typeof n !== "number" || n < 1) return null;
-  return n === 1
-    ? t("Este contato tem 1 compromisso na Agenda. Cancele ou apague o compromisso antes de excluir.")
-    : t("Este contato tem {n} compromissos na Agenda. Cancele ou apague os compromissos antes de excluir.").replace(
-        "{n}",
-        String(n),
-      );
+/** O que o diálogo "Excluir contato?" mostra quando a Agenda segura a ficha. */
+export interface BloqueioDaExclusao {
+  mensagem: string;
+  /** A Agenda, já no compromisso quando há um só visível. */
+  agendaHref: string;
+  /** Há compromisso visível: o caminho para ficha duplicada é juntar. */
+  sugerirJuntar: boolean;
 }
 
-function toastDeBloqueioPorVinculo(err: ApiError): boolean {
-  const t = (s: string) => traduzir(s, idiomaAtual());
-  const mensagem = mensagemDeBloqueioPorVinculo(err.details, t);
-  if (!mensagem) return false;
-  toast.error(mensagem, {
-    action: {
-      label: t("Abrir Agenda"),
-      onClick: () => {
-        window.location.href = "/app/agenda";
-      },
-    },
-  });
-  return true;
+/** Singular e plural por situação; a chave é o valor do banco (`status`). */
+function rotulosDaSituacao(t: (texto: string) => string): Record<string, [string, string]> {
+  return {
+    pending: [t("aguardando confirmação"), t("aguardando confirmação")],
+    confirmed: [t("confirmado"), t("confirmados")],
+    cancelled: [t("cancelado"), t("cancelados")],
+    completed: [t("realizado"), t("realizados")],
+    no_show: [t("falta"), t("faltas")],
+  };
+}
+
+/**
+ * A pré-checagem do handler põe `agenda` em `error.details` (migration 0413):
+ * quantos compromissos visíveis, em que situação, quantos excluídos ainda
+ * pendentes no Google, e qual abrir. Qualquer outro 409 devolve null e cai no
+ * texto genérico. As frases saem de chaves fixas do dicionário.
+ */
+export function bloqueioDaExclusao(
+  details: Record<string, unknown> | undefined,
+  t: (texto: string) => string,
+): BloqueioDaExclusao | null {
+  const agenda = details?.agenda as
+    | { por_situacao?: Record<string, number>; pendentes_no_google?: number; compromisso_id?: string | null }
+    | undefined;
+  if (!agenda) return null;
+  const porSituacao = Object.entries(agenda.por_situacao ?? {}).filter(([, n]) => n > 0);
+  const visiveis = porSituacao.reduce((s, [, n]) => s + n, 0);
+  const pendentes = agenda.pendentes_no_google ?? 0;
+  if (visiveis < 1 && pendentes < 1) return null;
+
+  const frases: string[] = [];
+  if (visiveis > 0) {
+    const rotulos = rotulosDaSituacao(t);
+    const lista = porSituacao
+      .map(([status, n]) => `${n} ${rotulos[status]?.[n === 1 ? 0 : 1] ?? status}`)
+      .join(", ");
+    frases.push(
+      (visiveis === 1
+        ? t("Este contato tem 1 compromisso na Agenda ({lista}).")
+        : t("Este contato tem {n} compromissos na Agenda ({lista}).")
+      )
+        .replace("{n}", String(visiveis))
+        .replace("{lista}", lista),
+      t(
+        "Compromisso é histórico do contato e impede a exclusão. Se esta ficha é duplicada, abra a ficha e use \"Juntar com outra ficha\": os compromissos passam para a ficha que fica. Se o compromisso foi lançado por engano, exclua-o na Agenda e tente de novo.",
+      ),
+    );
+  }
+  if (pendentes > 0) {
+    frases.push(
+      pendentes === 1
+        ? t("1 compromisso já excluído ainda não saiu do Google Agenda. Tente de novo em alguns minutos.")
+        : t("{n} compromissos já excluídos ainda não saíram do Google Agenda. Tente de novo em alguns minutos.").replace(
+            "{n}",
+            String(pendentes),
+          ),
+    );
+  }
+  return {
+    mensagem: frases.join(" "),
+    agendaHref: agenda.compromisso_id
+      ? `/app/agenda?compromisso=${encodeURIComponent(agenda.compromisso_id)}`
+      : "/app/agenda",
+    sugerirJuntar: visiveis > 0,
+  };
 }
 
 export function useDeleteContact() {
@@ -50,7 +86,9 @@ export function useDeleteContact() {
     mutationFn: async (contactId: string) =>
       apiClient.delete<unknown>(`/api/v1/contacts/${contactId}`),
     onError: (err) => {
-      if (err instanceof ApiError && toastDeBloqueioPorVinculo(err)) return;
+      // O bloqueio pela Agenda é mostrado DENTRO do diálogo de exclusão, que
+      // está aberto e é modal: um toast fora dele não recebe clique.
+      if (err instanceof ApiError && bloqueioDaExclusao(err.details, (s) => s)) return;
       showApiError(err);
     },
     onSuccess: () => {

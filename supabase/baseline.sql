@@ -33829,6 +33829,8 @@ $$;
 -- `p_organization_id` fecha a linha por dentro — sem service role.
 -- O conserto da outra metade (a guarda do gatilho, `pg_trigger_depth() > 1`)
 -- está no bloco da 0224, EDITADO NO LUGAR, porque é a MESMA função.
+-- O corpo abaixo já é o FINAL, da migration 0413 (compromisso excluído sai junto):
+-- editado no lugar para a reaplicação nunca passar pela versão antiga.
 create or replace function public.fn_apagar_contato_com_historico(
   p_contact_id uuid,
   p_organization_id uuid
@@ -33840,6 +33842,17 @@ security invoker
 set search_path to 'public', 'pg_temp'
 as $$
 begin
+  -- 0413: o compromisso que a Agenda já excluiu e que o Google não espera mais
+  -- sai junto. O resto (visível, ou excluído com Google pendente) segura a
+  -- ficha pelo RESTRICT abaixo e a transação inteira desfaz.
+  delete from public.calendar_appointments
+   where contact_id = p_contact_id
+     and organization_id = p_organization_id
+     and excluded_at is not null
+     and google_pending_write is null
+     and (google_event_id is null
+          or (google_local_revision = google_synced_local_revision and google_conflict is null));
+
   -- RESTRICT da #752: o histórico sai antes da ficha, na mesma transação.
   delete from public.messages
    where contact_id = p_contact_id
@@ -39302,3 +39315,16 @@ end $$;
 -- Quem mede a regra: `tests/invariants/agenda-presenca-pos-consulta.test.ts`.
 -- ---- fim: presença não abre inscrição duplicada no mesmo pós-consulta (migration 0410) ----
 
+-- ---- excluir contato leva o compromisso que a Agenda já excluiu (migration 0413) ----
+-- Derivado de supabase/migrations/20261113120000_0413_excluir_contato_leva_compromisso_excluido.sql
+-- (incidente, regra e FKs medidas: cabeçalho de lá).
+--
+-- NÃO HÁ CORPO DE FUNÇÃO AQUI, de propósito: a troca de
+-- `fn_apagar_contato_com_historico` foi feita no lugar, no bloco da 0340 acima.
+-- Mesma assinatura e mesmo retorno, então a reaplicação não passa por versão
+-- antiga (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`) e a
+-- última definição é igual à da migration 0413
+-- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
+-- Nenhuma função nova, tabela, coluna ou constraint; grants inalterados.
+-- Quem mede a regra: `tests/invariants/excluir-contato-com-compromisso-excluido.test.ts`.
+-- ---- fim: excluir contato leva o compromisso que a Agenda já excluiu (migration 0413) ----
