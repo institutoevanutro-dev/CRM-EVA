@@ -484,7 +484,9 @@ describe("o turno de resposta que terminou sem mensagem ao cliente", () => {
     expect(rows).toEqual([{ title: "A IA não respondeu um cliente: as regras de segurança barraram a resposta" }]);
   });
 
-  it("controle: veto e depois silêncio escolhido na correção não abre aviso", async () => {
+  it("veto e depois silêncio na correção: aviso na Central (correcao_calada_apos_veto)", async () => {
+    // Mudou de lado no pacote de 12/11: a resposta foi barrada e a correção terminou
+    // sem tentar nada — o cliente ficaria sem resposta e a equipe sem saber.
     const conversa = crypto.randomUUID();
     const { fake, prompts } = modelo([
       enviar("Seu agendamento está confirmado para amanhã às 9h"),
@@ -495,12 +497,12 @@ describe("o turno de resposta que terminou sem mensagem ao cliente", () => {
 
     expect(enviados).toEqual([]);
     expect(prompts[2]).toContain(MARCA_DA_CORRECAO);
-    const { rows } = await pool.query(
-      `select 1 from agent_inbox_items where organization_id = $1 and ref_kind = 'conversation' and ref_id = $2
+    const { rows } = await pool.query<{ title: string }>(
+      `select title from agent_inbox_items where organization_id = $1 and ref_kind = 'conversation' and ref_id = $2
           and kind <> 'capabilities_missing'`,
       [ORG, conversa],
     );
-    expect(rows).toEqual([]);
+    expect(rows).toEqual([{ title: "A IA não respondeu um cliente: as regras de segurança barraram a resposta" }]);
   });
 
   it("⭐ veto irrevogável (opt-out) + texto solto: NÃO pede correção nem chamada extra de modelo", async () => {
