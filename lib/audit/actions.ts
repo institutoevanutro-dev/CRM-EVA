@@ -740,6 +740,10 @@ export const AUDIT_ACTIONS = [
   "prontuario.contact_linked",
   "prontuario.contact_created",
   "prontuario.contact_updated",
+  // Vínculo ficha do Prontuário × contato desfeito (DELETE
+  // /api/v1/contacts/[id]/prontuario-link). `metadata.vinculo_removido` guarda
+  // a cópia da linha apagada de `prontuario_contact_links`.
+  "prontuario.contact_unlinked",
   // LEITURA de dado de paciente (achado A8, auditoria 2026-09-29). Para dado de
   // saúde a LGPD (arts. 37 e 46) espera saber quem consultou, não só quem
   // alterou. Emitidas por `lib/audit/leitura.ts`, com `metadata.acesso =
