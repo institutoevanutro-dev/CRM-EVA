@@ -13,6 +13,11 @@ import { GOV_MANAGER, GOV_ORG, GOV_SESSION, lastLine, seedGov, sql } from "./gov
  * (visível, ou excluído com Google pendente) segura a ficha e a transação
  * inteira desfaz.
  *
+ * Migration 0414 — o excluído pendente cuja conexão Google não existe mais
+ * (nula pelo SET NULL, ou `disconnected`) também sai: nenhum worker o retiraria,
+ * e segurar a ficha era beco sem saída. Conexão que ainda pode voltar
+ * (`token_expired` e afins) continua segurando.
+ *
  * Tudo roda COM A SESSÃO de um `manager` (o piso da rota), que é o caminho real:
  * superusuário não passa pela RLS nem pelos gatilhos que olham `auth.uid()`.
  */
@@ -36,6 +41,17 @@ const AG_EXCLUIDO_COM_VISIVEL = `${N}034`;
 const AG_GOOGLE_QUITADO = `${N}035`;
 const AG_OUTRA_ORG = `${N}036`;
 const AG_REMARCADO = `${N}037`;
+
+// 0414: compromisso excluído e pendente no Google, conforme a conexão dele.
+const C_SEM_CONEXAO = `${N}016`;
+const C_DESCONECTADA = `${N}017`;
+const C_TOKEN_VENCIDO = `${N}018`;
+const AG_SEM_CONEXAO = `${N}041`;
+const AG_DESCONECTADA = `${N}042`;
+const AG_TOKEN_VENCIDO = `${N}043`;
+const K_SAUDAVEL = `${N}051`;
+const K_DESCONECTADA = `${N}052`;
+const K_TOKEN_VENCIDO = `${N}053`;
 
 const FUNCAO = "fn_apagar_contato_com_historico";
 
@@ -88,7 +104,15 @@ function semear(): void {
       ('${C_GOOGLE_PENDENTE}', '${GOV_ORG}', 'Contato 0413 B'),
       ('${C_VISIVEL_E_EXCLUIDO}', '${GOV_ORG}', 'Contato 0413 C'),
       ('${C_GOOGLE_QUITADO}', '${GOV_ORG}', 'Contato 0413 D'),
-      ('${C_OUTRA_ORG}', '${OUTRA_ORG}', 'Contato 0413 E')
+      ('${C_OUTRA_ORG}', '${OUTRA_ORG}', 'Contato 0413 E'),
+      ('${C_SEM_CONEXAO}', '${GOV_ORG}', 'Contato 0414 F'),
+      ('${C_DESCONECTADA}', '${GOV_ORG}', 'Contato 0414 G'),
+      ('${C_TOKEN_VENCIDO}', '${GOV_ORG}', 'Contato 0414 H')
+      on conflict (id) do nothing;
+    insert into public.calendar_connections (id, organization_id, user_id, account_email, status) values
+      ('${K_SAUDAVEL}', '${GOV_ORG}', '${GOV_MANAGER}', 'saudavel-0414@exemplo.test', 'healthy'),
+      ('${K_DESCONECTADA}', '${GOV_ORG}', '${GOV_MANAGER}', 'desligada-0414@exemplo.test', 'disconnected'),
+      ('${K_TOKEN_VENCIDO}', '${GOV_ORG}', '${GOV_MANAGER}', 'vencida-0414@exemplo.test', 'token_expired')
       on conflict (id) do nothing;
 
     -- (a) o caso do incidente: ficha com histórico e UM compromisso excluído,
@@ -105,8 +129,21 @@ function semear(): void {
     update public.calendar_appointments set rescheduled_from_id = '${AG_SO_EXCLUIDO}' where id = '${AG_REMARCADO}';
 
     -- (b) excluído que chegou ao Google e cuja retirada ainda não foi confirmada.
+    -- (A conexão existe e está no ar: o worker vai retirá-lo.)
     ${compromisso(AG_GOOGLE_PENDENTE, GOV_ORG, C_GOOGLE_PENDENTE, true)}
     ${excluir(AG_GOOGLE_PENDENTE)}
+    update public.calendar_appointments set google_connection_id = '${K_SAUDAVEL}' where id = '${AG_GOOGLE_PENDENTE}';
+
+    -- (f)(g)(h) 0414: excluído pendente no Google sem conexão, com a conexão
+    -- desligada e com a conexão de token vencido.
+    ${compromisso(AG_SEM_CONEXAO, GOV_ORG, C_SEM_CONEXAO, true)}
+    ${excluir(AG_SEM_CONEXAO)}
+    ${compromisso(AG_DESCONECTADA, GOV_ORG, C_DESCONECTADA, true)}
+    ${excluir(AG_DESCONECTADA)}
+    update public.calendar_appointments set google_connection_id = '${K_DESCONECTADA}' where id = '${AG_DESCONECTADA}';
+    ${compromisso(AG_TOKEN_VENCIDO, GOV_ORG, C_TOKEN_VENCIDO, true)}
+    ${excluir(AG_TOKEN_VENCIDO)}
+    update public.calendar_appointments set google_connection_id = '${K_TOKEN_VENCIDO}' where id = '${AG_TOKEN_VENCIDO}';
 
     -- (c) um visível ao lado de um excluído limpo.
     ${compromisso(AG_VISIVEL, GOV_ORG, C_VISIVEL_E_EXCLUIDO)}
@@ -175,5 +212,29 @@ describe("excluir contato com compromisso já excluído na Agenda (0413)", () =>
     expect(lastLine(comoUsuario(GOV_MANAGER, `select public.${FUNCAO}('${C_OUTRA_ORG}', '${OUTRA_ORG}');`))).toBe("f");
     expect(contar(`select count(*) from public.contacts where id = '${C_OUTRA_ORG}'`)).toBe(1);
     expect(contar(`select count(*) from public.calendar_appointments where id = '${AG_OUTRA_ORG}'`)).toBe(1);
+  });
+
+  it("(f) 0414: excluído pendente cuja conexão foi apagada (nula) sai junto", () => {
+    // Pendente de verdade: revisão local à frente da sincronizada, com evento.
+    expect(
+      lastLine(sql(`select google_local_revision > google_synced_local_revision from public.calendar_appointments where id = '${AG_SEM_CONEXAO}'`)),
+    ).toBe("t");
+    expect(lastLine(comoUsuario(GOV_MANAGER, `select public.${FUNCAO}('${C_SEM_CONEXAO}', '${GOV_ORG}');`))).toBe("t");
+    expect(contar(`select count(*) from public.calendar_appointments where id = '${AG_SEM_CONEXAO}'`)).toBe(0);
+    expect(contar(`select count(*) from public.contacts where id = '${C_SEM_CONEXAO}'`)).toBe(0);
+  });
+
+  it("(g) 0414: excluído pendente com a conexão desconectada sai junto", () => {
+    expect(lastLine(comoUsuario(GOV_MANAGER, `select public.${FUNCAO}('${C_DESCONECTADA}', '${GOV_ORG}');`))).toBe("t");
+    expect(contar(`select count(*) from public.calendar_appointments where id = '${AG_DESCONECTADA}'`)).toBe(0);
+    expect(contar(`select count(*) from public.contacts where id = '${C_DESCONECTADA}'`)).toBe(0);
+  });
+
+  it("(h) 0414: conexão com token vencido ainda pode voltar — segura e não leva nada", () => {
+    expect(stderrDe(GOV_MANAGER, `select public.${FUNCAO}('${C_TOKEN_VENCIDO}', '${GOV_ORG}');`)).toContain(
+      "calendar_appointments",
+    );
+    expect(contar(`select count(*) from public.contacts where id = '${C_TOKEN_VENCIDO}'`)).toBe(1);
+    expect(contar(`select count(*) from public.calendar_appointments where id = '${AG_TOKEN_VENCIDO}'`)).toBe(1);
   });
 });

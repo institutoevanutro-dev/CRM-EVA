@@ -27,7 +27,7 @@ function rotulosDaSituacao(t: (texto: string) => string): Record<string, [string
 /**
  * A pré-checagem do handler põe `agenda` em `error.details` (migration 0413):
  * quantos compromissos visíveis, em que situação, quantos excluídos ainda
- * pendentes no Google, e qual abrir. Qualquer outro 409 devolve null e cai no
+ * pendentes no Google (em trânsito ou travados, 0414), e qual abrir. Qualquer outro 409 devolve null e cai no
  * texto genérico. As frases saem de chaves fixas do dicionário.
  */
 export function bloqueioDaExclusao(
@@ -35,13 +35,19 @@ export function bloqueioDaExclusao(
   t: (texto: string) => string,
 ): BloqueioDaExclusao | null {
   const agenda = details?.agenda as
-    | { por_situacao?: Record<string, number>; pendentes_no_google?: number; compromisso_id?: string | null }
+    | {
+        por_situacao?: Record<string, number>;
+        pendentes_no_google?: number;
+        travados_no_google?: number;
+        compromisso_id?: string | null;
+      }
     | undefined;
   if (!agenda) return null;
   const porSituacao = Object.entries(agenda.por_situacao ?? {}).filter(([, n]) => n > 0);
   const visiveis = porSituacao.reduce((s, [, n]) => s + n, 0);
   const pendentes = agenda.pendentes_no_google ?? 0;
-  if (visiveis < 1 && pendentes < 1) return null;
+  const travados = agenda.travados_no_google ?? 0;
+  if (visiveis < 1 && pendentes < 1 && travados < 1) return null;
 
   const frases: string[] = [];
   if (visiveis > 0) {
@@ -69,6 +75,19 @@ export function bloqueioDaExclusao(
             "{n}",
             String(pendentes),
           ),
+    );
+  }
+  // Travado (0414): conflito, conexão que pede atenção ou erro gravado pelo
+  // worker. Esperar não resolve; o painel do compromisso mostra o motivo.
+  if (travados > 0) {
+    frases.push(
+      travados === 1
+        ? t(
+            "1 compromisso já excluído não conseguiu sair do Google Agenda e não vai sair sozinho: há um conflito com o Google ou a conexão do Google de quem o lançou precisa de atenção. Em \"Abrir Agenda\" o compromisso mostra o motivo: quem o lançou resolve o conflito ali ou reconecta o Google na Agenda. Depois, tente excluir de novo.",
+          )
+        : t(
+            "{n} compromissos já excluídos não conseguiram sair do Google Agenda e não vão sair sozinhos: há um conflito com o Google ou a conexão do Google de quem os lançou precisa de atenção. Em \"Abrir Agenda\" o primeiro deles mostra o motivo: quem o lançou resolve o conflito ali ou reconecta o Google na Agenda. Depois, tente excluir de novo.",
+          ).replace("{n}", String(travados)),
     );
   }
   return {

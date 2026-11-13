@@ -24864,9 +24864,12 @@ create or replace trigger trg_agendamento_recalcula_cliente
   execute function public.fn_marcar_contato_como_cliente();
 
 -- Apagar o único horário que conta é o mesmo que cancelá-lo, para o contato.
--- `contact_id` é `on delete restrict`, então este trigger nunca vê a cascata de
--- um contato apagado; a de uma organização apagada chega aqui com a linha da
--- organização já invisível, e o interruptor lê desligado.
+-- `contact_id` é `on delete restrict`, então a cascata de um contato apagado
+-- não chega aqui. Desde a 0413, porém, `fn_apagar_contato_com_historico` apaga
+-- os compromissos JÁ EXCLUÍDOS do contato antes da ficha, e este trigger os vê:
+-- é inofensivo, porque excluído é sempre `cancelled` e não conta como horário.
+-- A cascata de uma organização apagada chega aqui com a linha da organização
+-- já invisível, e o interruptor lê desligado.
 create or replace trigger trg_agendamento_apagado_recalcula_cliente
   after delete on public.calendar_appointments
   for each row
@@ -33829,7 +33832,7 @@ $$;
 -- `p_organization_id` fecha a linha por dentro — sem service role.
 -- O conserto da outra metade (a guarda do gatilho, `pg_trigger_depth() > 1`)
 -- está no bloco da 0224, EDITADO NO LUGAR, porque é a MESMA função.
--- O corpo abaixo já é o FINAL, da migration 0413 (compromisso excluído sai junto):
+-- O corpo abaixo já é o FINAL, da migration 0414 (excluído sem conexão Google também sai):
 -- editado no lugar para a reaplicação nunca passar pela versão antiga.
 create or replace function public.fn_apagar_contato_com_historico(
   p_contact_id uuid,
@@ -33843,15 +33846,22 @@ set search_path to 'public', 'pg_temp'
 as $$
 begin
   -- 0413: o compromisso que a Agenda já excluiu e que o Google não espera mais
-  -- sai junto. O resto (visível, ou excluído com Google pendente) segura a
+  -- sai junto. 0414: e o excluído cuja conexão Google já não existe (nula pelo
+  -- SET NULL, ou `disconnected`) — não há mais quem retire o evento. O resto
+  -- (visível, ou excluído com Google pendente numa conexão viva) segura a
   -- ficha pelo RESTRICT abaixo e a transação inteira desfaz.
-  delete from public.calendar_appointments
-   where contact_id = p_contact_id
-     and organization_id = p_organization_id
-     and excluded_at is not null
-     and google_pending_write is null
-     and (google_event_id is null
-          or (google_local_revision = google_synced_local_revision and google_conflict is null));
+  delete from public.calendar_appointments a
+   where a.contact_id = p_contact_id
+     and a.organization_id = p_organization_id
+     and a.excluded_at is not null
+     and ((a.google_pending_write is null
+           and (a.google_event_id is null
+                or (a.google_local_revision = a.google_synced_local_revision and a.google_conflict is null)))
+          or a.google_connection_id is null
+          or exists (select 1 from public.calendar_connections k
+                      where k.id = a.google_connection_id
+                        and k.organization_id = a.organization_id
+                        and k.status = 'disconnected'));
 
   -- RESTRICT da #752: o histórico sai antes da ficha, na mesma transação.
   delete from public.messages
@@ -39328,3 +39338,17 @@ end $$;
 -- Nenhuma função nova, tabela, coluna ou constraint; grants inalterados.
 -- Quem mede a regra: `tests/invariants/excluir-contato-com-compromisso-excluido.test.ts`.
 -- ---- fim: excluir contato leva o compromisso que a Agenda já excluiu (migration 0413) ----
+
+-- ---- excluir contato: compromisso sem conexão Google não segura a ficha (migration 0414) ----
+-- Derivado de supabase/migrations/20261113180000_0414_excluir_contato_sem_conexao_google.sql
+-- (raciocínio e risco do evento órfão: cabeçalho de lá).
+--
+-- NÃO HÁ CORPO DE FUNÇÃO AQUI, de propósito: a troca de
+-- `fn_apagar_contato_com_historico` foi feita no lugar, no bloco da 0340 acima,
+-- como a da 0413. Mesma assinatura e mesmo retorno, então a reaplicação não
+-- passa por versão antiga (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`)
+-- e a última definição é igual à da migration 0414
+-- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
+-- Nenhuma função nova, tabela, coluna ou constraint; grants inalterados.
+-- Quem mede a regra: `tests/invariants/excluir-contato-com-compromisso-excluido.test.ts`.
+-- ---- fim: excluir contato: compromisso sem conexão Google não segura a ficha (migration 0414) ----
