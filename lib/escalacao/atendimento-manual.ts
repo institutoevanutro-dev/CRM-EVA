@@ -175,35 +175,62 @@ export async function pausarIaPorAtendimentoManual(
     // escrita). Sem ler de volta, a função dizia "pausei" com o banco intacto, e a
     // IA voltava a falar por cima de quem atende. `select("id")` torna a pausa
     // OBSERVÁVEL: sem linha afetada, não houve pausa.
-    const { data: afetadas, error: updErr } = await admin
-      .from("conversations")
-      .update({
-        bot_silenced_until: proposto.toISOString(),
-        last_handoff_at: agora.toISOString(),
-        last_handoff_reason: MOTIVO,
-      })
-      .eq("organization_id", input.organizationId)
-      .eq("id", input.conversationId)
-      .select("id");
+    const escrever = () =>
+      admin
+        .from("conversations")
+        .update({
+          bot_silenced_until: proposto.toISOString(),
+          last_handoff_at: agora.toISOString(),
+          last_handoff_reason: MOTIVO,
+        })
+        .eq("organization_id", input.organizationId)
+        .eq("id", input.conversationId)
+        .select("id");
+    const log = { organization_id: input.organizationId, conversation_id: input.conversationId };
 
-    if (updErr) {
+    const primeira = await escrever();
+    if (primeira.error) {
       logger.warn("[atendimento-manual] pausa da IA não gravada", {
-        organization_id: input.organizationId,
-        conversation_id: input.conversationId,
-        detail: updErr.message.slice(0, 160),
+        ...log,
+        detail: primeira.error.message.slice(0, 160),
       });
       return false;
     }
 
-    // Zero linhas é o mesmo que erro: o `error` fica `null` e só a contagem
-    // denuncia. Segue o contrato: devolve `false`, nunca lança.
-    if ((afetadas?.length ?? 0) === 0) {
-      logger.warn("[atendimento-manual] pausa da IA não gravada — nenhuma linha afetada", {
-        organization_id: input.organizationId,
-        conversation_id: input.conversationId,
+    // Zero linhas tem DOIS motivos, que pedem tratamentos opostos (PR #4296 do
+    // original): CORRIDA (a linha existe, a escrita não pegou — repetir UMA vez
+    // resolve) e CONVERSA INEXISTENTE (repetir nunca resolve). RELER separa os
+    // dois. Nunca um laço: no máximo duas escritas.
+    if ((primeira.data?.length ?? 0) === 0) {
+      logger.warn("[atendimento-manual] pausa da IA não gravada — nenhuma linha afetada; relendo", {
+        ...log,
         rows: 0,
       });
-      return false;
+      const { data: relida, error: relErr } = await admin
+        .from("conversations")
+        .select("id")
+        .eq("organization_id", input.organizationId)
+        .eq("id", input.conversationId)
+        .maybeSingle();
+      if (relErr || relida == null) {
+        const motivo = relErr ? "leitura_falhou" : "conversa_inexistente";
+        logger.error("[atendimento-manual] PAUSA NÃO GARANTIDA — IA pode responder por cima do atendente", {
+          ...log,
+          canal: input.canal ?? "desconhecido",
+          motivo,
+        });
+        return false;
+      }
+      const segunda = await escrever();
+      if (segunda.error || (segunda.data?.length ?? 0) === 0) {
+        logger.error("[atendimento-manual] PAUSA NÃO GARANTIDA — IA pode responder por cima do atendente", {
+          ...log,
+          canal: input.canal ?? "desconhecido",
+          motivo: segunda.error ? "escrita_falhou" : "corrida_persistente",
+          tentativas: 2,
+        });
+        return false;
+      }
     }
 
     logger.info("[atendimento-manual] IA pausada — pessoa respondeu pelo canal", {

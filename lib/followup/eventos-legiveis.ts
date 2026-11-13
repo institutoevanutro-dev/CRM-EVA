@@ -432,7 +432,7 @@ export function descreveEvento(
       return {
         titulo: "Segurou o fluxo por causa de um retorno agendado",
         detalhe: ate
-          ? traduzir("volta a andar em {ate}, um dia depois do retorno", idioma as Idioma).replace("{ate}", ate)
+          ? traduzir("volta a andar em {ate}, depois do retorno", idioma as Idioma).replace("{ate}", ate)
           : null,
         ...motor,
       };

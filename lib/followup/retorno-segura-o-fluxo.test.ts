@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from "vitest";
 import { createSupabaseAdminClient, runFollowupTick, type AdminClient, type FollowupJobRequest } from "./engine";
 import type { FlowGraph } from "./graph-schema";
 import type { EnrollmentRow } from "./node-handlers";
-import { FOLGA_DEPOIS_DO_RETORNO_MS, reavaliarDepoisDoRetorno } from "./retorno-segura-o-fluxo";
+import {
+  folgaDepoisDoRetorno,
+  PISO_DA_FOLGA_DEPOIS_DO_RETORNO_MS,
+  reavaliarDepoisDoRetorno,
+} from "./retorno-segura-o-fluxo";
 import { createSupabaseSilenceSweepDb, runSilenceSweep, type SilenceSweepDb } from "./silence-sweep";
 
 /**
@@ -67,13 +71,22 @@ describe("régua do retorno que segura", () => {
         { contact_id: null, next_run_at: ha(HORA) },
       ],
     ]);
-    const segura = await createSupabaseSilenceSweepDb(admin).loadContatosComRetornoVivo("org-1");
+    const segura = await createSupabaseSilenceSweepDb(admin).loadContatosComRetornoVivo("org-1", folgaDepoisDoRetorno(40));
     expect([...segura].sort()).toEqual(["c-recente", "c-vivo"]);
   });
 
-  it("a consulta do retorno saído: one-shot disparado com sucesso, fora os passos de fluxo, janela de um dia", async () => {
+  it("PR #3808: fluxo de 1 h solta quem recebeu o retorno há 5 h; fluxo de 3 dias ainda segura quem recebeu há 30 h", async () => {
+    const uma = fakeAdmin([[], [{ contact_id: "c-5h", next_run_at: ha(5 * HORA) }]]);
+    expect([...(await createSupabaseSilenceSweepDb(uma.admin).loadContatosComRetornoVivo("org-1", folgaDepoisDoRetorno(60)))]).toEqual([]);
+    const tres = fakeAdmin([[], [{ contact_id: "c-30h", next_run_at: ha(30 * HORA) }]]);
+    expect([
+      ...(await createSupabaseSilenceSweepDb(tres.admin).loadContatosComRetornoVivo("org-1", folgaDepoisDoRetorno(3 * 24 * 60))),
+    ]).toEqual(["c-30h"]);
+  });
+
+  it("a consulta do retorno saído: one-shot disparado com sucesso, fora os passos de fluxo, janela da folga do fluxo", async () => {
     const { admin, consultas } = fakeAdmin([[], []]);
-    await createSupabaseSilenceSweepDb(admin).loadContatosComRetornoVivo("org-1");
+    await createSupabaseSilenceSweepDb(admin).loadContatosComRetornoVivo("org-1", folgaDepoisDoRetorno(40));
     expect(consultas).toHaveLength(2);
     const [vivo, saido] = consultas as [Chamada[], Chamada[]];
     for (const c of [vivo, saido]) {
@@ -89,13 +102,16 @@ describe("régua do retorno que segura", () => {
     expect(saido).toContainEqual({ metodo: "is", args: ["last_error", null] });
     const gt = saido.find((c) => c.metodo === "gt" && c.args[0] === "next_run_at");
     const lte = saido.find((c) => c.metodo === "lte" && c.args[0] === "next_run_at");
-    expect(Math.abs(Date.parse(String(gt?.args[1])) - (Date.now() - FOLGA_DEPOIS_DO_RETORNO_MS))).toBeLessThan(30_000);
+    expect(Math.abs(Date.parse(String(gt?.args[1])) - (Date.now() - PISO_DA_FOLGA_DEPOIS_DO_RETORNO_MS))).toBeLessThan(30_000);
     expect(Math.abs(Date.parse(String(lte?.args[1])) - Date.now())).toBeLessThan(30_000);
   });
 
-  it("a regra devolve um dia depois do retorno", () => {
+  it("PR #3808: a folga é o maior entre o gatilho do fluxo e 4 h (antes, 24 h fixas)", () => {
     const r = "2026-09-30T12:00:00.000Z";
-    expect(Date.parse(reavaliarDepoisDoRetorno(r)) - Date.parse(r)).toBe(24 * HORA);
+    expect(Date.parse(reavaliarDepoisDoRetorno(r, 40)) - Date.parse(r)).toBe(4 * HORA);
+    expect(Date.parse(reavaliarDepoisDoRetorno(r, 60)) - Date.parse(r)).toBe(4 * HORA);
+    expect(Date.parse(reavaliarDepoisDoRetorno(r, 6 * 60)) - Date.parse(r)).toBe(6 * HORA);
+    expect(Date.parse(reavaliarDepoisDoRetorno(r, 3 * 24 * 60)) - Date.parse(r)).toBe(72 * HORA);
   });
 });
 
@@ -128,13 +144,24 @@ describe("varredura de silêncio", () => {
 
   it("⭐ #2907: retorno que saiu há 2 h segura, pela régua real; o outro silencioso entra", async () => {
     const { admin } = fakeAdmin([[], [{ contact_id: "contato-com-retorno", next_run_at: ha(2 * HORA) }]]);
-    const comRetorno = await createSupabaseSilenceSweepDb(admin).loadContatosComRetornoVivo("org");
+    const comRetorno = await createSupabaseSilenceSweepDb(admin).loadContatosComRetornoVivo("org", folgaDepoisDoRetorno(40));
     const { db, insert } = sweepDb(comRetorno);
     const resumo = await runSilenceSweep({ db, ...deps });
     expect(insert).toHaveBeenCalledTimes(1);
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ contact_id: "outro" }));
     expect(resumo.skipped_pending_return).toBe(1);
     expect(resumo.enrolled).toBe(1);
+  });
+
+  it("PR #3808: a varredura pergunta pelo retorno com a folga do PRÓPRIO fluxo", async () => {
+    const { db } = sweepDb(new Set());
+    const perguntas: number[] = [];
+    db.loadContatosComRetornoVivo = async (_org, folgaMs) => (perguntas.push(folgaMs), new Set<string>());
+    db.loadActiveSilencePointers = async () => [
+      { id: "p-1", organization_id: "org", active_version_id: "v-1", threshold_minutes: 4320, segments: [], active_since: "2026-10-01T00:00:00.000Z" },
+    ];
+    await runSilenceSweep({ db, ...deps });
+    expect(perguntas).toEqual([72 * HORA]);
   });
 
   it("controle: sem retorno, os dois entram", async () => {
@@ -187,7 +214,7 @@ describe("inscrição que já andava", () => {
   }
 
   it("⭐ segurada até a data da regra: nada vai para a fila e o dossiê diz por quê", async () => {
-    const ate = reavaliarDepoisDoRetorno("2026-10-02T11:00:00.000Z");
+    const ate = reavaliarDepoisDoRetorno("2026-10-02T11:00:00.000Z", 40);
     const l = loja(ate);
     await l.tick();
     expect(l.jobs).toHaveLength(0);
@@ -210,7 +237,7 @@ describe("inscrição que já andava", () => {
       followup_flow_pointers: { trigger_config: { kind: "silence", params: { threshold_minutes: 40 } } },
     });
     expect(await createSupabaseAdminClient(silencio.admin).retornoQueSeguraOFluxo!(enr)).toBe(
-      reavaliarDepoisDoRetorno(saido),
+      reavaliarDepoisDoRetorno(saido, 40),
     );
     const etapa = fakeAdmin([[], [{ contact_id: "c-1", next_run_at: saido }]], {
       followup_flow_pointers: { trigger_config: { kind: "stage_change", params: { stage_id: "x" } } },

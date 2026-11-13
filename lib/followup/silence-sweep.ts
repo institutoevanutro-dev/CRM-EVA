@@ -81,7 +81,7 @@ import {
 import { flowGraphSchema } from "./graph-schema";
 import { triggerConfigSchema } from "./api-schemas";
 import { resolveAgentForAutomaticTrigger, type FollowupGateDb } from "./agent-followup-gate";
-import { contatosQueORetornoSegura } from "./retorno-segura-o-fluxo";
+import { contatosQueORetornoSegura, folgaDepoisDoRetorno } from "./retorno-segura-o-fluxo";
 import { contatosQueSoResponderamAAutomacao, type CandidatoDoSilencio } from "./resposta-a-automacao";
 import { contatosQueSoReagiramACasoAberto } from "./reacao-a-caso-aberto";
 import { logger } from "@/lib/logger";
@@ -151,7 +151,7 @@ export interface SilenceSweepDb {
    * Contatos que um RETORNO segura (agendado, ou saído há menos de um dia): o
    * fluxo de silêncio não fala por cima. Ver `retorno-segura-o-fluxo.ts`.
    */
-  loadContatosComRetornoVivo(orgId: string): Promise<Set<string>>;
+  loadContatosComRetornoVivo(orgId: string, folgaMs: number): Promise<Set<string>>;
   /**
    * Dos contatos que iriam ao insert, os que só responderam a uma mensagem
    * automática nossa, sem nada com conteúdo (ver `resposta-a-automacao.ts`).
@@ -326,7 +326,10 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     if (contactIds.length === 0) continue;
     const nextEvalAt = clock().toISOString();
     const comInscricaoViva = await db.loadContatosComInscricaoViva(pointer.organization_id, contactIds);
-    const comRetorno = await db.loadContatosComRetornoVivo(pointer.organization_id);
+    const comRetorno = await db.loadContatosComRetornoVivo(
+      pointer.organization_id,
+      folgaDepoisDoRetorno(pointer.threshold_minutes),
+    );
     // Resposta a automática: pergunta só por quem iria ao insert. Cooldown, vivo
     // e retorno já decidiram os outros, cada pergunta lê mensagens a cada minuto,
     // e a auditoria do cron segue disparando pelos mesmos contadores.
@@ -690,8 +693,8 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       return ultima;
     },
 
-    loadContatosComRetornoVivo(orgId) {
-      return contatosQueORetornoSegura(admin, orgId);
+    loadContatosComRetornoVivo(orgId, folgaMs) {
+      return contatosQueORetornoSegura(admin, orgId, folgaMs);
     },
 
     loadContatosQueSoResponderamAAutomacao(orgId, contatos) {

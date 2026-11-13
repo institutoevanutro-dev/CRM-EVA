@@ -183,7 +183,7 @@ describe("o passo no motor deste fork (guardas estruturais)", () => {
   });
 
   it("o passo usa as ferramentas da prévia: o envio é o de applyPreviewPolicy", () => {
-    expect(turno).toMatch(/const tools = wrapToolsWithBreaker\(previewTools,/);
+    expect(turno).toMatch(/const tools = emOrdemDeEscrita\(\s*wrapToolsWithBreaker\(previewTools,/);
     expect(correcao).toMatch(/\n\s*tools,\n/);
     expect(correcao).toContain("pararQuando: () => preview.result.candidates.length > 0");
   });

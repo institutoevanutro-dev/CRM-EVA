@@ -826,7 +826,7 @@ describe('fiação no turno', () => {
   });
 
   it('a prévia arma o gate e conta os vetos pelos impedimentos', () => {
-    const previa = trecho('const previewTools =', 'const tools = wrapToolsWithBreaker(');
+    const previa = trecho('const previewTools =', 'const tools = emOrdemDeEscrita(');
     expect(previa).toContain('...horariosDaAgenda(),');
     expect(previa).toContain('VETOS_DO_HORARIO.has(i.code)');
   });
@@ -863,6 +863,6 @@ describe('fiação no turno', () => {
     expect(arma).toContain("ativo: modoDoHorario === 'barrar',");
     expect(arma).toContain("observar: modoDoHorario === 'observar',");
     // A prévia herda o mesmo armamento: só os vetos anteriores são dela.
-    expect(trecho('const previewTools =', 'const tools = wrapToolsWithBreaker(')).not.toMatch(/\b(?:ativo|observar):/);
+    expect(trecho('const previewTools =', 'const tools = emOrdemDeEscrita(')).not.toMatch(/\b(?:ativo|observar):/);
   });
 });

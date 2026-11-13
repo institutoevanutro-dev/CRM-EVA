@@ -15,7 +15,7 @@
  *
  * ─── A regra ───────────────────────────────────────────────────────────────
  *
- * Com um retorno VIVO, ou um que SAIU há menos de `FOLGA_DEPOIS_DO_RETORNO_MS`:
+ * Com um retorno VIVO, ou um que SAIU há menos da folga do fluxo (`folgaDepoisDoRetorno`):
  *   - a varredura não inscreve o contato (`contatosQueORetornoSegura`);
  *   - a inscrição que já andava fica segurada até a folga depois do retorno
  *     (`quandoDoRetornoQueSegura` + `reavaliarDepoisDoRetorno`). Se o cliente
@@ -37,11 +37,27 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** Quanto o fluxo espera depois do retorno: o tempo de a pessoa ler e responder. */
-export const FOLGA_DEPOIS_DO_RETORNO_MS = 24 * 3_600_000;
+/**
+ * Menor espera depois de um retorno, qualquer que seja o gatilho do fluxo. É a
+ * proteção da issue #2907: com gatilho de 40 min, o retorno saiu às 18:56 e o
+ * "Follow-up 1" às 18:58 — duas mensagens seguidas sem o lead responder.
+ */
+export const PISO_DA_FOLGA_DEPOIS_DO_RETORNO_MS = 4 * 3_600_000;
 
-export function reavaliarDepoisDoRetorno(quandoDoRetorno: string): string {
-  return new Date(Date.parse(quandoDoRetorno) + FOLGA_DEPOIS_DO_RETORNO_MS).toISOString();
+/**
+ * Quanto o fluxo de silêncio espera DEPOIS do retorno antes de falar: o retorno
+ * conta como a última conversa e o relógio do silêncio recomeça dali — o próprio
+ * gatilho do fluxo (`threshold_minutes`), nunca menos que o piso. O fluxo de 3
+ * dias espera 3 dias; o de 1 h e o de 40 min esperam 4 h. Antes era 1 dia para
+ * todos: o fluxo de 1 h ficava um dia parado depois do retorno.
+ * Portado do projeto original (DeskcommCRM, PR #3808, que substitui o #3692).
+ */
+export function folgaDepoisDoRetorno(gatilhoMinutos: number): number {
+  return Math.max(gatilhoMinutos * 60_000, PISO_DA_FOLGA_DEPOIS_DO_RETORNO_MS);
+}
+
+export function reavaliarDepoisDoRetorno(quandoDoRetorno: string, gatilhoMinutos: number): string {
+  return new Date(Date.parse(quandoDoRetorno) + folgaDepoisDoRetorno(gatilhoMinutos)).toISOString();
 }
 
 function retornos(admin: SupabaseClient, orgId: string) {
@@ -57,33 +73,37 @@ function retornos(admin: SupabaseClient, orgId: string) {
 
 const vivos = (admin: SupabaseClient, orgId: string) => retornos(admin, orgId).eq("enabled", true);
 
-const jaSaidos = (admin: SupabaseClient, orgId: string, agora: Date) =>
+const jaSaidos = (admin: SupabaseClient, orgId: string, folgaMs: number, agora: Date) =>
   retornos(admin, orgId)
     .eq("enabled", false)
     .is("last_error", null)
     .lte("next_run_at", agora.toISOString())
-    .gt("next_run_at", new Date(agora.getTime() - FOLGA_DEPOIS_DO_RETORNO_MS).toISOString());
+    .gt("next_run_at", new Date(agora.getTime() - folgaMs).toISOString());
 
 type Linha = { contact_id: string | null; next_run_at: string };
 
 /** A janela refeita no cliente: data torta que escapasse da consulta não segura para sempre. */
-function saiuDentroDaFolga(row: Linha, agora: Date): boolean {
+function saiuDentroDaFolga(row: Linha, folgaMs: number, agora: Date): boolean {
   const quando = Date.parse(row.next_run_at);
-  return !Number.isNaN(quando) && quando <= agora.getTime() && quando > agora.getTime() - FOLGA_DEPOIS_DO_RETORNO_MS;
+  return !Number.isNaN(quando) && quando <= agora.getTime() && quando > agora.getTime() - folgaMs;
 }
 
-/** Contatos que o retorno ainda segura (vivo ou recém-saído): a varredura de silêncio os pula. */
+/**
+ * Contatos que o retorno ainda segura (vivo ou recém-saído): a varredura de silêncio os pula.
+ * `folgaMs` é a do fluxo que pergunta (`folgaDepoisDoRetorno`): cada fluxo tem o seu gatilho.
+ */
 export async function contatosQueORetornoSegura(
   admin: SupabaseClient,
   orgId: string,
+  folgaMs: number,
   agora: Date = new Date(),
 ): Promise<Set<string>> {
-  const [v, s] = await Promise.all([vivos(admin, orgId), jaSaidos(admin, orgId, agora)]);
+  const [v, s] = await Promise.all([vivos(admin, orgId), jaSaidos(admin, orgId, folgaMs, agora)]);
   if (v.error) throw new Error(`retorno_vivo_query_failed: ${v.error.message}`);
   if (s.error) throw new Error(`retorno_disparado_query_failed: ${s.error.message}`);
   const ids = new Set<string>();
   for (const row of (v.data ?? []) as Linha[]) if (row.contact_id) ids.add(row.contact_id);
-  for (const row of (s.data ?? []) as Linha[]) if (row.contact_id && saiuDentroDaFolga(row, agora)) ids.add(row.contact_id);
+  for (const row of (s.data ?? []) as Linha[]) if (row.contact_id && saiuDentroDaFolga(row, folgaMs, agora)) ids.add(row.contact_id);
   return ids;
 }
 
@@ -95,17 +115,18 @@ export async function quandoDoRetornoQueSegura(
   admin: SupabaseClient,
   orgId: string,
   contactId: string,
+  folgaMs: number,
   agora: Date = new Date(),
 ): Promise<string | null> {
   const [v, s] = await Promise.all([
     vivos(admin, orgId).eq("contact_id", contactId).order("next_run_at", { ascending: false }).limit(1),
-    jaSaidos(admin, orgId, agora).eq("contact_id", contactId).order("next_run_at", { ascending: false }).limit(1),
+    jaSaidos(admin, orgId, folgaMs, agora).eq("contact_id", contactId).order("next_run_at", { ascending: false }).limit(1),
   ]);
   if (v.error) throw new Error(`retorno_vivo_query_failed: ${v.error.message}`);
   if (s.error) throw new Error(`retorno_disparado_query_failed: ${s.error.message}`);
   const candidatos = [
     ...((v.data ?? []) as Linha[]),
-    ...((s.data ?? []) as Linha[]).filter((r) => saiuDentroDaFolga(r, agora)),
+    ...((s.data ?? []) as Linha[]).filter((r) => saiuDentroDaFolga(r, folgaMs, agora)),
   ]
     .map((r) => r.next_run_at)
     .filter((q) => !Number.isNaN(Date.parse(q)));
