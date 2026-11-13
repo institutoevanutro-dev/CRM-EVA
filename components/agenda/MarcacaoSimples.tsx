@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
+import { DURACAO_MAXIMA_MIN, DURACAO_MINIMA_MIN, duracaoDoCampo } from "@/lib/agenda/duracao-escolhida";
 import { dataDeParede, instanteDe } from "@/lib/agenda/fuso";
 import { fimDoHorario, outrosProcedimentos, procedimentosDoProfissional } from "@/lib/agenda/marcacao-simples";
 import { ApiError } from "@/lib/api/types";
@@ -55,6 +56,8 @@ type Unidade = { id: string; name: string; active: boolean };
 /** O que a marcação leva ao POST, além de profissional, procedimento e paciente. */
 export type MarcacaoConfirmada = {
   instante: string;
+  /** Só quando a recepção mudou a duração (upstream #3714); ausente = a do procedimento. */
+  duracaoMin?: number;
   convidado?: string;
   endereco: string;
   observacao: string;
@@ -92,6 +95,8 @@ export function MarcacaoSimples({
   horarioInicial,
   permiteEncaixe,
   podeBloquearDeOutros,
+  duracao = null,
+  onDuracao,
   onConfirmar,
   onVerNaAgenda,
 }: {
@@ -126,6 +131,12 @@ export function MarcacaoSimples({
   permiteEncaixe: boolean;
   /** manager+ bloqueia a agenda de qualquer pessoa; o resto, só a própria. */
   podeBloquearDeOutros: boolean;
+  /**
+   * O texto do campo "Duração (min)"; `null` = a do procedimento (upstream
+   * #3714). Mora em quem chama porque entra na consulta dos horários livres.
+   */
+  duracao?: string | null;
+  onDuracao?: (texto: string | null) => void;
   onConfirmar: (m: MarcacaoConfirmada) => Promise<unknown>;
   onVerNaAgenda: (instante: string) => void;
 }) {
@@ -136,6 +147,8 @@ export function MarcacaoSimples({
   const procedimentos = procedimentosDoProfissional(tipos, profissionalId);
   const outros = outrosProcedimentos(tipos, profissionalId);
   const tipo = profissionalId ? (tipos.find((p) => p.id === tipoId) ?? null) : null;
+  // `null` = texto inválido: o aviso aparece e o Confirmar trava.
+  const duracaoMin = tipo ? duracaoDoCampo(duracao, tipo.duracaoMin) : null;
 
   const [dia, setDia] = React.useState<Date>(() =>
     horarioInicial ? new Date(horarioInicial.instante) : ancora,
@@ -192,11 +205,18 @@ export function MarcacaoSimples({
   const trocarProfissional = (id: string) => {
     onProfissional(id);
     if (!id) onTipo("");
+    onDuracao?.(null);
     setHorario(null);
   };
   const trocarProcedimento = (id: string) => {
     onTipo(id);
+    onDuracao?.(null);
     setEnderecoEditado(null);
+    setHorario(null);
+  };
+  // A lista de horários era de outra duração: o horário escolhido deixa de valer.
+  const trocarDuracao = (texto: string) => {
+    onDuracao?.(texto);
     setHorario(null);
   };
 
@@ -249,7 +269,7 @@ export function MarcacaoSimples({
     setHorario({ instante, rotulo: `${partesDaHora[1]}:${partesDaHora[2]}` });
   };
 
-  const pronto = Boolean(profissionalId && tipo && horario && !convidadoInvalido && cadastroCarregado && nomeResolvido);
+  const pronto = Boolean(profissionalId && tipo && duracaoMin !== null && horario && !convidadoInvalido && cadastroCarregado && nomeResolvido);
   const tempo = marcado ? "marcado" : horario ? "confirmando" : tipo ? "escolhendo-horario" : "escolhendo-dia";
 
   const confirmar = async () => {
@@ -266,6 +286,7 @@ export function MarcacaoSimples({
       if (pedeNome) await gravarNome.mutateAsync({ name: nomeCompletoLimpo(nomeCompleto) });
       await onConfirmar({
         instante: horario.instante,
+        duracaoMin: duracao === null ? undefined : (duracaoMin ?? undefined),
         convidado: convidadoLimpo || undefined,
         endereco: endereco.trim(),
         observacao: observacao.trim(),
@@ -291,7 +312,9 @@ export function MarcacaoSimples({
 
   const profissional = pessoas.find((p) => p.id === profissionalId);
   const faixaDoHorario = (h: HorarioLivre) =>
-    tipo ? `${h.rotulo} ${t("às")} ${format(parede(fimDoHorario(h.instante, tipo.duracaoMin)), "HH:mm")}` : h.rotulo;
+    tipo
+      ? `${h.rotulo} ${t("às")} ${format(parede(fimDoHorario(h.instante, duracaoMin ?? tipo.duracaoMin)), "HH:mm")}`
+      : h.rotulo;
 
   if (marcado) {
     return (
@@ -419,6 +442,38 @@ export function MarcacaoSimples({
                   ) : null}
                 </select>
               </div>
+
+              {tipo ? (
+                <div>
+                  <label htmlFor="duracao-da-marcacao" className={ROTULO}>
+                    {t("Duração (minutos)")}
+                  </label>
+                  <input
+                    id="duracao-da-marcacao"
+                    data-testid="duracao-da-marcacao"
+                    type="number"
+                    inputMode="numeric"
+                    min={DURACAO_MINIMA_MIN}
+                    max={DURACAO_MAXIMA_MIN}
+                    step={5}
+                    className={cn(CAMPO, "w-28")}
+                    value={duracao ?? String(tipo.duracaoMin)}
+                    onChange={(e) => trocarDuracao(e.target.value)}
+                    aria-invalid={duracaoMin === null || undefined}
+                    aria-describedby="ajuda-da-duracao"
+                  />
+                  <p
+                    id="ajuda-da-duracao"
+                    role={duracaoMin === null ? "alert" : undefined}
+                    data-testid={duracaoMin === null ? "duracao-invalida" : undefined}
+                    className={cn("mt-1 text-xs", duracaoMin === null ? "text-warning-fg" : "text-text-subtle")}
+                  >
+                    {duracaoMin === null
+                      ? t("Escolha uma duração entre 5 e 1440 minutos.")
+                      : t("Já vem com a duração do procedimento. Mude só se este atendimento precisar de mais ou menos tempo.")}
+                  </p>
+                </div>
+              ) : null}
 
               <VinculoDaMarcacao
                 compacto
@@ -713,7 +768,7 @@ export function MarcacaoSimples({
                     <span data-testid="faixa-do-horario" className="tabular-nums">
                       {faixaDoHorario(horario)}
                     </span>{" "}
-                    ({tipo.duracaoMin} {t("min")})
+                    ({duracaoMin ?? tipo.duracaoMin} {t("min")})
                   </span>
                 </p>
               ) : (

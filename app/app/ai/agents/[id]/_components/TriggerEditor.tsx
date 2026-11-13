@@ -25,6 +25,11 @@ export interface BusinessHoursValue {
    * sem aviso (o padrão). Porte de upstream #2284.
    */
   notice?: string | null;
+  /**
+   * "Não atender em feriado nacional" (porte do upstream #4469). Desligada de
+   * fábrica (ausente = `false`).
+   */
+  fechado_em_feriado_nacional?: boolean;
 }
 
 export interface TriggerValue {
@@ -244,6 +249,22 @@ export function TriggerEditor({ value, onChange, disabled }: Props) {
                   );
                 })}
               </div>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={bh.fechado_em_feriado_nacional === true}
+                  onCheckedChange={(v) => patchBh({ fechado_em_feriado_nacional: v })}
+                  disabled={disabled}
+                  id="bh_fechado_em_feriado_nacional"
+                />
+                <Label htmlFor="bh_fechado_em_feriado_nacional">{t("Não atender em feriado nacional")}</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  "Ligado, feriado nacional (inclui Carnaval e Corpus Christi) conta como dia fechado: quem escrever recebe a mensagem de fora do horário (se houver), o agente responde no próximo dia útil e não marca nada nesses dias. Desligado, o feriado é um dia comum.",
+                )}
+              </p>
             </div>
             <div className="space-y-1">
               <Label htmlFor="bh_notice">{t("Mensagem fora do horário (opcional)")}</Label>

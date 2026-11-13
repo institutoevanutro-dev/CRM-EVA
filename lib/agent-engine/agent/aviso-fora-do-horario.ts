@@ -118,6 +118,12 @@ export interface PerguntaDeAviso {
   janela: JanelaDeAtendimento | null;
   agora: Date;
   texto: string | null;
+  /**
+   * Hoje é feriado nacional e o agente tem "Não atender em feriado nacional"
+   * ligado (porte do upstream #4469)? FATO injetado pelo turno, que já adiou o
+   * job: dentro da janela semanal o aviso sai mesmo assim.
+   */
+  ehFeriadoNacional?: boolean;
 }
 
 /**
@@ -130,8 +136,9 @@ export function preCheckDoAviso(input: PerguntaDeAviso): DecisaoDoAviso | null {
   // Sem janela declarada o turno nem entra neste ramo — mas a pergunta é do
   // aviso, então ela responde: sem janela não há "fora dela".
   if (input.janela === null) return { enviar: false, motivo: 'sem_janela' };
-  // Dentro da janela não há aviso: a IA vai responder agora.
-  if (msAteAJanelaAbrir(input.janela, input.agora) === null)
+  // Dentro da janela não há aviso: a IA vai responder agora — SALVO no feriado
+  // nacional com a opção ligada, em que o turno já foi adiado.
+  if (msAteAJanelaAbrir(input.janela, input.agora) === null && input.ehFeriadoNacional !== true)
     return { enviar: false, motivo: 'dentro_da_janela' };
   // Sem texto configurado não há o que dizer, e inventar é proibido.
   if (input.texto === null || input.texto.trim() === '')
@@ -226,6 +233,8 @@ export interface EntradaDoAviso {
   texto: string | null;
   janela: JanelaDeAtendimento | null;
   agora: Date;
+  /** Ver `PerguntaDeAviso.ehFeriadoNacional`. Ausente = dia comum. */
+  ehFeriadoNacional?: boolean;
 }
 
 /**
@@ -261,6 +270,7 @@ export async function enviaAvisoForaDoHorario(
     janela,
     agora: entrada.agora,
     texto: entrada.texto,
+    ehFeriadoNacional: entrada.ehFeriadoNacional,
     contato,
     ehNumeroInterno,
     jaAvisado,

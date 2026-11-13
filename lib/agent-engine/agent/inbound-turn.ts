@@ -144,7 +144,7 @@ import {
   matchesHandoffKeyword,
   type PublishedAgentConfig,
 } from './agent-config';
-import { msAteAJanelaAbrir } from './janela-de-atendimento';
+import { msAteAJanelaAbrir, msAteAJanelaAbrirPulandoFeriado } from './janela-de-atendimento';
 import { turnoDisparaNasMensagens } from './palavra-chave-do-gatilho';
 import { enviaAvisoForaDoHorario, portasDeProducao } from './aviso-fora-do-horario';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
@@ -245,6 +245,7 @@ import {
 } from '../guardrails/jailbreak/classifier';
 import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
 import { fusoDaOrganizacao } from './fuso-da-org';
+import { blocoDoFeriado, ehFeriadoNacionalNoFuso, feriadoNacionalNoTurno } from './feriado-nacional';
 import { renderAgora } from '@/lib/tempo/agora';
 import { fusoUtilizavel } from '@/lib/tempo/fusos';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
@@ -3068,7 +3069,19 @@ async function executarTurnoDoAgente(
   // attempts (`rescheduleJob`) — quem escreveu 22h é atendido às 8h. O throw é
   // o contrato de `JobSettledError`: o run já dispôs do job, main.ts no-opa.
   if (!preview && liveJob().kind === 'inbound_turn' && agentConfig?.janelaDeAtendimento != null) {
-    const esperaMs = msAteAJanelaAbrir(agentConfig.janelaDeAtendimento, clock());
+    const janela = agentConfig.janelaDeAtendimento;
+    const agora = clock();
+    let esperaMs = msAteAJanelaAbrir(janela, agora);
+    // NÃO ATENDER EM FERIADO NACIONAL (porte do upstream #4469). Opção do
+    // agente, DESLIGADA de fábrica: desligada, o feriado é dia comum. Ligada, o
+    // turno espera a próxima abertura que não é feriado e o aviso de fora do
+    // horário recebe o MESMO fato do dia (sai mesmo dentro da janela semanal).
+    let feriadoHoje: boolean | undefined;
+    if (agentConfig.naoAtenderEmFeriadoNacional === true) {
+      const ehFeriado = (instante: Date) => ehFeriadoNacionalNoFuso(instante, janela.timezone);
+      feriadoHoje = ehFeriado(agora);
+      esperaMs = msAteAJanelaAbrirPulandoFeriado(janela, agora, ehFeriado);
+    }
     if (esperaMs !== null) {
       // O AVISO DE FORA DO HORÁRIO (porte de upstream #2284) —
       // ANTES do adiamento, para sair na hora em que a mensagem chegou. Só sai
@@ -3087,7 +3100,8 @@ async function executarTurnoDoAgente(
             channelSessionId: input.channelSessionId,
             texto: agentConfig.avisoForaDoHorario ?? null,
             janela: agentConfig.janelaDeAtendimento,
-            agora: clock(),
+            agora,
+            ehFeriadoNacional: feriadoHoje,
           },
         );
         runLog.info(
@@ -3111,6 +3125,7 @@ async function executarTurnoDoAgente(
           agent_id: agentConfig.agentId,
           espera_ms: esperaMs,
           janela: `${agentConfig.janelaDeAtendimento.start}-${agentConfig.janelaDeAtendimento.end}`,
+          feriado_nacional_hoje: feriadoHoje ?? null,
         },
       );
       throw new JobSettledError(
@@ -5419,8 +5434,21 @@ async function executarTurnoDoAgente(
     // ponto só cobre os três — e alcança de carona a chamada de fechamento, que
     // reusa `openingTextOnly` e é onde nasce o `prazo` ISO da declaração.
     const agoraBlock = renderAgora(clock(), fusoDaOrg);
+    // O FERIADO NACIONAL DO TURNO (porte do upstream #3894): logo depois do
+    // relógio, no sufixo por-lead, porque é fato do DIA (muda à meia-noite) e o
+    // prefixo estável não pode carregá-lo.
+    //
+    // ⚠️ SÓ com "Não atender em feriado nacional" LIGADA. `isHolidayBR` conta
+    // Carnaval e Corpus Christi (ponto facultativo), e o bloco proíbe marcar
+    // para amanhã na véspera: de fábrica, a clínica que abre nesses dias
+    // perderia marcação. Desligada (o padrão), o prompt é o de antes do porte.
+    const feriadoBlock =
+      agentConfig?.naoAtenderEmFeriadoNacional === true
+        ? blocoDoFeriado(feriadoNacionalNoTurno(clock(), fusoDaOrg))
+        : '';
     const openingSuffixes = [
       agoraBlock,
+      feriadoBlock,
       matchedSkillsBlock,
       stageHintBlock,
       splitHint,

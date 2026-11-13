@@ -2165,6 +2165,16 @@ export const DICIONARIO: Traducoes = {
   "A IA escolhe a hora": { es: "La IA elige el momento" },
   "Como calcular a espera": { es: "Cómo calcular la espera" },
   "Duração (minutos)": { es: "Duración (minutos)" },
+  // Duração escolhida na marcação (porte do upstream #3714).
+  "Já vem com a duração do procedimento. Mude só se este atendimento precisar de mais ou menos tempo.": {
+    es: "Viene con la duración del procedimiento. Cámbiala solo si esta atención necesita más o menos tiempo.",
+  },
+  "Escolha uma duração entre 5 e 1440 minutos.": { es: "Elige una duración entre 5 y 1440 minutos." },
+  // "Não atender em feriado nacional", desligada de fábrica (porte do upstream #4469).
+  "Não atender em feriado nacional": { es: "No atender en feriado nacional" },
+  "Ligado, feriado nacional (inclui Carnaval e Corpus Christi) conta como dia fechado: quem escrever recebe a mensagem de fora do horário (se houver), o agente responde no próximo dia útil e não marca nada nesses dias. Desligado, o feriado é um dia comum.": {
+    es: "Activado, el feriado nacional (incluye Carnaval y Corpus Christi) cuenta como día cerrado: quien escriba recibe el mensaje de fuera de horario (si lo hay), el agente responde el próximo día hábil y no agenda nada en esos días. Desactivado, el feriado es un día común.",
+  },
   "Mínimo (min)": { es: "Mínimo (min)" },
   "Máximo (min)": { es: "Máximo (min)" },
   "Orientação (opcional)": { es: "Orientación (opcional)" },
