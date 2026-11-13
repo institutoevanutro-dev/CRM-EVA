@@ -880,6 +880,9 @@ export const AUDIT_ACTIONS = [
   // código do Prontuário, tentativas). Nunca exam_id, nome nem conteúdo.
   "prontuario.exam_sent",
   "prontuario.exam_send_failed",
+  // Inscrições vivas levadas para a versão ativa do fluxo (metadata: totais e
+  // contagem por versão de origem). O dry-run não muda nada e não audita.
+  "followup_flow.enrollments_migrated",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
