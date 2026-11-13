@@ -42,6 +42,9 @@ const triggerConfigSchema = z
             // Sem esta linha o Zod descarta o campo ao salvar. Teto = o de
             // TAMANHO_MAXIMO_DO_TEXTO em aviso-fora-do-horario.ts.
             notice: z.string().max(1000).nullable().optional(),
+            // "Não atender em feriado nacional" (porte do upstream #4469),
+            // desligada de fábrica. Sem esta linha o Zod descarta a chave ao salvar.
+            fechado_em_feriado_nacional: z.boolean().optional(),
           })
           .nullable()
           .optional()

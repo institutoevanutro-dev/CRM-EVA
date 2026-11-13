@@ -15,7 +15,11 @@
  */
 import type pg from 'pg';
 
-import { lerJanelaDeAtendimento, type JanelaDeAtendimento } from './janela-de-atendimento';
+import {
+  lerFechadoEmFeriadoNacional,
+  lerJanelaDeAtendimento,
+  type JanelaDeAtendimento,
+} from './janela-de-atendimento';
 import { lerTextoDoAvisoForaDoHorario } from './aviso-fora-do-horario';
 import { lerFiltroDePalavraChave } from './palavra-chave-do-gatilho';
 
@@ -105,6 +109,11 @@ export interface PublishedAgentConfig {
    * Opcional porque nasce depois das fixtures que montam esta interface à mão.
    */
   avisoForaDoHorario?: string | null;
+  /**
+   * "Não atender em feriado nacional" (porte do upstream #4469), de
+   * `filters.business_hours.fechado_em_feriado_nacional`. Ausente = desligada.
+   */
+  naoAtenderEmFeriadoNacional?: boolean;
   /** criadores (p/ mint do token efêmero de audit — padrão do runtime nativo). */
   versionCreatedBy: string | null;
   agentCreatedBy: string | null;
@@ -239,6 +248,7 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     // `null` (sem janela ⇒ atende sempre), nunca uma mordaça acidental.
     janelaDeAtendimento: lerJanelaDeAtendimento(r.trigger_config),
     avisoForaDoHorario: lerTextoDoAvisoForaDoHorario(r.trigger_config),
+    naoAtenderEmFeriadoNacional: lerFechadoEmFeriadoNacional(r.trigger_config),
     // Mesma leitura defensiva da linha acima: regex torta/valor vazio ⇒ `null`
     // (sem filtro ⇒ entra em tudo), nunca uma mordaça acidental (#2679).
     filtroDePalavraChave: lerFiltroDePalavraChave(r.trigger_config),
