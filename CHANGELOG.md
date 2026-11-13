@@ -8,6 +8,30 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.11.1] — 2026-11-13
+
+### Corrigido
+
+- **As mensagens que o agente escreve num mesmo passo saem na ordem em que ele escreveu** Quando o agente de IA respondia em mais de uma mensagem de uma vez, as mensagens podiam chegar ao paciente embaralhadas: a que abria a resposta às vezes chegava por último. Agora as mensagens de texto, de mídia e de modelo, e a passagem para a equipe, saem uma depois da outra, na ordem em que o agente as escreveu. Com várias mensagens, cada uma passa pelas conferências de envio depois da anterior, um intervalo da mesma ordem do que o envio já espera entre mensagens. O texto das mensagens não muda. Não há nada a fazer.
+
+  Portado do projeto original (DeskcommCRM, PR #4288 de @maclevison).
+
+- **Depois de um retorno prometido, o follow-up de silêncio espera o próprio gatilho, com mínimo de 4 horas** Quando o agente promete um retorno ("te escrevo às 18h") e esse retorno sai, o follow-up de silêncio fica segurado para não mandar duas mensagens seguidas. Essa espera era fixa em 24 horas para qualquer fluxo: um fluxo de 1 hora ficava um dia inteiro parado, e um de 3 dias voltava a falar já no dia seguinte. Agora o retorno conta como a última conversa e o fluxo espera o próprio gatilho, nunca menos de 4 horas (fluxo de 40 min ou 1 h: 4 horas; fluxo de 3 dias: 3 dias). No histórico do fluxo, a linha "Segurou o fluxo por causa de um retorno agendado" passa a dizer "volta a andar em …, depois do retorno". Não há nada a fazer.
+
+  Portado do projeto original (DeskcommCRM, PR #3808 de @melgarafael, que substitui o PR #3692 de @EduFkn).
+
+- **A pausa da IA no atendimento manual tenta de novo uma vez quando a gravação não pega** Quando alguém da equipe responde pelo próprio WhatsApp, fora do CRM, a IA fica pausada naquela conversa. Se a gravação dessa pausa não pegasse (por uma disputa momentânea no banco), o CRM desistia na primeira tentativa e a IA podia responder por cima de quem atende. Agora ele confere se a conversa ainda existe e, se existir, tenta gravar a pausa mais uma vez. Se nem assim der certo, o registro de erro do servidor diz o motivo. Não há nada a fazer.
+
+  Portado do projeto original (DeskcommCRM, PR #4296 de @webtecnica).
+
+- **Uma recusa de marketing registrada pela ficha do contato passa a bloquear os envios** Quando o consentimento de marketing de um contato era retirado pela ficha dele (`PATCH /api/v1/contacts/{id}`, no formato `{ "granted": false }`), essa recusa não era lida na hora de enviar: as automações (WhatsApp, mensagem escrita pela IA, e-mail) e as campanhas continuavam escrevendo para ele. Só a recusa recebida por um formulário era levada em conta. Agora a recusa é lida nos dois formatos e bloqueia esses envios. Lembretes de compromisso, que são transacionais, continuam saindo. Não há nada a fazer.
+
+  Portado do projeto original (DeskcommCRM, PR #4307 de @FabioMundoDigital).
+
+- **O rodízio não entrega ao atendente conversa cujo caso já não pede uma pessoa** Uma conversa com caso aberto pela IA continuava na fila do rodízio mesmo quando o caso já não pedia ninguém: a bola estava com o paciente (caso "aguardando o cliente") ou o caso já tinha sido concluído ou cancelado sem que a conversa fosse fechada. Horas depois, o rodízio entregava essa conversa a um atendente que não tinha nada a fazer nela. Agora o rodízio confere o caso mais recente da conversa antes de distribuir: casos que pedem a equipe ("aguardando atendimento" ou "escalado") continuam sendo distribuídos como antes, e se o paciente escrever de novo depois do pedido ou da conclusão do caso, a conversa volta à fila normalmente. Conversas sem caso não mudam. Não há nada a fazer.
+
+  Portado do projeto original (DeskcommCRM, PR #3739 de @webtecnica).
+
 ## [5.11.0] — 2026-11-12
 
 ### Adicionado
@@ -8999,7 +9023,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.11.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.11.1...HEAD
+[5.11.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.11.0...v5.11.1
 [5.11.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.10.1...v5.11.0
 [5.10.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.10.0...v5.10.1
 [5.10.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.9.0...v5.10.0
