@@ -110,6 +110,22 @@ describe("bloqueioDaExclusao", () => {
     });
   });
 
+  it("excluído travado no Google: diz que não sai sozinho e abre o compromisso", () => {
+    const id = "c05e7a00-0000-4000-8000-0000000000f7";
+    const b = bloqueioDaExclusao(
+      { agenda: { por_situacao: {}, pendentes_no_google: 0, travados_no_google: 1, compromisso_id: id } },
+      pt,
+    );
+    expect(b?.mensagem).toBe(
+      "1 compromisso já excluído não conseguiu sair do Google Agenda e não vai sair sozinho: há um conflito com o Google ou a conexão do Google de quem o lançou precisa de atenção. Em \"Abrir Agenda\" o compromisso mostra o motivo: quem o lançou resolve o conflito ali ou reconecta o Google na Agenda. Depois, tente excluir de novo.",
+    );
+    expect(b?.mensagem).not.toContain("alguns minutos");
+    expect(b?.agendaHref).toBe(`/app/agenda?compromisso=${id}`);
+    expect(b?.sugerirJuntar).toBe(false);
+    const varios = bloqueioDaExclusao({ agenda: { por_situacao: {}, travados_no_google: 3, compromisso_id: id } }, es);
+    expect(varios?.mensagem.startsWith("3 citas ya eliminadas no pudieron salir de Google Calendar")).toBe(true);
+  });
+
   it("em espanhol sai em espanhol", () => {
     const b = bloqueioDaExclusao(
       { agenda: { por_situacao: { cancelled: 2 }, pendentes_no_google: 0, compromisso_id: null } },

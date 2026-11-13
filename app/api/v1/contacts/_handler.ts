@@ -891,11 +891,17 @@ function throwOnDbError(
  * NÃO apaga por conta própria é `calendar_appointments.contact_id` (0177);
  * `conversations` e `messages` saem com a ficha, que é o pedido da exclusão.
  *
- * A regra de quais compromissos seguram a ficha (migration 0413):
+ * A regra de quais compromissos seguram a ficha (migrations 0413 e 0414):
  *   - EXCLUÍDO (`excluded_at`, 0364), que a Agenda já não mostra e que o Google
  *     não espera mais, sai JUNTO, dentro de `fn_apagar_contato_com_historico`;
- *   - excluído com escrita pendente no Google segura: apagar a linha deixaria o
- *     evento lá sem ninguém para retirá-lo;
+ *   - excluído cuja conexão Google já não existe (`google_connection_id` nulo
+ *     pelo SET NULL da 0193, ou conexão `disconnected`) também sai (0414): não há
+ *     mais quem retire o evento, e segurar a ficha não o retiraria;
+ *   - excluído com escrita pendente no Google, numa conexão que ainda existe,
+ *     segura: apagar a linha deixaria o evento lá sem ninguém para retirá-lo.
+ *     A tela distingue o "em trânsito" (o worker vai tentar) do "travado"
+ *     (conflito, conexão que pede atenção, ou erro gravado pelo worker), que não
+ *     sai sozinho e precisa de alguém no painel do compromisso;
  *   - visível (qualquer situação) segura: é histórico.
  *
  * Esta conta é a MESMA do `where` da função, e existe só para a mensagem: quem
@@ -907,15 +913,20 @@ interface CompromissoDoContato {
   id: string;
   status: string;
   excluded_at: string | null;
+  google_connection_id: string | null;
   google_event_id: string | null;
   google_pending_write: unknown;
   google_local_revision: number | string;
   google_synced_local_revision: number | string;
   google_conflict: unknown;
+  google_sync_error: string | null;
 }
 
 const COLUNAS_DO_COMPROMISSO =
-  "id, status, excluded_at, google_event_id, google_pending_write, google_local_revision, google_synced_local_revision, google_conflict";
+  "id, status, excluded_at, google_connection_id, google_event_id, google_pending_write, google_local_revision, google_synced_local_revision, google_conflict, google_sync_error";
+
+/** Situações da conexão Google que não se resolvem sem alguém reconectar. */
+const CONEXAO_PEDE_ATENCAO = new Set(["token_expired", "scope_missing", "error"]);
 
 /** Excluído que ainda deve algo ao Google — espelho do `where` da 0413. */
 function pendenteNoGoogle(c: CompromissoDoContato): boolean {
@@ -927,17 +938,43 @@ function pendenteNoGoogle(c: CompromissoDoContato): boolean {
   );
 }
 
-function classificarCompromissos(compromissos: CompromissoDoContato[]): {
+/**
+ * Sem conexão capaz de sincronizar (0414): a linha nula pelo SET NULL, ou a
+ * conexão que a pessoa desligou. Conexão que a RLS esconde NÃO conta como
+ * órfã — o banco também não a enxergaria, e o erro fica do lado de segurar.
+ */
+function semConexaoNoGoogle(c: CompromissoDoContato, statusDaConexao: Map<string, string>): boolean {
+  return !c.google_connection_id || statusDaConexao.get(c.google_connection_id) === "disconnected";
+}
+
+function travadoNoGoogle(c: CompromissoDoContato, statusDaConexao: Map<string, string>): boolean {
+  return (
+    c.google_conflict != null ||
+    !!c.google_sync_error ||
+    CONEXAO_PEDE_ATENCAO.has(statusDaConexao.get(c.google_connection_id ?? "") ?? "")
+  );
+}
+
+function classificarCompromissos(
+  compromissos: CompromissoDoContato[],
+  statusDaConexao: Map<string, string>,
+): {
   visiveis: CompromissoDoContato[];
-  pendentesNoGoogle: CompromissoDoContato[];
+  emTransito: CompromissoDoContato[];
+  travados: CompromissoDoContato[];
   apagaveis: CompromissoDoContato[];
+  orfaos: CompromissoDoContato[];
 } {
   const visiveis = compromissos.filter((c) => !c.excluded_at);
   const excluidos = compromissos.filter((c) => c.excluded_at);
+  const pendentes = excluidos.filter((c) => pendenteNoGoogle(c) && !semConexaoNoGoogle(c, statusDaConexao));
+  const orfaos = excluidos.filter((c) => pendenteNoGoogle(c) && semConexaoNoGoogle(c, statusDaConexao));
   return {
     visiveis,
-    pendentesNoGoogle: excluidos.filter(pendenteNoGoogle),
-    apagaveis: excluidos.filter((c) => !pendenteNoGoogle(c)),
+    emTransito: pendentes.filter((c) => !travadoNoGoogle(c, statusDaConexao)),
+    travados: pendentes.filter((c) => travadoNoGoogle(c, statusDaConexao)),
+    apagaveis: excluidos.filter((c) => !pendentes.includes(c)),
+    orfaos,
   };
 }
 
@@ -981,25 +1018,55 @@ export async function deleteContactHandler(
     // reversível; mensagem apagada não volta.
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, errCompromissos.message);
   }
-  const { visiveis, pendentesNoGoogle, apagaveis } = classificarCompromissos(
-    (compromissos ?? []) as CompromissoDoContato[],
-  );
+  const lidos = (compromissos ?? []) as CompromissoDoContato[];
 
-  if (visiveis.length > 0 || pendentesNoGoogle.length > 0) {
+  // A situação das conexões Google dos excluídos pendentes (0414). O `manager`
+  // que a rota exige lê as conexões da organização (policy
+  // `calendar_connections_dono_ou_manager_read`); só `status` sai daqui.
+  const idsDeConexao = [
+    ...new Set(
+      lidos
+        .filter((c) => c.excluded_at && c.google_connection_id && pendenteNoGoogle(c))
+        .map((c) => c.google_connection_id!),
+    ),
+  ];
+  const statusDaConexao = new Map<string, string>();
+  if (idsDeConexao.length > 0) {
+    const { data: conexoes, error: errConexoes } = await supabase
+      .from("calendar_connections")
+      .select("id, status")
+      .eq("organization_id", ctx.organization_id)
+      .in("id", idsDeConexao);
+    if (errConexoes) {
+      throw new ApiError(500, "internal_error", undefined, ctx.requestId, errConexoes.message);
+    }
+    for (const k of (conexoes ?? []) as Array<{ id: string; status: string }>) statusDaConexao.set(k.id, k.status);
+  }
+
+  const { visiveis, emTransito, travados, apagaveis, orfaos } = classificarCompromissos(lidos, statusDaConexao);
+
+  if (visiveis.length > 0 || emTransito.length > 0 || travados.length > 0) {
     // A tela monta a frase com `agenda` (quantos, em que situação, e qual abrir);
     // `vinculos` é o texto em pt-BR da auditoria (DeskcommCRM #1925).
     const por_situacao: Record<string, number> = {};
     for (const c of visiveis) por_situacao[c.status] = (por_situacao[c.status] ?? 0) + 1;
     const vinculos: string[] = [];
     if (visiveis.length > 0) vinculos.push(`${visiveis.length} compromisso(s) na agenda`);
-    if (pendentesNoGoogle.length > 0) {
-      vinculos.push(`${pendentesNoGoogle.length} compromisso(s) excluído(s) ainda pendente(s) no Google`);
+    if (emTransito.length > 0) {
+      vinculos.push(`${emTransito.length} compromisso(s) excluído(s) ainda pendente(s) no Google`);
+    }
+    if (travados.length > 0) {
+      vinculos.push(`${travados.length} compromisso(s) excluído(s) travado(s) na sincronização com o Google`);
     }
     const agenda = {
       por_situacao,
-      pendentes_no_google: pendentesNoGoogle.length,
-      // Com um só compromisso visível, a tela abre ele direto na Agenda.
-      compromisso_id: visiveis.length === 1 ? visiveis[0]!.id : null,
+      pendentes_no_google: emTransito.length,
+      travados_no_google: travados.length,
+      // Com um só compromisso visível, a tela abre ele direto na Agenda. Sem
+      // visível, abre o primeiro travado: o painel "Sincronização Google" dele
+      // mostra o motivo e a saída (resolver o conflito, tentar de novo).
+      compromisso_id:
+        visiveis.length === 1 ? visiveis[0]!.id : visiveis.length === 0 ? (travados[0]?.id ?? null) : null,
     };
     await audit({
       action: "contact.delete_blocked",
@@ -1015,12 +1082,40 @@ export async function deleteContactHandler(
       "state_conflict",
       {
         vinculos,
-        por_tabela: { calendar_appointments: visiveis.length + pendentesNoGoogle.length },
+        por_tabela: { calendar_appointments: visiveis.length + emTransito.length + travados.length },
         agenda,
       },
       ctx.requestId,
       traduzir("Não foi possível excluir: o contato ainda tem registros vinculados.", ctx.idioma ?? "pt-BR"),
     );
+  }
+
+  // A PROVA DAS CONVERSÕES JÁ ENVIADAS (0414). Apagar o compromisso excluído leva
+  // `ad_conversion_dispatches` por CASCADE, inclusive o aviso que JÁ chegou ao
+  // Google Ads/Meta (`sent_at`). A plataforma guarda a conversão; aqui sumiria o
+  // registro de que ela foi mandada. O essencial de cada envio vai para a linha
+  // `contact.deleted` (append-only, 5 anos) — nenhum dado do paciente: a tabela
+  // não tem nenhum, e só saem id, plataforma, evento, horário e valor.
+  //
+  // Service role porque a tabela é deny-all para a sessão (RLS sem policy,
+  // grants revogados); `organization_id` vem do contexto autenticado, e os ids
+  // são os da pré-checagem, já fechados nessa organização. Falha da leitura não
+  // autoriza seguir: a prova não volta depois da cascata.
+  let conversoesEnviadas: Array<Record<string, unknown>> = [];
+  if (apagaveis.length > 0) {
+    const { data: envios, error: errEnvios } = await createAdminClient()
+      .from("ad_conversion_dispatches")
+      .select("id, appointment_id, platform, event_name, sent_at, value_cents, currency")
+      .eq("organization_id", ctx.organization_id)
+      .in(
+        "appointment_id",
+        apagaveis.map((c) => c.id),
+      )
+      .not("sent_at", "is", null);
+    if (errEnvios) {
+      throw new ApiError(500, "internal_error", undefined, ctx.requestId, errEnvios.message);
+    }
+    conversoesEnviadas = (envios ?? []) as Array<Record<string, unknown>>;
   }
 
   // UMA função, UMA transação (issue #1862).
@@ -1098,11 +1193,19 @@ export async function deleteContactHandler(
     requestId: ctx.requestId,
     // Os compromissos já excluídos na Agenda que saíram junto (migration 0413).
     // ponytail: é a conta da pré-checagem; um compromisso excluído no mesmo
-    // instante, entre ela e a função, sai sem entrar aqui.
+    // instante, entre ela e a função, sai sem entrar aqui (nem os envios de
+    // conversão dele). Fechar a janela pede a leitura dentro da função.
     metadata: {
       ...a.metadataActor,
       compromissos_excluidos_apagados: apagaveis.length,
       compromissos_ids: apagaveis.map((c) => c.id),
+      // 0414: excluídos que tinham evento no Google mas nenhuma conexão capaz de
+      // retirá-lo. O id do evento fica para alguém achá-lo e apagá-lo à mão.
+      compromissos_sem_conexao_no_google: orfaos.map((c) => ({
+        id: c.id,
+        google_event_id: c.google_event_id,
+      })),
+      conversoes_enviadas_apagadas: conversoesEnviadas,
     },
   });
 
