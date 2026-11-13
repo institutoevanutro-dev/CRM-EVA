@@ -61,6 +61,8 @@ interface TriggerFormState {
   kind: TriggerKind;
   thresholdMinutes: number;
   segments: string;
+  /** `params.reentrada_minima_horas` como texto do campo; "" = sem limite. */
+  reentradaHoras: string;
   stageId: string;
   cancelOnReply: boolean;
   eventTypeIds: string[];
@@ -73,6 +75,8 @@ const CANAL_DA_CONSULTA = "__canal_da_consulta__";
 
 const DEFAULT_THRESHOLD_MINUTES = 60;
 const MIN_THRESHOLD_MINUTES = 5;
+/** Mesmo teto do schema (`reentrada_minima_horas`, api-schemas.ts). */
+const MAX_REENTRADA_HORAS = 720;
 
 const KIND_LABEL: Record<TriggerKind, string> = {
   appointment_no_show:"Falta confirmada pela equipe",
@@ -108,7 +112,7 @@ function parseTriggerConfig(raw: Record<string, unknown>): TriggerFormState {
             ? "webhook"
             : "manual";
   const params =
-    (raw.params as { threshold_minutes?: number; segments?: string[]; stage_id?: string; event_type_ids?: string[]; channel_session_id?: string } | undefined) ?? {};
+    (raw.params as { threshold_minutes?: number; segments?: string[]; reentrada_minima_horas?: number; stage_id?: string; event_type_ids?: string[]; channel_session_id?: string } | undefined) ?? {};
   return {
     kind,
     eventTypeIds: Array.isArray(params.event_type_ids) ? params.event_type_ids : [],
@@ -118,6 +122,8 @@ function parseTriggerConfig(raw: Record<string, unknown>): TriggerFormState {
         ? params.threshold_minutes
         : DEFAULT_THRESHOLD_MINUTES,
     segments: kind === "silence" && Array.isArray(params.segments) ? params.segments.join(", ") : "",
+    reentradaHoras:
+      kind === "silence" && typeof params.reentrada_minima_horas === "number" ? String(params.reentrada_minima_horas) : "",
     stageId: kind === "stage_change" && typeof params.stage_id === "string" ? params.stage_id : "",
     cancelOnReply: raw.cancel_on_reply === true,
   };
@@ -145,7 +151,11 @@ function toTriggerConfig(form: TriggerFormState): Record<string, unknown> {
     .filter(Boolean);
   return {
     kind: "silence",
-    params: { threshold_minutes: form.thresholdMinutes, ...(segments.length > 0 ? { segments } : {}) },
+    params: {
+      threshold_minutes: form.thresholdMinutes,
+      ...(segments.length > 0 ? { segments } : {}),
+      ...(form.reentradaHoras.trim() ? { reentrada_minima_horas: Number(form.reentradaHoras) } : {}),
+    },
     ...cancelOnReply,
   };
 }
@@ -211,6 +221,11 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
 
   const thresholdInvalid =
     form.kind === "silence" && (!Number.isFinite(form.thresholdMinutes) || form.thresholdMinutes < MIN_THRESHOLD_MINUTES);
+  const reentrada = form.reentradaHoras.trim();
+  const reentradaInvalid =
+    form.kind === "silence" &&
+    reentrada !== "" &&
+    !(/^\d+$/.test(reentrada) && Number(reentrada) >= 1 && Number(reentrada) <= MAX_REENTRADA_HORAS);
   // Gatilho de etapa sem etapa escolhida não é rascunho: é um fluxo que ficaria
   // ativo sem nunca disparar. O publish recusa; o Salvar recusa antes.
   const stageInvalid = form.kind === "stage_change" && form.stageId.trim().length === 0;
@@ -219,11 +234,13 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
     ((form.kind === "appointment_no_show" || form.kind === "appointment_attended") &&
       (form.eventTypeIds.join() !== saved.eventTypeIds.join() || form.channelSessionId !== saved.channelSessionId)) ||
     form.cancelOnReply !== saved.cancelOnReply ||
-    (form.kind === "silence" && (form.thresholdMinutes !== saved.thresholdMinutes || form.segments !== saved.segments)) ||
+    (form.kind === "silence" && (form.thresholdMinutes !== saved.thresholdMinutes ||
+        form.segments !== saved.segments ||
+        form.reentradaHoras !== saved.reentradaHoras)) ||
     (form.kind === "stage_change" && form.stageId !== saved.stageId);
 
   const onSave = () => {
-    if (thresholdInvalid || stageInvalid) return;
+    if (thresholdInvalid || stageInvalid || reentradaInvalid) return;
     update.mutate(toTriggerConfig(form), {
       onSuccess: () => {
         setSaved(form);
@@ -393,6 +410,25 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
                   onChange={(e) => setForm((f) => ({ ...f, segments: e.target.value }))}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="trigger-reentrada">{t("Recomeçar no máximo a cada __ horas")}</Label>
+                <Input
+                  id="trigger-reentrada"
+                  type="number"
+                  min={1}
+                  max={MAX_REENTRADA_HORAS}
+                  step={1}
+                  placeholder={t("vazio = sem limite")}
+                  value={form.reentradaHoras}
+                  onChange={(e) => setForm((f) => ({ ...f, reentradaHoras: e.target.value }))}
+                  aria-invalid={reentradaInvalid}
+                />
+                {reentradaInvalid && (
+                  <p className="text-xs text-error-fg">
+                    {t("Número inteiro de horas, de 1 a")} {MAX_REENTRADA_HORAS}.
+                  </p>
+                )}
+              </div>
             </>
           )}
 
@@ -410,7 +446,7 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
             type="button"
             size="sm"
             className="w-full"
-            disabled={!dirty || thresholdInvalid || stageInvalid || update.isPending}
+            disabled={!dirty || thresholdInvalid || stageInvalid || reentradaInvalid || update.isPending}
             onClick={onSave}
             data-testid="trigger-config-save"
           >

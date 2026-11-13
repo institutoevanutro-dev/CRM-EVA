@@ -82,6 +82,17 @@ export type DeclaracaoDoTurno = z.infer<typeof declaracaoDoTurnoSchema>;
 /**
  * O pedaço da instrução de fechamento que cobre a declaração.
  *
+ * ═══ O QUE É PROMESSA (e por que o texto diz o que NÃO é) ═══
+ *
+ * Até 12/11/2026 o texto pedia "tudo que você prometeu a ela", e o modelo lia
+ * isso largo: em produção, 21 avisos "promessa sem responsável" em 7 dias, quase
+ * todos falsos, em três formatos — (a) o retorno combinado que o turno estava
+ * CUMPRINDO ("te chamei como combinado" declarava "chamar amanhã às 10h"); (b) a
+ * próxima pergunta normal da conversa; (c) o que a PESSOA disse que faria. Cada
+ * promessa declarada vira obrigação apurada pelo Operador (`operator-turn.ts`),
+ * então promessa falsa é aviso falso na Central. O texto agora nomeia os três
+ * formatos como exclusões, e manda o (c) para `intencoes`, que já existe.
+ *
  * Vive aqui, e não colado dentro de `CHECKPOINT_INSTRUCTION`, porque o texto e o
  * schema que o valida têm de mudar JUNTOS — separá-los em dois arquivos é como
  * uma instrução passa a pedir um formato que o parser não aceita mais.
@@ -95,8 +106,14 @@ export const DECLARACAO_INSTRUCTION =
   '{"intencoes": [{"o_que": "…", "evidencia": "…"}], "promessas": [{"o_que": "…", "prazo": "…"|null}], ' +
   '"nada_a_declarar": false}. ' +
   'Em "intencoes", o que a pessoa quer, em linguagem simples ("quer remarcar", "desistiu por causa do preço"), ' +
-  'com o trecho da conversa que mostra isso. Em "promessas", tudo que você prometeu a ela — ' +
-  'inclusive "vou verificar e te aviso" — com o prazo quando houver combinado um. ' +
+  'com o trecho da conversa que mostra isso — inclusive o que ELA disse que vai fazer ' +
+  '("se não conseguir pelo plano, te retorno" é intenção dela, não promessa sua). ' +
+  'Em "promessas", só o que VOCÊ se comprometeu a fazer DEPOIS desta mensagem e ainda não fez ' +
+  '("vou verificar e te aviso", "te chamo amanhã às 10h"), com o prazo quando houver combinado um. ' +
+  'Não é promessa: o que você está cumprindo nesta mesma mensagem (se você está retomando o contato ' +
+  'como tinha combinado, esse retorno já foi feito — não o declare de novo); ' +
+  'a próxima pergunta ou o próximo passo normal da conversa ("perguntar qual resultado ela busca"); ' +
+  'e o que a pessoa disse que vai fazer. ' +
   'Se o turno não teve nem intenção nem promessa, mande "nada_a_declarar": true e as duas listas vazias. ' +
   'Nunca invente: sem trecho que sustente, não declare.';
 

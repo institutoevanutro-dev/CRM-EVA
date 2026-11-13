@@ -16,6 +16,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { filtrarCandidatosExcluidos } from "@/lib/escalacao/devolucao-ao-rodizio";
 import { logger } from "@/lib/logger";
+import { motivoParaNaoRotear, type MotivoDoCaso } from "@/lib/routing/caso-da-conversa";
 import { decideRouting } from "@/lib/routing/decide";
 import { loadEligibleAttendants, InvalidRoutingChannel } from "@/lib/routing/eligibles";
 import { routingConfigSchema } from "@/lib/schemas/routing";
@@ -35,6 +36,8 @@ export type RoutingOutcome =
   | "skipped_conv_missing"
   /** Contato oculto do Inbox (migration 0372): ninguém é escalado para ele. */
   | "skipped_contato_oculto"
+  /** O caso mais recente da conversa não pede uma pessoa agora (PR #3739 do original). */
+  | "skipped_caso_sem_humano"
   | "skipped_invalid_payload"
   | "assign_lost_race"
   | "error";
@@ -64,6 +67,7 @@ const EMPTY_OUTCOMES = (): Record<RoutingOutcome, number> => ({
   skipped_invalid_channel: 0,
   skipped_conv_missing: 0,
   skipped_contato_oculto: 0,
+  skipped_caso_sem_humano: 0,
   skipped_invalid_payload: 0,
   assign_lost_race: 0,
   error: 0,
@@ -147,7 +151,7 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
 
   const { data: conv, error: convError } = await admin
     .from("conversations")
-    .select("id, organization_id, contact_id, channel_session_id, assigned_to_user_id, status, contato_oculto, metadata")
+    .select("id, organization_id, contact_id, channel_session_id, assigned_to_user_id, status, contato_oculto, metadata, last_inbound_at")
     .eq("id", conversationId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -163,6 +167,14 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
     await markDone(event, "skipped_contato_oculto");
     return "skipped_contato_oculto";
   }
+
+  // O CASO DA CONVERSA (PR #3739 do original): a pergunta que a fila nunca
+  // fazia — "o caso desta conversa pede uma pessoa agora?". Antes de ler config
+  // e candidatos: o caso barra a conversa antes de o rodízio montar a lista.
+  const motivoDoCaso = await motivoDoCasoParaRoteamento(admin, orgId, {
+    id: conversationId,
+    last_inbound_at: (conv as { last_inbound_at?: string | null }).last_inbound_at ?? null,
+  });
 
   // organizations.settings.routing → Zod (default manual; knobs = config, não hardcode).
   const { data: org, error: orgError } = await admin
@@ -204,6 +216,7 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
     config,
     attempts: event.attempts,
     now,
+    motivoDoCaso,
   });
 
   switch (action.kind) {
@@ -243,14 +256,18 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
           ? "skipped_manual"
           : action.reason === "already_assigned"
             ? "skipped_already_assigned"
-            : "skipped_unsupported_mode";
+            : action.reason === "caso_aguardando_cliente" || action.reason === "caso_encerrado"
+              ? "skipped_caso_sem_humano"
+              : "skipped_unsupported_mode";
       if (action.reason.startsWith("unsupported_mode")) {
         logger.warn("[routing-worker] modo não suportado (post-MVP) — no-op", {
           organization_id: orgId,
           mode: config.mode,
         });
       }
-      await markDone(event, outcome);
+      // As duas causas do caso viram o mesmo outcome de contagem; a distinção
+      // ("esperando o cliente" × "concluído") fica no metadata do evento.
+      await markDone(event, outcome, outcome === "skipped_caso_sem_humano" ? { motivo_do_caso: action.reason } : {});
       return outcome;
     }
     case "requeue": {
@@ -414,4 +431,43 @@ export async function adotarLeadsDoContato(
     });
     return 0;
   }
+}
+
+/**
+ * Lê o caso MAIS RECENTE da conversa e responde se ele tira a conversa da fila.
+ * `null` = a fila pode distribuir. Usa `agent_cases_conv_idx` (já existe).
+ *
+ * Falha de leitura DISTRIBUI (falha aberta): subir a exceção reenfileiraria o
+ * evento e deixaria a conversa sem dono, o desfecho caro. O erro vai ao log.
+ *
+ * Portado do projeto original (DeskcommCRM, PR #3739).
+ */
+export async function motivoDoCasoParaRoteamento(
+  admin: Pick<ReturnType<typeof createAdminClient>, "from">,
+  orgId: string,
+  conversa: { id: string; last_inbound_at?: string | null },
+): Promise<MotivoDoCaso | null> {
+  const { data, error } = await admin
+    .from("agent_cases")
+    .select("status, closed_at, updated_at")
+    .eq("organization_id", orgId)
+    .eq("conversation_id", conversa.id)
+    // O mais recente, com desempate determinístico (`created_at` pode empatar).
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    logger.warn("[routing-worker] não consegui ler o caso da conversa — seguindo para a fila", {
+      organization_id: orgId,
+      conversation_id: conversa.id,
+      error: error.message,
+    });
+    return null;
+  }
+  const caso = data as { status: string; closed_at: string | null; updated_at: string | null } | null;
+  return motivoParaNaoRotear(
+    caso ? { status: caso.status, encerradoEm: caso.closed_at ?? null, atualizadoEm: caso.updated_at ?? null } : null,
+    conversa.last_inbound_at ?? null,
+  );
 }

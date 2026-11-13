@@ -111,6 +111,45 @@ describe("declaração do turno — o contrato", () => {
       const achados = proibidos.filter((t) => texto.includes(t));
       expect(achados, `vocabulário interno na instrução do Conversador: ${achados.join(", ")}`).toEqual([]);
     });
+
+    // Os três formatos de promessa falsa medidos em produção (21 avisos
+    // "promessa sem responsável" em 7 dias). Vigia TEXTO: o comportamento do
+    // modelo não é testável sem chamá-lo, e este teste não chama.
+    describe("promessa é só o que o assistente fará DEPOIS deste turno", () => {
+      const texto = DECLARACAO_INSTRUCTION;
+
+      it("define promessa como compromisso futuro ainda não cumprido", () => {
+        expect(texto).toMatch(/DEPOIS desta mensagem e ainda não fez/);
+        expect(texto).not.toMatch(/tudo que você prometeu/i);
+      });
+
+      it("(a) o retorno combinado que o turno está cumprindo não é promessa", () => {
+        expect(texto).toMatch(/cumprindo nesta mesma mensagem/);
+        expect(texto).toMatch(/retomando o contato como tinha combinado, esse retorno já foi feito/);
+      });
+
+      it("(b) a próxima pergunta ou passo normal da conversa não é promessa", () => {
+        expect(texto).toMatch(/próxima pergunta ou o próximo passo normal da conversa/);
+      });
+
+      it("(c) o que a pessoa disse que vai fazer vai em intenções, não em promessas", () => {
+        expect(texto).toMatch(/o que ELA disse que vai fazer/);
+        expect(texto).toMatch(/é intenção dela, não promessa sua/);
+        // A posição importa: a regra tem de estar no trecho de "intencoes",
+        // antes de "promessas" — senão manda o caso (c) para lugar nenhum.
+        expect(texto.indexOf("ELA disse")).toBeLessThan(texto.indexOf('Em "promessas"'));
+      });
+
+      it("o caso (c) declarado como intenção é aceito pelo schema", () => {
+        const d = declaracaoDoTurnoSchema.parse({
+          intencoes: [
+            { o_que: "vai tentar pelo plano e retorna se não der", evidencia: "se eu não conseguir pelo plano, retorno" },
+          ],
+          promessas: [],
+        });
+        expect(promessasEmAberto(d)).toEqual([]);
+      });
+    });
   });
 
   describe("o segundo leitor — o humano que assume a conversa", () => {

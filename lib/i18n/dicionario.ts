@@ -2332,6 +2332,9 @@ export const DICIONARIO: Traducoes = {
   "minutos.": { es: "minutos." },
   "Segmentos (tags, opcional)": { es: "Segmentos (tags, opcional)" },
   "ex: vip, carrinho-abandonado": { es: "ej: vip, carrito-abandonado" },
+  "Recomeçar no máximo a cada __ horas": { es: "Reiniciar como máximo cada __ horas" },
+  "vazio = sem limite": { es: "vacío = sin límite" },
+  "Número inteiro de horas, de 1 a": { es: "Número entero de horas, de 1 a" },
   "Cancelar se o lead responder": { es: "Cancelar si el lead responde" },
   "Salvar gatilho": { es: "Guardar disparador" },
   "Fila de follow-ups": { es: "Cola de seguimientos" },
@@ -6711,7 +6714,7 @@ export const DICIONARIO: Traducoes = {
   "Adiado: a equipe ainda vai responder um caso aberto": { es: "Pospuesto: el equipo aún va a responder un caso abierto" },
   "envia em {ate}": { es: "envía el {ate}" },
   "Segurou o fluxo por causa de um retorno agendado": { es: "Frenó el flujo por un regreso programado" },
-  "volta a andar em {ate}, um dia depois do retorno": { es: "vuelve a avanzar el {ate}, un día después del regreso" },
+  "volta a andar em {ate}, depois do retorno": { es: "vuelve a avanzar el {ate}, después del regreso" },
   "Passo pulado, o fluxo seguiu": { es: "Paso omitido, el flujo siguió" },
   "O prazo desta espera já tinha passado": { es: "El plazo de esta espera ya había pasado" },
   "devia terminar em {quando}; a mensagem seguinte não será enviada": {

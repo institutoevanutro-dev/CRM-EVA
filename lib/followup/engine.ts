@@ -57,7 +57,8 @@ import {
   type AvisoRecuperacaoEsgotada,
 } from "./no-show-recuperacao-esgotada";
 import { interpolarDestino, persistirRespostaFollowupSupabase } from "./persistir-resposta";
-import { quandoDoRetornoQueSegura, reavaliarDepoisDoRetorno } from "./retorno-segura-o-fluxo";
+import { folgaDepoisDoRetorno, quandoDoRetornoQueSegura, reavaliarDepoisDoRetorno } from "./retorno-segura-o-fluxo";
+import { triggerConfigSchema } from "./api-schemas";
 import { TETO_DE_PASSOS_DO_MOTOR } from "./custo-no-motor";
 
 // O número mora em `custo-no-motor.ts` porque a publicação também precisa dele:
@@ -971,8 +972,9 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
   return {
     async assertServiceBoundary(enrollment) { if(!revisions.has(enrollment.id) && enrollment.revision!==undefined) revisions.set(enrollment.id,enrollment.revision); await assertServiceBoundarySupabase(admin, enrollment.service_boundary ?? null); },
     async retornoQueSeguraOFluxo(enrollment) {
-      const quando = await quandoDoRetornoQueSegura(admin, enrollment.organization_id, enrollment.contact_id);
-      if (quando === null) return null;
+      // O gatilho vem ANTES do retorno: a folga depois do retorno é a do fluxo
+      // (`folgaDepoisDoRetorno`, PR #3808 do original), e a janela do retorno
+      // recém-saído depende dela.
       const { data, error } = await admin
         .from("followup_flow_pointers")
         .select("trigger_config")
@@ -980,8 +982,16 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
         .eq("id", enrollment.pointer_id)
         .maybeSingle();
       if (error) throw new Error(`pointer_query_failed: ${error.message}`);
-      const gatilho = (data as { trigger_config?: { kind?: unknown } } | null)?.trigger_config;
-      return gatilho?.kind === "silence" ? reavaliarDepoisDoRetorno(quando) : null;
+      const gatilho = triggerConfigSchema.safeParse((data as { trigger_config?: unknown } | null)?.trigger_config);
+      if (!gatilho.success || gatilho.data.kind !== "silence") return null;
+      const minutos = gatilho.data.params.threshold_minutes;
+      const quando = await quandoDoRetornoQueSegura(
+        admin,
+        enrollment.organization_id,
+        enrollment.contact_id,
+        folgaDepoisDoRetorno(minutos),
+      );
+      return quando === null ? null : reavaliarDepoisDoRetorno(quando, minutos);
     },
     async assertAgenda(enrollment){
       // #3813 — a escolha do fluxo vale também no tick: sem ela o motor usava o

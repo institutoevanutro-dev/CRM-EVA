@@ -218,60 +218,75 @@ export function guardServiceTools(tools: ToolSet | undefined): ToolSet | undefin
     "search_knowledge",
     "read_skill_reference",
   ]);
+  // As guardas das chamadas paralelas de um passo correm EM FILA: cada `execute`
+  // começa na ordem em que o modelo escreveu as chamadas, não na ordem em que a
+  // consulta da guarda voltou. É dessa ordem que depende a fila de envio do turno
+  // (`lib/agent-engine/agent/fila-de-envio.ts`). Uma guarda que falha não trava
+  // as seguintes: cada uma confere o próprio efeito. Portado do projeto original
+  // (DeskcommCRM, PR #4288).
+  let guardaAnterior: Promise<unknown> = Promise.resolve();
   return Object.fromEntries(
     Object.entries(tools).map(([name, definition]) => {
       if (reads.has(name) || !definition.execute) return [name, definition];
       const execute = definition.execute;
+      const prepararExecucao = async (args: Parameters<typeof execute>): Promise<() => Promise<unknown>> => {
+        const scope = execution.getStore();
+        const conversa = scope?.boundary;
+        const kind = scope?.job?.kind;
+        if (!scope || !conversa || !kind || !TURNOS_AUTONOMOS.has(kind) || ENVIOS.has(name)) {
+          await guardServiceEffect();
+          return async () => execute(...args);
+        }
+        const pessoaNoComando = () =>
+          pessoaNoComandoDaConversa(
+            scope.db,
+            { organizationId: conversa.organization_id, conversationId: conversa.conversation_id },
+            kind,
+          );
+        const turnoRevogado = async () => {
+          try {
+            await requireCurrentAutonomousTurn(scope.db, scope.job!);
+            return null;
+          } catch (erro) {
+            if (erro instanceof StaleServiceBoundaryError) return "turno_revogado";
+            throw erro;
+          }
+        };
+        const motivo =
+          (await turnoRevogado()) ??
+          (scope.iaPassouAVez || scope.escritasEmCurso ? null : await pessoaNoComando());
+        if (motivo !== null) {
+          logger.info("ferramenta recusada: uma pessoa assumiu a conversa durante o turno", {
+            job_id: scope.job?.id,
+            organization_id: conversa.organization_id,
+            conversation_id: conversa.conversation_id,
+            ferramenta: name,
+            motivo,
+          });
+          return async () => RECUSA_POR_PESSOA_NO_COMANDO as never;
+        }
+        await guardServiceEffect();
+        scope.escritasEmCurso = (scope.escritasEmCurso ?? 0) + 1;
+        return async () => {
+          try {
+            return await execute(...args);
+          } finally {
+            if (!scope.iaPassouAVez && (await pessoaNoComando().catch(() => null)) !== null) {
+              scope.iaPassouAVez = true;
+            }
+            scope.escritasEmCurso = (scope.escritasEmCurso ?? 1) - 1;
+          }
+        };
+      };
       return [
         name,
         {
           ...definition,
-          execute: async (...args: Parameters<typeof execute>) => {
-            const scope = execution.getStore();
-            const conversa = scope?.boundary;
-            const kind = scope?.job?.kind;
-            if (!scope || !conversa || !kind || !TURNOS_AUTONOMOS.has(kind) || ENVIOS.has(name)) {
-              await guardServiceEffect();
-              return execute(...args);
-            }
-            const pessoaNoComando = () =>
-              pessoaNoComandoDaConversa(
-                scope.db,
-                { organizationId: conversa.organization_id, conversationId: conversa.conversation_id },
-                kind,
-              );
-            const turnoRevogado = async () => {
-              try {
-                await requireCurrentAutonomousTurn(scope.db, scope.job!);
-                return null;
-              } catch (erro) {
-                if (erro instanceof StaleServiceBoundaryError) return "turno_revogado";
-                throw erro;
-              }
-            };
-            const motivo =
-              (await turnoRevogado()) ??
-              (scope.iaPassouAVez || scope.escritasEmCurso ? null : await pessoaNoComando());
-            if (motivo !== null) {
-              logger.info("ferramenta recusada: uma pessoa assumiu a conversa durante o turno", {
-                job_id: scope.job?.id,
-                organization_id: conversa.organization_id,
-                conversation_id: conversa.conversation_id,
-                ferramenta: name,
-                motivo,
-              });
-              return RECUSA_POR_PESSOA_NO_COMANDO as never;
-            }
-            await guardServiceEffect();
-            scope.escritasEmCurso = (scope.escritasEmCurso ?? 0) + 1;
-            try {
-              return await execute(...args);
-            } finally {
-              if (!scope.iaPassouAVez && (await pessoaNoComando().catch(() => null)) !== null) {
-                scope.iaPassouAVez = true;
-              }
-              scope.escritasEmCurso -= 1;
-            }
+          execute: (...args: Parameters<typeof execute>) => {
+            // A guarda (tudo ANTES do `execute`) corre em fila; o `execute` em si não.
+            const preparo = guardaAnterior.then(() => prepararExecucao(args));
+            guardaAnterior = preparo.catch(() => undefined);
+            return preparo.then((executar) => executar());
           },
         },
       ];
