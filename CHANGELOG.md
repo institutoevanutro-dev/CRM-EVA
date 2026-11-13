@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.14.0] — 2026-11-13
+
+### Adicionado
+
+- **Dá para levar os follow-ups em andamento para a versão nova do fluxo** Uma inscrição de follow-up fica presa à versão do fluxo em que começou, então publicar textos novos (com `{{primeiro_nome}}`, por exemplo) só alcançava quem entrasse depois. A API ganhou `POST /api/v1/ai/followup-flows/{id}/migrar-inscricoes` (só administrador), com corpo `{ "dry_run": true | false }`: leva as inscrições vivas (ativas, aguardando resposta ou pausadas) para a versão ativa, mas só as seguras — o passo em que cada uma está precisa existir na versão nova com o mesmo tipo e, se for espera ou prazo de resposta, com o mesmo tempo. O status e a hora do próximo passo não mudam e nada é enviado na hora. Cada inscrição levada ganha o evento `version_migrated`, e a execução fica na auditoria (`followup_flow.enrollments_migrated`). Com `dry_run: true` só mostra a contagem por versão de origem, com o motivo das que não são seguras. Quem opera o servidor pode rodar o mesmo pelo contêiner do worker: `pnpm exec tsx scripts/migrar-inscricoes-de-versao.ts --org <uuid> --pointer <uuid> [--executar]`. Sem mudança no banco.
+
 ## [5.13.0] — 2026-11-13
 
 ### Adicionado
@@ -9091,7 +9097,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.13.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.0...HEAD
+[5.14.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.13.0...v5.14.0
 [5.13.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.12.0...v5.13.0
 [5.12.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.11.1...v5.12.0
 [5.11.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.11.0...v5.11.1
