@@ -911,6 +911,12 @@ const AVISO_DO_TURNO_MUDO: Record<FalhaDoTurnoMudo, { title: string; body: strin
       'O turno terminou sem mensagem para o cliente e a correção automática da IA gastou todas ' +
       'as etapas em consultas, sem chegar a responder. Abra a conversa e responda o cliente.',
   },
+  correcao_calada_apos_veto: {
+    title: 'A IA não respondeu um cliente: as regras de segurança barraram a resposta',
+    body:
+      'A IA tentou responder, as regras de segurança barraram a mensagem, e a correção ' +
+      'automática terminou sem enviar nada. Abra a conversa e responda o cliente.',
+  },
 };
 
 /**
@@ -5722,7 +5728,8 @@ async function executarTurnoDoAgente(
     // barrou de novo, ou gastou os passos dela sem responder (porte do #4038). Antes o
     // turno acabava mudo com um `info` no log do worker, que ninguém na clínica lê. Vira
     // aviso na Central, um por conversa e motivo enquanto aberto. Não envia nada: nunca
-    // duplica mensagem. O silêncio escolhido na correção segue sem aviso.
+    // duplica mensagem. O silêncio escolhido na correção (sem tentativa barrada antes)
+    // segue sem aviso.
     const falha =
       !preview && liveJob().kind === 'inbound_turn'
         ? falhaDoTurnoMudo({ ...silencioDoTurno(), saidaCortada, correcaoCortada, correcaoTentouEnviar, tetoNaCorrecao })

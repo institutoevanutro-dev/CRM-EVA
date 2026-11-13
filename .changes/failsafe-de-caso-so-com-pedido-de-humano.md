@@ -10,6 +10,10 @@ Agora essa proteção só abre o caso quando o paciente pediu para falar com alg
 pediu ajuda, reclamou, relatou urgência ou sintoma (dor, sangramento, febre, alergia,
 inchaço, falta de ar e afins), ou quando a IA de fato envolveu a equipe ("já encaminhei
 para a recepção", "a equipe vai verificar"). Sem nenhum desses sinais, a promessa
-continua barrada e a IA reformula a resposta. O texto do aviso ao paciente não mudou.
+continua barrada e a IA reformula a resposta. Pedido de ligação ou retorno, remarcar ou desmarcar,
+"não gostei" e sintomas como passar mal, caroço, secreção, coceira e formigamento
+também contam como sinal. Se a IA tentar responder, for barrada e a correção
+automática terminar sem enviar nada, a Central recebe um aviso crítico para a equipe
+responder. O texto do aviso ao paciente não mudou.
 Na atualização não há nada a fazer. Portado do projeto original (DeskcommCRM, PR #3816
 de @webtecnica).

@@ -50,13 +50,16 @@ export interface EntradaDoFailsafeDoCaso {
 const SINAL_DE_PESSOA =
   /\b(?:humano|humana|pessoa|pessoas|gente|alguem|ninguem|atendente|atendentes|gerente|supervisor|supervisora|responsavel|setor|departamento|equipe|recepcao|recepcionista|secretaria|doutor|doutora|dr|dra|medico|medica|enfermeir[oa]|biomedic[oa]|nutricionista|dono|dona|procon|advogad[oa])\b/;
 
-/** Pedido de ajuda e reclamação: na dúvida, gente. */
+/**
+ * Pedido de ajuda, de contato por telefone, de mudança na agenda e reclamação: na
+ * dúvida, gente. ("pode me ligar?", "preciso remarcar", "não gostei do resultado")
+ */
 const SINAL_DE_AJUDA_OU_RECLAMACAO =
-  /\b(?:ajuda|ajudar|socorro|reclam\w*|absurdo|insatisfeit[oa]|descaso|desrespeito|pessimo|horrivel|cancelar|cancelamento|reembolso|estorno|devolu\w*)\b/;
+  /\b(?:ajuda|ajudar|socorro|reclam\w*|absurdo|insatisfeit[oa]|descaso|desrespeito|pessimo|horrivel|nao gostei|cancelar|cancelamento|reembolso|estorno|devolu\w*|ligar|liga|ligue|liguem|ligacao|ligacoes|retorno|retornar|remarc\w*|desmarc\w*)\b/;
 
 /** Sintoma ou intercorrência relatada pelo paciente (complementa o léxico genérico). */
 const SINAL_CLINICO =
-  /\b(?:dor|doendo|doi|sangr\w*|febre|alergi\w*|reacao|inchad[oa]|inchaco|inflam\w*|infec\w*|pus|vermelhid\w*|hematoma|roxo|queimad\w*|tontura|respirar|desmai\w*|vomit\w*|falta de ar|intercorrencia|piorou|piorando|emergencia|urgente|urgencia)\b/;
+  /\b(?:dor|doendo|doi|sangr\w*|febre|alergi\w*|reacao|inchad[oa]|inchaco|inflam\w*|infec\w*|pus|vermelhid\w*|hematoma|roxo|queimad\w*|tontura|respirar|passando mal|mal[- ]estar|inchou|inchando|caroco|carocos|secrecao|coceira|cocando|formigamento|formigando|desmai\w*|vomit\w*|falta de ar|intercorrencia|piorou|piorando|emergencia|urgente|urgencia)\b/;
 
 function normalize(text: string): string {
   return text

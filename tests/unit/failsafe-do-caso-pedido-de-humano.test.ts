@@ -27,6 +27,8 @@ describe("fail-safe de caso: o 'Não' curto não vira passagem para atendente", 
   it("o defeito: paciente só respondeu 'Não' e a IA prometeu retomada — NÃO abre caso", () => {
     expect(abre("Não")).toBe(false);
     expect(abre("não obrigado")).toBe(false);
+    expect(abre("Não, obrigado")).toBe(false);
+    expect(abre("não, obrigado!")).toBe(false);
     expect(abre("Pode ser semana que vem")).toBe(false);
   });
 
@@ -46,6 +48,14 @@ describe("fail-safe de caso: o 'Não' curto não vira passagem para atendente", 
     "quero fazer uma reclamação",
     "isso é um absurdo",
     "quero cancelar",
+    "pode me ligar?",
+    "me liga por favor",
+    "liga pra mim",
+    "vocês podem me ligar",
+    "aguardo o retorno de vocês",
+    "não gostei do resultado",
+    "preciso remarcar",
+    "quero desmarcar",
   ])("paciente pede gente ou reclama ('%s') — abre caso", (msg) => {
     expect(abre(msg)).toBe(true);
   });
@@ -58,6 +68,15 @@ describe("fail-safe de caso: o 'Não' curto não vira passagem para atendente", 
     "ficou muito inchado e vermelho",
     "é urgente",
     "não consigo respirar direito",
+    "estou passando mal",
+    "tô passando mal",
+    "estou passando mal, pode me ligar?",
+    "estou com mal-estar",
+    "inchou muito o lábio",
+    "ficou um caroço",
+    "está saindo secreção",
+    "estou com coceira",
+    "tô sentindo um formigamento",
   ])("urgência ou sintoma ('%s') — abre caso, mesmo com a IA só prometendo retomada", (msg) => {
     expect(abre(msg)).toBe(true);
   });
