@@ -335,7 +335,8 @@ export function Sidebar() {
           aberta ? "w-64 shadow-xl" : "w-16",
         )}
       >
-        <SidebarContent collapsed={!aberta} />
+        {/* Escolheu a tela: o menu recolhe e devolve o conteúdo, mesmo com o mouse ainda em cima. */}
+        <SidebarContent collapsed={!aberta} onNavigate={() => setAberta(false)} />
       </div>
     </aside>
   );

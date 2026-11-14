@@ -482,13 +482,13 @@ test.describe("Quadro do funil — agir em vários cards de uma vez", () => {
    * da etapa sumia do alto no caminho (pedido de quem opera, 25/09/2026). Agora
    * quem rola é o quadro, nos dois eixos, e o cabeçalho da etapa fica preso.
    *
-   * 820×600 de propósito: com a barra lateral do app aberta, duas etapas de
-   * 20rem não cabem lado a lado, e a etapa de origem tem mais cards do que a
+   * 780×600 de propósito: com a faixa do menu (64px, recolhida desde 14/11) e as
+   * margens, duas etapas de 20rem não cabem lado a lado (780−112 < 684), e a etapa de origem tem mais cards do que a
    * altura do quadro — as duas rolagens existem, e o teste diz isso antes de
    * medir (senão "a barra está à vista" passaria por não haver barra).
    */
   test.describe("o quadro cabe na tela", () => {
-    test.use({ viewport: { width: 820, height: 600 } });
+    test.use({ viewport: { width: 780, height: 600 } });
 
     test("a barra lateral fica no pé da tela e o nome da etapa não some ao rolar", async ({ page }) => {
       await login(page, creds.users.manager!.email, creds.password);
@@ -503,7 +503,7 @@ test.describe("Quadro do funil — agir em vários cards de uma vez", () => {
         rolaParaBaixo: el.scrollHeight > el.clientHeight,
         paginaRola: document.documentElement.scrollHeight - document.documentElement.clientHeight,
       }));
-      expect(medida.rolaDeLado, "fixture: em 820px as duas etapas não cabem lado a lado").toBe(true);
+      expect(medida.rolaDeLado, "fixture: em 780px as duas etapas não cabem lado a lado").toBe(true);
       expect(medida.rolaParaBaixo, "fixture: a etapa de origem passa da altura do quadro").toBe(true);
       expect(medida.pe, "o pé do quadro — onde mora a barra lateral — está dentro da tela").toBeLessThanOrEqual(
         medida.janela,

@@ -145,6 +145,14 @@ describe("Sidebar por área", () => {
     vi.useRealTimers();
   });
 
+  it("escolher uma tela recolhe o menu, mesmo com o mouse ainda em cima", () => {
+    comoPapel("admin");
+    render(<Sidebar />);
+    fireEvent.mouseEnter(screen.getByTestId("barra-lateral"));
+    fireEvent.click(screen.getByRole("link", { name: "Radar" }));
+    expect(screen.queryByRole("button", { name: "Atendimento" })).toBeNull();
+  });
+
   it("a dica da busca diz Ctrl K fora do Mac", () => {
     comoPapel("admin");
     render(<SidebarContent collapsed={false} />);

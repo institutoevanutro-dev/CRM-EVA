@@ -92,8 +92,8 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
     await loginAdmin(page);
     // Grupos pelo que a pessoa veio fazer (11/10/2026); na tela Início nenhum está aberto.
     // Desde a D1.10 o nome do grupo é um botão que só abre e fecha; o Início é o único link.
-    await expect(sidebar(page).getByRole("link")).toHaveText(["Início"]);
     await abrirMenuLateral(page);
+    await expect(sidebar(page).getByRole("link")).toHaveText(["Início"]);
     await expect(sidebar(page).getByRole("button")).toHaveText(["Atendimento", "Vendas", "Assistente", "Análise", "Clínica", "Integrações"]);
     await page.screenshot({ path: path.join(EVIDENCE, "nav-sidebar-areas.png"), fullPage: true });
   });

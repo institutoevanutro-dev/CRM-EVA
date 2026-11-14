@@ -7,4 +7,8 @@ import { expect, type Page } from "@playwright/test";
 export async function abrirMenuLateral(page: Page): Promise<void> {
   await page.getByTestId("barra-lateral").hover();
   await expect(page.getByTestId("barra-lateral").locator("button[aria-expanded]").first()).toBeVisible();
+  // A largura anima em 200 ms: medir no meio da animação mede outra coisa.
+  await expect
+    .poll(() => page.getByTestId("barra-lateral").locator(":scope > div").evaluate((el) => el.getBoundingClientRect().width))
+    .toBe(256);
 }
