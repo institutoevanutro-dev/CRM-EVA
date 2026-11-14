@@ -16,7 +16,23 @@ export interface SyncDetail {
   pending: boolean;
   conflict: GoogleConflict | null;
   can_resolve: boolean;
+  /** Situação da conexão Google de quem lançou; null quando não há ou não dá para ver. */
+  connection_status?: string | null;
 }
+/**
+ * Conexões que não voltam sozinhas: o mesmo conjunto que a exclusão de contato
+ * trata como "travado" (`CONEXAO_PEDE_ATENCAO` em app/api/v1/contacts/_handler.ts).
+ * O aviso daquela tela promete que o motivo aparece aqui.
+ */
+const MOTIVO_DA_CONEXAO: Record<string, string> = {
+  token_expired:
+    "A conexão com o Google de quem lançou este compromisso expirou. Quem o lançou precisa reconectar o Google em Configurar suas agendas.",
+  scope_missing:
+    "A conexão com o Google de quem lançou este compromisso está sem permissão para a agenda. Quem o lançou precisa reconectar o Google em Configurar suas agendas.",
+  error:
+    "A conexão com o Google de quem lançou este compromisso está com erro. Quem o lançou precisa reconectar o Google em Configurar suas agendas.",
+};
+
 export function SincronizacaoDoCompromisso({
   id,
   sync,
@@ -60,6 +76,7 @@ export function SincronizacaoDoCompromisso({
           timeStyle: "short",
         }).formatRange(new Date(value.starts_at), new Date(value.ends_at));
   const c = sync.conflict;
+  const motivoDaConexao = MOTIVO_DA_CONEXAO[sync.connection_status ?? ""];
   return (
     <section className="space-y-2 rounded-md border p-3" aria-label={t("Sincronização Google")}>
       <h3 className="text-sm font-medium">{t("Sincronização Google")}</h3>
@@ -85,6 +102,11 @@ export function SincronizacaoDoCompromisso({
       {sync.error && (
         <p role="alert" className="text-sm text-destructive">
           {sync.error}
+        </p>
+      )}
+      {motivoDaConexao && (
+        <p role="alert" className="text-sm text-destructive">
+          {t(motivoDaConexao)}
         </p>
       )}
       {c && (
@@ -154,7 +176,7 @@ export function SincronizacaoDoCompromisso({
           )}
         </p>
       )}
-      {!c && sync.can_resolve && (sync.error || sync.pending) && (
+      {!c && !motivoDaConexao && sync.can_resolve && (sync.error || sync.pending) && (
         <Button variant="outline" onClick={() => void decide("retry")} disabled={busy}>
           {t("Tentar sincronizar novamente")}
         </Button>

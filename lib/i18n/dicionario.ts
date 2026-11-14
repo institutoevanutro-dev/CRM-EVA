@@ -687,6 +687,15 @@ export const DICIONARIO: Traducoes = {
   "Sincronização Google": { es: "Sincronización con Google" },
   "Este compromisso precisa de uma decisão de sincronização.": { es: "Esta cita necesita una decisión de sincronización." },
   "Há alterações aguardando sincronização.": { es: "Hay cambios pendientes de sincronización." },
+  "A conexão com o Google de quem lançou este compromisso expirou. Quem o lançou precisa reconectar o Google em Configurar suas agendas.": {
+    es: "La conexión con Google de quien registró esta cita expiró. Quien la registró debe volver a conectar Google en Configurar tus calendarios.",
+  },
+  "A conexão com o Google de quem lançou este compromisso está sem permissão para a agenda. Quem o lançou precisa reconectar o Google em Configurar suas agendas.": {
+    es: "La conexión con Google de quien registró esta cita no tiene permiso para el calendario. Quien la registró debe volver a conectar Google en Configurar tus calendarios.",
+  },
+  "A conexão com o Google de quem lançou este compromisso está com erro. Quem o lançou precisa reconectar o Google em Configurar suas agendas.": {
+    es: "La conexión con Google de quien registró esta cita tiene un error. Quien la registró debe volver a conectar Google en Configurar tus calendarios.",
+  },
   "Alterações sincronizadas.": { es: "Cambios sincronizados." },
   "Ainda não publicado no Google.": { es: "Aún no publicado en Google." },
   "Aqui": { es: "Aquí" },
@@ -702,6 +711,7 @@ export const DICIONARIO: Traducoes = {
   "Decisão registrada. O Google será relido antes de aplicar; mudanças novas exigem outra decisão.": { es: "Decisión registrada. Se volverá a leer Google antes de aplicarla; los cambios nuevos requieren otra decisión." },
   "Tentar sincronizar novamente": { es: "Reintentar sincronización" },
   "Configurar suas agendas": { es: "Configurar tus calendarios" },
+  "Reconectar Google": { es: "Volver a conectar Google" },
   "Ocupação do Google ainda não verificada neste período.": { es: "La ocupación de Google aún no se ha verificado en este período." },
   "Marcar compromisso": {es:"Programar cita"},
   "Recuperação encerrada. Revise o próximo passo.": {es:"Recuperación finalizada. Revise el siguiente paso."},

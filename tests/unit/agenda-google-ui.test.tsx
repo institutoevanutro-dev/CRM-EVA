@@ -127,6 +127,16 @@ describe("seleção explícita de fontes e destino", () => {
     expect(screen.getByText(/Leitura permitida/)).toBeVisible();
     expect(screen.getByText(/Leitura em andamento/)).toBeVisible();
   });
+  it("conexão que precisa ser refeita ganha Reconectar Google; a saudável não", async () => {
+    // É para cá que o painel do compromisso manda quem precisa reconectar.
+    api.get.mockResolvedValue({
+      data: { ...catalog, connections: [{ ...connection("one"), status: "token_expired" }, connection("two")] },
+    });
+    open(<AgendasConectadas />);
+    const botoes = await screen.findAllByRole("link", { name: "Reconectar Google" });
+    expect(botoes).toHaveLength(1);
+    expect(botoes[0]).toHaveAttribute("href", "/api/v1/agenda/google/connect");
+  });
 });
 describe("decisão de conflito e retry no detalhe", () => {
   it("mostra ambos horários e decide com os valores exatos, sem conversão bigint", async () => {
@@ -176,6 +186,30 @@ describe("decisão de conflito e retry no detalhe", () => {
     );
     expect(screen.getByText(/Preservamos o histórico/)).toBeVisible();
     expect(screen.queryByRole("button")).toBeNull();
+  });
+  it("conexão de quem lançou que pede atenção mostra o motivo e não oferece retry inútil", () => {
+    // O aviso de "excluir contato" promete que o motivo aparece aqui.
+    open(
+      <SincronizacaoDoCompromisso
+        id="a"
+        sync={{ ...initial, conflict: null, connection_status: "token_expired" }}
+        onSaved={() => {}}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(/expirou\. Quem o lançou precisa reconectar o Google/);
+    expect(screen.queryByRole("button", { name: "Tentar sincronizar novamente" })).toBeNull();
+    cleanup();
+    for (const status of ["healthy", "disconnected", null]) {
+      open(
+        <SincronizacaoDoCompromisso
+          id="a"
+          sync={{ ...initial, conflict: null, connection_status: status }}
+          onSaved={() => {}}
+        />,
+      );
+      expect(screen.queryByText(/precisa reconectar o Google/)).toBeNull();
+      cleanup();
+    }
   });
   it("retry envia mesma revisão e aparece junto do erro", async () => {
     open(

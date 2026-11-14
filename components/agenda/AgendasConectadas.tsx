@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
+/** As mesmas situações que o painel do compromisso manda reconectar. */
+const CONEXAO_PRECISA_RECONECTAR = new Set(["token_expired", "scope_missing", "error"]);
 export interface CalendarCatalog {
   connections: Array<{
     id: string;
@@ -111,6 +113,14 @@ export function AgendasConectadas() {
             >
               {t("Atualizar lista e sincronização")}
             </Button>
+            {CONEXAO_PRECISA_RECONECTAR.has(connection.status) && (
+              // A lista só traz conexões da própria pessoa: reconectar é refazer
+              // a autorização dela, e o retorno do Google devolve a conexão a
+              // `healthy`. É o caminho que o painel do compromisso aponta.
+              <Button variant="outline" asChild>
+                <a href="/api/v1/agenda/google/connect">{t("Reconectar Google")}</a>
+              </Button>
+            )}
           </div>
           {connection.last_sync_error && (
             <p role="alert" className="text-sm text-destructive">

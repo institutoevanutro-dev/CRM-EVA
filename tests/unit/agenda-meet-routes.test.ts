@@ -114,8 +114,11 @@ it("detalhe consulta o telefone real e formata o destino no idioma de quem lê",
             meeting_delivery: { state: "none" },
             google_local_revision: "1",
             google_synced_local_revision: "0",
+            google_connection_id: id,
           }
-        : table === "conversations"
+        : table === "calendar_connections"
+          ? { status: "token_expired" }
+          : table === "conversations"
           ? [{ id, created_at: "2030-01-02T13:00:00Z", contacts: contact }]
           : table === "messages"
             ? []
@@ -149,6 +152,10 @@ it("detalhe consulta o telefone real e formata o destino no idioma de quem lê",
     } as never);
     const response = await GET(new Request("http://local/appointment"), ctx);
     expect(response.status).toBe(200);
-    expect((await response.json()).data.meeting.destinations).toEqual([{ id, label }]);
+    const body = await response.json();
+    expect(body.data.meeting.destinations).toEqual([{ id, label }]);
+    // O motivo que o aviso de "excluir contato" promete mostrar no compromisso.
+    expect(body.data.google_sync.connection_status).toBe("token_expired");
+    expect(body.data).not.toHaveProperty("google_connection_id");
   }
 });
