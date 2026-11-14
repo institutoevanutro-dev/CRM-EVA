@@ -98,12 +98,21 @@ export async function PATCH(req: Request) {
     return ok({ saved: true }, { requestId });
   } catch (e) {
     const stale = e instanceof Error && "code" in e && (e.code === "PT409" || e.code === "40001");
+    if (stale)
+      return fail("conflict", "Suas agendas mudaram. Atualize a lista antes de salvar.", 409, {
+        requestId,
+      });
+    // O motivo vem do `raise exception` de fn_google_selection. Sem ele, a
+    // pessoa só lia "escolha agendas disponíveis" e não sabia qual travava.
+    const motivo = e instanceof Error ? e.message : "";
     return fail(
-      stale ? "conflict" : "forbidden",
-      stale
-        ? "Suas agendas mudaram. Atualize a lista antes de salvar."
-        : "Escolha agendas disponíveis da sua própria conexão.",
-      stale ? 409 : 403,
+      "forbidden",
+      motivo.includes("google_source_unavailable")
+        ? "Uma agenda marcada em \"Conta como ocupado\" não está mais disponível no Google. Desmarque-a e salve de novo."
+        : motivo.includes("google_destination_unavailable")
+          ? "A agenda escolhida como destino não aceita mais publicação. Escolha outra e salve de novo."
+          : "Escolha agendas disponíveis da sua própria conexão.",
+      403,
       { requestId },
     );
   }

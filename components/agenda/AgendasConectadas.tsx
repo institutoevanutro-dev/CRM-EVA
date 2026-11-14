@@ -161,14 +161,31 @@ export function AgendasConectadas() {
                     {t("Destino dos novos compromissos")}
                   </label>
                 </div>
-                {!calendar.can_write && (
-                  <p className="text-xs text-muted-foreground">
+                {!calendar.available ? (
+                  <p
+                    role={sources.includes(calendar.id) ? "alert" : undefined}
+                    className={
+                      sources.includes(calendar.id)
+                        ? "text-sm text-destructive"
+                        : "text-xs text-muted-foreground"
+                    }
+                  >
                     {t(
-                      calendar.can_read
-                        ? "Leitura permitida. Esta agenda não está disponível para publicação."
-                        : "Esta permissão não oferece a leitura de eventos necessária. Revise o acesso no Google.",
+                      sources.includes(calendar.id)
+                        ? "O Google não entrega mais esta agenda para a sua conta: ela foi apagada ou deixou de ser compartilhada. Desmarque \"Conta como ocupado\" para salvar as outras."
+                        : "O Google não entrega mais esta agenda para a sua conta: ela foi apagada ou deixou de ser compartilhada.",
                     )}
                   </p>
+                ) : (
+                  !calendar.can_write && (
+                    <p className="text-xs text-muted-foreground">
+                      {t(
+                        calendar.can_read
+                          ? "Leitura permitida. Esta agenda não está disponível para publicação."
+                          : "Esta permissão não oferece a leitura de eventos necessária. Revise o acesso no Google.",
+                      )}
+                    </p>
+                  )
                 )}
                 <p className="text-xs text-muted-foreground">
                   {calendar.last_sync_at

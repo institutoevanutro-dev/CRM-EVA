@@ -100,6 +100,26 @@ describe("bordas humanas de seleção e conflito", () => {
     ).toBe(409);
     expect(audit).not.toHaveBeenCalled();
   });
+  it("agenda marcada indisponível e destino sem publicação ganham mensagens próprias", async () => {
+    const body = () =>
+      request({ revisions: [{ connection_id: id, revision: "1" }], sources: [id], destination: id }, "PATCH");
+    vi.mocked(googleRpc).mockRejectedValueOnce(
+      Object.assign(new Error("google_source_unavailable"), { code: "42501" }),
+    );
+    const fonte = await PATCH(body());
+    expect(fonte.status).toBe(403);
+    expect((await fonte.json()).error.message).toMatch(/Conta como ocupado.*Desmarque/);
+    vi.mocked(googleRpc).mockRejectedValueOnce(
+      Object.assign(new Error("google_destination_unavailable"), { code: "42501" }),
+    );
+    expect((await (await PATCH(body())).json()).error.message).toMatch(/destino/);
+    vi.mocked(googleRpc).mockRejectedValueOnce(
+      Object.assign(new Error("google_selection_forbidden"), { code: "42501" }),
+    );
+    expect((await (await PATCH(body())).json()).error.message).toBe(
+      "Escolha agendas disponíveis da sua própria conexão.",
+    );
+  });
   it("dono diferente recebe403 decidido pela RPC, nunca fallback service", async () => {
     vi.mocked(googleRpc).mockRejectedValue(
       Object.assign(new Error("google_resolution_forbidden"), { code: "42501" }),
