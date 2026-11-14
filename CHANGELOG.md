@@ -8,6 +8,17 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.14.4] — 2026-11-14
+
+### Corrigido
+
+- **Configurar suas agendas diz qual agenda impede o salvamento** Quando uma agenda marcada em "Conta como ocupado" deixava de ser entregue pelo
+  Google (foi apagada ou deixou de ser compartilhada), "Salvar agendas" recusava
+  tudo com "Escolha agendas disponíveis da sua própria conexão", sem dizer qual.
+  Agora a própria agenda mostra que o Google não a entrega mais e pede para
+  desmarcá-la, e o erro do salvamento diz o motivo (agenda marcada indisponível
+  ou destino que não aceita publicação).
+
 ## [5.14.3] — 2026-11-14
 
 ### Corrigido
@@ -9134,7 +9145,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.3...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.4...HEAD
+[5.14.4]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.3...v5.14.4
 [5.14.3]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.2...v5.14.3
 [5.14.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.1...v5.14.2
 [5.14.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.0...v5.14.1
