@@ -177,6 +177,30 @@ describe("decisão de conflito e retry no detalhe", () => {
     expect(screen.getByText(/Preservamos o histórico/)).toBeVisible();
     expect(screen.queryByRole("button")).toBeNull();
   });
+  it("conexão de quem lançou que pede atenção mostra o motivo e não oferece retry inútil", () => {
+    // O aviso de "excluir contato" promete que o motivo aparece aqui.
+    open(
+      <SincronizacaoDoCompromisso
+        id="a"
+        sync={{ ...initial, conflict: null, connection_status: "token_expired" }}
+        onSaved={() => {}}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(/expirou\. Quem o lançou precisa reconectar o Google/);
+    expect(screen.queryByRole("button", { name: "Tentar sincronizar novamente" })).toBeNull();
+    cleanup();
+    for (const status of ["healthy", "disconnected", null]) {
+      open(
+        <SincronizacaoDoCompromisso
+          id="a"
+          sync={{ ...initial, conflict: null, connection_status: status }}
+          onSaved={() => {}}
+        />,
+      );
+      expect(screen.queryByText(/precisa reconectar o Google/)).toBeNull();
+      cleanup();
+    }
+  });
   it("retry envia mesma revisão e aparece junto do erro", async () => {
     open(
       <SincronizacaoDoCompromisso
