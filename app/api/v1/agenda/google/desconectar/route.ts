@@ -58,6 +58,11 @@ export const dynamic = "force-dynamic";
 const corpo = z.object({
   /** Ausente = a própria conexão de quem chamou. Presente = exige `manager`. */
   user_id: z.string().uuid().optional(),
+  /**
+   * Ausente = todas as contas Google da pessoa. Presente = só esta: quem
+   * reconectou com OUTRA conta precisa tirar a velha sem perder a nova.
+   */
+  connection_id: z.string().uuid().optional(),
 });
 
 export async function DELETE(req: NextRequest): Promise<Response> {
@@ -88,7 +93,7 @@ export async function DELETE(req: NextRequest): Promise<Response> {
 
   // Filtro explícito de tenant no client de service role — a doutrina não abre
   // exceção nem quando o `user_id` já restringiria na prática.
-  const { data: conexoes, error: erroLeitura } = await admin
+  let leitura = admin
     .from("calendar_connections")
     .select("id, account_email")
     .eq("organization_id", org.orgId)
@@ -96,6 +101,8 @@ export async function DELETE(req: NextRequest): Promise<Response> {
     // A CONSTANTE. Era `"google"`, e por isso desconectar respondia 404
     // "Não há agenda do Google conectada" para quem TINHA a agenda conectada.
     .eq("provider", PROVEDOR_GOOGLE);
+  if (lido.data.connection_id) leitura = leitura.eq("id", lido.data.connection_id);
+  const { data: conexoes, error: erroLeitura } = await leitura;
 
   if (erroLeitura) {
     return fail("internal_error", erroLeitura.message, 500, { requestId });

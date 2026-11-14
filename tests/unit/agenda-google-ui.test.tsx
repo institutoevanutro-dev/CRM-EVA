@@ -7,7 +7,7 @@ import {
   SincronizacaoDoCompromisso,
   type SyncDetail,
 } from "@/components/agenda/SincronizacaoDoCompromisso";
-const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), post: vi.fn() }));
+const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), post: vi.fn(), delete: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ apiClient: api }));
 vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: vi.fn() }));
 let client: QueryClient;
@@ -136,6 +136,31 @@ describe("seleção explícita de fontes e destino", () => {
     const botoes = await screen.findAllByRole("link", { name: "Reconectar Google" });
     expect(botoes).toHaveLength(1);
     expect(botoes[0]).toHaveAttribute("href", "/api/v1/agenda/google/connect");
+  });
+  it("conta velha parada ao lado de outra ganha Remover esta conta, e só ela sai", async () => {
+    // Reconectar escolhendo outra conta Google deixava a velha listada sem saída.
+    api.get.mockResolvedValue({
+      data: { ...catalog, connections: [{ ...connection("one"), status: "token_expired" }, connection("two")] },
+    });
+    api.delete.mockResolvedValue({ data: { desconectadas: 1 } });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    open(<AgendasConectadas />);
+    const botoes = await screen.findAllByRole("button", { name: "Remover esta conta" });
+    expect(botoes).toHaveLength(1);
+    fireEvent.click(botoes[0]!);
+    await waitFor(() =>
+      expect(api.delete).toHaveBeenCalledWith("/api/v1/agenda/google/desconectar", {
+        connection_id: connection("one").id,
+      }),
+    );
+  });
+  it("conta única parada não ganha Remover: o caminho é reconectar", async () => {
+    api.get.mockResolvedValue({
+      data: { ...catalog, connections: [{ ...connection("one"), status: "token_expired" }] },
+    });
+    open(<AgendasConectadas />);
+    await screen.findByRole("link", { name: "Reconectar Google" });
+    expect(screen.queryByRole("button", { name: "Remover esta conta" })).toBeNull();
   });
   it("agenda que o Google não entrega mais diz qual é e como destravar; desmarcada, só informa", async () => {
     // Visto no Instituto em 14/11: agenda marcada sumiu do Google e o salvar
