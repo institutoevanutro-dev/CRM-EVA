@@ -121,6 +121,24 @@ export function AgendasConectadas() {
                 <a href="/api/v1/agenda/google/connect">{t("Reconectar Google")}</a>
               </Button>
             )}
+            {CONEXAO_PRECISA_RECONECTAR.has(connection.status) && data.connections.length > 1 && (
+              // Reconectar escolhendo OUTRA conta cria uma segunda conexão; a
+              // velha fica parada aqui. Só ela sai: a conta nova continua.
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  if (!window.confirm(t("Remover esta conta do Google? As agendas dela deixam de ocupar seus horários."))) return;
+                  void execute(() =>
+                    apiClient.delete("/api/v1/agenda/google/desconectar", {
+                      connection_id: connection.id,
+                    }),
+                  );
+                }}
+              >
+                {t("Remover esta conta")}
+              </Button>
+            )}
           </div>
           {connection.last_sync_error && (
             <p role="alert" className="text-sm text-destructive">

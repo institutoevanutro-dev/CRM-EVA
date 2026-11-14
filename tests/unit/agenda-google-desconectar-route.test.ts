@@ -44,6 +44,8 @@ let apagadas: string[] = [];
 let atualizacao: Record<string, unknown> | null = null;
 /** Conexões que o banco devolve — vazio simula "não há o que desconectar". */
 let conexoes: Array<{ id: string; account_email: string }> = [];
+/** Filtros `eq` da leitura das conexões. */
+let filtros: Array<[string, unknown]> = [];
 
 function pedido(corpo?: unknown): NextRequest {
   return new NextRequest("https://crm.exemplo/api/v1/agenda/google/desconectar", {
@@ -59,6 +61,7 @@ beforeEach(() => {
   // chamadas e preserva as implementações; `resetAllMocks` apagaria as duas.)
   vi.clearAllMocks();
   apagadas = [];
+  filtros = [];
   atualizacao = null;
   conexoes = [{ id: CONEXAO, account_email: "ana@clinica.com.br" }];
   vi.mocked(requireRole).mockResolvedValue({
@@ -70,7 +73,10 @@ beforeEach(() => {
     from: (tabela: string) => ({
       select: () => {
         const cadeia = {
-          eq: () => cadeia,
+          eq: (coluna: string, valor: unknown) => {
+            filtros.push([coluna, valor]);
+            return cadeia;
+          },
           then: (r: (v: unknown) => unknown) => r({ data: conexoes, error: null }),
         };
         return cadeia;
@@ -134,6 +140,16 @@ describe("DELETE /api/v1/agenda/google/desconectar", () => {
     // `apagadas` que NUNCA enche passaria despercebido se os casos usassem
     // `not.toContain`. O controle prende a direção.
     expect(apagadas).toEqual([]);
+  });
+
+  it("com `connection_id` remove só aquela conta; sem ele, todas", async () => {
+    const { DELETE } = await import("@/app/api/v1/agenda/google/desconectar/route");
+    const OUTRA = "33333333-3333-4333-8333-333333333333";
+    await DELETE(pedido({ connection_id: OUTRA }));
+    expect(filtros).toContainEqual(["id", OUTRA]);
+    filtros = [];
+    await DELETE(pedido());
+    expect(filtros.some(([coluna]) => coluna === "id")).toBe(false);
   });
 
   it("não diz que desconectou o que não existe", async () => {

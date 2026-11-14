@@ -153,6 +153,19 @@ describe("leitura paginada sob claim original", () => {
     expect(actions.some((a) => a.action === "error")).toBe(true);
     expect(batches).toHaveLength(0);
   });
+  it("prefixo sem tupla CANCELADO é rastro de compromisso excluído: não trava a leitura", async () => {
+    transport.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          items: [{ id: idDeEventoDoGoogle(id), status: "cancelled" }],
+          nextSyncToken: "new",
+        }),
+      ),
+    );
+    expect(await syncCalendar(db(), org, id, transport)).not.toBe("failed");
+    expect(actions.some((a) => a.action === "error")).toBe(false);
+    expect(batches[0]?.items).toEqual([]);
+  });
   it("cancelamento de terceiro preserva lápide sem horários", async () => {
     transport.mockResolvedValue(
       new Response(
