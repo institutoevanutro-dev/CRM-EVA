@@ -2,10 +2,9 @@
 import Link from "next/link";
 import { useT } from "@/hooks/i18n/useT";
 import { usePathname } from "next/navigation";
-import { useMemo, useState, useSyncExternalStore, useTransition } from "react";
-import { CaretDown, CaretDoubleLeft, CaretDoubleRight, Gear, House, SignOut } from "@/lib/ui/icons";
+import { useRef, useState, useTransition } from "react";
+import { CaretDown, Gear, House, SignOut } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
-import { toggleSidebar } from "@/app/actions/shell/toggleSidebar";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { ConnectionHealthDot } from "@/components/connections/ConnectionHealthDot";
 import { SearchTrigger } from "@/components/shell/SearchTrigger";
@@ -27,54 +26,12 @@ interface SidebarContentProps {
   collapsed: boolean;
   showCollapseControl?: boolean;
   onNavigate?: () => void;
-  /** Recolher otimista (D1.10): quem guarda o estado é o `AppShell`. */
-  onAlternarRecolhido?: () => void;
-}
-
-/** Grupos abertos, por navegador. Preferência de conveniência: perder não quebra nada. */
-const CHAVE_DOS_GRUPOS = "menu:grupos-abertos";
-
-const ouvintesDosGrupos = new Set<() => void>();
-
-function assinarGrupos(avisar: () => void): () => void {
-  ouvintesDosGrupos.add(avisar);
-  window.addEventListener("storage", avisar);
-  return () => {
-    ouvintesDosGrupos.delete(avisar);
-    window.removeEventListener("storage", avisar);
-  };
-}
-
-function lerGruposCru(): string {
-  try {
-    return window.localStorage.getItem(CHAVE_DOS_GRUPOS) ?? "{}";
-  } catch {
-    return "{}";
-  }
-}
-
-function interpretarGrupos(cru: string): Record<string, boolean> {
-  try {
-    const v: unknown = JSON.parse(cru);
-    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, boolean>) : {};
-  } catch {
-    return {};
-  }
-}
-
-function gravarGrupos(grupos: Record<string, boolean>): void {
-  try {
-    window.localStorage.setItem(CHAVE_DOS_GRUPOS, JSON.stringify(grupos));
-  } catch {
-    // Navegação privada ou armazenamento cheio: o menu só não lembra.
-  }
-  for (const avisar of ouvintesDosGrupos) avisar();
 }
 
 /**
  * Navegação principal no desenho do PrecificaEva e do Eva Financeiro (pedido do dono,
  * 10/10/2026): cada área é um grupo que abre e fecha mostrando as suas telas, a busca de
- * telas e a pessoa logada moram aqui, e o botão de recolher fica no topo.
+ * telas e a pessoa logada moram aqui. Recolher não tem botão: a barra abre ao passar o mouse.
  *
  * Não decide nada: `areasDoMenu()` e `abasDaArea()` (lib/navigation/registry.ts) resolvem
  * o que este papel vê, e este componente desenha.
@@ -90,7 +47,6 @@ export function SidebarContent({
   collapsed,
   showCollapseControl = true,
   onNavigate,
-  onAlternarRecolhido,
 }: SidebarContentProps) {
   const t = useT();
   const pathname = usePathname();
@@ -110,24 +66,15 @@ export function SidebarContent({
   const onde = ondeNoMenu(pathname);
   const atual = onde.grupo;
   const abaAtual = onde.href;
-  // Os outros grupos: o que a pessoa deixou aberto, guardado no navegador. No servidor
-  // e na hidratação vale "{}" (useSyncExternalStore), então o HTML não diverge.
-  const guardadoCru = useSyncExternalStore(assinarGrupos, lerGruposCru, () => "{}");
-  const guardado = useMemo(() => interpretarGrupos(guardadoCru), [guardadoCru]);
-  // O grupo da tela atual: sempre aberto ao chegar na tela; fecha só se a pessoa
-  // fechar durante a visita. Zerado ao trocar de grupo, ajustando no render.
-  const [fechouNestaVisita, setFechouNestaVisita] = useState(false);
+  // Sanfona (pedido do André, 14/11): um grupo aberto por vez. Ao chegar numa
+  // tela, abre o grupo dela; abrir outro fecha o que estava aberto.
+  const [aberto, setAberto] = useState<string | null>(atual);
   const [visita, setVisita] = useState(atual);
   if (visita !== atual) {
     setVisita(atual);
-    setFechouNestaVisita(false);
+    setAberto(atual);
   }
-  const aberto = (id: string) => (id === atual ? !fechouNestaVisita : guardado[id] === true);
-  const alternar = (id: string) => {
-    const vaiAbrir = !aberto(id);
-    if (id === atual) setFechouNestaVisita(!vaiAbrir);
-    gravarGrupos({ ...guardado, [id]: vaiAbrir });
-  };
+  const alternar = (id: string) => setAberto((a) => (a === id ? null : id));
 
   const papeis: Record<string, string> = { admin: t("Administrador"), manager: t("Gestor"), agent: t("Atendente"), viewer: t("Leitura") };
   const papel = papeis[activeOrg?.role ?? ""];
@@ -166,7 +113,7 @@ export function SidebarContent({
     const ativa = atual === item.id;
     // O aviso de conexão caída só para quem pode abrir Conexões e agir.
     const temSaude = item.itens.some((d) => d.healthDot);
-    const expandido = !collapsed && aberto(item.id);
+    const expandido = !collapsed && aberto === item.id;
     return (
       <div key={item.id}>
         {collapsed ? (
@@ -223,23 +170,6 @@ export function SidebarContent({
     );
   };
 
-  // Otimista (D1.10): o menu muda no clique; o cookie segue para a primeira pintura
-  // da próxima carga, e o servidor não redesenha o layout por causa disto.
-  const recolher = showCollapseControl && (
-    <button
-      type="button"
-      onClick={() => {
-        onAlternarRecolhido?.();
-        toggleSidebar(collapsed).catch(() => undefined);
-      }}
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gold hover:bg-sidebar-active"
-      aria-label={collapsed ? t("Expandir sidebar") : t("Recolher sidebar")}
-      title={collapsed ? t("Expandir sidebar") : t("Recolher sidebar")}
-    >
-      {collapsed ? <CaretDoubleRight size={16} aria-hidden /> : <CaretDoubleLeft size={16} aria-hidden />}
-    </button>
-  );
-
   return (
     <>
       {/* `h-14` como a barra do topo: logo-moldura-no-tema-escuro.spec.ts mede este retângulo. */}
@@ -291,9 +221,7 @@ export function SidebarContent({
           </span>
         )}
         </div>
-        {!collapsed && recolher}
       </div>
-      {collapsed && <div className="flex justify-center pb-1">{recolher}</div>}
       <div aria-hidden className="mx-4 mb-2 h-px bg-gradient-to-r from-transparent via-gold/70 to-transparent" />
       <div className={cn("px-3 pb-2", collapsed && "px-2")}>
         <SearchTrigger naLateral recolhida={collapsed} atalho={showCollapseControl} />
@@ -368,25 +296,47 @@ export function SidebarContent({
   );
 }
 
-export function Sidebar({
-  collapsed,
-  onAlternarRecolhido,
-}: {
-  collapsed: boolean;
-  onAlternarRecolhido?: () => void;
-}) {
+/**
+ * Recolhida sempre (pedido do André, 14/11, igual em todos os sistemas): a faixa
+ * de ícones ocupa o lugar na linha, e o menu inteiro abre POR CIMA do conteúdo
+ * quando o mouse chega nela ou o teclado entra. Por cima, e não empurrando, para
+ * a tela não pular a cada passada do mouse. Fechar espera um instante: passar
+ * rente à borda não pisca o menu.
+ */
+export function Sidebar() {
+  const [aberta, setAberta] = useState(false);
+  const fechar = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const abrir = () => {
+    clearTimeout(fechar.current);
+    setAberta(true);
+  };
+  const fecharLogo = () => {
+    clearTimeout(fechar.current);
+    fechar.current = setTimeout(() => setAberta(false), 200);
+  };
   return (
     <aside
-      className={cn(
-        // O topo e a altura descontam `--faixas-de-cima` (porte do original
-        // #3190): as faixas grudam em `top-0` com z-50, e uma barra em `top-0`
-        // passaria por baixo delas, com o pé (Sair) abaixo da borda da tela.
-        // A largura anima em 200 ms: exceção declarada no contrato de movimento.
-        "fundo-lateral sticky top-[var(--faixas-de-cima,0px)] z-30 flex h-[calc(100dvh-var(--faixas-de-cima,0px))] shrink-0 flex-col text-sidebar-fg shadow-[inset_-1px_0_0_rgba(255,255,255,0.10)] transition-[width] duration-200 motion-reduce:transition-none",
-        collapsed ? "w-16" : "w-64",
-      )}
+      data-testid="barra-lateral"
+      onMouseEnter={abrir}
+      onMouseLeave={fecharLogo}
+      onFocus={abrir}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) fecharLogo();
+      }}
+      // O topo e a altura descontam `--faixas-de-cima` (porte do original
+      // #3190): as faixas grudam em `top-0` com z-50, e uma barra em `top-0`
+      // passaria por baixo delas, com o pé (Sair) abaixo da borda da tela.
+      className="sticky top-[var(--faixas-de-cima,0px)] z-30 h-[calc(100dvh-var(--faixas-de-cima,0px))] w-16 shrink-0"
     >
-      <SidebarContent collapsed={collapsed} onAlternarRecolhido={onAlternarRecolhido} />
+      <div
+        className={cn(
+          // A largura anima em 200 ms: exceção declarada no contrato de movimento.
+          "fundo-lateral absolute inset-y-0 left-0 flex flex-col text-sidebar-fg shadow-[inset_-1px_0_0_rgba(255,255,255,0.10)] transition-[width] duration-200 motion-reduce:transition-none",
+          aberta ? "w-64 shadow-xl" : "w-16",
+        )}
+      >
+        <SidebarContent collapsed={!aberta} />
+      </div>
     </aside>
   );
 }

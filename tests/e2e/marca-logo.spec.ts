@@ -72,6 +72,7 @@ import * as zlib from "node:zlib";
 import { test, expect, type Page, type Browser, type Locator } from "@playwright/test";
 
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), "evidence", "marca-logo");
@@ -377,6 +378,7 @@ async function logoDaBarra(page: Page): Promise<LogoNaTela | null> {
     `a casca do app não montou em /app — ${page.url()}. Sem <aside> não há o que medir.`,
   ).toBeAttached({ timeout: 15_000 });
 
+  await abrirMenuLateral(page);
   const img = casca.locator("img").first();
   // `count()` é a ÚNICA leitura sem auto-espera do helper, e por isso era ela
   // que media durante a troca de documento: `goto("/app")` cai num
@@ -539,6 +541,7 @@ async function barraMostraLogoDe(
   caminhoNoBucket: string,
   onde: string,
 ): Promise<LogoNaTela> {
+  await abrirMenuLateral(page);
   await expect(
     page.locator("aside").first().locator("img").first(),
     `${onde}: a barra lateral não passou a mostrar o logo da camada — esperava um src ` +

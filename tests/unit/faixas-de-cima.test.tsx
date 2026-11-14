@@ -95,7 +95,7 @@ describe("quem desconta as faixas", () => {
     const lateral = readFileSync("components/shell/Sidebar.tsx", "utf8");
     expect(topo).toMatch(/<header className="sticky top-\[var\(--faixas-de-cima,0px\)\] /);
     expect(lateral).toMatch(
-      /"fundo-lateral sticky top-\[var\(--faixas-de-cima,0px\)\] z-30 flex h-\[calc\(100dvh-var\(--faixas-de-cima,0px\)\)\] /,
+      /"sticky top-\[var\(--faixas-de-cima,0px\)\] z-30 h-\[calc\(100dvh-var\(--faixas-de-cima,0px\)\)\] /,
     );
   });
 

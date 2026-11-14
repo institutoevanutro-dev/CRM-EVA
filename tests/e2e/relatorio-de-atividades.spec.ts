@@ -48,6 +48,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA =
@@ -285,6 +286,7 @@ test.describe("Relatório de atividades — o período, pela tela", () => {
     // Menu por área (07/10/2026): a porta é a área Análise → aba Atividades. Estar na
     // aba de Análise (e não de Atendimento) é o "grupo certo" que este teste prendia.
     const sidebar = page.getByRole("navigation", { name: "Navegação principal" });
+    await abrirMenuLateral(page);
     await sidebar.getByRole("button", { name: "Análise" }).click();
     const item = page
       .getByRole("navigation", { name: "Telas de Análise" })
@@ -427,6 +429,7 @@ test.describe("Relatório de atividades — o período, pela tela", () => {
     // rota é `viewer` de propósito: um piso mais alto esconderia da pessoa as
     // atividades dela mesma.
     const sidebar = page.getByRole("navigation", { name: "Navegação principal" });
+    await abrirMenuLateral(page);
     await sidebar.getByRole("button", { name: "Análise" }).click();
     await expect(
       page.getByRole("navigation", { name: "Telas de Análise" }).getByRole("link", { name: "Atividades", exact: true }),

@@ -23,6 +23,7 @@ import * as path from "node:path";
 
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 // Segue o dev server do harness (playwright.config webServer) — nunca hardcodar
 // porta: o config usa E2E_PORT (default 3001).
@@ -128,7 +129,9 @@ test.describe("webhooks & automações — fluxo completo", () => {
       // --- Step 1: login como manager; Integrações → Webhooks (menu por área, 07/10/2026) ---
       await login(page, creds.users.manager!.email);
       // Webhooks mora no grupo Integrações (11/10/2026).
+      await abrirMenuLateral(page);
       await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("button", { name: /^Integrações/ }).click();
+      await abrirMenuLateral(page);
       await page.getByRole("navigation", { name: "Telas de Integrações" }).getByRole("link", { name: "Webhooks" }).click();
       await page.waitForURL(/\/app\/webhooks/);
 

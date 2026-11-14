@@ -1,6 +1,5 @@
 import { InterfaceRefresh } from "@/hooks/auth/InterfaceRefresh";
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import { isMfaEnrolled, loadAuthUser, requiresMfa, resolveActiveOrg, sessionAal } from "@/lib/auth/server";
 import { DEFAULT_VISIBILITY_MODE, type VisibilityMode } from "@/lib/auth/types";
 import { clientePelaAgendaLigado, pacientePeloCadastroLigado } from "@/lib/schemas/settings";
@@ -195,10 +194,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // adiante mostraria um CRM vazio em vez da pergunta do código.
   if (enrolled && !user.support && (await sessionAal()) !== "aal2") redirect("/login/mfa?next=/app");
 
-  // Read sidebar collapsed state SSR to avoid flash.
-  const store = await cookies();
-  const collapsed = store.get("sidebar_collapsed")?.value === "1";
-
   const impersonating = user.support ? {
     tenantId: user.support.organization_id, tenantName: user.support.name,
     expiresAt: user.support.expires_at, accessMode: user.support.access_mode,
@@ -206,7 +201,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const shell = (
     <VoiceCallProvider>
-      <AppShell sidebarCollapsed={collapsed}>{children}</AppShell>
+      <AppShell>{children}</AppShell>
     </VoiceCallProvider>
   );
 

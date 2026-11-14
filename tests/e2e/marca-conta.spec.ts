@@ -31,6 +31,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), ".superpowers", "evidence", "marca-conta");
@@ -209,6 +210,7 @@ test.describe("marca da clínica pela Conta", () => {
     // layout já renderizou com o memo anterior. Recarrega até o menu alcançar.
     await expect(async () => {
       await page.reload();
+      await abrirMenuLateral(page);
       await expect(page.locator("aside img").first()).toHaveAttribute("src", new RegExp(`platform/conta-${SHA_ESCURA}\\.png`), { timeout: 2_000 });
     }).toPass({ timeout: 45_000, intervals: [3_000] });
     await page.screenshot({ path: path.join(EVIDENCIA, "1-organizacao.png"), fullPage: true });
