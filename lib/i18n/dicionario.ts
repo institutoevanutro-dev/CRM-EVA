@@ -680,6 +680,8 @@ export const DICIONARIO: Traducoes = {
   "Destino dos novos compromissos": { es: "Destino de las nuevas citas" },
   "Leitura permitida. Esta agenda não está disponível para publicação.": { es: "Lectura permitida. Este calendario no está disponible para publicar." },
   "Esta permissão não oferece a leitura de eventos necessária. Revise o acesso no Google.": { es: "Este permiso no ofrece la lectura de eventos necesaria. Revisa el acceso en Google." },
+  "O Google não entrega mais esta agenda para a sua conta: ela foi apagada ou deixou de ser compartilhada.": { es: "Google ya no entrega este calendario a tu cuenta: fue eliminado o dejó de compartirse." },
+  "O Google não entrega mais esta agenda para a sua conta: ela foi apagada ou deixou de ser compartilhada. Desmarque \"Conta como ocupado\" para salvar as outras.": { es: "Google ya no entrega este calendario a tu cuenta: fue eliminado o dejó de compartirse. Desmarca \"Cuenta como ocupado\" para guardar los demás." },
   "Última sincronização": { es: "Última sincronización" },
   "Ainda não sincronizada": { es: "Aún no sincronizado" },
   "Leitura em andamento; a cobertura será confirmada ao terminar.": { es: "Lectura en curso; la cobertura se confirmará al terminar." },
