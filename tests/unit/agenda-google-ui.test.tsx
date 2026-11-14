@@ -137,6 +137,25 @@ describe("seleção explícita de fontes e destino", () => {
     expect(botoes).toHaveLength(1);
     expect(botoes[0]).toHaveAttribute("href", "/api/v1/agenda/google/connect");
   });
+  it("agenda que o Google não entrega mais diz qual é e como destravar; desmarcada, só informa", async () => {
+    // Visto no Instituto em 14/11: agenda marcada sumiu do Google e o salvar
+    // recusava tudo com uma frase que não dizia qual agenda travava.
+    api.get.mockResolvedValue({
+      data: {
+        ...catalog,
+        calendars: [
+          catalog.calendars[0],
+          { ...catalog.calendars[1], can_read: false, can_write: false, available: false },
+          { ...catalog.calendars[2], counts_for_conflicts: false, can_read: false, can_write: false, available: false },
+        ],
+      },
+    });
+    open(<AgendasConectadas />);
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent(/não entrega mais esta agenda.*Desmarque/);
+    expect(screen.getAllByText(/não entrega mais esta agenda/)).toHaveLength(2);
+    expect(screen.queryByText(/Esta permissão não oferece/)).toBeNull();
+  });
 });
 describe("decisão de conflito e retry no detalhe", () => {
   it("mostra ambos horários e decide com os valores exatos, sem conversão bigint", async () => {
