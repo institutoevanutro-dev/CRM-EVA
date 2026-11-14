@@ -714,6 +714,8 @@ export const DICIONARIO: Traducoes = {
   "Tentar sincronizar novamente": { es: "Reintentar sincronización" },
   "Configurar suas agendas": { es: "Configurar tus calendarios" },
   "Reconectar Google": { es: "Volver a conectar Google" },
+  "Remover esta conta": { es: "Quitar esta cuenta" },
+  "Remover esta conta do Google? As agendas dela deixam de ocupar seus horários.": { es: "¿Quitar esta cuenta de Google? Sus calendarios dejarán de ocupar sus horarios." },
   "Ocupação do Google ainda não verificada neste período.": { es: "La ocupación de Google aún no se ha verificado en este período." },
   "Marcar compromisso": {es:"Programar cita"},
   "Recuperação encerrada. Revise o próximo passo.": {es:"Recuperación finalizada. Revise el siguiente paso."},

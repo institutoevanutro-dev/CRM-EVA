@@ -8,6 +8,19 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.14.5] — 2026-11-14
+
+### Corrigido
+
+- **Leitura do Google não trava mais em compromisso excluído; conta velha pode ser removida** Excluir um contato apaga o compromisso e cancela o evento no Google. A leitura
+  seguinte encontrava esse evento cancelado, sem compromisso no CRM, e parava a
+  agenda inteira com "A leitura não terminou", indefinidamente. Agora o evento
+  cancelado é ignorado e a leitura segue.
+
+  Quem reconecta escolhendo outra conta do Google ficava com a conta velha parada
+  na lista, sem como tirá-la. Em Configurações › Agenda, a conta parada que está
+  ao lado de outra ganha "Remover esta conta", que desconecta só ela.
+
 ## [5.14.4] — 2026-11-14
 
 ### Corrigido
@@ -9145,7 +9158,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.4...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.5...HEAD
+[5.14.5]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.4...v5.14.5
 [5.14.4]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.3...v5.14.4
 [5.14.3]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.2...v5.14.3
 [5.14.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.1...v5.14.2

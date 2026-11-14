@@ -123,8 +123,13 @@ export async function syncCalendar(
         pruneIds.add(eventId);
         continue;
       }
-      if (ehEventoNosso(event.id))
+      if (ehEventoNosso(event.id)) {
+        // Cancelado no Google: é o rastro de um compromisso que saiu do CRM
+        // (exclusão de contato apaga o compromisso e cancela o evento). Não
+        // ocupa hora; parar a leitura nele travava a agenda inteira.
+        if (event.status === "cancelled") continue;
         throw new Error("Evento do produto sem vínculo. Revise a publicação antiga.");
+      }
       const read = doEventoDoGoogle(event, { fusoDoCalendario: timeZone! });
       if (read.tipo === "recusado")
         throw new Error("Evento inválido. A leitura não foi concluída.");
