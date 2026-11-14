@@ -127,6 +127,16 @@ describe("seleção explícita de fontes e destino", () => {
     expect(screen.getByText(/Leitura permitida/)).toBeVisible();
     expect(screen.getByText(/Leitura em andamento/)).toBeVisible();
   });
+  it("conexão que precisa ser refeita ganha Reconectar Google; a saudável não", async () => {
+    // É para cá que o painel do compromisso manda quem precisa reconectar.
+    api.get.mockResolvedValue({
+      data: { ...catalog, connections: [{ ...connection("one"), status: "token_expired" }, connection("two")] },
+    });
+    open(<AgendasConectadas />);
+    const botoes = await screen.findAllByRole("link", { name: "Reconectar Google" });
+    expect(botoes).toHaveLength(1);
+    expect(botoes[0]).toHaveAttribute("href", "/api/v1/agenda/google/connect");
+  });
 });
 describe("decisão de conflito e retry no detalhe", () => {
   it("mostra ambos horários e decide com os valores exatos, sem conversão bigint", async () => {
