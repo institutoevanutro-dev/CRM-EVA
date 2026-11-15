@@ -12131,6 +12131,10 @@ export const DICIONARIO: Traducoes = {
   "Resumo curto": { es: "Resumen corto" },
   "Resumo curto da conversa": { es: "Resumen corto de la conversación" },
   "Não foi possível registrar. Confira o resumo e tente de novo.": { es: "No fue posible registrar. Revise el resumen e intente de nuevo." },
+  "Ir para a mensagem citada": { es: "Ir al mensaje citado" },
+  "Mensagem citada": { es: "Mensaje citado" },
+  "Toque para carregar a original": { es: "Toque para cargar el original" },
+  "A mensagem original não está mais na conversa.": { es: "El mensaje original ya no está en la conversación." },
 };
 
 /**
