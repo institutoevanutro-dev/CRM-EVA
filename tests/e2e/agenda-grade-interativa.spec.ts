@@ -240,6 +240,11 @@ test("bloco fora da disponibilidade abre como encaixe; o do passado não marca e
   await expect(painel).toHaveCount(0);
 
   // ── O PASSADO continua recusado, e diz por quê ──────────────────────────
+  // DUAS semanas para trás, não uma: da semana seguinte, um clique cai na semana
+  // de HOJE (dom→sáb), e no domingo antes do primeiro horário da grade ela ainda
+  // não tem bloco nenhum que já passou — reprovou assim em 15/11, 06h50 BRT.
+  // A semana passada é inteira do passado em qualquer dia e hora.
+  await page.getByTestId("periodo-anterior").click();
   await page.getByTestId("periodo-anterior").click();
   const bloqueado = blocoDoPassado(page);
   await expect(bloqueado).toBeAttached({ timeout: 15_000 });
