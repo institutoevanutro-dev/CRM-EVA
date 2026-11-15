@@ -201,3 +201,19 @@ describe("filtrar preserva a seleção múltipla e o modo E/OU (#2498)", () => {
     expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 });
+
+describe("a busca do seletor ignora ACENTO (#4622)", () => {
+  it("`orcamento` acha 'Orçamento enviado', e `orçamento` também", async () => {
+    tagsRef.current = ["Orçamento enviado", "vip"];
+
+    const { user, campo } = await campoDeBuscaAberto();
+    await user.type(campo, "orcamento");
+    expect(screen.getByRole("menuitemcheckbox", { name: /Orçamento enviado/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitemcheckbox", { name: /vip/ })).not.toBeInTheDocument();
+
+    await user.clear(campo);
+    await user.type(campo, "orçamento");
+    expect(screen.getByRole("menuitemcheckbox", { name: /Orçamento enviado/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitemcheckbox", { name: /vip/ })).not.toBeInTheDocument();
+  });
+});

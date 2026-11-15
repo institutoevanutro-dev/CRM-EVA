@@ -12,6 +12,7 @@ import {
   MODOS_DE_ETIQUETA,
 } from "@/lib/inbox/marcador-da-conversa";
 import { PISO_DA_BUSCA, buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
+import { NOME_DE_ARQUIVO_MAX } from "@/lib/messaging/media/nome-de-arquivo";
 
 /**
  * O que a API aceita ESCREVER. Cinco valores, e a ausência de `pending`/`resolved`
@@ -82,6 +83,16 @@ export const sendMessageSchema = z
     // só nasce na ingestão, a partir do webhook do canal.
     media_url: z.never({ message: "Use media_storage_path (envie o arquivo antes)." }).optional(),
     media_storage_path: z.string().min(1).max(500).optional(),
+    /**
+     * O nome ORIGINAL do anexo, o que a pessoa escolheu no seletor.
+     *
+     * `media_storage_path` é `out-<uuid>.<ext>` e não tem nome legível; é este
+     * campo que viaja como `filename` do documento e fica gravado na linha
+     * (`metadata.media_filename`) para o balão mostrar o mesmo nome. Opcional:
+     * quem chama a API só com o storage_path continua no basename, como antes.
+     * Portado do projeto original (DeskcommCRM, PR #4484 de @webtecnica).
+     */
+    media_filename: z.string().min(1).max(NOME_DE_ARQUIVO_MAX).optional(),
     media_mime: z.string().optional(),
     media_size_bytes: z.number().int().positive().optional(),
     /**

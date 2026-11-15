@@ -41,6 +41,7 @@ import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/arch
 import { CHANNEL_PROVIDER_INSTAGRAM } from "@/lib/channels/capabilities";
 import { automaticoPodeEnviar, estadoDaJanela } from "@/lib/channels/janela";
 import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
+import { nomeDeArquivoLimpo, nomeDoAnexoParaEnviar } from "@/lib/messaging/media/nome-de-arquivo";
 import { isMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import { escolherVariante, tipoDaMidia } from "@/lib/midias/envio";
 import { variantesDoItem } from "@/lib/midias/esquemas";
@@ -806,6 +807,15 @@ export async function sendMessageHandler(
   // sendo `ai_actor_id` (`ehFalaDaIa`, lib/ai/handoff/aviso-ao-lead.ts).
   const { ai_actor_name: _doChamador, ...metadataDoChamador }: Record<string, unknown> =
     input.metadata ?? {};
+  // O nome que a PESSOA deu ao arquivo. O caminho no bucket nasce
+  // `out-<uuid>.<ext>`, então não há nome legível nele; este é o único que
+  // sobra. Gravado na linha porque o balão lê `metadata.media_filename`; sem
+  // isso o histórico mostraria o nome aleatório. `null` quando o envio não traz
+  // nome (token que só manda o storage_path): o balão segue com o rótulo de
+  // sempre. Portado do projeto original (DeskcommCRM, PR #4484 de @webtecnica).
+  const nomeOriginalDoAnexo = input.media_storage_path
+    ? nomeDeArquivoLimpo(input.media_filename)
+    : null;
   const insertRow = {
     ...(ctx.internalMessageId ? { id: ctx.internalMessageId } : {}),
     organization_id: c.organization_id,
@@ -829,6 +839,9 @@ export async function sendMessageHandler(
     sent_at: now,
     metadata: {
       ...metadataDoChamador,
+      // Depois do `metadata` do chamador de propósito: o nome do arquivo é dado
+      // do ENVIO, e o cliente da API não o sobrescreve por metadata.
+      ...(nomeOriginalDoAnexo ? { media_filename: nomeOriginalDoAnexo } : {}),
       ...(ctx.actor.type === "ai_agent" ? { ai_actor_id: ctx.actor.id } : {}),
       ...(nomeDoAgente ? { ai_actor_name: nomeDoAgente } : {}),
       ...(midiaDaBiblioteca ? { media_variant: midiaDaBiblioteca.variante.key } : {}),
@@ -1119,7 +1132,10 @@ export async function sendMessageHandler(
         if (signErr || !signed?.signedUrl) {
           throw new Error(`storage_sign_failed: ${signErr?.message ?? "no_url"}`);
         }
-        const filename = input.media_storage_path.split("/").pop() ?? undefined;
+        // O nome ORIGINAL vence o basename aleatório do bucket. Sem nome
+        // (chamada por token, que só conhece o storage_path), o basename
+        // continua sendo o que sai, como sempre foi.
+        const filename = nomeDoAnexoParaEnviar(input.media_filename, input.media_storage_path);
         await checkBoundary();
         ({ externalId } = await adapter.send({
           beforeSend: checkBoundary,

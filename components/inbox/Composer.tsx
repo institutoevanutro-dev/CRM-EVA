@@ -904,6 +904,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                 type: uploaded.kind,
                 body: caption || undefined,
                 media_storage_path: uploaded.storage_path,
+                // O nome que a pessoa escolheu: o path no bucket é `out-<uuid>`,
+                // e é este campo que vira o `filename` do documento no WhatsApp
+                // e o rótulo do balão (porte do DeskcommCRM, PR #4484).
+                media_filename: uploaded.media_filename ?? undefined,
                 media_mime: uploaded.media_mime,
                 media_size_bytes: uploaded.media_size_bytes,
               },

@@ -14,6 +14,7 @@ import { audit } from "@/lib/audit";
 import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { extFromMime, MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
+import { nomeDeArquivoLimpo } from "@/lib/messaging/media/nome-de-arquivo";
 import { validateOutboundMedia } from "@/lib/messaging/media/upload-validation";
 import { transcodificarNotaDeVoz } from "@/lib/messaging/media/voice-transcode";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -149,6 +150,12 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   return ok(
     {
       storage_path: storagePath,
+      // O nome como a pessoa o escolheu. O caminho acima é aleatório de
+      // propósito; sem devolver o original aqui, o envio só tinha o basename
+      // para mandar ao WhatsApp, e o paciente recebia `out-3f9a2b.pdf`. Lido do
+      // `File`, a última ponta que ainda o conhece, pela mesma guarda da
+      // ingestão. Portado do projeto original (DeskcommCRM, PR #4484).
+      media_filename: nomeDeArquivoLimpo(file.name),
       // O mime e o tamanho do arquivo QUE FOI GUARDADO, não os que chegaram.
       // Devolver o original seria mandar o canal buscar um `webm` que já não
       // existe — o mesmo defeito, um passo adiante.

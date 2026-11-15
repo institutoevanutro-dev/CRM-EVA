@@ -28,6 +28,13 @@ beforeEach(() => {
       filters.push(v);
       return chain;
     },
+    // `candidates.ts` segue a cadeia com `.in()` e `.gt()` depois do `.or()`
+    // (a fila drena, upstream #4514).
+    in: (coluna: string, valores: readonly string[]) => {
+      filters.push(`in:${coluna}=${valores.join(",")}`);
+      return chain;
+    },
+    gt: () => chain,
     lte: () => chain,
     not: () => chain,
     order: () => chain,
@@ -45,6 +52,8 @@ describe("push usa o executor comum por compromisso", () => {
     expect((await GET(request())).status).toBe(200);
     expect(reconcileAppointment).toHaveBeenCalledWith(expect.anything(), org, "appointment");
     expect(filters[0]).toContain("needs_google_push.eq.true");
+    // completed/no_show não empurram; cancelled fica (é o que apaga o evento).
+    expect(filters).toContain("in:status=pending,confirmed,cancelled");
   });
   it("sem conexão/claim disponível não marca sucesso nem audita entrega", async () => {
     vi.mocked(reconcileAppointment).mockResolvedValue("busy");
