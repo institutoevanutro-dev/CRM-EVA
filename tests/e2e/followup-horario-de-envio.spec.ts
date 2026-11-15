@@ -15,6 +15,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { test, expect, type Page } from "@playwright/test";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), "evidence", "horario-de-envio");
@@ -66,7 +67,9 @@ test.describe("follow-ups — horário de envio", () => {
 
     // A porta: pelo menu, não pela URL digitada.
     // Menu por área (07/10/2026): IA → aba Follow-ups.
+    await abrirMenuLateral(page);
     await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("button", { name: "Assistente", exact: true }).click();
+    await abrirMenuLateral(page);
     await page.getByRole("navigation", { name: "Telas de Assistente" }).getByRole("link", { name: "Follow-ups" }).click();
     await page.waitForURL(/\/app\/ai\/followups/);
 

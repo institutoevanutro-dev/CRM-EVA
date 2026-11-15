@@ -77,6 +77,7 @@ import * as zlib from "node:zlib";
 import { test, expect, type Page, type Locator } from "@playwright/test";
 
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), "evidence", "logo-moldura-tema-escuro");
@@ -348,7 +349,7 @@ function anotar(nome: string, dado: unknown): void {
 
 /** O cabeçalho da barra lateral: o primeiro filho do `<aside>` (`h-14`, `border-b`). */
 function cabecalhoDaBarra(page: Page): Locator {
-  return page.locator("aside > div").first();
+  return page.locator("aside > div > div").first();
 }
 
 async function medirCaixa(alvo: Locator): Promise<Caixa> {
@@ -395,12 +396,13 @@ test.describe("a moldura do logo no tema escuro", () => {
       await escolherTemaPelaTela(page, tema);
       expect(await temaDaPagina(page)).toBe(tema);
 
+      await abrirMenuLateral(page);
       const m = await medirMoldura(page.locator("aside img").first());
       anotar(`1-barra-${tema}.json`, m);
       await page.screenshot({ path: evidencia(`1-barra-${tema}.png`) });
       expect(fundoETransparente(m.fundo), `o logo ganhou moldura (${m.fundo})`).toBe(true);
 
-      const fundoDaBarra = await page.locator("aside").first().evaluate((el) => getComputedStyle(el).backgroundColor);
+      const fundoDaBarra = await page.locator("aside > div").first().evaluate((el) => getComputedStyle(el).backgroundColor);
       expect(fundoDaBarra, "a barra lateral deixou de ser verde").not.toMatch(/rgba?\(255, 255, 255/);
     });
   }
@@ -483,6 +485,7 @@ test.describe("a moldura do logo no tema escuro", () => {
     await escolherTemaPelaTela(page, "dark");
     expect(await temaDaPagina(page)).toBe("dark");
 
+    await abrirMenuLateral(page);
     const barra = page.locator("aside").first();
     await expect(
       barra.locator("img"),
@@ -531,10 +534,12 @@ test.describe("a moldura do logo no tema escuro", () => {
     await page.goto("/app/inbox");
 
     await escolherTemaPelaTela(page, "light");
+    await abrirMenuLateral(page);
     const claro = await medirCaixa(cabecalhoDaBarra(page));
     await page.screenshot({ path: evidencia("6-cabecalho-claro.png") });
 
     await escolherTemaPelaTela(page, "dark");
+    await abrirMenuLateral(page);
     const escuro = await medirCaixa(cabecalhoDaBarra(page));
     await page.screenshot({ path: evidencia("6-cabecalho-escuro.png") });
 

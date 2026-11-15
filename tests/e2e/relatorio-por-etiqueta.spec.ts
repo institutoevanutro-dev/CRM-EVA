@@ -20,6 +20,7 @@ import { randomInt, randomUUID } from "node:crypto";
 import { test, type Page } from "@playwright/test";
 
 import { admin, captura, creds, expect, insere, login, type Creds } from "./qa-l12-comum";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 const SUFIXO = `${Date.now()}`.slice(-7);
 const ORCAMENTO = `orcamento-e2e-${SUFIXO}`;
@@ -112,6 +113,7 @@ test.describe("Relatório por etiqueta — pela tela", () => {
     // A PORTA: pelo menu, nunca pela URL.
     const sidebar = page.getByRole("navigation", { name: "Navegação principal" });
     // Menu por área (07/10/2026): Análise → aba Por etiqueta.
+    await abrirMenuLateral(page);
     await sidebar.getByRole("button", { name: "Análise" }).click();
     await page
       .getByRole("navigation", { name: "Telas de Análise" })

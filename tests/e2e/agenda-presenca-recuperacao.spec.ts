@@ -13,6 +13,7 @@ import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
 import { escolherProfissionalEProcedimento } from "./helpers/marcacao-simples";
 import { enviarTextoFixoPendente } from "../../lib/followup/enviar-texto-fixo";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
   auth: { persistSession: false },
@@ -502,6 +503,7 @@ test("ir para a Agenda pelo menu apaga o cliente da conversa — \"Novo agendame
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("painel-de-marcacao")).toBeHidden();
 
+  await abrirMenuLateral(page);
   await page.getByRole("link", { name: "Agenda", exact: true }).first().click();
   await expect(page).toHaveURL(/\/app\/agenda$/);
   await page.getByRole("button", { name: /novo agendamento/i }).click();

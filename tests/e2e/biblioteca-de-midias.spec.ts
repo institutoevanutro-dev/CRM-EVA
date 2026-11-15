@@ -18,6 +18,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), ".superpowers/evidence/biblioteca-de-midias");
@@ -101,7 +102,9 @@ test.describe("Biblioteca de mídias — o gestor cadastra, sobe, registra o ter
   test("vídeo sem pessoa fica Pronta ao subir o arquivo", async ({ page }) => {
     await login(page, creds.users.manager!.email, creds.password);
     // Pela navegação, como o gestor chega: grupo Assistente › Biblioteca de mídias (menu por tarefa, 11/10/2026).
+    await abrirMenuLateral(page);
     await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("button", { name: "Assistente", exact: true }).click();
+    await abrirMenuLateral(page);
     await page.getByRole("navigation", { name: "Telas de Assistente" }).getByRole("link", { name: "Biblioteca de mídias" }).click();
     await page.waitForURL(/\/app\/ai\/midias$/);
     await expect(page.getByRole("heading", { level: 1, name: "Biblioteca de mídias" })).toBeVisible({ timeout: 60_000 });

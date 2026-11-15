@@ -15,6 +15,7 @@ import { test, expect, type Page } from "@playwright/test";
 
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
 import { afirmarAdminDeTenantPuro } from "./utils/precondicao";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 let creds = lerCreds();
 const EVIDENCE = path.join(process.cwd(), ".superpowers", "evidence");
@@ -91,6 +92,7 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
     await loginAdmin(page);
     // Grupos pelo que a pessoa veio fazer (11/10/2026); na tela Início nenhum está aberto.
     // Desde a D1.10 o nome do grupo é um botão que só abre e fecha; o Início é o único link.
+    await abrirMenuLateral(page);
     await expect(sidebar(page).getByRole("link")).toHaveText(["Início"]);
     await expect(sidebar(page).getByRole("button")).toHaveText(["Atendimento", "Vendas", "Assistente", "Análise", "Clínica", "Integrações"]);
     await page.screenshot({ path: path.join(EVIDENCE, "nav-sidebar-areas.png"), fullPage: true });
@@ -98,6 +100,7 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
 
   test("chega nas Etapas do funil por Clínica, com um clique no grupo e outro na tela", async ({ page }) => {
     await loginAdmin(page);
+    await abrirMenuLateral(page);
     await sidebar(page).getByRole("button", { name: "Clínica", exact: true }).click();
     await abas(page, "Clínica").getByRole("link", { name: "Etapas do funil" }).click();
     await page.waitForURL(/settings\/tenant\/pipelines/);
@@ -106,24 +109,30 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
 
   test("Produtos é tela de Clínica (o preço vem do PrecificaEva, não se vende por ela)", async ({ page }) => {
     await loginAdmin(page);
+    await abrirMenuLateral(page);
     await sidebar(page).getByRole("button", { name: "Clínica", exact: true }).click();
     await abas(page, "Clínica").getByRole("link", { name: "Produtos" }).click();
     await page.waitForURL(/\/app\/products/);
+    await abrirMenuLateral(page);
     await expect(abas(page, "Vendas")).toHaveCount(0);
   });
 
   test("a lista de funis é a primeira aba de Vendas", async ({ page }) => {
     await loginAdmin(page);
+    await abrirMenuLateral(page);
     await sidebar(page).getByRole("button", { name: "Vendas" }).click();
     await expect(abas(page, "Vendas").getByRole("link").first()).toHaveText("Funis");
     await abas(page, "Vendas").getByRole("link", { name: "Funis" }).click();
     await page.waitForURL(/\/app\/kanban/);
+    // Escolher a tela recolhe o menu; para ver a marcação, abre de novo.
+    await abrirMenuLateral(page);
     await expect(abas(page, "Vendas").getByRole("link", { name: "Funis" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("heading", { name: "Funis", level: 1 })).toBeVisible();
   });
 
   test("chega em Conhecimento pelo grupo Assistente", async ({ page }) => {
     await loginAdmin(page);
+    await abrirMenuLateral(page);
     await sidebar(page).getByRole("button", { name: "Assistente", exact: true }).click();
     await abas(page, "Assistente").getByRole("link", { name: "Conhecimento" }).click();
     await page.waitForURL(/knowledge\/sources/);
@@ -134,9 +143,12 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
   test("chega ao canal oficial por Integrações → Conexões", async ({ page }) => {
     await loginAdmin(page);
     // Desde a D1.10 o nome do grupo só abre e fecha; a navegação é pela tela dentro dele.
+    await abrirMenuLateral(page);
     await sidebar(page).getByRole("button", { name: /^Integrações/ }).click();
     await abas(page, "Integrações").getByRole("link", { name: "Conexões" }).click();
     await page.waitForURL(/\/app\/connections/);
+    // Escolher a tela recolhe o menu; para ver a marcação, abre de novo.
+    await abrirMenuLateral(page);
     await expect(abas(page, "Integrações").getByRole("link", { name: "Conexões" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("tab", { name: /oficial/i })).toBeVisible();
   });
@@ -179,6 +191,7 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
   test("nenhum grupo fica fora da dobra, e em 900px o menu não rola", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await loginAdmin(page);
+    await abrirMenuLateral(page);
 
     const m = await page.evaluate(() => {
       const nav = document.querySelector('nav[aria-label="Navegação principal"]')!;
@@ -243,8 +256,10 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
   test("um agent não vê grupo nem tela que a permissão fecha", async ({ page }) => {
     await login(page, creds.users.agent!.email);
     // Integrações inteiro é manager+ (Conexões é admin): o grupo não aparece para o agent.
+    await abrirMenuLateral(page);
     await expect(sidebar(page).getByRole("button", { name: /^Integrações/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Conexões" })).toHaveCount(0);
+    await abrirMenuLateral(page);
     await expect(sidebar(page).getByRole("button", { name: "Atendimento" })).toBeVisible();
   });
 });

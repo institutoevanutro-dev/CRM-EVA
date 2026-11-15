@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
 import { esperarAgenda, telaAgenda } from "./helpers/tela-agenda";
 import { partesNoFuso } from "../../lib/agenda/fuso";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 /**
  * A PROVA NA TELA DO PRODUTO — e ela existe porque a outra estava na tela errada.
@@ -45,6 +46,7 @@ test.describe("a Agenda como o dono do produto a usa", () => {
     // O item vive no grupo "Atendimento", junto do Inbox — decisão registrada
     // no `registry.ts`: a Agenda é onde o dia acontece, não onde se configura.
     // Menu por área (07/10/2026): Atendimento → aba Agenda.
+    await abrirMenuLateral(page);
     await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("button", { name: "Atendimento" }).click();
     const item = page.getByRole("navigation", { name: "Telas de Atendimento" }).getByRole("link", { name: "Agenda", exact: true });
     await expect(item).toBeVisible({ timeout: ESPERA });

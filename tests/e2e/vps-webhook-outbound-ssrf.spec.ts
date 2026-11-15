@@ -22,6 +22,7 @@ import * as path from "node:path";
 
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 const APP_URL = `http://localhost:${process.env.E2E_PORT ?? "3001"}`;
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
@@ -105,7 +106,9 @@ test.describe("J6.8 — anti-SSRF do outbound call_webhook (real, ponta a ponta)
       await login(page, creds.users.manager!.email);
       // Menu por área (07/10/2026): Integrações → Webhooks.
       // Webhooks mora no grupo Integrações (11/10/2026).
+      await abrirMenuLateral(page);
       await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("button", { name: /^Integrações/ }).click();
+      await abrirMenuLateral(page);
       await page.getByRole("navigation", { name: "Telas de Integrações" }).getByRole("link", { name: "Webhooks" }).click();
       await page.waitForURL(/\/app\/webhooks/);
       await page.getByRole("button", { name: /Nova fonte|Criar primeira fonte/ }).click();

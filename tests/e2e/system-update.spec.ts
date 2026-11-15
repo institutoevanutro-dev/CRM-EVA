@@ -39,6 +39,7 @@ import * as path from "node:path";
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const SECRET = process.env.INTERNAL_SECRET ?? "";
@@ -250,6 +251,7 @@ test("o dono vê a versão nova na sidebar e atualiza pela tela", async ({ page,
   await loginWithTotp(page, creds.users.dono!.email, creds.dono_totp!.secret);
   await heartbeat(request, { latest_version: "1.1.0", changelog });
   await page.goto("/app/inbox");
+  await abrirMenuLateral(page);
 
   const aviso = page.getByRole("link", { name: /nova versão/i });
   await expect(aviso).toBeVisible();
@@ -518,6 +520,7 @@ test("instalação à frente da versão publicada não vira tela quebrada nem al
   await loginWithTotp(page, creds.users.dono!.email, creds.dono_totp!.secret);
 
   await page.goto("/app/inbox");
+  await abrirMenuLateral(page);
   await expect(page.getByRole("link", { name: /nova versão/i })).toHaveCount(0);
   await expect(page.getByText("versão abc1234")).toBeVisible();
 
@@ -564,6 +567,7 @@ test("quem não é dono do servidor não vê o botão", async ({ page, request }
 
   await login(page, creds.users.agent!.email);
   await page.goto("/app/inbox");
+  await abrirMenuLateral(page);
   await expect(page.getByRole("link", { name: /nova versão/i })).toHaveCount(0);
 
   await page.goto("/app/settings/atualizacao");

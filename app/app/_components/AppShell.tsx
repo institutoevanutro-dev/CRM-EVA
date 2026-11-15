@@ -1,5 +1,5 @@
 "use client";
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { TopBar } from "@/components/shell/TopBar";
 import { BarraDeProgressoNavegacao } from "@/components/shell/BarraDeProgressoNavegacao";
@@ -9,17 +9,14 @@ import { useNotifyOpenFromServiceWorker } from "@/lib/notifications/notify_open"
 import { useT } from "@/hooks/i18n/useT";
 
 interface AppShellProps {
-  sidebarCollapsed: boolean;
   children: ReactNode;
 }
 
-export function AppShell({ sidebarCollapsed, children }: AppShellProps) {
+export function AppShell({ children }: AppShellProps) {
   useInboundMessageAlerts();
   useCrmAlerts();
   useNotifyOpenFromServiceWorker();
   const t = useT();
-  // Recolher otimista (D1.10): nasce do cookie lido no servidor e muda no clique.
-  const [recolhido, setRecolhido] = useState(sidebarCollapsed);
   return (
     // Menos `--faixas-de-cima` (publicada por `FaixasDeCima`, porte do original
     // #3190): as faixas do topo ficam ACIMA da casca, e sem o desconto o
@@ -40,7 +37,7 @@ export function AppShell({ sidebarCollapsed, children }: AppShellProps) {
       </a>
       <BarraDeProgressoNavegacao />
       <div className="hidden md:block">
-        <Sidebar collapsed={recolhido} onAlternarRecolhido={() => setRecolhido((r) => !r)} />
+        <Sidebar />
       </div>
       {/*
         `min-w-0` é o que permite a coluna de conteúdo ENCOLHER. Um flex item

@@ -13,6 +13,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { test, expect, type Page } from "@playwright/test";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 
@@ -48,7 +49,9 @@ async function login(page: Page, email: string): Promise<void> {
 
 async function gotoRadar(page: Page): Promise<void> {
   // Menu por área (07/10/2026): Atendimento → aba Radar.
+  await abrirMenuLateral(page);
   await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("button", { name: "Atendimento" }).click();
+  await abrirMenuLateral(page);
   await page.getByRole("navigation", { name: "Telas de Atendimento" }).getByRole("link", { name: "Radar" }).click();
   await page.waitForURL(/\/app\/radar/);
   await expect(page.getByRole("heading", { name: "Radar de risco" })).toBeVisible();

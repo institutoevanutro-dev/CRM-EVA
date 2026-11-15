@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page } from "@playwright/test";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
   auth: { persistSession: false },
@@ -127,12 +128,15 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await expect(member.getByRole("heading", { name: /Radar/ }).first()).toBeVisible();
     await member.goto("/app/settings/profile");
     await customize(page, emails[1]!, "Produtos");
+    await abrirMenuLateral(member);
     await expect(nav(member).getByRole("button", { name: "Atendimento", exact: true })).toHaveCount(0);
     await member.goto("/app");
     await member.waitForURL("**/app/products");
     // Menu por tarefa (11/10/2026): o único grupo com tela visível é Clínica, onde Produtos mora. O grupo da tela
     // atual já nasce aberto; clicar no nome do grupo em que se está FECHA o grupo, então não se clica.
+    await abrirMenuLateral(member);
     await expect(nav(member).getByRole("button", { name: "Clínica", exact: true })).toHaveAttribute("aria-expanded", "true");
+    await abrirMenuLateral(member);
     await expect(nav(member).getByRole("button", { name: "Vendas", exact: true })).toHaveCount(0);
     const abasDeVendas = member.getByRole("navigation", { name: "Telas de Clínica" });
     await expect(abasDeVendas.getByRole("link", { name: "Produtos" })).toBeVisible();
@@ -167,7 +171,9 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await guest.goto(link);
     await guest.getByRole("button", { name: /aceitar/i }).click();
     await guest.waitForURL("**/app/tasks");
+    await abrirMenuLateral(guest);
     await expect(nav(guest).getByRole("button", { name: "Atendimento", exact: true })).toHaveCount(0);
+    await abrirMenuLateral(guest);
     await expect(nav(guest).getByRole("button", { name: "Vendas", exact: true })).toBeVisible();
     await expect(
       guest.getByRole("navigation", { name: "Telas de Vendas" }).getByRole("link", { name: "Tarefas", exact: true }),

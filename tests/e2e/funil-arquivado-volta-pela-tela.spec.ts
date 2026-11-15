@@ -52,6 +52,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+import { abrirMenuLateral } from "./utils/menu-lateral";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA =
@@ -111,7 +112,9 @@ const sidebar = (page: Page) => page.getByRole("navigation", { name: "Navegaçã
  */
 async function irParaFunis(page: Page): Promise<void> {
   // Menu por área (07/10/2026): Vendas abre na aba Funis.
+  await abrirMenuLateral(page);
   await sidebar(page).getByRole("button", { name: "Vendas" }).click();
+  await abrirMenuLateral(page);
   await page.getByRole("navigation", { name: "Telas de Vendas" }).getByRole("link", { name: "Funis" }).click();
   await page.waitForURL(/\/app\/kanban/);
   await expect(page.getByRole("heading", { name: "Funis", level: 1 })).toBeVisible();

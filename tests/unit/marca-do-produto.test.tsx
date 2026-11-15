@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
-import { Sidebar } from "@/components/shell/Sidebar";
+import { SidebarContent } from "@/components/shell/Sidebar";
 import {
   CLASSES_DE_COR,
   CLASSES_DE_COR_SOBRE_FUNDA,
@@ -51,7 +51,7 @@ const PADRAO: Branding = { name: DEFAULT_APP_NAME, logoUrl: null, initial: "D" }
 function renderSidebar(marca: Branding, collapsed: boolean) {
   return render(
     <MarcaDaInstalacaoProvider marca={marca}>
-      <Sidebar collapsed={collapsed} />
+      <SidebarContent collapsed={collapsed} />
     </MarcaDaInstalacaoProvider>,
   );
 }

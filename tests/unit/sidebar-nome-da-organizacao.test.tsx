@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-import { Sidebar } from "@/components/shell/Sidebar";
+import { SidebarContent } from "@/components/shell/Sidebar";
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
 import type { Branding } from "@/lib/branding";
 import { MarcaDaInstalacaoProvider } from "@/lib/branding/contexto";
@@ -57,7 +57,7 @@ let marcaDaInstalacao: Branding = {
 function renderSidebar(props: { collapsed: boolean }) {
   return render(
     <MarcaDaInstalacaoProvider marca={marcaDaInstalacao}>
-      <Sidebar collapsed={props.collapsed} />
+      <SidebarContent collapsed={props.collapsed} />
     </MarcaDaInstalacaoProvider>,
   );
 }
