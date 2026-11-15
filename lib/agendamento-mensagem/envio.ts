@@ -65,6 +65,11 @@ export async function autorAindaTemAcesso(admin: SupabaseClient, ag: Agendamento
 }
 
 export async function encaminharAgendamento(admin: SupabaseClient, ag: AgendamentoParaEnvio): Promise<DesfechoDoEnvio> {
+  // O texto é do atendente: sai como HUMANO, com a autoria de quem agendou
+  // (`sent_via='user'`, assinatura dele, pausa da IA como numa resposta digitada).
+  // Quem chama já conferiu que essa pessoa ainda é da equipe com papel de
+  // atendente ou acima (`autorAindaTemAcesso`); sem autor, não há envio.
+  if (!ag.created_by_user_id) return { desfecho: "falhou", motivo: "sem_autor" };
   try {
     // O fork não tem a guarda de org parada dentro do `sendMessageHandler`
     // (no original ela mora lá): confere aqui, antes de abrir o atendimento.
@@ -74,7 +79,7 @@ export async function encaminharAgendamento(admin: SupabaseClient, ag: Agendamen
     const ctx: HandlerCtx = {
       organization_id: ag.organization_id,
       serviceBoundary: boundary,
-      actor: { type: "webhook_source", id: `scheduled:${ag.id}` },
+      actor: { type: "user", id: ag.created_by_user_id },
       // O id da mensagem é o do agendamento: se a rodada cair depois do envio e
       // antes de gravar o desfecho, a próxima reencontra a MESMA linha em vez de
       // mandar de novo (o handler devolve a linha já enviada no 23505).

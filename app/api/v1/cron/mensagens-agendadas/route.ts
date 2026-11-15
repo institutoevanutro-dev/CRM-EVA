@@ -5,9 +5,13 @@
  *   1. CLAIM: marca `claimed_until` com UPDATE condicional. Só quem marcar a linha
  *      processa; duas rodadas simultâneas não encaminham o mesmo envio.
  *   2. quem agendou perdeu o acesso → `cancelada` (`sem_acesso`).
- *   3. número fora do ar + `esperar` → solta a trava e tenta no próximo minuto.
- *   4. número fora do ar + `cancelar` → `cancelada` (`numero_desconectado`).
- *   5. número no ar → encaminha; `encaminhada` com o `message_id`, ou `falhou`.
+ *   3. mais de 12h de atraso → `cancelada` (`expirada`).
+ *   4. número fora do ar + `esperar` → adia 5 min (`adiada_ate`, fora do lote).
+ *   5. número fora do ar + `cancelar` → `cancelada` (`numero_desconectado`).
+ *   6. ATRASADA (mais de 10 min): fora da janela do número → adia até ela abrir;
+ *      outro envio agendado do número há menos de 1 min → adia (ritmo).
+ *   7. senão → encaminha; `encaminhada` com o `message_id`, ou `falhou`.
+ * Regras em `lib/agendamento-mensagem/decisao.ts`.
  *
  * Primeira parte da #3118: envio único. Não há próxima ocorrência.
  * Auditoria só quando o agendamento teve desfecho gravado (regra do cron).
@@ -19,6 +23,8 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { ehOperante, statusDaOrgEmbutida } from "@/lib/campanhas/organizacao";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { adiarAteAJanelaAbrir } from "@/lib/automation/janela-do-canal";
+import { decidirAgendamento, FOLGA_DO_HORARIO_MS } from "@/lib/agendamento-mensagem/decisao";
 import {
   autorAindaTemAcesso,
   encaminharAgendamento,
@@ -52,6 +58,12 @@ async function handle(req: NextRequest): Promise<Response> {
     .select("id, organization_id, organizations:organization_id!inner(status)")
     .eq("status", "agendada")
     .lte("scheduled_at", agora.toISOString())
+    // O que esta rodada vai PULAR não pode ocupar o lote: org parada fica fora
+    // pelo join, e o adiado (número fora com "esperar", fora da janela, ritmo)
+    // fica fora até `adiada_ate`. Sem isto, 50 linhas presas num número
+    // desconectado travavam as de todos os outros números para sempre.
+    .eq("organizations.status", "active")
+    .or(`adiada_ate.is.null,adiada_ate.lte.${agora.toISOString()}`)
     .order("scheduled_at", { ascending: true })
     .limit(LOTE);
   if (error) return fail("internal_error", "Erro ao ler as mensagens devidas.", 500, { requestId });
@@ -59,6 +71,8 @@ async function handle(req: NextRequest): Promise<Response> {
   const resumo = { processadas: 0, encaminhadas: 0, falhas: 0, canceladas: 0, esperando: 0 };
 
   const soltar = (id: string) => admin.from("mensagens_agendadas").update({ claimed_until: null }).eq("id", id);
+  const adiar = (id: string, ate: Date) =>
+    admin.from("mensagens_agendadas").update({ claimed_until: null, adiada_ate: ate.toISOString() }).eq("id", id);
 
   for (const candidata of candidatas ?? []) {
     // Org parada (suspensa, redigida, arquivada) não envia: o agendamento espera.
@@ -78,15 +92,15 @@ async function handle(req: NextRequest): Promise<Response> {
     resumo.processadas++;
 
     let final: Final;
-    if (!(await autorAindaTemAcesso(admin, ag))) {
+    const decisao = (await autorAindaTemAcesso(admin, ag)) ? await decidir(admin, ag, agora) : null;
+    if (!decisao) {
       final = { status: "cancelada", motivo: "sem_acesso" };
-    } else if (!(await sessaoEstaConectada(admin, ag.organization_id, ag.channel_session_id))) {
-      if (ag.se_desconectado === "esperar") {
-        await soltar(ag.id);
-        resumo.esperando++;
-        continue;
-      }
-      final = { status: "cancelada", motivo: "numero_desconectado" };
+    } else if (decisao.acao === "adiar") {
+      await adiar(ag.id, decisao.ate);
+      resumo.esperando++;
+      continue;
+    } else if (decisao.acao === "cancelar") {
+      final = { status: "cancelada", motivo: decisao.motivo };
     } else {
       const desfecho = await encaminharAgendamento(admin, ag);
       // Org parada no meio do envio: não grava desfecho. O agendamento fica como
@@ -137,6 +151,42 @@ async function handle(req: NextRequest): Promise<Response> {
   }
 
   return ok(resumo, { requestId });
+}
+
+/**
+ * Junta os fatos e decide (`lib/agendamento-mensagem/decisao.ts`). A janela do
+ * número e o último envio só são lidos para o envio ATRASADO: no horário, a
+ * mensagem sai como o atendente marcou.
+ */
+async function decidir(admin: ReturnType<typeof createAdminClient>, ag: LinhaDevida, agora: Date) {
+  const scheduledAt = new Date(ag.scheduled_at);
+  const conectado = await sessaoEstaConectada(admin, ag.organization_id, ag.channel_session_id);
+  const atrasada = agora.getTime() - scheduledAt.getTime() > FOLGA_DO_HORARIO_MS;
+  let janelaAbreEm: Date | null = null;
+  let ultimoEnvioDoNumero: Date | null = null;
+  if (conectado && atrasada) {
+    const abre = await adiarAteAJanelaAbrir(admin, ag.organization_id, ag.channel_session_id, agora);
+    janelaAbreEm = abre ? new Date(abre) : null;
+    const { data } = await admin
+      .from("mensagens_agendadas")
+      .select("updated_at")
+      .eq("organization_id", ag.organization_id)
+      .eq("channel_session_id", ag.channel_session_id)
+      .eq("status", "encaminhada")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const ultimo = (data as { updated_at?: string } | null)?.updated_at;
+    ultimoEnvioDoNumero = ultimo ? new Date(ultimo) : null;
+  }
+  return decidirAgendamento({
+    agora,
+    scheduledAt,
+    seDesconectado: ag.se_desconectado,
+    conectado,
+    janelaAbreEm,
+    ultimoEnvioDoNumero,
+  });
 }
 
 export async function GET(req: NextRequest): Promise<Response> {

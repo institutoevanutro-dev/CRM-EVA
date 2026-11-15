@@ -12176,6 +12176,7 @@ export const DICIONARIO: Traducoes = {
   "Etiquetas automáticas do Google Ads (opcional)": { es: "Etiquetas automáticas de Google Ads (opcional)" },
   "Escolha os dados de origem que viram etiquetas. Só se aplica a negócios identificados como Google Ads; campos ausentes são ignorados.": { es: "Elija los datos de origen que se convierten en etiquetas. Solo se aplica a negocios identificados como Google Ads; los campos ausentes se ignoran." },
   "Até dez etiquetas no total, com até 60 caracteres cada. O nome inclui o ID quando disponível; nomes longos usam só o ID ou são ignorados.": { es: "Hasta diez etiquetas en total, con hasta 60 caracteres cada una. El nombre incluye el ID cuando está disponible; los nombres largos usan solo el ID o se ignoran." },
+  "passou mais de 12 horas do horário marcado": { es: "pasaron más de 12 horas de la hora programada" },
 };
 
 /**

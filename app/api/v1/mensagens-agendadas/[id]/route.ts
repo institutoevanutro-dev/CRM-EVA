@@ -73,6 +73,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       body: v.body,
       scheduled_at: v.scheduled_at,
       se_desconectado: v.se_desconectado,
+      // Horário novo, fila nova: o adiamento era do horário antigo.
+      adiada_ate: null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)

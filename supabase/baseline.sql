@@ -38860,10 +38860,15 @@ create table if not exists public.mensagens_agendadas (
   motivo text,
   message_id uuid references public.messages(id) on delete set null,
   claimed_until timestamptz,
+  adiada_ate timestamptz,
   created_by_user_id uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- `adiada_ate`: a linha que o cron PULOU (número fora com "esperar", fora da
+-- janela do número, ritmo) sai do lote até essa hora, para não travar as outras.
+alter table public.mensagens_agendadas add column if not exists adiada_ate timestamptz;
 
 create index if not exists idx_mensagens_agendadas_org_contato
   on public.mensagens_agendadas (organization_id, contact_id, scheduled_at desc);

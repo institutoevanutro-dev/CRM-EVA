@@ -61,6 +61,8 @@ function rotuloDoMotivo(motivo: string | null, t: (texto: string) => string): st
       return t("quem agendou não tem mais acesso");
     case "contato_anonimizado":
       return t("contato anonimizado");
+    case "expirada":
+      return t("passou mais de 12 horas do horário marcado");
     default:
       return motivo;
   }
