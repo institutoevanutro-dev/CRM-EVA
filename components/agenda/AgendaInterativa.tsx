@@ -10,6 +10,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { useHorariosLivres } from "@/hooks/agenda/useHorariosLivres";
 import { useRemarcarAgendamento } from "@/hooks/agenda/useRemarcarAgendamento";
+import type { FechamentoDaGrade } from "@/lib/agenda/fechamentos-na-grade";
 import type { MotivoDaGradeTravada } from "@/lib/agenda/grade-interativa";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +57,7 @@ export function AgendaInterativa({
   fuso,
   pessoas,
   agendamentos,
+  fechamentos,
   recorte,
   tipos,
   tipo,
@@ -77,6 +79,8 @@ export function AgendaInterativa({
   fuso: string;
   pessoas: Pessoa[];
   agendamentos: Agendamento[];
+  /** As faixas de "Dias fora da rotina", repassadas à grade como vieram. */
+  fechamentos?: FechamentoDaGrade[];
   /** A MESMA janela que a grade desenha — vem de quem já a calcula, sem recontá-la. */
   recorte: { de: string; ate: string };
   /**
@@ -397,6 +401,7 @@ export function AgendaInterativa({
         fuso={fuso}
         pessoas={pessoas}
         agendamentos={desenhados}
+        fechamentos={fechamentos}
         onAbrirAgendamento={onAbrirAgendamento}
         onAbrirDia={onAbrirDia}
         className="min-h-0 flex-1"

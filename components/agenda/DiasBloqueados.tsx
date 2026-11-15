@@ -378,7 +378,13 @@ export function DiasBloqueados({
               <span>
                 {pessoas.length > 0 ? `${nomeDe(e.user_id)} · ` : ""}
                 {new Date(`${e.exception_date}T12:00:00`).toLocaleDateString()} · {faixa(e, t)}
-                {e.is_unavailable ? "" : ` · ${t("aberto excepcionalmente")}`}
+                {/* "14:00–15:00" sozinho não diz se a faixa foi aberta ou fechada
+                    (porte do projeto original, PR #3888); o dia inteiro fechado já se lê. */}
+                {e.is_unavailable
+                  ? e.start_minute === 0 && e.end_minute === 1440
+                    ? ""
+                    : ` · ${t("fechado nessas horas")}`
+                  : ` · ${t("aberto excepcionalmente")}`}
                 {e.reason ? ` · ${e.reason}` : ""}
               </span>
               {podeEditar && (podeEscolherQuem || !euId || e.user_id === euId) ? (

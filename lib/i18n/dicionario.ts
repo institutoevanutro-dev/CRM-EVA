@@ -12135,6 +12135,8 @@ export const DICIONARIO: Traducoes = {
   "Mensagem citada": { es: "Mensaje citado" },
   "Toque para carregar a original": { es: "Toque para cargar el original" },
   "A mensagem original não está mais na conversa.": { es: "El mensaje original ya no está en la conversación." },
+  "Fechado": { es: "Cerrado" },
+  "fechado nessas horas": { es: "cerrado en esas horas" },
 };
 
 /**

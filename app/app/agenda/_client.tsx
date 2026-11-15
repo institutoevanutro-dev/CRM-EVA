@@ -35,6 +35,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { quandoCurto } from "@/components/agenda/rotulo-do-bloco";
 import { useAgendamentos } from "@/hooks/agenda/useAgendamentos";
+import { useFechamentosDaGrade } from "@/hooks/agenda/useFechamentosDaGrade";
 import { useHorariosLivres } from "@/hooks/agenda/useHorariosLivres";
 import { useMarcarAgendamento } from "@/hooks/agenda/useMarcarAgendamento";
 import {
@@ -498,6 +499,18 @@ export function AgendaClient({
   const agendamentosDaGrade = React.useMemo(
     () => agendamentos.filter((a) => a.situacao !== "cancelled"),
     [agendamentos],
+  );
+
+  // As faixas FECHADAS em "Dias fora da rotina", filtradas pelas MESMAS pessoas
+  // que os agendamentos: isolar uma pessoa e ver o fechamento de outra faria a
+  // grade dela parecer fechada sem estar. (Porte do DeskcommCRM #3888.)
+  const { data: fechamentosVivos } = useFechamentosDaGrade(recorteDaGrade, fusoDaAgenda);
+  const fechamentosDaGrade = React.useMemo(
+    () =>
+      (fechamentosVivos ?? []).filter(
+        (f) => selecionadas.length === 0 || selecionadas.includes(f.responsavelId),
+      ),
+    [fechamentosVivos, selecionadas],
   );
 
   /**
@@ -1175,6 +1188,7 @@ export function AgendaClient({
         agora={new Date()}
         pessoas={pessoas}
         agendamentos={agendamentosDaGrade}
+        fechamentos={fechamentosDaGrade}
         recorte={recorteDaGrade}
         tipos={tiposIniciais.map((t) => ({ id: t.id, nome: t.nome, duracaoMin: t.duracaoMin }))}
         tipo={tipo ? { id: tipo.id, duracaoMin: tipo.duracaoMin } : null}

@@ -285,7 +285,7 @@ describe("Bloquear um HORÁRIO de uma pessoa", () => {
     montar({ pessoas: EQUIPE, euId: EU, podeEscolherQuem: false });
 
     const itens = await screen.findAllByRole("listitem");
-    expect(itens[0]).toHaveTextContent(/Dra\. Ana · .*20.* · 14:00–16:00 · Congresso/);
+    expect(itens[0]).toHaveTextContent(/Dra\. Ana · .*20.* · 14:00–16:00 · fechado nessas horas · Congresso/);
     expect(itens[1]).toHaveTextContent(/Você · .*21.* · o dia todo/);
     // A RLS não deixaria apagar o da colega: o botão não promete o que não faz.
     expect(itens[0]).not.toHaveTextContent("Reabrir");
