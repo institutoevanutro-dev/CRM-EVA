@@ -205,7 +205,7 @@ export function ChatThread({
   );
   const irParaCitada = useCallback(async (id: string) => {
     const achar = () =>
-      scrollRef.current.scrollerRef.current?.querySelector<HTMLElement>(`[data-message-id="${id}"]`) ?? null;
+      scrollRef.current.scrollerRef.current?.querySelector<HTMLElement>(`[data-linha-da-mensagem="${id}"]`) ?? null;
     let alvo = achar();
     let paginas = 0;
     let temMais = qRef.current.hasNextPage;

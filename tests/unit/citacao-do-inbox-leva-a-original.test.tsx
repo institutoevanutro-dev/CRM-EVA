@@ -14,7 +14,7 @@ import type { Message } from "@/lib/types/messaging";
  *
  * A lista do fio NÃO é virtualizada: é paginação por cursor (`useMessagesRealtime`,
  * 50 por página, `hasNextPage`/`fetchNextPage` para trás). Tudo o que está
- * carregado está no DOM, com `data-message-id`. Então o gesto tem dois caminhos,
+ * carregado está no DOM, com `data-linha-da-mensagem`. Então o gesto tem dois caminhos,
  * e este arquivo mede os dois:
  *
  *   1. a original está na tela → rola até ela e acende o destaque;
@@ -131,7 +131,7 @@ function clicarNaCitacao() {
 
 /** Os elementos que receberam `scrollIntoView`, como atributo de identidade. */
 function alvosDaRolagem(): (string | null)[] {
-  return (rolar.mock.contexts as Element[]).map((el) => el.getAttribute("data-message-id"));
+  return (rolar.mock.contexts as Element[]).map((el) => el.getAttribute("data-linha-da-mensagem"));
 }
 
 describe("Inbox: clicar na mensagem citada leva até a original", () => {
@@ -172,12 +172,12 @@ describe("Inbox: clicar na mensagem citada leva até a original", () => {
 
     await waitFor(() => expect(alvosDaRolagem()).toContain("m-1"));
     // O alvo é a bolha da ORIGINAL, não a da resposta que citou.
-    const alvo = container.querySelector('[data-message-id="m-1"]');
+    const alvo = container.querySelector('[data-linha-da-mensagem="m-1"]');
     expect(alvo).not.toBeNull();
     expect(rolar.mock.contexts).toContain(alvo);
     expect(alvo?.getAttribute("data-destacada")).toBe("true");
     // O outro balão não pisca: o destaque é do alvo, não da tela toda.
-    expect(container.querySelector('[data-message-id="m-2"]')?.getAttribute("data-destacada")).toBeNull();
+    expect(container.querySelector('[data-linha-da-mensagem="m-2"]')?.getAttribute("data-destacada")).toBeNull();
     // Nada foi buscado: a original já estava na tela.
     expect(estado.fetchNextPage).not.toHaveBeenCalled();
   });
@@ -209,9 +209,9 @@ describe("Inbox: clicar na mensagem citada leva até a original", () => {
 
     await waitFor(() => expect(alvosDaRolagem()).toContain("m-velha"));
     expect(estado.fetchNextPage).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[data-message-id="m-velha"]')).not.toBeNull();
+    expect(container.querySelector('[data-linha-da-mensagem="m-velha"]')).not.toBeNull();
     expect(
-      container.querySelector('[data-message-id="m-velha"]')?.getAttribute("data-destacada"),
+      container.querySelector('[data-linha-da-mensagem="m-velha"]')?.getAttribute("data-destacada"),
     ).toBe("true");
     // A original carregada toma o lugar do rótulo genérico.
     expect(screen.queryByText("Toque para carregar a original")).toBeNull();
@@ -241,7 +241,7 @@ describe("Inbox: clicar na mensagem citada leva até a original", () => {
     clicarNaCitacao();
 
     await waitFor(() => expect(alvosDaRolagem()).toContain("m-apagada"));
-    expect(container.querySelector('[data-message-id="m-apagada"]')).not.toBeNull();
+    expect(container.querySelector('[data-linha-da-mensagem="m-apagada"]')).not.toBeNull();
     expect(aviso.info).not.toHaveBeenCalled();
   });
 

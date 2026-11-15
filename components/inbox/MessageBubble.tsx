@@ -349,8 +349,10 @@ export const MessageBubble = memo(function MessageBubble({
   return (
     <div
       data-search-match={searchMatch || undefined}
-      // A identidade da mensagem no DOM: é por ela que o clique na citação acha o alvo.
-      data-message-id={message.id}
+      // A linha da mensagem no DOM: é por ela que o clique na citação acha o alvo.
+      // Atributo próprio, não `data-message-id`: esse já é da bolha, e repetir o
+      // mesmo nos dois elementos quebra quem localiza a bolha pelo id (e2e).
+      data-linha-da-mensagem={message.id}
       data-destacada={destacada || undefined}
       className={cn(
         // 12px entre turnos, 2px dentro da sequência (I8).
