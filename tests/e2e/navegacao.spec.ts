@@ -113,6 +113,7 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
     await sidebar(page).getByRole("button", { name: "Clínica", exact: true }).click();
     await abas(page, "Clínica").getByRole("link", { name: "Produtos" }).click();
     await page.waitForURL(/\/app\/products/);
+    await abrirMenuLateral(page);
     await expect(abas(page, "Vendas")).toHaveCount(0);
   });
 
@@ -123,6 +124,8 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
     await expect(abas(page, "Vendas").getByRole("link").first()).toHaveText("Funis");
     await abas(page, "Vendas").getByRole("link", { name: "Funis" }).click();
     await page.waitForURL(/\/app\/kanban/);
+    // Escolher a tela recolhe o menu; para ver a marcação, abre de novo.
+    await abrirMenuLateral(page);
     await expect(abas(page, "Vendas").getByRole("link", { name: "Funis" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("heading", { name: "Funis", level: 1 })).toBeVisible();
   });
@@ -144,6 +147,8 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
     await sidebar(page).getByRole("button", { name: /^Integrações/ }).click();
     await abas(page, "Integrações").getByRole("link", { name: "Conexões" }).click();
     await page.waitForURL(/\/app\/connections/);
+    // Escolher a tela recolhe o menu; para ver a marcação, abre de novo.
+    await abrirMenuLateral(page);
     await expect(abas(page, "Integrações").getByRole("link", { name: "Conexões" })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("tab", { name: /oficial/i })).toBeVisible();
   });
