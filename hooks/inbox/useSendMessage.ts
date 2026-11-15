@@ -11,6 +11,11 @@ interface SendArgs {
   media_url?: string;
   media_mime?: string;
   media_storage_path?: string;
+  /**
+   * O nome ORIGINAL do anexo. Sem ele o servidor só conhece o basename
+   * aleatório do bucket, e é esse nome que o paciente veria no WhatsApp.
+   */
+  media_filename?: string;
   media_size_bytes?: number;
   /** Item da Biblioteca de mídia: o handler resolve o arquivo e confere o termo. */
   media_library_item_id?: string;
