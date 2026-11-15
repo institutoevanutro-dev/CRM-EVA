@@ -8,6 +8,15 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.14.6] — 2026-11-15
+
+### Alterado
+
+- **Menu lateral recolhido que abre com o mouse, e grupos em sanfona** O menu lateral fica sempre recolhido na faixa de ícones e abre por cima do
+  conteúdo quando o mouse chega nele (ou o teclado entra), recolhendo ao sair.
+  O botão de recolher saiu. Os grupos do menu funcionam em sanfona: abrir um
+  fecha o que estava aberto. Pedido do dono para todos os sistemas.
+
 ## [5.14.5] — 2026-11-14
 
 ### Corrigido
@@ -9158,7 +9167,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.5...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.6...HEAD
+[5.14.6]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.5...v5.14.6
 [5.14.5]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.4...v5.14.5
 [5.14.4]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.3...v5.14.4
 [5.14.3]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.2...v5.14.3
