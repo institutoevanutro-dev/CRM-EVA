@@ -38877,6 +38877,13 @@ create index if not exists idx_mensagens_agendadas_devidas
 
 alter table public.mensagens_agendadas enable row level security;
 
+-- Policy e privilégios sem janela na reaplicação
+-- (tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts): a policy só é
+-- recriada quando a definição no banco não é esta, e o revoke/grant acontece num
+-- bloco só.
+do $politica$ begin
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'mensagens_agendadas' and policyname = 'mensagens_agendadas_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'c87fdade7d67e82584c527bd87120fad') then
 drop policy if exists mensagens_agendadas_select on public.mensagens_agendadas;
 create policy mensagens_agendadas_select on public.mensagens_agendadas
   for select to authenticated using (
@@ -38887,10 +38894,14 @@ create policy mensagens_agendadas_select on public.mensagens_agendadas
          and c.organization_id = mensagens_agendadas.organization_id
     )
   );
+end if;
+end $politica$;
 
+do $janela$ begin
 revoke all on public.mensagens_agendadas from public, anon, authenticated;
 grant select on public.mensagens_agendadas to authenticated;
 grant select, insert, update, delete on public.mensagens_agendadas to service_role;
+end $janela$;
 
 create or replace function public.fn_mensagens_agendadas_contato_anonimizado()
   returns trigger
@@ -38913,8 +38924,7 @@ end$$;
 
 revoke all on function public.fn_mensagens_agendadas_contato_anonimizado() from public, anon, authenticated;
 
-drop trigger if exists trg_contacts_anonimizado_mensagens_agendadas on public.contacts;
-create trigger trg_contacts_anonimizado_mensagens_agendadas
+create or replace trigger trg_contacts_anonimizado_mensagens_agendadas
   after update of is_anonymized on public.contacts
   for each row
   when (new.is_anonymized = true and coalesce(old.is_anonymized, false) = false)

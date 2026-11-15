@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+/** Espelho do CHECK de `mensagens_agendadas.status` (migration 0416). */
+export const SITUACOES_DO_AGENDAMENTO = ["agendada", "encaminhada", "falhou", "cancelada"] as const;
+/** Espelho do CHECK de `mensagens_agendadas.se_desconectado` (migration 0416). */
+export const SE_DESCONECTADO = ["esperar", "cancelar"] as const;
+
 /**
  * Edição de uma mensagem de texto agendada: o texto, o horário e o que fazer se
  * o número estiver fora do ar. Contato e número NÃO vêm do corpo: saem da
@@ -10,7 +15,7 @@ export const editarAgendamentoSchema = z
     title: z.string().trim().max(120).optional().nullable(),
     body: z.string().trim().min(1, "mensagem_vazia").max(4096),
     scheduled_at: z.iso.datetime(),
-    se_desconectado: z.enum(["esperar", "cancelar"]).default("esperar"),
+    se_desconectado: z.enum(SE_DESCONECTADO).default("esperar"),
   })
   .strict();
 

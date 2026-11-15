@@ -246,6 +246,19 @@ const PARES: Array<{
     simbolo: "AutomationRunStatus",
   },
   {
+    tabela: "mensagens_agendadas",
+    coluna: "status",
+    // lib/agendamento-mensagem/schema.ts → SITUACOES_DO_AGENDAMENTO. Migration 0416.
+    arquivo: "lib/agendamento-mensagem/schema.ts",
+    simbolo: "SITUACOES_DO_AGENDAMENTO",
+  },
+  {
+    tabela: "mensagens_agendadas",
+    coluna: "se_desconectado",
+    arquivo: "lib/agendamento-mensagem/schema.ts",
+    simbolo: "SE_DESCONECTADO",
+  },
+  {
     tabela: "crm_tasks",
     coluna: "priority",
     // lib/tarefas/tipos.ts → PRIORIDADES_DA_TAREFA. Nasce com o par no mesmo
