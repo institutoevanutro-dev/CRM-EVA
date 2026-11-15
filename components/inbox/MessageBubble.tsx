@@ -28,6 +28,7 @@ import { MediaRenderer } from "@/components/inbox/media/MediaRenderer";
 import { ExameNoProntuario } from "@/components/inbox/ExameNoProntuario";
 import { MediaUnavailable } from "@/components/inbox/media/MediaUnavailable";
 import { ContactCard } from "@/components/inbox/media/ContactCard";
+import { TextoComLinks } from "@/components/inbox/TextoComLinks";
 import { resolveSharedContact } from "@/lib/messaging/contact-card";
 import {
   extractCitations,
@@ -436,7 +437,7 @@ export const MessageBubble = memo(function MessageBubble({
                 ? t("Esta mensagem foi apagada")
                 : citada.type === "contact"
                   ? resolveSharedContact(citada)?.name || t("Contato")
-                  : citada.body?.trim() || t("(sem texto)")}
+                  : citada.body?.trim() ? <TextoComLinks texto={citada.body.trim()} /> : t("(sem texto)")}
             </div>
           </div>
         )}
@@ -496,7 +497,7 @@ export const MessageBubble = memo(function MessageBubble({
             )}
 
             {message.body && !isContact && (
-              <p className="whitespace-pre-wrap wrap-anywhere leading-snug">{message.body}</p>
+              <p className="whitespace-pre-wrap wrap-anywhere leading-snug"><TextoComLinks texto={message.body} /></p>
             )}
           </>
         )}
