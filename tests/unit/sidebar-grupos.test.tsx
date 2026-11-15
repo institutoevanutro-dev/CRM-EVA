@@ -145,6 +145,26 @@ describe("Sidebar por área", () => {
     vi.useRealTimers();
   });
 
+  it("chegar no Início não fecha o grupo que a pessoa acabou de abrir", () => {
+    comoPapel("admin");
+    rota.atual = "/app";
+    const { rerender } = render(<SidebarContent collapsed={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Assistente" }));
+    rota.atual = "/app/inicio";
+    rerender(<SidebarContent collapsed={false} />);
+    expect(screen.getByRole("navigation", { name: "Telas de Assistente" })).toBeInTheDocument();
+  });
+
+  it("foco devolvido por código não abre o menu; Tab abre", () => {
+    comoPapel("admin");
+    render(<Sidebar />);
+    const barra = screen.getByTestId("barra-lateral");
+    fireEvent.focus(barra.querySelector("button")!);
+    expect(screen.queryByRole("button", { name: "Vendas" })).toBeNull();
+    fireEvent.keyUp(barra.querySelector("button")!, { key: "Tab" });
+    expect(screen.getByRole("button", { name: "Vendas" })).toBeInTheDocument();
+  });
+
   it("escolher uma tela recolhe o menu, mesmo com o mouse ainda em cima", () => {
     comoPapel("admin");
     render(<Sidebar />);

@@ -72,7 +72,9 @@ export function SidebarContent({
   const [visita, setVisita] = useState(atual);
   if (visita !== atual) {
     setVisita(atual);
-    setAberto(atual);
+    // Só um grupo de verdade toma o lugar: chegar no Início (ou terminar de
+    // carregar nele) não fecha o grupo que a pessoa acabou de abrir.
+    if (grupos.some((g) => g.id === atual)) setAberto(atual);
   }
   const alternar = (id: string) => setAberto((a) => (a === id ? null : id));
 
@@ -319,14 +321,21 @@ export function Sidebar() {
       data-testid="barra-lateral"
       onMouseEnter={abrir}
       onMouseLeave={fecharLogo}
-      onFocus={abrir}
+      // Teclado abre pelo Tab. Foco devolvido por código (o ⌘K fechando volta
+      // para a busca, que mora aqui) NÃO abre: o menu ficaria aberto por cima
+      // do conteúdo, sem o mouse em cima para recolher.
+      onKeyUp={(e) => {
+        if (e.key === "Tab") abrir();
+      }}
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) fecharLogo();
       }}
       // O topo e a altura descontam `--faixas-de-cima` (porte do original
       // #3190): as faixas grudam em `top-0` com z-50, e uma barra em `top-0`
       // passaria por baixo delas, com o pé (Sair) abaixo da borda da tela.
-      className="sticky top-[var(--faixas-de-cima,0px)] z-30 h-[calc(100dvh-var(--faixas-de-cima,0px))] w-16 shrink-0"
+      // z-40: aberto, o menu passa POR CIMA da barra do topo (z-30), que
+      // vem depois no DOM; abaixo das faixas (z-50).
+      className="sticky top-[var(--faixas-de-cima,0px)] z-40 h-[calc(100dvh-var(--faixas-de-cima,0px))] w-16 shrink-0"
     >
       <div
         className={cn(
