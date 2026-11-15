@@ -26,6 +26,7 @@ const config: VercelConfig = {
     { path: "/api/v1/cron/handoff-devolucao", schedule: "*/5 * * * *" },
     { path: "/api/v1/cron/rodizio-devolucao", schedule: "*/5 * * * *" },
     { path: "/api/v1/cron/campaign-worker", schedule: "* * * * *" },
+    { path: "/api/v1/cron/mensagens-agendadas", schedule: "* * * * *" },
     { path: "/api/v1/cron/webhook-log-retention", schedule: "*/5 * * * *" },
     { path: "/api/v1/cron/channel-health", schedule: "*/5 * * * *" },
     { path: "/api/v1/cron/agenda-google-push", schedule: "*/5 * * * *" },

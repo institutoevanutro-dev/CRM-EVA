@@ -305,6 +305,13 @@ beforeAll(() => {
             (organization_id, campaign_id, channel_session_id)
             values (v_org, v_camp, v_sess);
         end if;
+
+        -- migration 0416 (porte do original #4131) -- a mensagem agendada da conversa semeada.
+        if not exists (select 1 from public.mensagens_agendadas where organization_id = v_org) then
+          insert into public.mensagens_agendadas
+            (organization_id, conversation_id, contact_id, channel_session_id, body, scheduled_at)
+          values (v_org, v_conv, v_contact, v_sess, 'rls invariant probe', now() + interval '1 day');
+        end if;
       end loop;
     end
     $seed$;
@@ -363,6 +370,10 @@ beforeAll(() => {
  * cabeçalho do caso de `contact_field_proposals` abaixo.
  */
 export const TABLES = [
+  // migration 0416 (porte do original #4131) — a mensagem agendada na conversa. A
+  // leitura exige a conversa visível pela sessão; a semente usa v_conv, sem dono,
+  // que o agent semeado enxerga (visibility_mode padrão).
+  "mensagens_agendadas",
   "conversations",
   "messages",
   "contacts",
