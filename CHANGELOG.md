@@ -8,6 +8,33 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.14.7] — 2026-11-15
+
+### Corrigido
+
+- **Compromisso encerrado ou em agenda do Google que sumiu para de voltar à fila a cada cinco minutos** Compromissos que já aconteceram (compareceu, faltou ou cancelado no passado) voltavam à fila do Google a cada cinco minutos, para sempre, gastando uma leitura no Google sem mudar nada. Agora a fila só leva o que ainda pode mudar lá.
+
+  Quando a agenda do Google de destino some da conta, o compromisso para de tentar e mostra o motivo certo ("A agenda de destino não aparece mais na conta Google…") em vez de "O compromisso mudou". Ele volta sozinho quando a agenda reaparece, ou pelo botão "Atualizar lista e sincronização".
+
+  Portado do projeto original (DeskcommCRM, PRs #4453 e #4514 de @webtecnica).
+
+- **Documento enviado pelo Inbox chega ao paciente com o nome original** O arquivo anexado no Inbox chegava ao WhatsApp do paciente com um nome interno (`out-<código>.pdf`). Agora vai com o nome que o arquivo tinha no computador, e o balão da conversa mostra o mesmo nome.
+
+  Portado do projeto original (DeskcommCRM, PR #4484 de @webtecnica).
+
+- **Busca na conversa e no seletor de etiquetas ignora acento** Procurar `orcamento` agora acha "orçamento", tanto na busca dentro da conversa quanto no filtro de etiquetas. Com acento ou sem acento, o resultado é o mesmo.
+
+  Portado do projeto original (DeskcommCRM, PR #4622 de @webtecnica).
+
+- **Endereço de site na conversa vira link clicável** Endereço mandado na conversa (`https://…`, `www.…` ou domínio conhecido) agora vira link que abre em outra aba, nas mensagens, na citação de resposta e nas notas internas. Só endereços de site viram link; o resto do texto aparece exatamente como foi escrito.
+
+  Portado do projeto original (DeskcommCRM, PR #4582 de @webtecnica).
+
+- **Responder "Cancelar" não bloqueia mais o paciente** Quem respondia só "Cancelar" a um lembrete de consulta ficava bloqueado: deixava de receber mensagens e os negócios abertos iam para perdido, sem aviso. Agora "Cancelar" sozinho é tratado como resposta normal e o atendimento segue.
+  "Cancelar a inscrição" sem dizer de quê passa a chamar uma pessoa da equipe em vez de bloquear. Quem quer sair continua saindo com PARAR, SAIR ou STOP, e "cancelar a inscrição das mensagens" segue bloqueando.
+
+  Portado do projeto original (DeskcommCRM, PR #4584 de @webtecnica).
+
 ## [5.14.6] — 2026-11-15
 
 ### Alterado
@@ -9167,7 +9194,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.6...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.7...HEAD
+[5.14.7]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.6...v5.14.7
 [5.14.6]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.5...v5.14.6
 [5.14.5]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.4...v5.14.5
 [5.14.4]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.3...v5.14.4
