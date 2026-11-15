@@ -51,7 +51,10 @@ const PEDE_PARA_SAIR = [
   // comunicativos, não apaga o padrão inteiro.
   "pare de mandar essas fotos",
   "quero sair da lista",
-  "quero cancelar a inscrição",
+  // `quero cancelar a inscrição` saiu daqui no porte do upstream #4584: sem
+  // objeto de comunicação, a frase pode ser a inscrição num curso ou programa e
+  // agora ESCALA sem bloquear — o caso vive em
+  // `tests/unit/opt-out-cancelar-sozinho-e-compra.test.ts`.
   "me descadastra aí",
   // ─── Formas que passavam batido (medido por @deskcommopp4s-cmd, #1607) ─────
   //
@@ -418,10 +421,14 @@ describe("cancelar o PLANO escala sem bloquear — a palavra de duas caras", () 
     "sair da lista",
     "dar de baja la suscripcion",
     "quiero dar de baja la suscripcion",
-    "quero cancelar a inscrição",
-    "cancelar",
-  ])("com objeto de comunicação (ou a palavra sozinha) continua bloqueando: %s", (texto) => {
+    "quero cancelar a inscrição das mensagens",
+  ])("com objeto de comunicação continua bloqueando: %s", (texto) => {
     expect(ehPedidoDeOptOut(texto)).toBe(true);
+  });
+
+  it("`cancelar` SOZINHO não bloqueia nem escala — é resposta de menu (#4584)", () => {
+    expect(ehPedidoDeOptOut("cancelar")).toBe(false);
+    expect(ehOptOutProvavel("cancelar")).toBe(false);
   });
 
   it("'do whatsapp' e 'de vocês' podem ser o plano: escalam, não bloqueiam", () => {
@@ -526,8 +533,10 @@ describe("ehPedidoDeOptOut — pedido INEQUÍVOCO, o que autoriza bloquear", () 
     expect(ehPedidoDeOptOut("tem como parar a dor?")).toBe(false);
   });
 
-  it("cancelar sozinho sai; cancelar UMA COISA fica", () => {
-    expect(ehPedidoDeOptOut("cancelar")).toBe(true);
+  it("cancelar sozinho não é palavra de saída; cancelar UMA COISA também não", () => {
+    // Porte do upstream #4584: no atendimento, "cancelar" sozinho é resposta a
+    // um menu ("confirmar, remarcar ou cancelar?") — não descadastro.
+    expect(ehPedidoDeOptOut("cancelar")).toBe(false);
     expect(ehPedidoDeOptOut("quero cancelar o pedido")).toBe(false);
   });
 });

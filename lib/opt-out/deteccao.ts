@@ -60,7 +60,15 @@ export const PALAVRAS_DE_OPT_OUT: ReadonlySet<string> = new Set([
   "parar",
   "pare",
   "sair",
-  "cancelar",
+  // `cancelar` SOZINHO saiu desta lista (porte do upstream #4584). A palavra
+  // solta gravava `is_blocked` na INGESTÃO, antes do modelo — e no canal ela é
+  // quase sempre a RESPOSTA a uma pergunta que a ofereceu ("confirmar, remarcar
+  // ou cancelar?" do lembrete de consulta), inclusive um botão com esse rótulo,
+  // que chega como texto. Nenhum rodapé promete CANCELAR como palavra de saída
+  // (`PALAVRAS_DE_SAIDA_DO_RODAPE` é parar/pare/stop/baja). Não foi para as
+  // ambíguas de propósito: o ambíguo cala a IA e escala, o que para quem só
+  // respondeu a um menu seria parar o atendimento sem motivo. Quem quer sair
+  // tem `parar`, `sair`, `stop` e as frases com objeto abaixo.
   "descadastrar",
   "remover",
   "unsubscribe",
@@ -746,15 +754,15 @@ const FRASES_DE_OPT_OUT: readonly RegExp[] = [
   // As duas leem hoje a MESMA constante (`LISTAS_DE_ENVIO`), que é o que torna
   // impossível uma voltar a divergir da outra.
   new RegExp(SAIR_DA_LISTA + FREIO_DE_LISTA_QUALIFICADA, "u"),
-  // "cancelar a inscrição" — e NÃO "cancelar a assinatura" (porte do upstream
-  // #2971): `assinatura` serve às duas coisas, sair das mensagens e cancelar o
-  // plano, e bloqueava quem só perguntava "posso cancelar a assinatura e voltar
-  // depois?". Ela foi para as ambíguas (escala para uma pessoa, não bloqueia).
-  /\bcancelar?\s+(?:a\s+)?inscricao\b/u,
-  // ...mas "cancelar a assinatura DAS MENSAGENS" nomeia o objeto de comunicação
-  // e bloqueia na hora — a regra do cabeçalho. "do whatsapp" e "de vocês" ficam
-  // de fora de propósito: também podem ser o plano, e seguem só escalando.
-  /\bcancelar?\s+(?:a\s+)?(?:minha\s+)?assinatura\s+(?:d(?:as|essas|estas)\s+(?:mensagens|notificacoes|promocoes|ofertas|novidades)|d(?:os|esses|estes)\s+(?:avisos|disparos|envios)|d(?:a|essa|esta)\s+newsletter)\b/u,
+  // "cancelar a assinatura/inscrição DAS MENSAGENS" nomeia o objeto de
+  // comunicação e bloqueia na hora — a regra do cabeçalho. A frase SEM objeto
+  // fica nas ambíguas, abaixo: `assinatura` desde o porte do upstream #2971 e
+  // `inscricao` desde o porte do #4584, pelo mesmo motivo — a palavra serve às
+  // duas coisas, sair das mensagens e desfazer a inscrição num curso, programa
+  // ou plano ("posso cancelar a inscrição e voltar depois?" gravava
+  // `is_blocked`). "do whatsapp" e "de vocês" ficam de fora de propósito:
+  // também podem ser o plano, e seguem só escalando.
+  /\bcancelar?\s+(?:a\s+)?(?:minha\s+)?(?:assinatura|inscricao)\s+(?:d(?:as|essas|estas)\s+(?:mensagens|notificacoes|promocoes|ofertas|novidades)|d(?:os|esses|estes)\s+(?:avisos|disparos|envios)|d(?:a|essa|esta)\s+newsletter)\b/u,
   /\b(?:me\s+)?descadastr\w*\b/u,
   /\bdescadastro\b/u,
   // ── espanhol ──────────────────────────────────────────────────────────────
@@ -814,8 +822,10 @@ const FRASES_DE_OPT_OUT: readonly RegExp[] = [
   // quer continuar sendo atendido.
   /\b(?:sacame|sacar|quitame|quitar|borrame|borrar|elimina|eliminame)\s+de\s+(?:la\s+)?lista\b(?!\s+de\s+(?:espera|precios|invitados))/u,
   /\bsalir\s+de\s+(?:la\s+)?lista\b(?!\s+de\s+(?:espera|precios|invitados))/u,
-  // Espelho do português: `suscripcion` foi para as ambíguas (é também o plano);
-  // `inscripcion` fica, e a forma COM objeto ("a los mensajes") bloqueia.
+  // Espelho do português: `suscripcion` foi para as ambíguas (é também o plano).
+  // `inscripcion` FICA bloqueando — ao contrário do português `inscricao`, que
+  // foi para as ambíguas no porte do #4584; o upstream deixou o espanhol fora
+  // daquele recorte, e este porte também. A forma COM objeto ("a los mensajes") bloqueia.
   /\bcancelar\s+(?:la\s+)?inscripcion\b/u,
   /\bcancelar\s+(?:la\s+|mi\s+)?suscripcion\s+(?:a|de)\s+(?:los|estos|tus|sus)\s+(?:mensajes|promociones|ofertas)\b/u,
 ];
@@ -868,6 +878,12 @@ const FRASES_AMBIGUAS_DE_OPT_OUT: readonly RegExp[] = [
   // pode ser o PLANO ("quero cancelar a assinatura da revista"), e o bloqueio
   // deixaria o cliente sem resposta. Uma pessoa decide.
   /\bcancelar?\s+(?:a\s+)?(?:minha\s+)?assinatura\b/u,
+  // "cancelar a inscrição" sem objeto — a MESMA decisão (porte do upstream
+  // #4584): é o "cancelar inscrição" dos rodapés de e-mail E a inscrição num
+  // curso ou programa. Bloqueava na ingestão; agora escala. O recorte é o que
+  // já bloqueava, sem alargar: "cancelar minha inscrição no curso" não era
+  // sinal e continua não sendo.
+  /\bcancelar?\s+(?:a\s+)?inscricao\b/u,
   // ── espanhol ──────────────────────────────────────────────────────────────
   //
   // Esta lista tinha ZERO entradas em espanhol. Não por decisão: o ambíguo é
