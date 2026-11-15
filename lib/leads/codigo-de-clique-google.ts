@@ -16,6 +16,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
 import { logger } from "@/lib/logger";
+import { metadadosGoogleDaUrl } from "@/lib/plataformas-de-anuncio/google/metadados-da-campanha";
 
 /** Alfabeto sem 0/O/1/I, como o site gera. */
 export const PADRAO_DO_CODIGO = /^[A-HJ-NP-Z2-9]{6}$/;
@@ -62,12 +63,16 @@ export async function aplicarCodigoDeCliqueGoogle(
   if (!data) return false;
 
   const tipo = data.click_id_kind as TipoDeClique;
+  const landingUrl = typeof data.landing_url === "string" ? data.landing_url : null;
   await estamparAtribuicaoDoContato(admin, contactId, {
     plataforma: "google_ads",
     sourceId: null,
     titulo: null,
     corpo: null,
-    sourceUrl: typeof data.landing_url === "string" ? data.landing_url : null,
+    sourceUrl: landingUrl,
+    // Campanha, grupo, anúncio, palavra-chave e conta, lidos da query da página
+    // de destino (porte do DeskcommCRM #4631).
+    metadadosDaCampanha: metadadosGoogleDaUrl(landingUrl),
     bruto: { [tipo]: data.click_id, codigo, clicked_at: data.clicked_at },
   });
   return true;

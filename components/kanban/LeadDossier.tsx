@@ -10,6 +10,8 @@ import { useLeadTimeline } from "@/hooks/leads/useLeadTimeline";
 import { ROLE_RANK } from "@/lib/auth/types";
 import type { Lead } from "@/lib/types/leads";
 import { ConversaNoDossie } from "./ConversaNoDossie";
+import { NiveisDaOrigemGoogle } from "@/components/contacts/NiveisDaOrigemGoogle";
+import { origemGoogleAds } from "@/lib/leads/origem-google-ads";
 import { LeadFieldsForm } from "./LeadFieldsForm";
 import { ScoreSlot } from "./ScoreSlot";
 import { LeadTimeline } from "./LeadTimeline";
@@ -75,6 +77,9 @@ export function LeadDossier({
 }: Props) {
   const tagDoIdioma = useTagDeIdioma();
   const t = useT();
+  // A origem do Google Ads de QUANDO O NEGÓCIO NASCEU (o retrato em
+  // `crm_leads.source_metadata`). Porte do DeskcommCRM #4631.
+  const origemGoogle = origemGoogleAds(lead.source_metadata, lead.source);
   const campos = useRef<HTMLDivElement | null>(null);
   const timeline = useLeadTimeline(open ? lead.id : null, lead.contact_id);
   const { fechadas, alternar, abrir } = useSecoesRecolhidas();
@@ -191,6 +196,15 @@ export function LeadDossier({
           recolhida={fechadas.has("dados-do-negocio")}
           aoAlternar={alternar}
         >
+          {origemGoogle && (
+            <dl className="mb-4 grid grid-cols-2 gap-3 text-sm" data-testid="origem-google-ads">
+              <div>
+                <dt className="text-xs uppercase text-muted-foreground">{t("Origem")}</dt>
+                <dd className="mt-1">{t("Google Ads")}</dd>
+              </div>
+              <NiveisDaOrigemGoogle origem={origemGoogle} />
+            </dl>
+          )}
           <div ref={campos}>
             <LeadFieldsForm lead={lead} pipelineId={pipelineId} fieldDefs={fieldDefs} />
           </div>

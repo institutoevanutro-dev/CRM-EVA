@@ -10,6 +10,7 @@ import { z } from "zod";
 import { ESCOLHAS_NO_ENVIO } from "@/lib/agenda/escolha-no-envio";
 
 import { conditionSchema, conditionsSchema } from "@/lib/automation/conditions";
+import { CAMPOS_DE_ETIQUETA_GOOGLE_ADS } from "@/lib/automation/etiquetas-google-ads";
 
 /**
  * Os gatilhos que o motor reconhece, e a entidade que cada um tem que trazer.
@@ -126,10 +127,22 @@ export const actionSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("add_tag"),
     config: z.object({
-      tags: z.array(z.string().min(1).max(60)).min(1).max(10),
+      tags: z.array(z.string().min(1).max(60)).max(10),
+      // Etiquetas automáticas da origem do Google Ads (porte do DeskcommCRM
+      // #4631): escolhas fechadas, nunca caminho nem expressão.
+      google_ads_fields: z.array(z.enum(CAMPOS_DE_ETIQUETA_GOOGLE_ADS)).max(5).optional(),
       // Onde a etiqueta é gravada: `card` (padrão, o de sempre) ou `contato`.
       // Opcional: as regras antigas não têm a chave e continuam iguais.
       destino: z.enum(["card", "contato"]).optional(),
+    }).superRefine((config, ctx) => {
+      const campos = config.google_ads_fields ?? [];
+      const quantidade = config.tags.length + campos.length;
+      if (quantidade < 1 || quantidade > 10) {
+        ctx.addIssue({ code: "custom", path: ["tags"], message: "Escolha de uma a dez etiquetas, incluindo os campos do Google Ads." });
+      }
+      if (new Set(campos).size !== campos.length) {
+        ctx.addIssue({ code: "custom", path: ["google_ads_fields"], message: "Escolha cada campo do Google Ads uma única vez." });
+      }
     }),
   }),
   z.object({ type: z.literal("assign_owner"), config: z.object({ user_id: z.string().uuid() }) }),

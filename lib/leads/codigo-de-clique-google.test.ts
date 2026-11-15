@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { aplicarCodigoDeCliqueGoogle, codigoNaMensagem } from "./codigo-de-clique-google";
 
-vi.mock("@/lib/leads/atribuicao-de-anuncio", () => ({ estamparAtribuicaoDoContato: vi.fn() }));
+vi.mock("@/lib/leads/atribuicao-de-anuncio", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/leads/atribuicao-de-anuncio")>()),
+  estamparAtribuicaoDoContato: vi.fn(),
+}));
 import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
 
 describe("código de clique na mensagem", () => {
@@ -50,5 +53,34 @@ describe("aplicarCodigoDeCliqueGoogle", () => {
     const { admin } = adminCom(null);
     expect(await aplicarCodigoDeCliqueGoogle(admin, "org-1", "ct-1", "Cód. 952FHZ")).toBe(false);
     expect(estamparAtribuicaoDoContato).not.toHaveBeenCalled();
+  });
+});
+
+describe("aplicarCodigoDeCliqueGoogle — campanha da página de destino (porte do projeto original, PR #4631)", () => {
+  it("lê campanha, grupo, anúncio, palavra-chave e conta da query da landing_url", async () => {
+    vi.mocked(estamparAtribuicaoDoContato).mockClear();
+    const landing =
+      "https://site.test/agendar?utm_campaign=Consultas&utm_adset=Zona%20sul&utm_term=consulta%20perto" +
+      "&campaignid=123&adgroupid=456&creative=789&google_customer_id=123-456-7890&gclid=Cj0KCQabc123&outra=x";
+    const { admin } = adminCom({ click_id_kind: "gclid", click_id: "Cj0KCQabc123", landing_url: landing, clicked_at: null });
+    await aplicarCodigoDeCliqueGoogle(admin, "org-1", "ct-1", "Cód. 952FHZ");
+    expect(estamparAtribuicaoDoContato).toHaveBeenCalledWith(admin, "ct-1", expect.objectContaining({
+      metadadosDaCampanha: {
+        utm_campaign: "Consultas",
+        utm_adset: "Zona sul",
+        utm_term: "consulta perto",
+        google_campaign_id: "123",
+        google_adgroup_id: "456",
+        google_ad_id: "789",
+        google_customer_id: "1234567890",
+      },
+    }));
+  });
+
+  it("sem landing_url (ou inválida) a campanha vem vazia e o clique entra assim mesmo", async () => {
+    vi.mocked(estamparAtribuicaoDoContato).mockClear();
+    const { admin } = adminCom({ click_id_kind: "gclid", click_id: "Cj0KCQabc123", landing_url: "não é url", clicked_at: null });
+    expect(await aplicarCodigoDeCliqueGoogle(admin, "org-1", "ct-1", "Cód. 952FHZ")).toBe(true);
+    expect(estamparAtribuicaoDoContato).toHaveBeenCalledWith(admin, "ct-1", expect.objectContaining({ metadadosDaCampanha: {} }));
   });
 });

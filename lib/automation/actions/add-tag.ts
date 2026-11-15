@@ -15,6 +15,7 @@
  */
 import { originFromAutomationEvent } from "@/lib/atendimento/origem-automacao";
 import { registerAction } from "@/lib/automation/actions";
+import { etiquetasGoogleAds } from "@/lib/automation/etiquetas-google-ads";
 import type { ActionCtx, ActionResultDetail } from "@/lib/automation/types";
 
 /** A função SQL que faz a junção na linha alvo — uma por tabela (migration 0386). */
@@ -43,7 +44,11 @@ function lista(valor: unknown): string[] {
  * PR #2967 de @webtecnica).
  */
 async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise<ActionResultDetail> {
-  const tags = Array.isArray(config.tags) ? config.tags.map(String) : [];
+  const literais = Array.isArray(config.tags) ? config.tags.map(String) : [];
+  // As etiquetas automáticas do Google Ads (porte do DeskcommCRM #4631) usam a
+  // mesma junção atômica, destino e evento, dentro do teto de dez por ação.
+  const automaticas = etiquetasGoogleAds(ctx.context, config.google_ads_fields);
+  const tags = [...literais, ...automaticas.slice(0, Math.max(0, 10 - literais.length))];
   if (!tags.length) return { type: "add_tag", status: "skipped", detail: { reason: "no_tags" } };
 
   const lead = ctx.context.lead as { id: string; contact_id?: string; tags?: string[] } | undefined;

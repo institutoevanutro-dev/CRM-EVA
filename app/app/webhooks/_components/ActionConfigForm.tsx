@@ -22,6 +22,7 @@ import { useAgentsList } from "@/hooks/ai/useAgents";
 import { canaisQueEnviam, channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { apiClient } from "@/lib/api/client";
+import { CAMPOS_DE_ETIQUETA_GOOGLE_ADS, type CampoDeEtiquetaGoogleAds } from "@/lib/automation/etiquetas-google-ads";
 import type { FollowupFlowPointerRow } from "@/hooks/followup/useFollowupFlows";
 
 export type ActionItem =
@@ -35,7 +36,7 @@ export type ActionItem =
       type: "send_ai_message";
       config: { agent_id: string; channel_session_id: string; instruction: string };
     }
-  | { type: "add_tag"; config: { tags: string[]; destino?: "card" | "contato" } }
+  | { type: "add_tag"; config: { tags: string[]; destino?: "card" | "contato"; google_ads_fields?: CampoDeEtiquetaGoogleAds[] } }
   | { type: "assign_owner"; config: { user_id: string } }
   | { type: "call_webhook"; config: { url: string; secret?: string; secret_enc?: string } }
   | { type: "start_message_flow"; config: { flow_pointer_id: string; bind_appointment?: boolean } };
@@ -444,9 +445,25 @@ function SendAiMessageForm({
 function AddTagForm({
   config,
   onChange,
-}: FormProps<{ tags: string[]; destino?: "card" | "contato" }>) {
+}: FormProps<{ tags: string[]; destino?: "card" | "contato"; google_ads_fields?: CampoDeEtiquetaGoogleAds[] }>) {
   const t = useT();
   const [text, setText] = React.useState(config.tags.join(", "));
+  // `t()` com literal por campo: chave montada em runtime escapa do guardião de espanhol.
+  const rotuloDoCampo = (campo: CampoDeEtiquetaGoogleAds) => {
+    switch (campo) {
+      case "campaign":
+        return t("Campanha");
+      case "adgroup":
+        return t("Grupo de anúncios");
+      case "ad":
+        return t("Anúncio");
+      case "keyword":
+        return t("Palavra-chave");
+      case "account":
+        return t("Conta do Google Ads");
+    }
+  };
+  const selecionados = config.google_ads_fields ?? [];
   return (
     <div className="space-y-2">
       <div className="space-y-1">
@@ -465,6 +482,38 @@ function AddTagForm({
           placeholder="boas-vindas, novo-lead"
         />
       </div>
+      <fieldset className="space-y-2 rounded-md border p-3">
+        <legend className="px-1 text-sm font-medium">{t("Etiquetas automáticas do Google Ads (opcional)")}</legend>
+        <p className="text-xs text-muted-foreground">
+          {t("Escolha os dados de origem que viram etiquetas. Só se aplica a negócios identificados como Google Ads; campos ausentes são ignorados.")}
+        </p>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          {CAMPOS_DE_ETIQUETA_GOOGLE_ADS.map((campo) => {
+            const marcado = selecionados.includes(campo);
+            return (
+              <label key={campo} className="flex min-h-11 items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={marcado}
+                  disabled={!marcado && config.tags.length + selecionados.length >= 10}
+                  onChange={(event) =>
+                    onChange({
+                      ...config,
+                      google_ads_fields: event.target.checked
+                        ? [...selecionados, campo]
+                        : selecionados.filter((s) => s !== campo),
+                    })
+                  }
+                />
+                {rotuloDoCampo(campo)}
+              </label>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {t("Até dez etiquetas no total, com até 60 caracteres cada. O nome inclui o ID quando disponível; nomes longos usam só o ID ou são ignorados.")}
+        </p>
+      </fieldset>
       <div className="space-y-1">
         <Label>{t("Destino da etiqueta")}</Label>
         <Select
