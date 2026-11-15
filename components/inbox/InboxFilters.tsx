@@ -27,6 +27,7 @@ import {
   type ModoDeEtiqueta,
   marcadoresEscolhidos,
 } from "@/lib/inbox/marcador-da-conversa";
+import { termoSemAcento } from "@/lib/inbox/termo-de-busca";
 import { PontoDaEtiqueta } from "@/components/tags/PontoDaEtiqueta";
 import { channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useAuth } from "@/hooks/auth/AuthProvider";
@@ -337,9 +338,12 @@ export function InboxFilters({ value, onChange }: Props) {
    * Portado do projeto original (DeskcommCRM, issue #2498, PR #2701).
    */
   const [buscaDeEtiqueta, setBuscaDeEtiqueta] = useState("");
-  const termoDaEtiqueta = buscaDeEtiqueta.trim().toLocaleLowerCase();
+  // Os DOIS lados pela régua de acento (`termoSemAcento`): `toLocaleLowerCase`
+  // dobra CAIXA e não ACENTO, então `orcamento` não achava "Orçamento enviado".
+  // Portado do projeto original (DeskcommCRM, PR #4622 de @webtecnica).
+  const termoDaEtiqueta = termoSemAcento(buscaDeEtiqueta.trim());
   const opcoesVisiveis = termoDaEtiqueta
-    ? opcoesDoSeletor.filter((tag) => tag.toLocaleLowerCase().includes(termoDaEtiqueta))
+    ? opcoesDoSeletor.filter((tag) => termoSemAcento(tag).includes(termoDaEtiqueta))
     : opcoesDoSeletor;
   const alternaEtiqueta = (tag: string) => {
     const escolhida = etiquetas.includes(tag);
