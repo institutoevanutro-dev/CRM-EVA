@@ -1,5 +1,11 @@
 import { z } from "zod";
 const cents = z.string().regex(/^\d{1,18}$/);
+const Sinal = z.object({
+  id: z.string().uuid(),
+  data: z.string(),
+  valor_cents: cents,
+  situacao: z.enum(["aberto", "usado", "retido", "estornado"]),
+});
 export const ResumoFinanceiro = z.object({
   versao: z.union([z.literal(1), z.literal(2)]),
   paciente_id: z.string().uuid(),
@@ -32,16 +38,17 @@ export const ResumoFinanceiro = z.object({
     .max(100),
   /** Sinais do paciente (eva-financeiro 0087): crédito pago antes da venda, faturamento no dia do pagamento. Financeiro antigo não manda. */
   sinais: z
-    .array(
-      z.object({
-        id: z.string().uuid(),
-        data: z.string(),
-        valor_cents: cents,
-        situacao: z.enum(["aberto", "usado", "retido", "estornado"]),
-      }),
-    )
-    .max(100)
-    .default([]),
+    .array(z.unknown())
+    .default([])
+    // Item fora do contrato (situação nova, id ruim) cai sozinho: não derruba o quadro inteiro.
+    .transform((itens) =>
+      itens
+        .flatMap((i) => {
+          const r = Sinal.safeParse(i);
+          return r.success ? [r.data] : [];
+        })
+        .slice(0, 100),
+    ),
 });
 export type ResumoFinanceiro = z.infer<typeof ResumoFinanceiro>;
 export type ConfigFinanceiro = { url: string; token: string };
