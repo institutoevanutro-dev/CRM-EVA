@@ -1581,6 +1581,34 @@ else
   printf '  ✓ REVERSE_PROXY=caddy (default): dc_files() não menciona a portaria\n'
 fi
 
+# O diagnostico.sh não sourceia o _common.sh (roda avulso, em máquina antiga): a dica "Suba com" tem a lista de -f
+# dele, lida do .env. A função sai do arquivo e é comparada com o dc_files() do _common.sh em cada modo; dica só com o
+# prod atrás da portaria recriaria o Caddy pedindo as portas 80/443 e tiraria a clínica (e as outras) do ar.
+diagnostico_dica_e2e() {
+  local dir funcao modo env_linha esperado deu kit="$PWD"
+  dir="$(mktemp -d)"
+  funcao="$(awk '/^arquivos_do_compose\(\) \{/{dentro=1} dentro{print} dentro && /^\}$/{exit}' ./diagnostico.sh)"
+  if [ -z "$funcao" ]; then printf '  ✗ diagnostico.sh: arquivos_do_compose() sumiu\n'; fail=1; rm -rf "$dir"; return; fi
+  for modo in portaria traefik npm caddy vazio; do
+    case "$modo" in
+      vazio) env_linha='' ; esperado="$(REVERSE_PROXY=caddy bash -c '. "$1/_common.sh"; dc_files' _ "$kit")" ;;
+      *) env_linha="REVERSE_PROXY=\"$modo\"" ; esperado="$(REVERSE_PROXY="$modo" bash -c '. "$1/_common.sh"; dc_files' _ "$kit")" ;;
+    esac
+    printf 'A=1\r\n%s\r\n' "$env_linha" > "$dir/.env"   # CRLF de propósito: .env editado no Windows
+    deu="$(COMPOSE_FILE=docker-compose.prod.yml bash -c "$funcao"'
+arquivos_do_compose "$1"' _ "$dir/.env")"
+    if [ "$deu" = "$esperado" ]; then printf '  ✓ diagnostico.sh, REVERSE_PROXY=%s: a dica leva %s\n' "$modo" "$deu"
+    else printf '  ✗ diagnostico.sh, REVERSE_PROXY=%s: a dica leva "%s", o kit usa "%s"\n' "$modo" "$deu" "$esperado"; fail=1; fi
+  done
+  rm -rf "$dir"
+  if grep -q 'Suba com: docker compose %s up -d.*"$(arquivos_do_compose .env)"' ./diagnostico.sh; then
+    printf '  ✓ a dica "Suba com" do diagnostico.sh usa a lista de -f do modo\n'
+  else
+    printf '  ✗ a dica "Suba com" do diagnostico.sh não usa arquivos_do_compose\n'; fail=1
+  fi
+}
+diagnostico_dica_e2e
+
 portaria_dc_e2e() {
   local dir kit="$PWD"
   dir="$(mktemp -d)"; mkdir -p "$dir/bin"
