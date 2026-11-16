@@ -8,6 +8,20 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.18.0] — 2026-11-16
+
+### Adicionado
+
+- **Várias instalações no mesmo servidor, atrás de uma portaria** Novo valor `REVERSE_PROXY=portaria`, para servidor que recebe mais de uma instalação. Uma portaria (nginx
+  L4) fica com as portas 80 e 443 e repassa cada conexão, ainda cifrada e com o IP de quem visita, ao Caddy
+  da instalação certa. Quem não usa o modo não muda nada: o padrão continua `caddy`.
+
+### Corrigido
+
+- **A dica "Suba com" do diagnóstico leva o arquivo do proxy desta instalação** Quando não achava o worker, o `diagnostico.sh` sugeria subir a stack só com o `docker-compose.prod.yml`. Numa
+  instalação com Traefik, Nginx Proxy Manager ou portaria, seguir a dica recriava o Caddy pedindo as portas 80 e
+  443 e tirava o site do ar. Agora a dica lê o `REVERSE_PROXY` do `.env` e inclui o arquivo do modo.
+
 ## [5.17.1] — 2026-11-16
 
 ### Corrigido
@@ -9242,7 +9256,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.17.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.18.0...HEAD
+[5.18.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.17.1...v5.18.0
 [5.17.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.17.0...v5.17.1
 [5.17.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.16.1...v5.17.0
 [5.16.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.16.0...v5.16.1
