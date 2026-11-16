@@ -12,6 +12,12 @@ const brl = (v: string) => {
   const n = BigInt(v);
   return `R$ ${(n / 100n).toLocaleString("pt-BR")},${(n % 100n).toString().padStart(2, "0")}`;
 };
+/** Lê só AAAA-MM-DD; o que não for data aparece como veio, nunca "Invalid Date". */
+function dataDoSinal(data: string, idioma: string): string {
+  const d = new Date(`${data.slice(0, 10)}T12:00:00Z`);
+  return Number.isNaN(d.getTime()) ? data : d.toLocaleDateString(idioma, { timeZone: "UTC" });
+}
+
 const rotulo: Record<string, string> = {
   em_aberto: "Em aberto",
   quitada: "Quitada",
@@ -162,8 +168,7 @@ export function FinanceiroDoContato({ contactId }: { contactId: string }) {
                     {(dados.resumo.sinais ?? []).map((s) => (
                       <li key={s.id} className="flex flex-wrap justify-between gap-2 border-b py-2">
                         <span>
-                          {new Date(`${s.data}T12:00:00Z`).toLocaleDateString(idioma, { timeZone: "UTC" })} ·{" "}
-                          {t(rotulo[s.situacao]!)}
+                          {dataDoSinal(s.data, idioma)} · {t(rotulo[s.situacao]!)}
                         </span>
                         <span>{brl(s.valor_cents)}</span>
                       </li>
