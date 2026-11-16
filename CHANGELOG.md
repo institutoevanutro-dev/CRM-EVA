@@ -8,6 +8,16 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.16.0] — 2026-11-16
+
+### Adicionado
+
+- **Bônus da equipe por comparecimento, com o canal da marcação na Agenda** Ao marcar uma consulta pela Agenda, a atendente escolhe se ela foi marcada por "Mensagem" ou por "Ligação". Dá para corrigir depois, no detalhe do compromisso. Consultas marcadas pela IA não pedem nada.
+
+  No Bônus da equipe há um bloco novo, "Comparecimentos (por pessoa)": um valor por consulta em que o paciente veio (um para mensagem, outro para ligação) e faixas do mês que se acumulam (por exemplo, ao chegar a 10, 15 e 20). Tudo começa zerado até a organização preencher. O placar da equipe e o "Meu bônus" mostram, por pessoa, quantos vieram por mensagem e por ligação, o valor, a faixa atingida e quanto falta para a próxima. Consultas antigas, sem canal, contam como mensagem.
+
+  A atualização aplica a migration 0417 (coluna do canal da marcação) pelo baseline, sem nada a fazer à mão.
+
 ## [5.15.0] — 2026-11-16
 
 ### Adicionado
@@ -9210,7 +9220,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.15.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.16.0...HEAD
+[5.16.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.15.0...v5.16.0
 [5.15.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.7...v5.15.0
 [5.14.7]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.6...v5.14.7
 [5.14.6]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.5...v5.14.6
