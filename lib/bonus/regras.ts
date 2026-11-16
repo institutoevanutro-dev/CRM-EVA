@@ -46,6 +46,27 @@ export const regrasSchema = z.object({
       stories_por_dia: inteiro(0, 20).default(2),
     })
     .prefault({}),
+  /**
+   * Bônus por PRODUTIVIDADE (decisão de 16/11): por consulta marcada pela
+   * pessoa em que o paciente compareceu. Fixo conforme o canal da marcação
+   * (`calendar_appointments.booking_channel`; sem canal conta como mensagem) e
+   * faixas CUMULATIVAS no mês: chegou ao mínimo, soma o valor da faixa. Os
+   * limiares padrão são do produto; o dinheiro é zero até a organização gravar.
+   */
+  comparecimentos: z
+    .object({
+      por_mensagem_cents: centavos.default(0),
+      por_ligacao_cents: centavos.default(0),
+      faixas: z
+        .array(z.object({ minimo: inteiro(1, 10_000), valor_cents: centavos }))
+        .max(10)
+        .default([
+          { minimo: 10, valor_cents: 0 },
+          { minimo: 15, valor_cents: 0 },
+          { minimo: 20, valor_cents: 0 },
+        ]),
+    })
+    .prefault({}),
   resultados: z
     .object({ comparecimento: valorSchema, sinal_pago: valorSchema, avaliacao_google: valorSchema })
     .prefault({}),

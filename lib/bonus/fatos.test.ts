@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { logger } from "@/lib/logger";
 
-import { lerPrograma, paraTarefaDoMes, programasAtivos } from "./fatos";
+import { comparecimentosDaPessoa, lerPrograma, paraTarefaDoMes, programasAtivos } from "./fatos";
 
 const SP = "America/Sao_Paulo";
 
@@ -78,5 +78,18 @@ describe("início do programa", () => {
     const admin = { from: () => consulta } as unknown as SupabaseClient;
     const r = await lerPrograma(admin, "org");
     expect(r.status === "ok" && r.programa.inicio).toBeNull();
+  });
+});
+
+describe("comparecimentos da pessoa", () => {
+  it("conta só os da pessoa, separa ligação e trata sem canal como mensagem", () => {
+    const linhas = [
+      { created_by_user_id: "a", booking_channel: "mensagem" },
+      { created_by_user_id: "a", booking_channel: "ligacao" },
+      { created_by_user_id: "a", booking_channel: null },
+      { created_by_user_id: "b", booking_channel: "ligacao" },
+    ];
+    expect(comparecimentosDaPessoa(linhas, "a")).toEqual({ mensagem: 2, ligacao: 1 });
+    expect(comparecimentosDaPessoa(linhas, "c")).toEqual({ mensagem: 0, ligacao: 0 });
   });
 });
