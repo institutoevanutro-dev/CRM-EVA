@@ -195,6 +195,20 @@ export interface AppointmentRow {
 }
 
 /**
+ * Mensagem de texto agendada para o titular (migration 0416; porte do DeskcommCRM #4131). O texto é
+ * escrito PARA ele e a anonimização o apaga, então o pedido de acesso o entrega,
+ * com o horário e o desfecho (agendada, encaminhada, falhou, cancelada).
+ */
+export interface ScheduledMessageRow {
+  id: string;
+  title: string | null;
+  body: string;
+  scheduled_at: string;
+  status: string;
+  created_at: string;
+}
+
+/**
  * Tarefa combinada SOBRE a pessoa (migration 0210).
  *
  * ⚠️ ESTE BLOCO NASCEU COM A OUTRA METADE, e não depois dela. A migration liga o
@@ -461,6 +475,11 @@ export interface ExportPayload {
   checkpoints?: CheckpointRow[];
   appointments: AppointmentRow[];
   tasks: TaskRow[];
+  /**
+   * Mensagens agendadas (migration 0416). Presente só quando há linha: o
+   * data.json de quem não tem agendamento fica byte a byte o de antes.
+   */
+  scheduled_messages?: ScheduledMessageRow[];
   /** Opcional: o JSON leva; o PDF não o lê. */
   bonus_calls?: BonusCallRow[];
   webhook_captures: CaptureRow[];
@@ -1161,6 +1180,26 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // Mensagens agendadas — contact_id direto em mensagens_agendadas (migration 0416).
+  let scheduled_messages: ScheduledMessageRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("mensagens_agendadas")
+      .select("id, title, body, scheduled_at, status, created_at")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("scheduled_at", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] scheduled messages load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      scheduled_messages = data;
+    }
+  }
+
   // Chamadas de voz — `contact_id` direto em `voice_calls` (migration 0232).
   //
   // O que existe aqui é o REGISTRO da ligação, nunca o áudio: gravação está
@@ -1653,6 +1692,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     checkpoints,
     appointments,
     tasks,
+    ...(scheduled_messages.length > 0 ? { scheduled_messages } : {}),
     bonus_calls,
     exames_enviados_ao_prontuario,
     webhook_captures,

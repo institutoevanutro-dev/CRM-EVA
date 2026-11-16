@@ -23,6 +23,26 @@ import { logger } from "@/lib/logger";
 
 export type PlataformaDeAnuncio = "meta_ads" | "google_ads";
 
+/**
+ * Vocabulário fechado da campanha: o que a estampa grava no topo de
+ * `source_metadata` e o que a ficha e a ação de etiqueta leem. Porte do
+ * DeskcommCRM #4631.
+ */
+export const CHAVES_DE_METADADOS_DA_CAMPANHA = [
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_adset",
+  "utm_ad",
+  "utm_term",
+  "utm_content",
+  "utm_placement",
+  "google_campaign_id",
+  "google_adgroup_id",
+  "google_ad_id",
+  "google_customer_id",
+] as const;
+
 export interface AtribuicaoDeAnuncio {
   plataforma: PlataformaDeAnuncio;
   /** `ctwa_clid` — identifica o clique específico que abriu a conversa. */
@@ -31,6 +51,8 @@ export interface AtribuicaoDeAnuncio {
   titulo: string | null;
   corpo: string | null;
   sourceUrl: string | null;
+  /** Campos de campanha normalizados, sem copiar o query/payload bruto para o topo. */
+  metadadosDaCampanha?: Partial<Record<(typeof CHAVES_DE_METADADOS_DA_CAMPANHA)[number], string>>;
   /** Payload de onde isto foi extraído — nunca descartado, é a prova. */
   bruto: Record<string, unknown>;
 }
@@ -61,6 +83,13 @@ export async function estamparAtribuicaoDoContato(
     p_contact: contactId,
     p_platform: atribuicao.plataforma,
     p_metadata: {
+      // A RPC faz merge. No Google, os campos de campanha ausentes vão nulos:
+      // um cadastro importado com UTM antiga não pode se misturar com o clique
+      // provado (porte do DeskcommCRM #4631).
+      ...(atribuicao.plataforma === "google_ads" && atribuicao.metadadosDaCampanha
+        ? Object.fromEntries(CHAVES_DE_METADADOS_DA_CAMPANHA.map((chave) => [chave, null]))
+        : {}),
+      ...atribuicao.metadadosDaCampanha,
       ad_platform: atribuicao.plataforma,
       ad_source_id: atribuicao.sourceId,
       ad_title: atribuicao.titulo,

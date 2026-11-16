@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { DotsThree, PaperPlaneTilt } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
+import { MensagensAgendadasBotao } from "@/components/inbox/MensagensAgendadas";
 import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentPreviewDialog";
 import {
   RespostaComImagensDialog,
@@ -60,6 +61,8 @@ export interface ComposerHandle {
 
 interface Props {
   conversationId: string;
+  /** Liga as mensagens agendadas (a conversa tem contato e número). Porte do DeskcommCRM #4131. */
+  agendamentoLigado?: boolean;
   disabled?: boolean;
   /** Set true when contact is blocked / anonymized — explanation shown. */
   blockedReason?: string | null;
@@ -116,6 +119,7 @@ interface Props {
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   {
     conversationId,
+    agendamentoLigado = false,
     disabled,
     blockedReason,
     janelaFechada,
@@ -163,6 +167,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     setRespostaComImagens(null);
   }
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [agendaAberta, setAgendaAberta] = useState(false);
   const [menuDismissed, setMenuDismissed] = useState(false);
   const [mode, setMode] = useState<"reply" | "note">("reply");
   /**
@@ -709,7 +714,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             onEscolher={applyTemplate}
           />
         )}
-        <div className="flex items-end gap-2">
+        {/* `@container`: o botão de mensagens agendadas decide pela largura
+            DESTA linha, não da janela. */}
+        <div className="@container flex items-end gap-2">
           {/* O "+" existe nos DOIS modos: em "Nota interna" a nota aceita anexo
               (foto/vídeo e documento). Contato some — cartão de contato é uma
               MENSAGEM para o cliente — e a restrição do canal (`soFoto`) não
@@ -718,6 +725,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             disabled={respostaBarrada}
             onPick={escolherArquivo}
             onPickContact={mode === "reply" ? () => setContactPickerOpen(true) : undefined}
+            onAgendar={agendamentoLigado && mode === "reply" ? () => setAgendaAberta(true) : undefined}
             soFoto={mode === "reply" ? soFoto : false}
           />
           <EmojiButton
@@ -827,6 +835,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             disabled={mode === "note" ? isDisabled : respostaBarrada}
             aria-label={t("Mensagem")}
           />
+          {agendamentoLigado && mode === "reply" ? (
+            <MensagensAgendadasBotao
+              conversationId={conversationId}
+              textoInicial={text}
+              aberto={agendaAberta}
+              onAbertoChange={setAgendaAberta}
+            />
+          ) : null}
           {text.trim() || mode === "note" ? (
             <Button
               type="button"

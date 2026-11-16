@@ -180,6 +180,11 @@ const DECISOES: Record<string, Decisao> = {
     razao: "Passo 7f (0317): o assunto e o próximo passo, texto livre sobre o que a pessoa pediu; estado, dono, prazo e desfecho ficam.",
   },
   // ── redigir pela virada de is_anonymized (gatilho) ────────────────────────
+  mensagens_agendadas: {
+    decidida: "redigir",
+    caminho: "gatilho",
+    razao: "0416 (porte do original #4131): fn_mensagens_agendadas_contato_anonimizado troca o texto por '[redigido]', apaga o título e cancela o que ainda não saiu, na virada — o texto agendado é escrito PARA a pessoa e costuma nomeá-la. Horário, status e o vínculo com a mensagem enviada ficam: são a trilha do que a empresa mandou. Efeito provado em tests/invariants/lgpd-mensagem-agendada-do-contato-anonimizado.test.ts.",
+  },
   ai_reply_drafts: {
     decidida: "redigir",
     caminho: "gatilho",

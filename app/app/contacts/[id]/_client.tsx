@@ -39,6 +39,8 @@ import { TimelineView } from "@/components/contacts/TimelineView";
 import { EditContactDialog } from "@/components/contacts/EditContactDialog";
 import { JuntarComOutraFicha } from "@/components/contacts/JuntarComOutraFicha";
 import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
+import { NiveisDaOrigemGoogle } from "@/components/contacts/NiveisDaOrigemGoogle";
+import { origemGoogleAds } from "@/lib/leads/origem-google-ads";
 import { PropostasDeDado } from "@/components/contacts/PropostasDeDado";
 import { ConversaNoDossie } from "@/components/kanban/ConversaNoDossie";
 import { CanaisDoContato } from "@/components/contacts/CanaisDoContato";
@@ -103,6 +105,8 @@ export function ContactDetailClient({ contactId }: Props) {
   }
 
   const contact = q.data.data;
+  // Campanha, grupo, anúncio, palavra-chave e conta do Google Ads (porte do DeskcommCRM #4631).
+  const origemGoogle = origemGoogleAds(contact.source_metadata, contact.source);
   const isAdmin =
     (user.is_platform_admin && !user.support) || (activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin);
 
@@ -343,6 +347,7 @@ export function ContactDetailClient({ contactId }: Props) {
                 <dt className="text-xs uppercase text-muted-foreground">{t("Origem")}</dt>
                 <dd className="mt-1">{contact.source}</dd>
               </div>
+              {origemGoogle && <NiveisDaOrigemGoogle origem={origemGoogle} />}
               <div>
                 <dt className="text-xs uppercase text-muted-foreground">{t("Última atividade")}</dt>
                 <dd className="mt-1">

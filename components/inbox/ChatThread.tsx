@@ -4,7 +4,8 @@ import { APARENCIA_PADRAO, estiloDaAparencia, type AparenciaDaConversa } from "@
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import type { Locale } from "date-fns";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
 import { format, isToday, isYesterday } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,14 @@ export function mergeThreadItems(messages: Message[], notes: Note[]): ThreadItem
   items.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
   return items;
 }
+
+/**
+ * Quanto tempo o "achei" da citada fica aceso, e até onde se carrega o histórico
+ * atrás dela (10 páginas: uma citada apagada de verdade não pode arrastar a
+ * conversa inteira para a memória antes do aviso). Porte do DeskcommCRM #4583.
+ */
+const DESTAQUE_DA_CITADA_MS = 2400;
+const PAGINAS_ATE_A_CITADA = 10;
 
 function dayLabel(d: Date, t: (texto: string) => string = (texto) => texto, locale: Locale): string {
   if (isToday(d)) return t("Hoje");
@@ -171,6 +180,55 @@ export function ChatThread({
     searching: !!termo,
   });
   const { scrollerRef, contentRef, bottomRef } = scroll;
+
+  /**
+   * IR ATÉ A MENSAGEM CITADA (porte do DeskcommCRM #4583). Se a original já está
+   * no DOM, rola e acende o destaque; se ficou fora da página, pagina PARA TRÁS
+   * com o `fetchNextPage` da própria lista até achá-la. Não achou: avisa.
+   * Estável (refs) para o `memo` da bolha seguir valendo.
+   */
+  const [citadaDestacada, setCitadaDestacada] = useState<string | null>(null);
+  const destaqueDaCitada = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const qRef = useRef(q);
+  const scrollRef = useRef(scroll);
+  const tRef = useRef(t);
+  useEffect(() => {
+    qRef.current = q;
+    scrollRef.current = scroll;
+    tRef.current = t;
+  });
+  useEffect(
+    () => () => {
+      if (destaqueDaCitada.current) clearTimeout(destaqueDaCitada.current);
+    },
+    [],
+  );
+  const irParaCitada = useCallback(async (id: string) => {
+    const achar = () =>
+      scrollRef.current.scrollerRef.current?.querySelector<HTMLElement>(`[data-linha-da-mensagem="${id}"]`) ?? null;
+    let alvo = achar();
+    let paginas = 0;
+    let temMais = qRef.current.hasNextPage;
+    while (!alvo && temMais && paginas < PAGINAS_ATE_A_CITADA) {
+      scrollRef.current.beforeLoadOlder();
+      const proxima = await qRef.current.fetchNextPage();
+      paginas += 1;
+      temMais = proxima?.hasNextPage ?? false;
+      // A página nova só vira DOM depois do commit do React: espera curta, com teto.
+      for (let espera = 0; espera < 20 && !alvo; espera += 1) {
+        await new Promise((resolver) => setTimeout(resolver, 20));
+        alvo = achar();
+      }
+    }
+    if (!alvo) {
+      toast.info(tRef.current("A mensagem original não está mais na conversa."));
+      return;
+    }
+    alvo.scrollIntoView({ block: "center" });
+    setCitadaDestacada(id);
+    if (destaqueDaCitada.current) clearTimeout(destaqueDaCitada.current);
+    destaqueDaCitada.current = setTimeout(() => setCitadaDestacada(null), DESTAQUE_DA_CITADA_MS);
+  }, []);
 
   // Só o TERMO leva à ocorrência: depender dos resultados faria cada mensagem
   // nova do tempo real arrancar quem lê de volta à primeira.
@@ -337,6 +395,8 @@ export function ChatThread({
                   message={item.data}
                   searchMatch={resultados.has(item.data.id)}
                   debugCitations={debugCitations}
+                  destacada={citadaDestacada === item.data.id}
+                  onIrParaCitada={irParaCitada}
                   onResponder={onResponder}
                   onEncaminhar={onEncaminhar}
                   // A citada sai da MESMA lista já carregada: buscar no servidor

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useId, useState, type ReactNode } from "react";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
@@ -49,6 +49,17 @@ interface Props {
   onEncaminhar?: (m: Message) => void;
   /** A mensagem citada por ESTA, quando houver — desenha o fio. */
   citada?: Message | null;
+  /**
+   * O fio acabou de ser alcançado: o balão pisca por um instante. Quem liga e
+   * desliga é o `ChatThread` (dono do scroller). Porte do DeskcommCRM #4583.
+   */
+  destacada?: boolean;
+  /**
+   * Tocar no trecho citado leva à mensagem original. A rolagem (e o carregamento
+   * do histórico até ela) é do `ChatThread`. Sem este callback o fio continua
+   * desenhado, só não é clicável — é a leitura do super-admin.
+   */
+  onIrParaCitada?: (id: string) => void;
   /**
    * QUEM está lendo a conversa. É o que separa "Você" de "Atendente": a coluna
    * `sent_via='user'` só diz *"um humano digitou no CRM"*, nunca QUAL humano.
@@ -133,6 +144,34 @@ function AckIndicator({ status, paradaSemConexao, saiSozinha, corDaLida, t }: {
 }
 
 /**
+ * O trecho da citação: BOTÃO quando o fio sabe rolar até a original, TEXTO
+ * quando não sabe (a leitura do super-admin não tem fio rolável). Onde não há
+ * para onde ir, não há botão. Porte do DeskcommCRM #4583.
+ */
+function CitacaoDaBolha({
+  aoTocar,
+  rotulo,
+  className,
+  children,
+}: {
+  aoTocar?: () => void;
+  rotulo: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  // O aria-label dá o nome da AÇÃO; o trecho citado volta como descrição.
+  const idDoTrecho = useId();
+  if (!aoTocar) return <div className={className}>{children}</div>;
+  return (
+    <button type="button" onClick={aoTocar} aria-label={rotulo} aria-describedby={idDoTrecho} className={className}>
+      <span id={idDoTrecho} className="contents">
+        {children}
+      </span>
+    </button>
+  );
+}
+
+/**
  * Memorizado: o inbox redesenha a cada 30s (relógio da janela de 24h) e a cada
  * releitura da conversa. Sem `memo`, toda bolha da conversa se redesenhava junto.
  * As props chegam estáveis — o react-query preserva a identidade das mensagens
@@ -145,6 +184,8 @@ export const MessageBubble = memo(function MessageBubble({
   onResponder,
   onEncaminhar,
   citada,
+  destacada = false,
+  onIrParaCitada,
   viewerUserId,
   nomeDoAutor,
   onReenviar,
@@ -301,9 +342,18 @@ export const MessageBubble = memo(function MessageBubble({
     finally { setOcupado(false); }
   }
 
+  // Quem é a citada mesmo quando ela não está carregada (ficou fora da página):
+  // o fio continua desenhado com rótulo genérico e o clique carrega até ela.
+  const idDaCitada = citada?.id ?? message.reply_to_message_id ?? null;
+
   return (
     <div
       data-search-match={searchMatch || undefined}
+      // A linha da mensagem no DOM: é por ela que o clique na citação acha o alvo.
+      // Atributo próprio, não `data-message-id`: esse já é da bolha, e repetir o
+      // mesmo nos dois elementos quebra quem localiza a bolha pelo id (e2e).
+      data-linha-da-mensagem={message.id}
+      data-destacada={destacada || undefined}
       className={cn(
         // 12px entre turnos, 2px dentro da sequência (I8).
         "group flex w-full min-w-0 items-center gap-1 px-4",
@@ -400,6 +450,8 @@ export const MessageBubble = memo(function MessageBubble({
           // A marca da busca é ANEL, não cor de fundo: o fundo já diz de quem é
           // a mensagem, e trocá-lo apagaria essa leitura justo na bolha achada.
           searchMatch && "ring-2 ring-foreground ring-offset-2 ring-offset-background",
+          // O "achei" do clique na citação: o mesmo anel da busca, em cor de destaque.
+          destacada && "ring-2 ring-primary ring-offset-2 ring-offset-background",
         )}
       >
         {/*
@@ -408,20 +460,27 @@ export const MessageBubble = memo(function MessageBubble({
           Mostra de quem era e um trecho. `line-clamp-2` porque serve para
           reconhecer, não para reler: a original está logo acima no histórico.
         */}
-        {citada && (
-          <div
+        {idDaCitada && (
+          <CitacaoDaBolha
+            aoTocar={onIrParaCitada ? () => onIrParaCitada(idDaCitada) : undefined}
+            rotulo={t("Ir para a mensagem citada")}
             className={cn(
-              "mb-1 rounded-md border-l-2 px-2 py-1 text-xs",
+              "mb-1 block w-full rounded-md border-l-2 px-2 py-1 text-left text-xs",
               // `current`, e não a cor da marca: o texto da bolha da equipe agora
               // muda com a aparência escolhida, e a citação acompanha.
               isOutbound
                 ? "border-current/50 bg-current/10"
                 : "border-primary bg-background/60",
+              onIrParaCitada
+                ? "cursor-pointer hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-1"
+                : "",
             )}
           >
-            <div className="font-medium opacity-80">
-              {citada.direction === "outbound" ? t("Você") : t("Cliente")}
-            </div>
+            <span className="block font-medium opacity-80">
+              {citada
+                ? citada.direction === "outbound" ? t("Você") : t("Cliente")
+                : t("Mensagem citada")}
+            </span>
             {/*
               A CITADA PODE TER SIDO APAGADA — e aí o texto dela não volta aqui.
 
@@ -432,14 +491,22 @@ export const MessageBubble = memo(function MessageBubble({
               continuava legível dentro de cada resposta que a citou. O fio
               permanece (a citação some, não a resposta); o conteúdo, não.
             */}
-            <div className={cn("line-clamp-2 wrap-anywhere opacity-70", citada.revoked_at && "italic")}>
-              {citada.revoked_at
+            <span className={cn("line-clamp-2 wrap-anywhere opacity-70", citada?.revoked_at && "italic")}>
+              {!citada
+                ? t("Toque para carregar a original")
+                : citada.revoked_at
                 ? t("Esta mensagem foi apagada")
                 : citada.type === "contact"
                   ? resolveSharedContact(citada)?.name || t("Contato")
-                  : citada.body?.trim() ? <TextoComLinks texto={citada.body.trim()} /> : t("(sem texto)")}
-            </div>
-          </div>
+                  : citada.body?.trim()
+                    ? // Link dentro do <button> da citação é controle aninhado:
+                      // com botão, o endereço sai como texto; sem, continua link.
+                      onIrParaCitada
+                      ? citada.body.trim()
+                      : <TextoComLinks texto={citada.body.trim()} />
+                    : t("(sem texto)")}
+            </span>
+          </CitacaoDaBolha>
         )}
         {senderLabel && inicioDoTurno && (
           <div className="mb-0.5 flex items-center gap-1 text-[11px] font-semibold opacity-80">

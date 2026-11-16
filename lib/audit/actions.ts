@@ -883,6 +883,14 @@ export const AUDIT_ACTIONS = [
   // Inscrições vivas levadas para a versão ativa do fluxo (metadata: totais e
   // contagem por versão de origem). O dry-run não muda nada e não audita.
   "followup_flow.enrollments_migrated",
+  // Mensagem de texto agendada na conversa (porte do DeskcommCRM #4131, envio
+  // único). `dispatched` é o cron entregando ao envio, não "enviada": a mensagem
+  // pode ficar em `queued`. Nunca o texto no metadata.
+  "scheduled_message.created",
+  "scheduled_message.updated",
+  "scheduled_message.cancelled",
+  "scheduled_message.dispatched",
+  "scheduled_message.failed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
