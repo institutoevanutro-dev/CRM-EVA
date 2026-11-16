@@ -39499,3 +39499,26 @@ end $$;
 -- Nenhuma função nova, tabela, coluna ou constraint; grants inalterados.
 -- Quem mede a regra: `tests/invariants/excluir-contato-com-compromisso-excluido.test.ts`.
 -- ---- fim: excluir contato: compromisso sem conexão Google não segura a ficha (migration 0414) ----
+
+-- ---- canal da marcação da consulta (migration 0417) ----
+-- Derivado de supabase/migrations/20261116120000_0417_canal_da_marcacao.sql
+-- (decisão e regra do bônus: cabeçalho de lá). Coluna + CHECK, idempotente.
+alter table public.calendar_appointments
+  add column if not exists booking_channel text;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'calendar_appointments_booking_channel_check'
+       and conrelid = 'public.calendar_appointments'::regclass
+  ) then
+    alter table public.calendar_appointments
+      add constraint calendar_appointments_booking_channel_check
+      check (booking_channel in ('mensagem', 'ligacao'));
+  end if;
+end $$;
+
+comment on column public.calendar_appointments.booking_channel is
+  'Como a equipe marcou a consulta: mensagem ou ligacao. Nula = legado ou marcada pela IA. Base do bônus por comparecimento. Migration 0417.';
+-- ---- fim: canal da marcação da consulta (migration 0417) ----

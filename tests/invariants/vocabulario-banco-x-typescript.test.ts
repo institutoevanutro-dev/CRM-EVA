@@ -294,6 +294,13 @@ const PARES: Array<{
     simbolo: "RESULTADOS_DE_LIGACAO",
   },
   {
+    tabela: "calendar_appointments",
+    coluna: "booking_channel",
+    // lib/agenda/tipos.ts → CANAIS_DA_MARCACAO. Nasce com o par, migration 0417.
+    arquivo: "lib/agenda/tipos.ts",
+    simbolo: "CANAIS_DA_MARCACAO",
+  },
+  {
     tabela: "team_invites",
     coluna: "role",
     // lib/schemas/team.ts → ROLES (tupla `as const`). O `z.enum(ROLES)` das
