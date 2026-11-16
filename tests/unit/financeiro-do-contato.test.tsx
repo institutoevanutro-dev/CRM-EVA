@@ -70,3 +70,28 @@ it("apresenta valores exatos em centavos e links da venda", async () => {
     "https://f.test/vendas/venda",
   );
 });
+it("mostra os sinais do paciente com data, situação e valor exatos", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      Response.json({
+        data: {
+          configurada: true,
+          abrir_url: "https://f.test/pacientes/crm",
+          base_url: "https://f.test",
+          resumo: {
+            consultado_em: "2026-11-16T00:00:00Z",
+            propostas: [],
+            vendas: [],
+            sinais: [{ id: "s1", data: "2026-11-16", valor_cents: "15000", situacao: "aberto" }],
+            limitado: false,
+          },
+        },
+      }),
+    ),
+  );
+  render(<FinanceiroDoContato contactId="ficticio" />);
+  const lista = await screen.findByTestId("sinais-do-contato");
+  expect(lista).toHaveTextContent("16/11/2026 · Em aberto");
+  expect(lista).toHaveTextContent("R$ 150,00");
+});
