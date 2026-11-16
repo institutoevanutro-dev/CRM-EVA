@@ -364,7 +364,11 @@ export async function ingestaoEmCurso(
           and exists (
                 select 1 from messages msg
                  where msg.organization_id = $1
-                   and msg.id = (e.payload->>'message_id')::uuid
+                   -- CASE (e não comparar como texto): um message_id fora do formato
+                   -- vira null em vez de derrubar o envio, e o índice de msg.id vale.
+                   and msg.id = case when e.payload->>'message_id'
+                                       ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                                     then (e.payload->>'message_id')::uuid end
                    and msg.created_at > coalesce(
                          (select (payload->>'ultima_inbound_vista_em')::timestamptz
                             from job_queue where organization_id = $1 and id = $3),
