@@ -34,10 +34,10 @@ import { describe, expect, it } from "vitest";
  *
  * ─── ESCOPO ──────────────────────────────────────────────────────────────────
  *
- * `docker-compose.prod.yml` e `docker-compose.traefik.yml` — os que rodam na
- * VPS do cliente. O `docker-compose.yml` (dev) está FORA de propósito: publicar
- * portas na máquina de quem desenvolve é justamente o que ele existe para
- * fazer.
+ * `docker-compose.prod.yml`, `docker-compose.traefik.yml` e
+ * `docker-compose.portaria.yml`: os que rodam na VPS do cliente. O
+ * `docker-compose.yml` (dev) está FORA de propósito: publicar portas na
+ * máquina de quem desenvolve é justamente o que ele existe para fazer.
  */
 
 const RAIZ = process.cwd();
@@ -122,14 +122,14 @@ function semComentarios(bloco: string): string {
     .join("\n");
 }
 
-const ARQUIVOS = ["docker-compose.prod.yml", "docker-compose.traefik.yml"] as const;
+const ARQUIVOS = ["docker-compose.prod.yml", "docker-compose.traefik.yml", "docker-compose.portaria.yml"] as const;
 
 const SERVICOS = new Map<string, Map<string, string>>(
   ARQUIVOS.map((f) => [f, lerServicos(fs.readFileSync(path.join(RAIZ, f), "utf8"))]),
 );
 
 describe("a fronteira de rede do que o cliente instala", () => {
-  it("o parser enxerga os serviços dos dois compose", () => {
+  it("o parser enxerga os serviços dos três compose", () => {
     // GUARDA DO INSTRUMENTO. Sem esta asserção, um parser quebrado deixaria
     // todos os casos abaixo verdes por não terem medido nada — que é a forma
     // mais silenciosa de um gate morrer.
@@ -140,6 +140,8 @@ describe("a fronteira de rede do que o cliente instala", () => {
     const traefik = [...SERVICOS.get("docker-compose.traefik.yml")!.keys()];
     expect(traefik, "o override do Traefik parou de declarar serviços").toContain("app");
     expect(traefik).toContain("caddy");
+    // O override da portaria só muda o Caddy (portas, trecho global, rede).
+    expect([...SERVICOS.get("docker-compose.portaria.yml")!.keys()]).toEqual(["caddy"]);
   });
 
   it("só o proxy reverso publica porta no host", () => {

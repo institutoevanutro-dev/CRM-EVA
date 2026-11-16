@@ -1,0 +1,27 @@
+# docker-compose.portaria.yml: override para servidor com VÁRIAS instalações atrás de uma portaria (nginx L4)
+# que é a única dona das portas 80/443 da máquina. Entra quando REVERSE_PROXY=portaria (dc() do _common.sh).
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.portaria.yml --env-file .env up -d
+#
+# O Caddy desta instalação continua emitindo e renovando os certificados dela (o desafio TLS passa intacto
+# pela 443 e o HTTP pela 80 da portaria). Ele só deixa de publicar portas e passa a ser alcançado pela rede da
+# portaria, que tem só a portaria e os Caddys das instalações. A portaria chama cada Caddy pelo NOME DO
+# CONTÊINER (único no servidor), nunca pelo apelido `caddy`, que se repete entre instalações.
+#
+# A rede é criada por quem monta a portaria (o evalink-instalador), não por este compose: ausente, o compose
+# recusa antes de criar qualquer coisa, e o garantir_rede_do_proxy do kit explica antes dele.
+services:
+  caddy:
+    ports: !reset []
+    environment:
+      PORTARIA_SUBNET: ${PORTARIA_SUBNET:-10.231.231.0/24}
+    volumes:
+      - ./docker/caddy/portaria-global.caddy:/etc/caddy/global.d/portaria.caddy:ro
+    networks:
+      internal: {}
+      portaria: {}
+
+networks:
+  portaria:
+    external: true
+    name: ${PORTARIA_NETWORK_NAME:-evalink-portaria}
