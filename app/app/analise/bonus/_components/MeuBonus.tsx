@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { marcarReleitura } from "@/lib/audit/releitura";
-import type { ResultadoDoCriterio } from "@/lib/bonus/calculo";
+import type { PlacarDosComparecimentos, ResultadoDoCriterio } from "@/lib/bonus/calculo";
 import type { ItemDaFilaNaTela, RespostaMeuBonus } from "@/lib/bonus/tela";
 import type { ResultadoDeLigacao } from "@/lib/bonus/tipos";
 import { formatCentsBRL } from "@/lib/money";
@@ -30,6 +30,16 @@ const ROTULO_DO_MOTIVO: Record<NonNullable<ItemDaFilaNaTela["motivo"]>, string> 
 };
 
 const CHAVE_MEU = ["bonus", "meu"] as const;
+
+/** "Faltam 3 para ganhar mais R$ 150,00" ou a faixa já atingida. Usado aqui e no placar da equipe. */
+export function fraseDaFaixa(c: PlacarDosComparecimentos, t: (s: string) => string): string {
+  if (c.proximaFaixa) {
+    return t("Faltam {n} para ganhar mais {valor}")
+      .replace("{n}", String(c.proximaFaixa.faltam))
+      .replace("{valor}", formatCentsBRL(c.proximaFaixa.valorCents));
+  }
+  return c.faixaAtingida === null ? t("Sem faixas configuradas") : t("Todas as faixas atingidas");
+}
 
 export function MeuBonus() {
   const t = useT();
@@ -92,11 +102,45 @@ export function MeuBonus() {
               {formatCentsBRL(p.totalCents)}
             </p>
             <p className="text-sm text-muted-foreground">
-              {d.mes_de_teste ? t("Mês de teste: os resultados estão garantidos.") : t("Tarefas mais resultados da dupla.")}
+              {d.mes_de_teste ? t("Mês de teste: os resultados estão garantidos.") : t("Tarefas, comparecimentos e resultados da dupla.")}
             </p>
           </CardContent>
         </Card>
       </div>
+
+      <Card data-testid="meus-comparecimentos">
+        <CardHeader>
+          <CardTitle>{t("Pacientes que vieram às consultas que você marcou")}</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-4">
+          <div>
+            <p className="text-3xl tabular-nums">{p.comparecimentos.total}</p>
+            <p className="text-sm text-muted-foreground">
+              {t("{m} por mensagem · {l} por ligação")
+                .replace("{m}", String(p.comparecimentos.mensagem))
+                .replace("{l}", String(p.comparecimentos.ligacao))}
+            </p>
+          </div>
+          <div>
+            <p className="text-2xl tabular-nums">{formatCentsBRL(p.comparecimentos.fixoCents)}</p>
+            <p className="text-sm text-muted-foreground">{t("pelas consultas")}</p>
+          </div>
+          <div>
+            <p className="text-2xl tabular-nums">{formatCentsBRL(p.comparecimentos.faixasCents)}</p>
+            <p className="text-sm text-muted-foreground">
+              {p.comparecimentos.faixaAtingida === null
+                ? t("nenhuma faixa ainda")
+                : t("faixa de {n} atingida").replace("{n}", String(p.comparecimentos.faixaAtingida))}
+            </p>
+          </div>
+          <div>
+            <p className="text-2xl tabular-nums" data-testid="total-comparecimentos">
+              {formatCentsBRL(p.comparecimentos.valorCents)}
+            </p>
+            <p className="text-sm text-muted-foreground">{fraseDaFaixa(p.comparecimentos, t)}</p>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

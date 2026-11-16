@@ -210,6 +210,92 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
         </CardContent>
       </Card>
 
+      <Card data-testid="config-comparecimentos">
+        <CardHeader>
+          <CardTitle>{t("Comparecimentos (por pessoa)")}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            {t("Conta cada consulta que a pessoa marcou e em que o paciente veio. Consultas antigas, sem o canal informado, contam como mensagem; as marcadas pela IA não entram.")}
+          </p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Campo
+              id="comp-mensagem"
+              rotulo={t("Por consulta marcada por mensagem (R$)")}
+              valor={reais(r.comparecimentos.por_mensagem_cents)}
+              invalido={errado("comparecimentos.por_mensagem_cents")}
+              aoMudar={(v) => muda((x) => ({ ...x, comparecimentos: { ...x.comparecimentos, por_mensagem_cents: centavos(v) } }))}
+            />
+            <Campo
+              id="comp-ligacao"
+              rotulo={t("Por consulta marcada por ligação (R$)")}
+              valor={reais(r.comparecimentos.por_ligacao_cents)}
+              invalido={errado("comparecimentos.por_ligacao_cents")}
+              aoMudar={(v) => muda((x) => ({ ...x, comparecimentos: { ...x.comparecimentos, por_ligacao_cents: centavos(v) } }))}
+            />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {t("Prêmios do mês: ao chegar a cada quantidade, soma o valor da faixa (as faixas acumulam).")}
+          </p>
+          {r.comparecimentos.faixas.map((f, i) => (
+            // A chave pelo tamanho remonta os campos quando uma faixa sai.
+            <div key={`${i}-${r.comparecimentos.faixas.length}`} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+              <Campo
+                id={`comp-faixa-min-${i}`}
+                rotulo={t("Ao chegar a (comparecimentos)")}
+                valor={texto(f.minimo)}
+                invalido={errado(`comparecimentos.faixas.${i}.minimo`)}
+                aoMudar={(v) =>
+                  muda((x) => {
+                    x.comparecimentos.faixas[i]!.minimo = numero(v);
+                    return x;
+                  })
+                }
+              />
+              <Campo
+                id={`comp-faixa-valor-${i}`}
+                rotulo={t("Ganha mais (R$)")}
+                valor={reais(f.valor_cents)}
+                invalido={errado(`comparecimentos.faixas.${i}.valor_cents`)}
+                aoMudar={(v) =>
+                  muda((x) => {
+                    x.comparecimentos.faixas[i]!.valor_cents = centavos(v);
+                    return x;
+                  })
+                }
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  muda((x) => {
+                    x.comparecimentos.faixas.splice(i, 1);
+                    return x;
+                  })
+                }
+              >
+                {t("Tirar")}
+              </Button>
+            </div>
+          ))}
+          <Button
+            variant="outline"
+            size="sm"
+            className="self-start"
+            disabled={r.comparecimentos.faixas.length >= 10}
+            onClick={() =>
+              muda((x) => {
+                const maior = Math.max(0, ...x.comparecimentos.faixas.map((f) => f.minimo));
+                x.comparecimentos.faixas.push({ minimo: maior + 5, valor_cents: 0 });
+                return x;
+              })
+            }
+          >
+            {t("Adicionar faixa")}
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>{t("Metas por mês")}</CardTitle>
