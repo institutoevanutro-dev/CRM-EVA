@@ -254,7 +254,7 @@ import {
   anotarUltimaInboundVista,
   type CorteDaAnotacao,
   reanotarSeOCorteMudou,
-  respostaFicouObsoleta,
+  respostaFicouObsoletaAposIngestao,
   ultimaInboundJaRespondida,
 } from './turno-ja-respondido';
 import { acionarSupervisao } from '@/lib/supervisao/acionamento';
@@ -1322,6 +1322,12 @@ export interface InboundTurnKnobs {
    * `respostaFicouObsoleta`. Ausente = desligada (testes que não a exercitam).
    */
   respostaObsoletaTetoMs?: number;
+  /**
+   * Quanto a régua de resposta obsoleta espera a ingestão de uma mensagem nova
+   * terminar antes de decidir (RESPOSTA_OBSOLETA_ESPERA_INGESTAO_MS) — ver
+   * `respostaFicouObsoletaAposIngestao`. Ausente = não espera.
+   */
+  respostaObsoletaEsperaIngestaoMs?: number;
   /**
    * Modo da conferência de horário da agenda (HORARIO_DA_AGENDA_MODO). Ausente =
    * 'observar', o padrão do env: o veredito vai ao trace e nada é barrado.
@@ -4081,13 +4087,19 @@ async function executarTurnoDoAgente(
           (knobsDaJanela === null || janelaDeEnvioAberta(quandoOProximoEnvia, knobsDaJanela, true)) &&
           (agentConfig?.janelaDeAtendimento == null ||
             msAteAJanelaAbrir(agentConfig.janelaDeAtendimento, quandoOProximoEnvia) === null) &&
-          (await respostaFicouObsoleta(
+          (await respostaFicouObsoletaAposIngestao(
             pool,
             { organizationId: tenantId, conversationId: input.conversationId, jobId: liveJob().id },
             // A espera da mídia estourou o teto (handler): a mais antiga sem resposta envelheceu
             // esperando, e o teto de 120 s deixaria sair a resposta que leu a mídia como `[tipo]`.
             // ponytail: 24 h = "sem teto" sem estourar o intervalo do Postgres.
             input.esperaDaMidiaNoTeto === true && tetoObsoleta > 0 ? 86_400_000 : tetoObsoleta,
+            // A mensagem nova ainda sendo ingerida não tem pedido de turno: espera ela
+            // terminar antes de a régua decidir (ver `respostaFicouObsoletaAposIngestao`).
+            {
+              ms: deps.knobs.respostaObsoletaEsperaIngestaoMs ?? 0,
+              dormir: deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
+            },
           ))
         ) {
           runLog.info('resposta descartada — o cliente escreveu de novo durante o turno', {

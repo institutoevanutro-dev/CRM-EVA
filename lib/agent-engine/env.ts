@@ -139,6 +139,10 @@ const envSchema = z.object({
   // enquanto a mensagem mais antiga sem resposta tiver menos que isto. 0 = desliga.
   // Ver `respostaFicouObsoleta` (agent/turno-ja-respondido.ts).
   RESPOSTA_OBSOLETA_TETO_MS: z.coerce.number().int().min(0).default(120_000),
+  // Antes de a régua acima decidir, espera até isto a ingestão de uma mensagem
+  // nova (o `message.received` dela) terminar: só depois dela nasce o pedido de
+  // turno que a régua exige como prova. 0 = não espera (comportamento anterior).
+  RESPOSTA_OBSOLETA_ESPERA_INGESTAO_MS: z.coerce.number().int().min(0).default(5_000),
   // Conferência de horário da agenda (`guardrails/horario-da-agenda.ts`): 'observar'
   // calcula o veredito e só o registra no trace (`observado:<código>`), sem barrar;
   // 'barrar' veta e ensina. Lido pelo worker e pela prévia (`turnKnobsFromEnv`).
