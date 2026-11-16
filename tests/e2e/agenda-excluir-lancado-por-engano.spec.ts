@@ -86,6 +86,8 @@ test("excluir pela tela: some da grade e de todas as listas, o horário volta, e
   const horario = await primeiroHorarioOferecido(page, tipo, dias);
   const rotulo = (await horario.getAttribute("data-testid"))!.replace("horario-", "");
   await horario.click();
+  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   await page.getByTestId("confirmar-marcacao").click();
   await expect(page.getByTestId("ver-na-agenda")).toBeVisible({ timeout: 15_000 });
   await page.keyboard.press("Escape");

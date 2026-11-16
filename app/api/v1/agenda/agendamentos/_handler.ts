@@ -42,6 +42,7 @@ import {
 } from "@/lib/agenda/laco";
 import {
   ALVO_DE_VINCULO_DO_AGENDAMENTO,
+  type CanalDaMarcacao,
   ENTIDADE_DO_AGENDAMENTO,
   NOME_GENERICO_DO_TIPO,
   VINCULO_DE_AGENDAMENTO,
@@ -102,6 +103,11 @@ export interface MarcarInput {
    * troca silenciosa pelo padrão. A ferramenta da IA não manda este campo.
    */
   duration_minutes?: number;
+  /**
+   * Como a equipe marcou: mensagem ou ligação (migration 0417, base do bônus
+   * por comparecimento). Só vale quando quem marca é pessoa; da IA é ignorado.
+   */
+  booking_channel?: CanalDaMarcacao;
 }
 
 export interface AlterarInput {
@@ -114,6 +120,8 @@ export interface AlterarInput {
   notes?: string;
   /** Igual ao de `MarcarInput`: `""` desconvida, ausente não mexe. */
   guest_email?: string;
+  /** Correção do canal da marcação (só pessoa). Não é remarcação nem muda a revisão. */
+  booking_channel?: CanalDaMarcacao;
 }
 
 export interface CancelarInput {
@@ -344,6 +352,8 @@ async function executarCriacaoDeAgendamento(
       guest_email: input.guest_email || null,
       created_by_kind: autorParaCriacao(ctx.actor),
       created_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
+      // Canal só de pessoa: consulta marcada pela IA não entra no bônus.
+      booking_channel: ctx.actor.type === "user" ? (input.booking_channel ?? null) : null,
       source: ctx.actor.type === "user" ? "ui" : "mcp",
     })
     .select("id, starts_at, ends_at, status, time_zone, revision, meeting_state, meeting_url")
@@ -372,7 +382,12 @@ async function executarCriacaoDeAgendamento(
     resourceType: "calendar_appointment",
     resourceId: criado.id,
     requestId: ctx.requestId,
-    metadata: { event_type_id: tipo.id, owner_user_id: donoId, time_zone: criado.time_zone },
+    metadata: {
+      event_type_id: tipo.id,
+      owner_user_id: donoId,
+      time_zone: criado.time_zone,
+      booking_channel: ctx.actor.type === "user" ? (input.booking_channel ?? null) : null,
+    },
   });
 
   return criado as Record<string, unknown>;
@@ -518,7 +533,33 @@ export async function alterarAgendamentoHandler(
     transicao = transicao ?? input.status;
   }
 
-  if (Object.keys(mudanca).length === 0) return { id: atual.id, inalterado: true };
+  // O canal é dado do bônus, não do compromisso: não passa pelo núcleo de
+  // revisão (`fn_appointment_change`), não cancela acompanhamento nem vai ao
+  // Google. UPDATE pela sessão (RLS `calendar_appointments_update`), org filtrada.
+  let canalCorrigido = false;
+  if (input.booking_channel !== undefined && ctx.actor.type === "user") {
+    await guardServiceEffect();
+    const { error } = await supabase
+      .from("calendar_appointments")
+      .update({ booking_channel: input.booking_channel })
+      .eq("organization_id", ctx.organization_id)
+      .eq("id", atual.id as string);
+    if (error) throw new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
+    canalCorrigido = true;
+    void audit({
+      action: "agenda.appointment_updated",
+      actorUserId: ctx.actor.id,
+      organizationId: ctx.organization_id,
+      resourceType: "calendar_appointment",
+      resourceId: input.id,
+      requestId: ctx.requestId,
+      metadata: { booking_channel: input.booking_channel },
+    });
+  }
+
+  if (Object.keys(mudanca).length === 0) {
+    return canalCorrigido ? { id: atual.id, booking_channel: input.booking_channel } : { id: atual.id, inalterado: true };
+  }
 
   const salvo = await alteraComRevisao(supabase,ctx,input.id,input.revision ?? Number(atual.revision),mudanca);
 

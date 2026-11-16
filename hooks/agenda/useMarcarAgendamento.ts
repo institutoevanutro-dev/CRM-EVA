@@ -28,6 +28,8 @@ export interface NovoAgendamento {
    * `attendees` e sem convite nenhum saindo do Google.
    */
   guest_email?: string;
+  /** Como a equipe marcou (bônus por comparecimento). */
+  booking_channel?: "mensagem" | "ligacao";
 }
 
 /**

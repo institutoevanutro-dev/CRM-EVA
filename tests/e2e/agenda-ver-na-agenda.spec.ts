@@ -92,6 +92,8 @@ test("marcar, clicar em 'Ver na agenda', e ENCONTRAR o compromisso na grade", as
   await horario.click();
 
   await expect(page.getByTestId("confirmacao")).toBeVisible({ timeout: 10_000 });
+  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   await page.getByTestId("confirmar-marcacao").click();
 
   const verNaAgenda = page.getByTestId("ver-na-agenda");

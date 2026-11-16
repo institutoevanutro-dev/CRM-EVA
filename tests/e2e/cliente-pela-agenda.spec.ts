@@ -170,6 +170,8 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
   const marcou = page.waitForResponse(
     (r) => r.url().includes("/api/v1/agenda/agendamentos") && r.request().method() === "POST",
   );
+  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   await page.getByTestId("confirmar-marcacao").click();
   const resposta = await marcou;
   expect(resposta.ok(), `a marcação foi recusada: ${await resposta.text()}`).toBe(true);

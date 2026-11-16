@@ -45,6 +45,9 @@ type Detalhe = {
   excluded_at?: string | null;
   exclusion_reason?: string | null;
   revision: number;
+  /** Como a equipe marcou (0417). Nula = legado ou marcada pela IA. */
+  booking_channel?: "mensagem" | "ligacao" | null;
+  created_by_kind?: string;
   contact_id: string | null;
   /** Os dois nomes do contato: o do cadastro e o do WhatsApp. */
   contato?: { name: string | null; display_name: string | null } | null;
@@ -234,6 +237,23 @@ export function DetalheDoCompromisso({
                 )[a.status] ?? a.status,
               )}
             </p>
+            {a.created_by_kind === "user" ? (
+              <label className="block text-sm" data-testid="compromisso-canal">
+                <span className="text-text-muted">{t("Marcada por")}</span>
+                <select
+                  className="mt-1 w-full rounded-md border bg-surface p-2"
+                  value={a.booking_channel ?? ""}
+                  disabled={!podeEditar || a.status === "cancelled" || Boolean(a.excluded_at) || mutation.isPending || staleDraft}
+                  onChange={(e) => {
+                    if (e.target.value) decide({ booking_channel: e.target.value });
+                  }}
+                >
+                  {a.booking_channel ? null : <option value="">{t("Não informado (conta como mensagem)")}</option>}
+                  <option value="mensagem">{t("Mensagem")}</option>
+                  <option value="ligacao">{t("Ligação")}</option>
+                </select>
+              </label>
+            ) : null}
             {faltaNome ? (
               <div
                 role="status"

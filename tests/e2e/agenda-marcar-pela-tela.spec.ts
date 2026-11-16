@@ -192,6 +192,8 @@ test("marcar um horário pela tela e vê-lo aparecer na grade — sem recarregar
   // próprio botão de confirmar. Depois do clique o painel troca para a vista de
   // sucesso, e é `ver-na-agenda` que prova que a marcação foi aceita.
   await expect(page.getByTestId("confirmacao")).toBeVisible({ timeout: 10_000 });
+  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   await page.getByTestId("confirmar-marcacao").click();
   await expect(page.getByTestId("ver-na-agenda")).toBeVisible({ timeout: 15_000 });
 

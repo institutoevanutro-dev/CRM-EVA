@@ -180,6 +180,8 @@ test("o Novo agendamento pede o nome completo de quem só tem o do WhatsApp e gr
   await evidencia(page, info, "0-uma-palavra-nao-libera");
 
   await campo.fill("Carla Fictícia Souza");
+  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   await expect(page.getByTestId("confirmar-marcacao")).toBeEnabled();
   await evidencia(page, info, "1-nome-completo-conferido");
 
@@ -201,6 +203,8 @@ test("o Novo agendamento pede o nome completo de quem só tem o do WhatsApp e gr
       new URL(r.url()).pathname === "/api/v1/agenda/agendamentos" &&
       r.request().method() === "POST",
   );
+  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   await page.getByTestId("confirmar-marcacao").click();
   const respostaDoNome = await gravouNome;
   expect(respostaDoNome.ok(), `o nome foi recusado: ${await respostaDoNome.text()}`).toBe(true);

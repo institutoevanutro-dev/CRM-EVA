@@ -281,6 +281,8 @@ test("arrastar um card remarca — e o horário novo sobrevive ao reload", async
   const testidOrigem = (await origem.getAttribute("data-testid"))!;
   await origem.click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible({ timeout: 15_000 });
+  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   await page.getByTestId("confirmar-marcacao").click();
   await expect(page.getByTestId("ver-na-agenda")).toBeVisible({ timeout: 20_000 });
   await page.keyboard.press("Escape");
@@ -459,6 +461,8 @@ test("arrastar para fora da disponibilidade é RECUSADO e o card volta", async (
   const testidOrigem = (await origem.getAttribute("data-testid"))!;
   await origem.click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible({ timeout: 15_000 });
+  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   await page.getByTestId("confirmar-marcacao").click();
   await expect(page.getByTestId("ver-na-agenda")).toBeVisible({ timeout: 20_000 });
   await page.keyboard.press("Escape");
