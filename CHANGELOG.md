@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.16.1] — 2026-11-16
+
+### Corrigido
+
+- **O agente não responde duas vezes quando o cliente manda a segunda mensagem no mesmo segundo do envio** Quando o cliente mandava uma segunda mensagem bem no instante em que o agente começava a responder à primeira, a resposta desatualizada saía e a segunda mensagem ganhava outra resposta, às vezes com um novo cumprimento. Agora, antes de enviar, o agente espera alguns segundos a mensagem nova terminar de ser registrada e responde às duas de uma vez.
+
+  A espera tem teto (`RESPOSTA_OBSOLETA_ESPERA_INGESTAO_MS`, padrão 5000 ms; 0 desliga) e não exige nada à mão na atualização.
+
 ## [5.16.0] — 2026-11-16
 
 ### Adicionado
@@ -9220,7 +9228,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.16.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.16.1...HEAD
+[5.16.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.16.0...v5.16.1
 [5.16.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.15.0...v5.16.0
 [5.15.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.7...v5.15.0
 [5.14.7]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.6...v5.14.7
