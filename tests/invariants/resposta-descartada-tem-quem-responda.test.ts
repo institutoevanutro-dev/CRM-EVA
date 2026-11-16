@@ -418,6 +418,104 @@ describe("a resposta descartada tem quem responda depois", () => {
 });
 
 /**
+ * A MENSAGEM NOVA AINDA SENDO INGERIDA (medido em produção, 2026-11-13).
+ *
+ * A régua rodou 0,1 s antes de nascer o pedido de turno da mensagem nova: a
+ * ingestão ainda drenava o `message.received` dela. Agora a régua espera essa
+ * ingestão terminar e só então decide — pelo critério de sempre. Os dois lados:
+ * terminou COM pedido de turno, descarta; terminou SEM, a resposta sai.
+ */
+describe("a régua espera a ingestão da mensagem nova terminar", () => {
+  const dormir = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+  async function turnoQueLeuAte(): Promise<string> {
+    await inbound("Oi", haSegundos(40));
+    await inbound("Tudo bem?", haSegundos(30));
+    const job = crypto.randomUUID();
+    await pool.query(
+      `insert into job_queue (id, organization_id, contact_id, kind, payload, status, attempts)
+       values ($1,$2,$3,'inbound_turn',$4,'done',1)`,
+      [job, ORG, CONTACT, { conversation_id: CONV, ultima_inbound_vista_em: haSegundos(30) }],
+    );
+    return job;
+  }
+
+  /** A pergunta é gravada agora; o trigger emite o `message.received` dela, `pending`. */
+  async function perguntaEmIngestao(): Promise<string> {
+    const msg = await inbound(PERGUNTA, new Date().toISOString());
+    const { rows } = await pool.query<{ n: number }>(
+      `select count(*)::int as n from event_log
+        where organization_id = $1 and event_type = 'message.received' and entity_id = $2 and status = 'pending'`,
+      [ORG, msg],
+    );
+    expect(rows[0]?.n, "o trigger não emitiu message.received para a pergunta").toBe(1);
+    return msg;
+  }
+
+  async function terminarIngestao(msg: string, despachar: boolean): Promise<void> {
+    if (despachar) {
+      await pool.query(
+        `insert into event_log (organization_id, event_type, entity_kind, entity_id, payload, status)
+         values ($1::uuid, 'ai_agent.dispatch_requested', 'message', $2::uuid,
+                 jsonb_build_object('organization_id', $1::text, 'conversation_id', $3::text,
+                                    'contact_id', $4::text, 'inbound_message_id', $2::text),
+                 'pending')`,
+        [ORG, msg, CONV, CONTACT],
+      );
+    }
+    await pool.query(
+      `update event_log set status = 'done'
+        where organization_id = $1 and event_type = 'message.received' and entity_id = $2`,
+      [ORG, msg],
+    );
+  }
+
+  it("a ingestão termina pedindo turno: a resposta desatualizada é descartada", async () => {
+    const job = await turnoQueLeuAte();
+    const msg = await perguntaEmIngestao();
+    const termino = dormir(400).then(() => terminarIngestao(msg, true));
+    const obsoleta = await m.regua.respostaFicouObsoletaAposIngestao(
+      pool,
+      { organizationId: ORG, conversationId: CONV, jobId: job },
+      TETO,
+      { ms: 5_000, dormir },
+    );
+    await termino;
+    expect(obsoleta).toBe(true);
+  });
+
+  it("a ingestão termina SEM pedir turno: a resposta sai, ninguém responderia depois", async () => {
+    const job = await turnoQueLeuAte();
+    const msg = await perguntaEmIngestao();
+    const termino = dormir(400).then(() => terminarIngestao(msg, false));
+    const inicio = Date.now();
+    const obsoleta = await m.regua.respostaFicouObsoletaAposIngestao(
+      pool,
+      { organizationId: ORG, conversationId: CONV, jobId: job },
+      TETO,
+      { ms: 5_000, dormir },
+    );
+    await termino;
+    expect(obsoleta).toBe(false);
+    // Saiu logo depois de a ingestão terminar, não no fim da espera.
+    expect(Date.now() - inicio).toBeLessThan(3_000);
+  });
+
+  it("controle: sem esperar, a mesma mensagem em ingestão deixa a resposta sair (o defeito medido)", async () => {
+    const job = await turnoQueLeuAte();
+    await perguntaEmIngestao();
+    expect(
+      await m.regua.respostaFicouObsoletaAposIngestao(
+        pool,
+        { organizationId: ORG, conversationId: CONV, jobId: job },
+        TETO,
+        { ms: 0, dormir },
+      ),
+    ).toBe(false);
+  });
+});
+
+/**
  * A espera da mídia olha a CONVERSA (o texto depois da foto espera a foto
  * virar texto). Mas só vale esperar pela mídia que VAI virar texto: o vídeo
  * com a leitura desligada (o padrão) e a mídia importada do histórico do

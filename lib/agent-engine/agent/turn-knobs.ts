@@ -10,6 +10,7 @@ export function turnKnobsFromEnv(env: Env): InboundTurnKnobs {
     maxSendsPerTurn: env.MAX_SENDS_PER_TURN,
     queuedRetryDelayMs: env.SEND_QUEUED_RETRY_MS,
     respostaObsoletaTetoMs: env.RESPOSTA_OBSOLETA_TETO_MS,
+    respostaObsoletaEsperaIngestaoMs: env.RESPOSTA_OBSOLETA_ESPERA_INGESTAO_MS,
     horarioDaAgendaModo: env.HORARIO_DA_AGENDA_MODO,
     breaker: {
       exactFailureWarn: env.TOOL_BREAKER_EXACT_WARN,
