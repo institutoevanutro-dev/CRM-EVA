@@ -8,6 +8,12 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.17.1] — 2026-11-16
+
+### Corrigido
+
+- **Sinal fora do padrão não esconde o quadro Financeiro do contato** Se o Financeiro mandar um sinal com situação desconhecida, mais de 100 sinais ou uma data com hora, o quadro do contato continua aparecendo: o sinal inválido fica de fora, a lista é cortada em 100 e a data aparece certa (ou como veio, nunca "Invalid Date").
+
 ## [5.17.0] — 2026-11-16
 
 ### Adicionado
@@ -9236,7 +9242,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.17.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.17.1...HEAD
+[5.17.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.17.0...v5.17.1
 [5.17.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.16.1...v5.17.0
 [5.16.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.16.0...v5.16.1
 [5.16.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.15.0...v5.16.0
