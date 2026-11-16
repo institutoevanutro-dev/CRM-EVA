@@ -119,6 +119,8 @@ test("no celular não rola para o lado, e o Confirmar fica alcançável", async 
   expect(m.sobraHorizontal, JSON.stringify(m)).toBeLessThanOrEqual(1);
   expect(m.paginaHorizontal, JSON.stringify(m)).toBeLessThanOrEqual(1);
   await expect(page.getByTestId("confirmar-marcacao")).toBeInViewport();
+  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   await expect(page.getByTestId("confirmar-marcacao")).toBeEnabled();
 });
 

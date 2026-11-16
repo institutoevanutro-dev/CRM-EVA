@@ -92,6 +92,15 @@ export const SITUACOES_DO_AGENDAMENTO = [
 ] as const;
 export type SituacaoDoAgendamento = (typeof SITUACOES_DO_AGENDAMENTO)[number];
 
+/**
+ * Como a equipe marcou a consulta (`calendar_appointments.booking_channel`,
+ * migration 0417). Nula no banco = legado ou marcada pela IA. É a base do
+ * bônus por comparecimento (`lib/bonus/calculo.ts`). A forma `as const` é
+ * requisito de `tests/invariants/vocabulario-banco-x-typescript.test.ts`.
+ */
+export const CANAIS_DA_MARCACAO = ["mensagem", "ligacao"] as const;
+export type CanalDaMarcacao = (typeof CANAIS_DA_MARCACAO)[number];
+
 export const ROTULO_DA_SITUACAO: Record<SituacaoDoAgendamento, string> = {
   pending: "Aguardando confirmação",
   confirmed: "Confirmado",

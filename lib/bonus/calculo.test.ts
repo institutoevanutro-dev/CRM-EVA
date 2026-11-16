@@ -8,6 +8,7 @@ import {
   type EntradaDoMes,
   type FatosDaPessoa,
   fracaoDaFaixa,
+  placarDosComparecimentos,
   type TarefaDoMes,
 } from "./calculo";
 import { regrasSchema, type RegrasDoBonus } from "./regras";
@@ -254,5 +255,75 @@ describe("calcularMes", () => {
     const fora = { ...mesPerfeito(A, DEZEMBRO_UTEIS), tarefas: [tarefa({ id: "x", diaDoPrazo: "2026-11-30", diaDoFechamento: "2026-12-02" })] };
     const placar = calcularMes(entrada({ pessoas: [fora] }));
     expect(placar.pessoas[0]!.tarefas.devidos).toBe(9);
+  });
+});
+
+describe("bônus por comparecimento", () => {
+  const regra = regrasSchema.parse({
+    comparecimentos: {
+      por_mensagem_cents: 1_000,
+      por_ligacao_cents: 2_000,
+      faixas: [
+        { minimo: 15, valor_cents: 15_000 },
+        { minimo: 10, valor_cents: 10_000 },
+        { minimo: 20, valor_cents: 25_000 },
+      ],
+    },
+  }).comparecimentos;
+  const so = (mensagem: number, ligacao = 0) => placarDosComparecimentos({ mensagem, ligacao }, regra);
+
+  it("padrão: dinheiro zero e limiares 10/15/20", () => {
+    const r = regrasSchema.parse({}).comparecimentos;
+    expect(r).toEqual({
+      por_mensagem_cents: 0,
+      por_ligacao_cents: 0,
+      faixas: [
+        { minimo: 10, valor_cents: 0 },
+        { minimo: 15, valor_cents: 0 },
+        { minimo: 20, valor_cents: 0 },
+      ],
+    });
+    expect(placarDosComparecimentos({ mensagem: 30, ligacao: 5 }, r).valorCents).toBe(0);
+  });
+
+  it("9 não chega à primeira faixa: só o fixo, faltam 1", () => {
+    const p = so(9);
+    expect(p).toMatchObject({ total: 9, fixoCents: 9_000, faixasCents: 0, faixaAtingida: null, valorCents: 9_000 });
+    expect(p.proximaFaixa).toEqual({ minimo: 10, valorCents: 10_000, faltam: 1 });
+  });
+
+  it("10 paga a primeira faixa", () => {
+    expect(so(10)).toMatchObject({ faixasCents: 10_000, faixaAtingida: 10, valorCents: 20_000, proximaFaixa: { minimo: 15, faltam: 5 } });
+  });
+
+  it("15 soma as duas primeiras (cumulativo)", () => {
+    expect(so(15)).toMatchObject({ faixasCents: 25_000, faixaAtingida: 15, valorCents: 40_000 });
+  });
+
+  it("20 soma as três: R$ 500 de faixas, sem próxima", () => {
+    const p = so(20);
+    expect(p).toMatchObject({ faixasCents: 50_000, faixaAtingida: 20, valorCents: 70_000 });
+    expect(p.proximaFaixa).toBeNull();
+  });
+
+  it("mistura de canais: ligação vale o dobro e a faixa conta o total", () => {
+    const p = so(6, 4);
+    expect(p).toMatchObject({ mensagem: 6, ligacao: 4, total: 10, fixoCents: 6_000 + 8_000, faixasCents: 10_000, valorCents: 24_000 });
+  });
+
+  it("entra no total da pessoa, somado às tarefas, e o teto corta", () => {
+    const base = regras({ comparecimentos: { por_mensagem_cents: 1_000, por_ligacao_cents: 2_000, faixas: [] } });
+    const pessoa: FatosDaPessoa = { userId: A, tarefas: [], leads: [], ligacoes: [], diasDeExcecao: [], comparecimentos: { mensagem: 3, ligacao: 1 } };
+    const e = entrada({ mes: "2026-10", hoje: "2026-10-31", regras: { ...base, rotinas: { ...base.rotinas, stories_por_dia: 0 } }, pessoas: [pessoa], storiesPorDia: {} });
+    const p = calcularMes(e).pessoas[0]!;
+    expect(p.comparecimentos.valorCents).toBe(5_000);
+    expect(p.totalCents).toBe(p.tarefas.valorCents + p.resultadosCents + 5_000);
+    const comTeto = calcularMes({ ...e, regras: { ...e.regras, teto_cents: 1_000 } }).pessoas[0]!;
+    expect(comTeto.totalCents).toBe(1_000);
+  });
+
+  it("pessoa sem contagem conta zero", () => {
+    const p = calcularMes(entrada({})).pessoas[0]!;
+    expect(p.comparecimentos.total).toBe(0);
   });
 });

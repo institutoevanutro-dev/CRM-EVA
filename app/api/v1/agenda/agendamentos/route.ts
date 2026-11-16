@@ -19,6 +19,7 @@ import { z } from "zod";
 import { listaAgendamentos, type AgendamentoListado } from "@/lib/agenda/consulta";
 import { donosDaAgenda } from "@/lib/agenda/donos-da-agenda";
 import { DURACAO_MAXIMA_MIN, DURACAO_MINIMA_MIN } from "@/lib/agenda/duracao-escolhida";
+import { CANAIS_DA_MARCACAO } from "@/lib/agenda/tipos";
 import { lerBloqueiosDaGrade } from "@/lib/agenda/bloqueios-da-grade";
 import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
@@ -94,6 +95,12 @@ const marcarSchema = z.object({
   guest_email: emailDoConvidado.optional(),
   /** A duração DESTE atendimento (porte do upstream #3714); ausente = a do tipo. */
   duration_minutes: z.number().int().min(DURACAO_MINIMA_MIN).max(DURACAO_MAXIMA_MIN).optional(),
+  /**
+   * Mensagem ou ligação (migration 0417). A tela da Agenda exige a escolha; a
+   * REST aceita sem, e o bônus conta a consulta de pessoa sem canal como
+   * mensagem.
+   */
+  booking_channel: z.enum(CANAIS_DA_MARCACAO).optional(),
 });
 
 const alterarSchema = z
@@ -111,6 +118,8 @@ const alterarSchema = z
     status: z.enum(["confirmed", "completed", "no_show"]).optional(),
     notes: z.string().max(2000).optional(),
     guest_email: emailDoConvidado.optional(),
+    /** Corrigir o canal da marcação (bônus); não remarca nem muda a revisão. */
+    booking_channel: z.enum(CANAIS_DA_MARCACAO).optional(),
   })
   .refine(
     (c) =>
@@ -118,7 +127,8 @@ const alterarSchema = z
       c.starts_at !== undefined ||
       c.status !== undefined ||
       c.notes !== undefined ||
-      c.guest_email !== undefined,
+      c.guest_email !== undefined ||
+      c.booking_channel !== undefined,
     {
       message: "Informe pelo menos um campo para alterar.",
     },

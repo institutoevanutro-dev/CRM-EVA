@@ -12,6 +12,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { DURACAO_MAXIMA_MIN, DURACAO_MINIMA_MIN, duracaoDoCampo } from "@/lib/agenda/duracao-escolhida";
 import { dataDeParede, instanteDe } from "@/lib/agenda/fuso";
 import { fimDoHorario, outrosProcedimentos, procedimentosDoProfissional } from "@/lib/agenda/marcacao-simples";
+import type { CanalDaMarcacao } from "@/lib/agenda/tipos";
 import { ApiError } from "@/lib/api/types";
 import {
   ehNomeCompleto,
@@ -61,7 +62,11 @@ export type MarcacaoConfirmada = {
   convidado?: string;
   endereco: string;
   observacao: string;
+  /** Mensagem ou ligação: obrigatório na tela, é a base do bônus por comparecimento. */
+  canal: CanalDaMarcacao;
 };
+
+const ROTULO_DO_CANAL: Record<CanalDaMarcacao, string> = { mensagem: "Mensagem", ligacao: "Ligação" };
 
 const CAMPO =
   "h-10 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-text outline-hidden transition-colors focus:border-accent disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-text-subtle";
@@ -168,6 +173,7 @@ export function MarcacaoSimples({
   const [encaixeAberto, setEncaixeAberto] = React.useState(false);
   const [horaDoEncaixe, setHoraDoEncaixe] = React.useState("");
   const [observacao, setObservacao] = React.useState("");
+  const [canal, setCanal] = React.useState<CanalDaMarcacao | null>(null);
   const [convidado, setConvidado] = React.useState("");
   // Endereço não editado herda o do procedimento; trocar de procedimento volta
   // ao dele, senão o endereço de um viaja para outro atendimento.
@@ -269,11 +275,11 @@ export function MarcacaoSimples({
     setHorario({ instante, rotulo: `${partesDaHora[1]}:${partesDaHora[2]}` });
   };
 
-  const pronto = Boolean(profissionalId && tipo && duracaoMin !== null && horario && !convidadoInvalido && cadastroCarregado && nomeResolvido);
+  const pronto = Boolean(profissionalId && tipo && duracaoMin !== null && horario && canal && !convidadoInvalido && cadastroCarregado && nomeResolvido);
   const tempo = marcado ? "marcado" : horario ? "confirmando" : tipo ? "escolhendo-horario" : "escolhendo-dia";
 
   const confirmar = async () => {
-    if (!horario || !pronto) return;
+    if (!horario || !pronto || !canal) return;
     if (tipo?.exigePaciente && !contactId) {
       setSemPacienteNoTipo(tipo.id);
       return;
@@ -290,6 +296,7 @@ export function MarcacaoSimples({
         convidado: convidadoLimpo || undefined,
         endereco: endereco.trim(),
         observacao: observacao.trim(),
+        canal,
       });
       setRecusa(null);
       setMarcado(horario);
@@ -787,6 +794,30 @@ export function MarcacaoSimples({
                 </p>
               ) : null}
             </div>
+            <div className="flex shrink-0 items-center gap-2">
+            <fieldset className="flex items-center gap-1.5" data-testid="canal-da-marcacao">
+              <legend className="sr-only">{t("Como a consulta foi marcada")}</legend>
+              <span aria-hidden className="text-xs text-text-muted">
+                {t("Marcada por")}
+              </span>
+              {(["mensagem", "ligacao"] as const).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  data-testid={`canal-${c}`}
+                  aria-pressed={canal === c}
+                  onClick={() => setCanal(c)}
+                  className={cn(
+                    "h-8 rounded-md border px-2.5 text-xs font-medium transition-colors",
+                    canal === c
+                      ? "border-accent bg-accent text-accent-foreground"
+                      : "border-border bg-surface text-text hover:border-border-strong",
+                  )}
+                >
+                  {t(ROTULO_DO_CANAL[c])}
+                </button>
+              ))}
+            </fieldset>
             <Button
               data-testid="confirmar-marcacao"
               disabled={!pronto || enviando}
@@ -795,6 +826,7 @@ export function MarcacaoSimples({
             >
               {enviando ? t("Marcando…") : t("Confirmar")}
             </Button>
+            </div>
           </div>
         </div>
       </TabsContent>

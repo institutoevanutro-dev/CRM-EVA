@@ -35,6 +35,25 @@ export interface FatosDaPessoa {
   ligacoes: RotinaDoDia[];
   /** Férias, atestado: as rotinas desses dias saem da conta da pessoa (Etapa 2 preenche). */
   diasDeExcecao: string[];
+  /** Consultas marcadas pela pessoa em que o paciente compareceu, no mês, por canal. Ausente = zero. */
+  comparecimentos?: ComparecimentosDaPessoa;
+}
+
+export interface ComparecimentosDaPessoa {
+  /** Inclui as sem canal (legado), que contam como mensagem. */
+  mensagem: number;
+  ligacao: number;
+}
+
+export interface PlacarDosComparecimentos extends ComparecimentosDaPessoa {
+  total: number;
+  fixoCents: number;
+  /** Soma das faixas atingidas (cumulativas). */
+  faixasCents: number;
+  /** O mínimo da maior faixa atingida; `null` = nenhuma ainda. */
+  faixaAtingida: number | null;
+  proximaFaixa: { minimo: number; valorCents: number; faltam: number } | null;
+  valorCents: number;
 }
 
 export interface ContagensDoMes {
@@ -78,6 +97,7 @@ export interface PlacarDasTarefas {
 export interface PlacarDaPessoa {
   userId: string;
   tarefas: PlacarDasTarefas;
+  comparecimentos: PlacarDosComparecimentos;
   resultadosCents: number;
   totalCents: number;
 }
@@ -139,6 +159,27 @@ export function avaliarCriterio(
   return { ...base, valorCents: 0, faixa: "nenhuma" };
 }
 
+export function placarDosComparecimentos(
+  c: ComparecimentosDaPessoa,
+  regra: RegrasDoBonus["comparecimentos"],
+): PlacarDosComparecimentos {
+  const total = c.mensagem + c.ligacao;
+  const fixoCents = c.mensagem * regra.por_mensagem_cents + c.ligacao * regra.por_ligacao_cents;
+  const faixas = [...regra.faixas].sort((a, b) => a.minimo - b.minimo);
+  const atingidas = faixas.filter((f) => total >= f.minimo);
+  const proxima = faixas.find((f) => total < f.minimo);
+  const faixasCents = atingidas.reduce((soma, f) => soma + f.valor_cents, 0);
+  return {
+    ...c,
+    total,
+    fixoCents,
+    faixasCents,
+    faixaAtingida: atingidas.at(-1)?.minimo ?? null,
+    proximaFaixa: proxima ? { minimo: proxima.minimo, valorCents: proxima.valor_cents, faltam: proxima.minimo - total } : null,
+    valorCents: fixoCents + faixasCents,
+  };
+}
+
 function placarDaPessoa(
   p: FatosDaPessoa,
   e: EntradaDoMes,
@@ -183,7 +224,8 @@ function placarDaPessoa(
 
   const fracaoBps = fracaoDaFaixa(feitos, devidos, e.regras.tarefas.faixas);
   const valorCents = Math.floor((e.regras.tarefas.valor_cents * fracaoBps) / 10_000);
-  const soma = valorCents + resultadosCents;
+  const comparecimentos = placarDosComparecimentos(p.comparecimentos ?? { mensagem: 0, ligacao: 0 }, e.regras.comparecimentos);
+  const soma = valorCents + resultadosCents + comparecimentos.valorCents;
   const teto = e.regras.teto_cents;
   return {
     userId: p.userId,
@@ -196,6 +238,7 @@ function placarDaPessoa(
       valorCents,
       naoFeitos,
     },
+    comparecimentos,
     resultadosCents,
     totalCents: teto === null ? soma : Math.min(soma, teto),
   };

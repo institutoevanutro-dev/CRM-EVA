@@ -39,6 +39,14 @@ import {
   procedimentosDoProfissional,
 } from "@/lib/agenda/marcacao-simples";
 
+/** Bônus (0417): a marcação nova exige o canal; o teste escolhe "Mensagem" ao montar. */
+function comCanal<T>(r: T): T {
+  const canal = screen.queryByTestId("canal-mensagem");
+  if (canal) fireEvent.click(canal);
+  return r;
+}
+
+
 const ANA = "11111111-1111-4111-8111-111111111111";
 const BETO = "22222222-2222-4222-8222-222222222222";
 const PESSOAS = [
@@ -110,11 +118,11 @@ function montarMarcacao(props: Partial<ComponentProps<typeof MarcacaoSimples>> =
     onConfirmar: vi.fn(() => Promise.resolve()),
     onVerNaAgenda: vi.fn(),
   };
-  return render(
+  return comCanal(render(
     <QueryClientProvider client={qc}>
       <MarcacaoSimples {...base} {...props} />
     </QueryClientProvider>,
-  );
+  ));
 }
 
 describe("Novo agendamento: profissional antes do procedimento", () => {
@@ -164,7 +172,7 @@ describe("Novo agendamento: profissional antes do procedimento", () => {
     fireEvent.click(screen.getByTestId("confirmar-marcacao"));
     await waitFor(() => expect(onConfirmar).toHaveBeenCalled());
     expect(onConfirmar.mock.calls[0]).toEqual([
-      expect.objectContaining({ instante, endereco: "", observacao: "" }),
+      expect.objectContaining({ instante, endereco: "", observacao: "", canal: "mensagem" }),
     ]);
     await screen.findByTestId("ver-na-agenda");
   });

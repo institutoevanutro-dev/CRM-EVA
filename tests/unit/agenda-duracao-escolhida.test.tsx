@@ -32,6 +32,14 @@ import { duracaoDoBloco, duracaoDoCampo, duracaoEscolhidaValida } from "@/lib/ag
 import { partesNoFuso } from "@/lib/agenda/fuso";
 import { horariosLivres, type Slot, type TipoDeAgendamento } from "@/lib/agenda/horarios-livres";
 
+/** Bônus (0417): a marcação nova exige o canal; o teste escolhe "Mensagem" ao montar. */
+function comCanal<T>(r: T): T {
+  const canal = screen.queryByTestId("canal-mensagem");
+  if (canal) fireEvent.click(canal);
+  return r;
+}
+
+
 afterEach(cleanup);
 
 const SP = "America/Sao_Paulo";
@@ -148,11 +156,11 @@ describe("tela: campo Duração no Novo agendamento", () => {
   }
   function montar(props: Partial<ComponentProps<typeof MarcacaoSimples>> = {}) {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    return render(
+    return comCanal(render(
       <QueryClientProvider client={qc}>
         <Montar {...props} />
       </QueryClientProvider>,
-    );
+    ));
   }
 
   it("abre com a duração do procedimento e, sem mexer, não manda duração", async () => {

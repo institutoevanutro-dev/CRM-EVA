@@ -13,6 +13,8 @@ import { apiClient } from "@/lib/api/client";
 import { diaNoPeriodo, periodoAberto, type RespostaDaEquipe } from "@/lib/bonus/tela";
 import { formatCentsBRL } from "@/lib/money";
 
+import { fraseDaFaixa } from "./MeuBonus";
+
 export function BonusDaEquipe() {
   const t = useT();
   const q = useQuery({
@@ -42,6 +44,8 @@ export function BonusDaEquipe() {
                 <TableHead>{t("Pessoa")}</TableHead>
                 <TableHead>{t("Tarefas no prazo")}</TableHead>
                 <TableHead className="text-right">{t("Pelas tarefas")}</TableHead>
+                <TableHead>{t("Comparecimentos")}</TableHead>
+                <TableHead className="text-right">{t("Pelos comparecimentos")}</TableHead>
                 <TableHead className="text-right">{t("Resultados")}</TableHead>
                 <TableHead className="text-right">{t("Total")}</TableHead>
               </TableRow>
@@ -55,6 +59,18 @@ export function BonusDaEquipe() {
                     {p.tarefas.feitos}/{p.tarefas.devidos})
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{formatCentsBRL(p.tarefas.valorCents)}</TableCell>
+                  <TableCell className="tabular-nums">
+                    {p.comparecimentos.total}
+                    <span className="block text-xs text-muted-foreground">
+                      {t("{m} por mensagem · {l} por ligação")
+                        .replace("{m}", String(p.comparecimentos.mensagem))
+                        .replace("{l}", String(p.comparecimentos.ligacao))}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatCentsBRL(p.comparecimentos.valorCents)}
+                    <span className="block text-xs text-muted-foreground">{fraseDaFaixa(p.comparecimentos, t)}</span>
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{formatCentsBRL(p.resultadosCents)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatCentsBRL(p.totalCents)}</TableCell>
                 </TableRow>

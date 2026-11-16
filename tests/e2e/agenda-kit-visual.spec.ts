@@ -234,6 +234,8 @@ test.describe("kit visual da Agenda", () => {
     // E os horários estão lá, clicáveis, levando ao terceiro tempo.
     await painel.getByTestId("horario-09:30").click();
     await expect(painel).toHaveAttribute("data-tempo", "confirmando", { timeout: ESPERA });
+    // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+    if (await painel.getByTestId("canal-mensagem").isVisible()) await painel.getByTestId("canal-mensagem").click();
     await painel.getByTestId("confirmar-marcacao").click();
     await expect(painel).toHaveAttribute("data-tempo", "marcado", { timeout: ESPERA });
     await expect(painel.getByText("Marcado.")).toBeVisible();
@@ -259,6 +261,8 @@ test.describe("kit visual da Agenda", () => {
     // E CONFIRMAR CONTINUA ATIVO: aviso, não bloqueio. Se o botão estivesse
     // desabilitado, a tela teria transformado "não recebe mensagem" em "não
     // pode ser atendido", que é outra coisa e é errado.
+    // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+    if (await painel.getByTestId("canal-mensagem").isVisible()) await painel.getByTestId("canal-mensagem").click();
     const confirmar = painel.getByTestId("confirmar-marcacao");
     await expect(confirmar).toBeEnabled();
     await confirmar.click();

@@ -11,7 +11,7 @@ import { leadsQueEntraramNoSinal } from "@/lib/conversoes/sinais-do-periodo";
 import { logger } from "@/lib/logger";
 import { FUSO_PADRAO, fusoValido } from "@/lib/tempo/fusos";
 
-import type { EntradaDoMes, FatosDaPessoa, TarefaDoMes } from "./calculo";
+import type { ComparecimentosDaPessoa, EntradaDoMes, FatosDaPessoa, TarefaDoMes } from "./calculo";
 import { diasDoMes, janelaDoMes, mesDe, somarDias } from "./calendario";
 import {
   type DiaDeEnvio,
@@ -142,6 +142,23 @@ export function paraTarefaDoMes(l: LinhaDeTarefa, fuso: string): TarefaDoMes {
   };
 }
 
+export interface LinhaDeComparecimento {
+  created_by_user_id: string;
+  booking_channel: string | null;
+}
+
+/** Sem canal (legado) conta como mensagem: é o valor menor, ninguém ganha por engano. */
+export function comparecimentosDaPessoa(linhas: readonly LinhaDeComparecimento[], userId: string): ComparecimentosDaPessoa {
+  let mensagem = 0;
+  let ligacao = 0;
+  for (const l of linhas) {
+    if (l.created_by_user_id !== userId) continue;
+    if (l.booking_channel === "ligacao") ligacao += 1;
+    else mensagem += 1;
+  }
+  return { mensagem, ligacao };
+}
+
 interface LinhaDeItem {
   id: string;
   dia: string;
@@ -216,7 +233,7 @@ export async function fatosDoMes(
   const primeiro = `${mes}-01`;
   const ultimo = diasDoMes(mes).at(-1)!;
 
-  const [tarefas, itens, stories, comparecimentos, leadsDoSinal] = await Promise.all([
+  const [tarefas, itens, stories, comparecimentos, leadsDoSinal, marcadosQueVieram] = await Promise.all([
     participantes.length === 0
       ? Promise.resolve([] as (LinhaDeTarefa & { assigned_to: string })[])
       : todas<LinhaDeTarefa & { assigned_to: string }>((a, b) =>
@@ -253,6 +270,25 @@ export async function fatosDoMes(
       .gte("starts_at", inicio.toISOString())
       .lt("starts_at", fim.toISOString()),
     leadsQueEntraramNoSinal(admin, org, programa.etapasDeSinalPago, inicio.toISOString(), fim.toISOString()),
+    // Bônus por comparecimento: consulta marcada POR PESSOA participante (a da
+    // IA fica fora) em que o paciente veio, pelo dia local do início no mês.
+    participantes.length === 0
+      ? Promise.resolve([] as LinhaDeComparecimento[])
+      : todas<LinhaDeComparecimento>((a, b) =>
+          admin
+            .from("calendar_appointments")
+            .select("created_by_user_id, booking_channel")
+            .eq("organization_id", org)
+            .eq("status", "completed")
+            .is("excluded_at", null)
+            .eq("created_by_kind", "user")
+            .in("created_by_user_id", participantes)
+            .neq("source", "historical_import")
+            .gte("starts_at", inicio.toISOString())
+            .lt("starts_at", fim.toISOString())
+            .order("id")
+            .range(a, b),
+        ),
   ]);
   if (comparecimentos.error) throw new Error(`bonus_fatos: ${comparecimentos.error.message}`);
 
@@ -275,6 +311,7 @@ export async function fatosDoMes(
     ...rotinasDaPessoa(itens, enviados, userId),
     // Etapa 2 (fechamento) preenche: férias e atestado por pessoa.
     diasDeExcecao: [],
+    comparecimentos: comparecimentosDaPessoa(marcadosQueVieram, userId),
   }));
 
   return {

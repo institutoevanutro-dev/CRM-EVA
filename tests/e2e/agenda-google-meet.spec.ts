@@ -190,6 +190,8 @@ async function book(page: Page, f: Fixture) {
       new URL(r.url()).pathname === "/api/v1/agenda/agendamentos" &&
       r.request().method() === "POST",
   );
+  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   await page.getByTestId("confirmar-marcacao").click();
   const saved = await response;
   expect(saved.status(), await saved.text()).toBe(201);

@@ -123,6 +123,8 @@ test("uma profissional, um clique no horário vazio, o compromisso na grade", as
   const post = page.waitForResponse(
     (r) => r.url().includes("/api/v1/agenda/agendamentos") && r.request().method() === "POST",
   );
+  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   await page.getByTestId("confirmar-marcacao").click();
   const resposta = await post;
   const corpoPedido = resposta.request().postDataJSON() as Record<string, unknown>;

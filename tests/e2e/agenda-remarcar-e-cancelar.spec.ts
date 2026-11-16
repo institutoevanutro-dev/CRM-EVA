@@ -109,6 +109,8 @@ async function marcarUm(
   await expect(horario).toBeVisible({ timeout: 15_000 });
   const rotulo = (await horario.getAttribute("data-testid"))!.replace("horario-", "");
   await horario.click();
+  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   await page.getByTestId("confirmar-marcacao").click();
   await expect(page.getByTestId("ver-na-agenda")).toBeVisible({ timeout: 15_000 });
   await page.keyboard.press("Escape");
@@ -202,6 +204,8 @@ test("remarcar pela tela: o painel abre em modo remarcar e o horário muda", asy
   const rotuloNovo = (await outro.getAttribute("data-testid"))!.replace("horario-", "");
   expect(rotuloNovo).not.toBe(rotuloOriginal);
   await outro.click();
+  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
+  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   await page.getByTestId("confirmar-marcacao").click();
 
   await expect

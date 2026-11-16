@@ -12,7 +12,7 @@ import { join } from "node:path";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -27,6 +27,14 @@ import { GradeDaAgenda } from "@/components/agenda/GradeDaAgenda";
 import { MarcacaoSimples } from "@/components/agenda/MarcacaoSimples";
 import type { Agendamento, Pessoa } from "@/components/agenda/tipos";
 import { listaAgendamentos } from "@/lib/agenda/consulta";
+
+/** Bônus (0417): a marcação nova exige o canal; o teste escolhe "Mensagem" ao montar. */
+function comCanal<T>(r: T): T {
+  const canal = screen.queryByTestId("canal-mensagem");
+  if (canal) fireEvent.click(canal);
+  return r;
+}
+
 
 const ANA = "11111111-1111-4111-8111-111111111111";
 const CONTATO = "44444444-4444-4444-8444-444444444444";
@@ -83,11 +91,11 @@ function montar(props: Partial<ComponentProps<typeof MarcacaoSimples>> = {}) {
     onConfirmar: vi.fn(async () => undefined),
     onVerNaAgenda: vi.fn(),
   };
-  render(
+  comCanal(render(
     <QueryClientProvider client={qc}>
       <MarcacaoSimples {...base} {...props} />
     </QueryClientProvider>,
-  );
+  ));
 }
 
 describe("marcação simples: a faixa no rodapé", () => {

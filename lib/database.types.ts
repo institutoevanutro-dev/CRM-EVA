@@ -2284,6 +2284,7 @@ export type Database = {
           google_sync_error: string | null
           google_synced_at: string | null
           guest_email: string | null
+          booking_channel: string | null
           id: string
           location_details: string | null
           location_kind: string
@@ -2358,6 +2359,7 @@ export type Database = {
           google_sync_error?: string | null
           google_synced_at?: string | null
           guest_email?: string | null
+          booking_channel?: string | null
           id?: string
           location_details?: string | null
           location_kind?: string
@@ -2432,6 +2434,7 @@ export type Database = {
           google_sync_error?: string | null
           google_synced_at?: string | null
           guest_email?: string | null
+          booking_channel?: string | null
           id?: string
           location_details?: string | null
           location_kind?: string
