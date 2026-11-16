@@ -52,6 +52,14 @@ import {
   sugestaoDeNomeCompleto,
 } from "@/lib/contacts/rotulo-do-contato";
 
+/** Bônus (0417): a marcação nova exige o canal; o teste escolhe "Mensagem" ao montar. */
+function comCanal<T>(r: T): T {
+  const canal = screen.queryByTestId("canal-mensagem");
+  if (canal) fireEvent.click(canal);
+  return r;
+}
+
+
 const ANA = "11111111-1111-4111-8111-111111111111";
 const CONTATO = "44444444-4444-4444-8444-444444444444";
 const PESSOAS = [{ id: ANA, nome: "Dra. Ana Teste", trilha: 1 }] as unknown as Pessoa[];
@@ -205,11 +213,11 @@ function montarMarcacao(props: Partial<ComponentProps<typeof MarcacaoSimples>> =
     onConfirmar,
     onVerNaAgenda: vi.fn(),
   };
-  render(
+  comCanal(render(
     <QueryClientProvider client={qc}>
       <MarcacaoSimples {...base} {...props} />
     </QueryClientProvider>,
-  );
+  ));
   return { onConfirmar };
 }
 
