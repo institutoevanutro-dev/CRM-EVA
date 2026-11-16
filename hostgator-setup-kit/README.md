@@ -135,6 +135,11 @@ proxy errado deixa o site no ar sem responder, o instalador mostra o que encontr
 confirmação. Em `bash install.sh --yes` não há a quem perguntar: ele para e pede que você
 declare `REVERSE_PROXY=traefik` no `.env` — aí a escolha é sua e ele segue sem perguntar.
 
+`REVERSE_PROXY=portaria`: o servidor tem **várias** instalações, e quem tem as portas 80/443 é a
+portaria (nginx L4 que o evalink-instalador monta em `/root/evalink-portaria`). O Caddy desta
+instalação sobe sem portas, na rede da portaria, e segue cuidando dos certificados. Nunca é
+detectado: quem monta a portaria escreve no `.env`. Ver o cabeçalho de `docker-compose.portaria.yml`.
+
 ## Scripts do kit
 
 | Script | Função |

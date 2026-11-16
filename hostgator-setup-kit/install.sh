@@ -23,6 +23,7 @@ REPO_DIR="${REPO_DIR:-deskcommcrm}"
 COMPOSE="docker-compose.prod.yml"
 COMPOSE_TRAEFIK="docker-compose.traefik.yml"
 COMPOSE_NPM="docker-compose.npm.yml"
+COMPOSE_PORTARIA="docker-compose.portaria.yml"
 NONINTERACTIVE=0
 [ "${1:-}" = "--yes" ] && NONINTERACTIVE=1
 
@@ -33,6 +34,7 @@ dc() {
   case "${REVERSE_PROXY:-caddy}" in
   traefik) docker compose -f "$COMPOSE" -f "$COMPOSE_TRAEFIK" "$@" ;;
   npm)     docker compose -f "$COMPOSE" -f "$COMPOSE_NPM" "$@" ;;
+  portaria) docker compose -f "$COMPOSE" -f "$COMPOSE_PORTARIA" "$@" ;;
   *)       docker compose -f "$COMPOSE" "$@" ;;
   esac
 }
@@ -40,6 +42,7 @@ dc_files() {
   case "${REVERSE_PROXY:-caddy}" in
   traefik) printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_TRAEFIK" ;;
   npm)     printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_NPM" ;;
+  portaria) printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_PORTARIA" ;;
   *)       printf -- '-f %s' "$COMPOSE" ;;
   esac
 }
@@ -1756,7 +1759,9 @@ esac
   printf '# modo). Em "npm" entra o docker-compose.npm.yml, que também desliga o Caddy\n'
   printf '# e fixa o app na rede/IP que o Proxy Host espera (PROXY_NETWORK_* só é lido\n'
   printf '# nesse modo, e é sempre configuração manual — não há como detectar o NPM\n'
-  printf '# sozinho, ao contrário do Traefik).\n'
+  printf '# sozinho, ao contrário do Traefik). Em "portaria" (várias instalações no\n'
+  printf '# servidor) entra o docker-compose.portaria.yml: o Caddy sobe sem portas, atrás\n'
+  printf '# da portaria do evalink-instalador, que é quem escreve este valor.\n'
   envq REVERSE_PROXY "$REVERSE_PROXY"
   # O default mora aqui, junto dos irmãos TRAEFIK_* logo abaixo, e não numa
   # atribuição solta lá atrás: em modo caddy ninguém DECIDE esta variável, e
