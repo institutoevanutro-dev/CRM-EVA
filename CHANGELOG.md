@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.17.0] — 2026-11-16
+
+### Adicionado
+
+- **Sinais do paciente no quadro Financeiro do contato** Na ficha do contato, o quadro "Propostas, vendas e pagamentos" ganha a lista "Sinais": data, situação (em aberto, usado numa venda, retido ou estornado) e valor de cada sinal registrado no Financeiro. O sinal entra no faturamento no dia em que o paciente paga.
+
+  Precisa do Financeiro com a migration 0087 (eva-financeiro#94). Com um Financeiro mais antigo a lista fica vazia, sem erro. Sem migration no CRM e sem nada a fazer à mão.
+
 ## [5.16.1] — 2026-11-16
 
 ### Corrigido
@@ -9228,7 +9236,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.16.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.17.0...HEAD
+[5.17.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.16.1...v5.17.0
 [5.16.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.16.0...v5.16.1
 [5.16.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.15.0...v5.16.0
 [5.15.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.14.7...v5.15.0
