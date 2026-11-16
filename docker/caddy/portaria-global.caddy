@@ -1,0 +1,13 @@
+# Modo portaria (REVERSE_PROXY=portaria): o servidor tem várias instalações, e quem tem as portas 80/443 é a
+# portaria (nginx L4). Ela lê só o nome pedido (SNI) e repassa a conexão cifrada, intacta, com o cabeçalho
+# PROXY, que carrega o IP de quem visita. Só a subrede da portaria é ouvida: de qualquer outra origem o
+# cabeçalho é ignorado e a conexão segue como sempre. A 80 (desafio ACME e redirecionamento) não muda.
+servers :443 {
+	listener_wrappers {
+		proxy_protocol {
+			timeout 5s
+			allow {$PORTARIA_SUBNET}
+		}
+		tls
+	}
+}

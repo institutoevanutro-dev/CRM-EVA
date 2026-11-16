@@ -298,6 +298,7 @@ dc up -d
 # com o Traefik nas portas 80/443. O resultado era um "⚠ não consegui recriar o
 # proxy" em TODA atualização de quem usa proxy externo: alarme falso, num
 # momento em que o dono precisa confiar no que está lendo.
+# No modo portaria o ramo padrão serve: o dc() já entra o override, e o Caddy é recriado sem portas.
 case "${REVERSE_PROXY:-caddy}" in
 traefik|npm)
   c_grn "✓ proxy externo (${REVERSE_PROXY}): o Caddy não é usado aqui — nada a recarregar"

@@ -3,6 +3,11 @@
 
 {
 	email {$ACME_EMAIL}
+
+	# Trechos globais escolhidos pelo modo do proxy. Só o docker-compose.portaria.yml monta um arquivo nesta
+	# pasta (REVERSE_PROXY=portaria); nos outros modos ela não existe no contêiner, e o glob sem arquivo não
+	# muda nada, como o import de sites/ abaixo.
+	import /etc/caddy/global.d/*.caddy
 }
 
 # Sites extras servidos por este mesmo Caddy (ex.: o site da Conta, o login

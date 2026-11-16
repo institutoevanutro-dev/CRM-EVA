@@ -5,6 +5,7 @@ set -euo pipefail
 COMPOSE="docker-compose.prod.yml"
 COMPOSE_TRAEFIK="docker-compose.traefik.yml"
 COMPOSE_NPM="docker-compose.npm.yml"
+COMPOSE_PORTARIA="docker-compose.portaria.yml"
 
 # Proxy reverso desta instalação. Vem do .env (load_env), com default 'caddy' —
 # ou seja, toda instalação que já existe continua exatamente como está.
@@ -17,6 +18,10 @@ COMPOSE_NPM="docker-compose.npm.yml"
 #             Docker — o roteamento é manual, na UI dele). Entra o override, que
 #             desliga o Caddy e garante o `app` na rede/IP que o Proxy Host
 #             espera. Ver o cabeçalho de docker-compose.npm.yml.
+#   portaria → o servidor tem VÁRIAS instalações, e quem tem as portas 80/443 é a portaria
+#              (nginx L4 que o evalink-instalador monta em /root/evalink-portaria). O Caddy desta
+#              instalação sobe sem portas, na rede da portaria, e segue cuidando dos certificados.
+#              Ver o cabeçalho de docker-compose.portaria.yml.
 #
 # Todo `docker compose` do kit passa por aqui: com proxy externo, um comando sem
 # o override subiria o Caddy e ele iria bater de frente com o proxy da hospedagem.
@@ -24,6 +29,7 @@ dc() {
   case "${REVERSE_PROXY:-caddy}" in
   traefik) docker compose -f "$COMPOSE" -f "$COMPOSE_TRAEFIK" "$@" ;;
   npm)     docker compose -f "$COMPOSE" -f "$COMPOSE_NPM" "$@" ;;
+  portaria) docker compose -f "$COMPOSE" -f "$COMPOSE_PORTARIA" "$@" ;;
   *)       docker compose -f "$COMPOSE" "$@" ;;
   esac
 }
@@ -35,6 +41,7 @@ dc_files() {
   case "${REVERSE_PROXY:-caddy}" in
   traefik) printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_TRAEFIK" ;;
   npm)     printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_NPM" ;;
+  portaria) printf -- '-f %s -f %s' "$COMPOSE" "$COMPOSE_PORTARIA" ;;
   *)       printf -- '-f %s' "$COMPOSE" ;;
   esac
 }
@@ -193,6 +200,35 @@ veredito_rede_do_proxy() {  # veredito_rede_do_proxy <driver encontrado> <rede> 
 # Define TRAEFIK_NETWORK quando ela vem vazia — de propósito, é o mesmo default
 # que o instalador grava no .env.
 garantir_rede_do_proxy() {
+  # A rede da portaria nunca é criada pelo kit: é de quem monta a portaria (o evalink-instalador), como a do
+  # NPM é do stack dele. Sumiu (prune, down -v): morre explicando, antes do erro opaco do compose.
+  if [ "${REVERSE_PROXY:-caddy}" = "portaria" ]; then
+    # O override zera as portas do Caddy com `ports: !reset []`, e o !reset só existe do compose 2.24 em
+    # diante. Antes disso as portas 80/443 voltam e o Caddy disputa com a portaria, então a guarda é aqui.
+    local versao maior menor
+    versao="$(docker compose version --short 2>/dev/null || true)"; versao="${versao#v}"
+    maior="${versao%%.*}"; menor="${versao#*.}"; menor="${menor%%[!0-9]*}"
+    case "$maior" in ''|*[!0-9]*) maior=0 ;; esac
+    if [ "$maior" -lt 2 ] || { [ "$maior" -eq 2 ] && [ "${menor:-0}" -lt 24 ]; }; then
+      die "O Docker Compose deste servidor é a versão '${versao:-desconhecida}', e o modo portaria precisa
+da 2.24 ou mais nova (é dela o 'ports: !reset []' que tira as portas 80/443 do Caddy).
+Atualize o plugin do compose (apt install docker-compose-plugin) e rode de novo."
+    fi
+    local rede_portaria="${PORTARIA_NETWORK_NAME:-evalink-portaria}" faixa_esperada="${PORTARIA_SUBNET:-10.231.231.0/24}" faixas
+    faixas="$(docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}' "$rede_portaria" 2>/dev/null)" \
+      || die "A rede Docker '$rede_portaria' (a da portaria do servidor) não existe.
+Ela é criada por quem monta a portaria (evalink-instalador, comando portaria). Monte a portaria
+antes, ou ponha REVERSE_PROXY=caddy no .env se este servidor tem uma instalação só."
+    # O Caddy só aceita o cabeçalho PROXY vindo de PORTARIA_SUBNET (docker/caddy/portaria-global.caddy). Com a
+    # rede numa faixa diferente o site funciona, mas o cabeçalho é descartado e todo visitante chega com o IP
+    # da portaria: o limite de tentativas de login (lib/auth/rate-limit.ts) passa a contar todos como um só.
+    case " $faixas " in
+    *" $faixa_esperada "*) return 0 ;;
+    esac
+    die "A rede '$rede_portaria' usa a faixa '${faixas% }', mas o .env diz PORTARIA_SUBNET=$faixa_esperada.
+Com faixas diferentes o CRM descarta o cabeçalho PROXY da portaria e todo visitante aparece com o IP
+da portaria. Ponha no .env a faixa da rede (PORTARIA_SUBNET=${faixas%% *}) e rode de novo."
+  fi
   # NPM nunca é criado por nós: a rede é sempre do stack do Proxy Manager (ou de
   # quem hospeda), então não há "nossa" bridge para oferecer — só checar e, se
   # sumiu (prune, down -v), morrer explicando em vez do opaco erro do compose.

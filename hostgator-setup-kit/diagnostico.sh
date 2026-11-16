@@ -37,6 +37,21 @@ fi
 titulo() { printf '\n%s%s%s\n' "$B" "$*" "$Z"; }
 item()   { printf '  %s\n' "$*"; }
 
+# A lista de -f do modo desta instalação, para as dicas que ensinam o comando: a mesma do dc_files() do
+# _common.sh, que este script não sourceia (ver acima), lida do REVERSE_PROXY do .env. Dica só com o prod numa
+# instalação atrás de proxy externo ou da portaria recriaria o Caddy pedindo as portas 80/443, e quem a
+# seguisse tiraria o site do ar.
+arquivos_do_compose() {  # arquivos_do_compose <.env>
+  local rp
+  rp="$({ grep -E '^REVERSE_PROXY=' "$1" 2>/dev/null || true; } | tail -1 | cut -d= -f2- | tr -d "\"' \r")"
+  case "$rp" in
+    traefik)  printf -- '-f %s -f docker-compose.traefik.yml' "$COMPOSE_FILE" ;;
+    npm)      printf -- '-f %s -f docker-compose.npm.yml' "$COMPOSE_FILE" ;;
+    portaria) printf -- '-f %s -f docker-compose.portaria.yml' "$COMPOSE_FILE" ;;
+    *)        printf -- '-f %s' "$COMPOSE_FILE" ;;
+  esac
+}
+
 # ── 0. Achar a instalação ────────────────────────────────────────────────────
 # O install.sh clona em ./deskcommcrm por padrão, mas o operador pode ter posto
 # em qualquer lugar. Procuramos no cwd, no caminho padrão, e por último varremos
@@ -160,7 +175,7 @@ item "worker  : ${IMG_WORKER:-(não encontrado)}${CRIADA_WORKER:+   ${D}imagem d
 if [ -z "$IMG_WORKER" ]; then
   printf '\n%s⚠ Não achei o contêiner do worker.%s\n' "$Y" "$Z"
   printf '  Ou a stack está parada, ou esta instalação não tem o agente de IA.\n'
-  printf '  Suba com: docker compose -f %s up -d   e rode este diagnóstico de novo.\n' "$COMPOSE_FILE"
+  printf '  Suba com: docker compose %s up -d   e rode este diagnóstico de novo.\n' "$(arquivos_do_compose .env)"
   exit 2
 fi
 

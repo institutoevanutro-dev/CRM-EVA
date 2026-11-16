@@ -1560,6 +1560,107 @@ STUB
 npm_rede_e2e "rede do NPM presente: install/update seguem"        segue 0
 npm_rede_e2e "rede do NPM sumiu (prune/down -v): morre explicando" morre 1
 
+echo "proxy reverso: portaria (várias instalações no mesmo servidor)"
+# Também é sempre escrito no .env, por quem monta a portaria (o evalink-instalador). As três provas são as do
+# NPM: dc()/dc_files() entram o override, quem não usa o modo não vê o override, e a rede ausente morre
+# explicando antes do erro opaco do compose. As duas cópias de dc_files contam: a do install.sh (a que vale
+# aqui, porque o install.sh foi carregado por último) e a do _common.sh (a do update.sh).
+if REVERSE_PROXY=portaria dc_files | grep -q 'docker-compose.portaria.yml'; then
+  printf '  ✓ dc_files() do install.sh entra o docker-compose.portaria.yml com REVERSE_PROXY=portaria\n'
+else
+  printf '  ✗ dc_files() do install.sh não entrou o override da portaria (deu: %s)\n' "$(REVERSE_PROXY=portaria dc_files)"; fail=1
+fi
+if (REVERSE_PROXY=portaria bash -c '. "$1/_common.sh"; dc_files' _ "$PWD") | grep -q 'docker-compose.portaria.yml'; then
+  printf '  ✓ dc_files() do _common.sh entra o docker-compose.portaria.yml com REVERSE_PROXY=portaria\n'
+else
+  printf '  ✗ dc_files() do _common.sh não entrou o override da portaria\n'; fail=1
+fi
+if REVERSE_PROXY=caddy dc_files | grep -q 'portaria'; then
+  printf '  ✗ dc_files() entrou o override da portaria SEM REVERSE_PROXY=portaria (vacuidade)\n'; fail=1
+else
+  printf '  ✓ REVERSE_PROXY=caddy (default): dc_files() não menciona a portaria\n'
+fi
+
+# O diagnostico.sh não sourceia o _common.sh (roda avulso, em máquina antiga): a dica "Suba com" tem a lista de -f
+# dele, lida do .env. A função sai do arquivo e é comparada com o dc_files() do _common.sh em cada modo; dica só com o
+# prod atrás da portaria recriaria o Caddy pedindo as portas 80/443 e tiraria a clínica (e as outras) do ar.
+diagnostico_dica_e2e() {
+  local dir funcao modo env_linha esperado deu kit="$PWD"
+  dir="$(mktemp -d)"
+  funcao="$(awk '/^arquivos_do_compose\(\) \{/{dentro=1} dentro{print} dentro && /^\}$/{exit}' ./diagnostico.sh)"
+  if [ -z "$funcao" ]; then printf '  ✗ diagnostico.sh: arquivos_do_compose() sumiu\n'; fail=1; rm -rf "$dir"; return; fi
+  for modo in portaria traefik npm caddy vazio; do
+    case "$modo" in
+      vazio) env_linha='' ; esperado="$(REVERSE_PROXY=caddy bash -c '. "$1/_common.sh"; dc_files' _ "$kit")" ;;
+      *) env_linha="REVERSE_PROXY=\"$modo\"" ; esperado="$(REVERSE_PROXY="$modo" bash -c '. "$1/_common.sh"; dc_files' _ "$kit")" ;;
+    esac
+    printf 'A=1\r\n%s\r\n' "$env_linha" > "$dir/.env"   # CRLF de propósito: .env editado no Windows
+    deu="$(COMPOSE_FILE=docker-compose.prod.yml bash -c "$funcao"'
+arquivos_do_compose "$1"' _ "$dir/.env")"
+    if [ "$deu" = "$esperado" ]; then printf '  ✓ diagnostico.sh, REVERSE_PROXY=%s: a dica leva %s\n' "$modo" "$deu"
+    else printf '  ✗ diagnostico.sh, REVERSE_PROXY=%s: a dica leva "%s", o kit usa "%s"\n' "$modo" "$deu" "$esperado"; fail=1; fi
+  done
+  rm -rf "$dir"
+  if grep -q 'Suba com: docker compose %s up -d.*"$(arquivos_do_compose .env)"' ./diagnostico.sh; then
+    printf '  ✓ a dica "Suba com" do diagnostico.sh usa a lista de -f do modo\n'
+  else
+    printf '  ✗ a dica "Suba com" do diagnostico.sh não usa arquivos_do_compose\n'; fail=1
+  fi
+}
+diagnostico_dica_e2e
+
+portaria_dc_e2e() {
+  local dir kit="$PWD"
+  dir="$(mktemp -d)"; mkdir -p "$dir/bin"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" > "%s/args"\n' "$dir" > "$dir/bin/docker"
+  chmod +x "$dir/bin/docker"
+  (cd "$dir" && env PATH="$dir/bin:$PATH" REVERSE_PROXY=portaria bash -c '. "$1/_common.sh"; dc up -d caddy' _ "$kit") >/dev/null 2>&1
+  if grep -qx 'compose -f docker-compose.prod.yml -f docker-compose.portaria.yml up -d caddy' "$dir/args" 2>/dev/null; then
+    printf '  ✓ dc() chama o compose com os dois arquivos, na ordem\n'
+  else
+    printf '  ✗ dc() não chamou o compose com os dois arquivos (deu: %s)\n' "$(cat "$dir/args" 2>/dev/null)"; fail=1
+  fi
+  rm -rf "$dir"
+}
+portaria_dc_e2e
+
+# O dublê responde as três perguntas que a guarda faz ao Docker: a versão do compose (o `ports: !reset []`
+# do override exige 2.24+), se a rede existe e qual a faixa dela. Os padrões são os de um servidor bom, para
+# que cada caso mude UMA coisa e a recusa só possa ter um motivo. Quem morre tem de dizer o motivo (6º
+# argumento): sem isso, a rede ausente "morreria" também por uma versão que o dublê esquecesse de responder.
+portaria_rede_e2e() {  # portaria_rede_e2e <descrição> <segue|morre> <rede existe: 0 ok, 1 sumiu> [versão do compose] [faixa da rede] [trecho da recusa]
+  local desc="$1" esperado="$2" existe="$3" versao="${4:-2.24.0}" faixa="${5:-10.231.231.0/24}" motivo="${6:-}"
+  local dir real saida kit="$PWD"
+  dir="$(mktemp -d)"; mkdir -p "$dir/bin"
+  cat > "$dir/bin/docker" <<STUB
+#!/usr/bin/env bash
+[ "\$1 \$2 \$3" = "compose version --short" ] && { printf '%s\n' "$versao"; exit 0; }
+if [ "\$1" = network ] && [ "\$2" = inspect ]; then
+  [ "$existe" = 0 ] || exit 1
+  case "\$*" in *Subnet*) printf '%s\n' "$faixa" ;; esac
+  exit 0
+fi
+exit 0
+STUB
+  chmod +x "$dir/bin/docker"
+  if saida="$(cd "$dir" && env PATH="$dir/bin:$PATH" REVERSE_PROXY=portaria PROJECT_DIR="$dir" NO_COLOR=1 \
+        bash -c '. "$1/_common.sh"; garantir_rede_do_proxy' _ "$kit" 2>&1)"
+  then real=segue; else real=morre; fi
+  rm -rf "$dir"
+  if [ "$real" != "$esperado" ]; then
+    printf '  ✗ %s  (deu %s, esperava %s)\n' "$desc" "$real" "$esperado"; fail=1
+  elif [ -n "$motivo" ] && ! printf '%s' "$saida" | grep -qF -- "$motivo"; then
+    printf '  ✗ %s  (morreu, mas sem dizer "%s": %s)\n' "$desc" "$motivo" "$saida"; fail=1
+  else printf '  ✓ %s\n' "$desc"; fi
+}
+portaria_rede_e2e "rede da portaria presente: install/update seguem" segue 0
+portaria_rede_e2e "rede da portaria ausente: morre explicando"      morre 1 2.24.0 10.231.231.0/24 "não existe"
+portaria_rede_e2e "compose 2.23.0 (sem !reset): morre nomeando a versão" morre 0 2.23.0 10.231.231.0/24 "2.23.0"
+portaria_rede_e2e "compose 2.24.0: segue"                             segue 0 2.24.0
+portaria_rede_e2e "compose v2.30.1 (com o v na frente): segue"        segue 0 v2.30.1
+portaria_rede_e2e "rede com outra faixa (10.99.0.0/24): morre explicando" morre 0 2.24.0 10.99.0.0/24 "10.99.0.0/24"
+portaria_rede_e2e "rede com a faixa do .env (10.231.231.0/24): segue" segue 0 2.24.0 10.231.231.0/24
+
 echo "proxy reverso: quanta confiança a eleição merece"
 # A eleição por porta publicada traz a evidência (a coluna Ports diz ':80->'); a
 # varredura por modo host não traz nenhuma — em modo host a coluna é vazia para
