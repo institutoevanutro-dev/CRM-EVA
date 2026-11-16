@@ -22,6 +22,10 @@ const rotulo: Record<string, string> = {
   aprovada: "Aprovada",
   recusada: "Recusada",
   expirada: "Expirada",
+  aberto: "Em aberto",
+  usado: "Usado numa venda",
+  retido: "Retido (paciente faltou)",
+  estornado: "Estornado",
 };
 export function FinanceiroDoContato({ contactId }: { contactId: string }) {
   const idioma = useTagDeIdioma();
@@ -143,6 +147,29 @@ export function FinanceiroDoContato({ contactId }: { contactId: string }) {
                     </li>
                   ))}
                 </ul>
+              )}
+              <h3 className="font-semibold">{t("Sinais")}</h3>
+              {!(dados.resumo.sinais ?? []).length ? (
+                <p>{t("Nenhum sinal registrado.")}</p>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    {t(
+                      "O sinal entra no faturamento no dia em que o paciente paga; a venda que usa o sinal entra só pelo restante.",
+                    )}
+                  </p>
+                  <ul className="space-y-2" data-testid="sinais-do-contato">
+                    {(dados.resumo.sinais ?? []).map((s) => (
+                      <li key={s.id} className="flex flex-wrap justify-between gap-2 border-b py-2">
+                        <span>
+                          {new Date(`${s.data}T12:00:00Z`).toLocaleDateString(idioma, { timeZone: "UTC" })} ·{" "}
+                          {t(rotulo[s.situacao]!)}
+                        </span>
+                        <span>{brl(s.valor_cents)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
               {dados.resumo.limitado ? (
                 <p>
