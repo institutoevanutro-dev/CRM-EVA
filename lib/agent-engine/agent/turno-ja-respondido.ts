@@ -317,3 +317,74 @@ export async function respostaFicouObsoleta(
   );
   return rows[0]?.obsoleta === true;
 }
+
+/**
+ * ESPERA A INGESTÃO EM CURSO antes de aplicar a régua de resposta obsoleta.
+ *
+ * ## O defeito (medido em produção, 2026-11-13)
+ *
+ * O cliente mandou duas mensagens com 18 s entre si. A segunda foi gravada às
+ * 10:42:30.37; o turno da primeira pediu o primeiro envio às 10:42:33.12 e a
+ * régua rodou nesse instante. A mensagem nova já era "mais nova que a vista",
+ * mas ainda não tinha PROVA de que alguém responderia: o
+ * `ai_agent.dispatch_requested` dela só nasceu às 10:42:33.22, porque a
+ * ingestão (`aplicarEfeitosPosEntrada`) drena o pipeline de eventos — o
+ * `message.received` dela, em `processing` — antes de pedir o despacho. A
+ * régua concluiu "ninguém responde depois", a resposta desatualizada saiu, e o
+ * turno da segunda mensagem cumprimentou o cliente de novo.
+ *
+ * ## Por que esperar, e não aceitar o `message.received` como prova
+ *
+ * A régua só descarta com PROVA de que há quem responda
+ * (`tests/invariants/resposta-descartada-tem-quem-responda.test.ts`). O
+ * `message.received` em processamento é promessa, não prova: a ingestão pode
+ * terminar sem despacho (opt-out, contato oculto, conversa assumida por humano,
+ * agente fora da janela). Então este passo não muda o critério — só espera,
+ * por pouco tempo, a ingestão da mensagem nova terminar, e devolve a decisão à
+ * régua de sempre. Estourou a espera: segue como antes, e a resposta sai.
+ *
+ * Conta tentativas em vez de ler o relógio: o `sleep` do turno é injetável e,
+ * nos testes, não espera nada — um laço guiado pelo relógio nunca terminaria.
+ */
+export const INTERVALO_DA_ESPERA_DA_INGESTAO_MS = 250;
+
+export async function ingestaoEmCurso(
+  db: Queryable,
+  alvo: Pick<AlvoDoTurno, 'organizationId' | 'conversationId' | 'jobId'>,
+): Promise<boolean> {
+  const { rows } = await db.query<{ em_curso: boolean }>(
+    `select exists (
+       select 1 from event_log e
+        where e.organization_id = $1
+          and e.event_type = 'message.received'
+          and e.status in ('pending', 'processing')
+          and e.payload->>'conversation_id' = $2::uuid::text
+          -- Só a mensagem que o turno NÃO viu: a data é a da mensagem, não a do
+          -- evento (um evento reprocessado é mais novo que a mensagem dele).
+          and exists (
+                select 1 from messages msg
+                 where msg.organization_id = $1
+                   and msg.id = (e.payload->>'message_id')::uuid
+                   and msg.created_at > coalesce(
+                         (select (payload->>'ultima_inbound_vista_em')::timestamptz
+                            from job_queue where organization_id = $1 and id = $3),
+                         '-infinity'))
+     ) as em_curso`,
+    [alvo.organizationId, alvo.conversationId, alvo.jobId],
+  );
+  return rows[0]?.em_curso === true;
+}
+
+export async function respostaFicouObsoletaAposIngestao(
+  db: Queryable,
+  alvo: Pick<AlvoDoTurno, 'organizationId' | 'conversationId' | 'jobId'>,
+  tetoMs: number,
+  espera: { ms: number; dormir: (ms: number) => Promise<void> },
+): Promise<boolean> {
+  if (!(tetoMs > 0)) return false;
+  const tentativas = espera.ms > 0 ? Math.ceil(espera.ms / INTERVALO_DA_ESPERA_DA_INGESTAO_MS) : 0;
+  for (let i = 0; i < tentativas && (await ingestaoEmCurso(db, alvo)); i += 1) {
+    await espera.dormir(INTERVALO_DA_ESPERA_DA_INGESTAO_MS);
+  }
+  return respostaFicouObsoleta(db, alvo, tetoMs);
+}
