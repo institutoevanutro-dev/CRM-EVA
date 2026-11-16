@@ -30,6 +30,18 @@ export const ResumoFinanceiro = z.object({
       }),
     )
     .max(100),
+  /** Sinais do paciente (eva-financeiro 0087): crédito pago antes da venda, faturamento no dia do pagamento. Financeiro antigo não manda. */
+  sinais: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        data: z.string(),
+        valor_cents: cents,
+        situacao: z.enum(["aberto", "usado", "retido", "estornado"]),
+      }),
+    )
+    .max(100)
+    .default([]),
 });
 export type ResumoFinanceiro = z.infer<typeof ResumoFinanceiro>;
 export type ConfigFinanceiro = { url: string; token: string };
