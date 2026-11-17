@@ -40,7 +40,7 @@ describe("controle de aparência da conversa", () => {
   it("três grupos de rádio nativos, com o atual marcado", async () => {
     render(<Palco aoMudar={() => {}} />);
     await abrir();
-    expect(screen.getByRole("radio", { name: "Liso" })).toHaveProperty("checked", true);
+    expect(screen.getByRole("radio", { name: "Desenho" })).toHaveProperty("checked", true);
     expect(screen.getByRole("radio", { name: "Cor da marca" })).toHaveProperty("checked", true);
     expect(screen.getByRole("radio", { name: "Branco" })).toHaveProperty("checked", true);
   });
@@ -68,6 +68,6 @@ describe("controle de aparência da conversa", () => {
     });
     await waitFor(() => expect(aoMudar).toHaveBeenLastCalledWith(APARENCIA_PADRAO));
     expect(toastErro).toHaveBeenCalled();
-    expect(screen.getByRole("radio", { name: "Liso" })).toHaveProperty("checked", true);
+    expect(screen.getByRole("radio", { name: "Desenho" })).toHaveProperty("checked", true);
   });
 });

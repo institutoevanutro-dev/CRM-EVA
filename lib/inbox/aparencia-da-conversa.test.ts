@@ -43,9 +43,11 @@ describe("aparência da conversa — contraste", () => {
 });
 
 // I1: o recibo "Lida" lê mais que "Entregue" em toda aparência — ícone ≥ 3:1.
-// A marca entra com a cor de fábrica (accent-600 no claro, accent-400 no escuro).
+// A marca entra com a cor de fábrica dos graus que ela usa (accent-100 no claro,
+// accent-800 no escuro — o balão "estilo WhatsApp" de 16/11/2026).
 describe("aparência da conversa — recibo Lida", () => {
-  const MARCA = { claro: "#506d48", escuro: "#82a077" } as const;
+  const MARCA = { claro: "#e4ebe0", escuro: "#374731" } as const;
+  const TEXTO = { claro: "#171717", escuro: "#f1ede0" } as const;
   for (const [nome, p] of Object.entries(ENVIADAS)) {
     for (const tema of ["claro", "escuro"] as const) {
       const { fundo, lida } = p[tema];
@@ -65,15 +67,26 @@ describe("aparência da conversa — recibo Lida", () => {
     expect(css).toContain("--bolha-enviada-lida: var(--bolha-enviada-lida-escuro)");
   });
 
-  it("a marca de fábrica no CSS é a medida acima", () => {
+  for (const tema of ["claro", "escuro"] as const) {
+    it(`marca (${tema}): texto e hora do balão ≥ 4.5:1`, () => {
+      expect(ENVIADAS.marca[tema].texto).toBe("var(--color-text)");
+      expect(razaoDeContraste(MARCA[tema], TEXTO[tema])).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+
+  it("a marca de fábrica e o texto no CSS são os medidos acima", () => {
     const css = readFileSync("app/globals.css", "utf8");
-    expect(css).toContain(`--color-accent-600: ${MARCA.claro}`);
-    expect(css).toContain(`--color-accent-400: ${MARCA.escuro}`);
+    expect(ENVIADAS.marca.claro.fundo).toBe("var(--color-accent-100)");
+    expect(ENVIADAS.marca.escuro.fundo).toBe("var(--color-accent-800)");
+    expect(css).toContain(`--color-accent-100: ${MARCA.claro}`);
+    expect(css).toContain(`--color-accent-800: ${MARCA.escuro}`);
+    expect(css).toMatch(new RegExp(`--color-text:\\s*${TEXTO.claro}`));
+    expect(css).toMatch(new RegExp(`--color-text:\\s*${TEXTO.escuro}`));
   });
 });
 
 describe("aparência da conversa — leitura do metadado (gravável pelo usuário)", () => {
-  it("sem nada gravado, é o desenho de antes", () => {
+  it("sem nada gravado, é o padrão", () => {
     expect(lerAparencia(undefined)).toEqual(APARENCIA_PADRAO);
     expect(lerAparencia("lixo")).toEqual(APARENCIA_PADRAO);
   });

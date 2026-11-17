@@ -14,8 +14,11 @@ import { z } from "zod";
  * só os identificadores desta lista e cai no padrão campo a campo. Nenhum valor
  * cru do metadado chega ao CSS — o estilo sai sempre das tabelas abaixo.
  *
- * O padrão (`liso` + `marca` + `branco`) é exatamente o desenho de antes: quem
- * nunca abrir o controle não vê nada mudar.
+ * O padrão (`desenho` + `marca` + `branco`) é o visual "estilo WhatsApp" pedido
+ * pelo dono em 16/11/2026: fundo com desenho NOSSO de baixo contraste
+ * (`--conversa-desenho` no `globals.css`), balão da equipe na cor da marca —
+ * tom claro no tema claro, escurecido no escuro — e o do cliente em superfície
+ * neutra. Quem já escolheu outra combinação continua com a dela.
  */
 
 /** Um par de cores por tema. `var(--token)` acompanha a marca e o tema sozinho. */
@@ -31,21 +34,31 @@ type ParEnviada = Par & { lida: string };
 type EnviadaPorTema = { claro: ParEnviada; escuro: ParEnviada };
 
 export const FUNDOS = {
+  desenho: {
+    rotulo: "Desenho",
+    cor: "var(--color-bg)",
+    // O desenho mora no `globals.css` (uma versão por tema, mesma régua dos balões).
+    imagem: "var(--conversa-desenho)",
+    tamanho: "240px 240px",
+  },
   liso: {
     rotulo: "Liso",
     cor: "var(--color-bg)",
     imagem: "none",
+    tamanho: "auto",
   },
   pontilhado: {
     rotulo: "Pontilhado",
     cor: "var(--color-bg)",
     imagem:
       "radial-gradient(color-mix(in srgb, var(--color-text) 14%, transparent) 1px, transparent 1.6px)",
+    tamanho: "16px 16px",
   },
   tom: {
     rotulo: "Tom suave",
     cor: "color-mix(in srgb, var(--color-accent) 9%, var(--color-bg))",
     imagem: "none",
+    tamanho: "auto",
   },
 } as const;
 
@@ -53,10 +66,12 @@ export const FUNDOS = {
 export const ENVIADAS = {
   marca: {
     rotulo: "Cor da marca",
-    // No escuro a marca é CLARA (accent-400 com texto escuro): o azul claro
-    // das outras aparências escuras sumiria nela, então leva um azul fundo.
-    claro: { fundo: "var(--primary)", texto: "var(--primary-foreground)", lida: "#bfe3f5" },
-    escuro: { fundo: "var(--primary)", texto: "var(--primary-foreground)", lida: "#1e3a8a" },
+    // A marca da INSTALAÇÃO, nunca um verde fixo: tom claro da rampa no tema
+    // claro e tom escurecido no escuro, os dois com o texto do tema por cima.
+    // Os graus da rampa têm luminosidade fixa para qualquer semente, então o
+    // contraste medido na Sage (`aparencia-da-conversa.test.ts`) vale para todas.
+    claro: { fundo: "var(--color-accent-100)", texto: "var(--color-text)", lida: "#0369a1" },
+    escuro: { fundo: "var(--color-accent-800)", texto: "var(--color-text)", lida: "#7dd3fc" },
   },
   verde: {
     rotulo: "Verde claro",
@@ -80,7 +95,8 @@ export const RECEBIDAS = {
   branco: {
     rotulo: "Branco",
     claro: { fundo: "var(--color-surface)", texto: "var(--color-text)" },
-    escuro: { fundo: "var(--color-surface)", texto: "var(--color-text)" },
+    // No escuro a superfície elevada: a comum quase some sobre o fundo da conversa.
+    escuro: { fundo: "var(--color-surface-elevated)", texto: "var(--color-text)" },
   },
   cinza: {
     rotulo: "Cinza",
@@ -101,7 +117,7 @@ export type Recebida = keyof typeof RECEBIDAS;
 export type AparenciaDaConversa = { fundo: Fundo; enviada: Enviada; recebida: Recebida };
 
 export const APARENCIA_PADRAO: AparenciaDaConversa = {
-  fundo: "liso",
+  fundo: "desenho",
   enviada: "marca",
   recebida: "branco",
 };
@@ -143,6 +159,7 @@ export function estiloDaAparencia(a: AparenciaDaConversa): CSSProperties {
   return {
     "--conversa-fundo-cor": fundo.cor,
     "--conversa-fundo-imagem": fundo.imagem,
+    "--conversa-fundo-tamanho": fundo.tamanho,
     "--bolha-enviada-fundo-claro": env.claro.fundo,
     "--bolha-enviada-texto-claro": env.claro.texto,
     "--bolha-enviada-fundo-escuro": env.escuro.fundo,

@@ -219,19 +219,18 @@ export function ConversationListItem({
       type="button"
       data-conversation-id={conversation.id}
       onClick={() => onSelect(conversation.id)}
+      // Linha de app de mensagem: sem borda entre as linhas (o respiro separa),
+      // a escolhida com fundo um tom acima e o foco do teclado num anel por dentro.
       className={cn(
-        "group relative flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-elevated",
-        onAlternarSelecao ? "min-w-0 flex-1" : "border-b border-border/70",
-        "focus-visible:outline-hidden focus-visible:bg-surface-elevated",
-        isSelected && "bg-accent/10 hover:bg-accent/10",
+        "group relative flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-surface-elevated/60",
+        onAlternarSelecao && "min-w-0 flex-1",
+        "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        isSelected && "bg-surface-elevated hover:bg-surface-elevated",
       )}
       aria-current={isSelected ? "true" : undefined}
     >
-      {isSelected && (
-        <span className="absolute inset-y-0 left-0 w-0.5 bg-accent" aria-hidden />
-      )}
       <div className="relative shrink-0">
-        <AvatarDoContato contato={c} nome={displayName} reserva={phoneFallback} />
+        <AvatarDoContato contato={c} nome={displayName} reserva={phoneFallback} className="h-12 w-12" />
         <SeloDoCanal
           canal={viaInstagram ? "instagram" : "whatsapp"}
           tamanho="pequeno"
@@ -253,10 +252,10 @@ export function ConversationListItem({
             </span>
           </div>
         )}
-        <div className="flex items-baseline justify-between gap-2">
+        <div className="flex items-baseline justify-between gap-2 pt-0.5">
           <span
             className={cn(
-              "truncate text-sm",
+              "truncate text-[15px] leading-5",
               unread > 0 ? "font-semibold text-text" : "font-medium text-text",
               c?.is_anonymized && "font-normal italic text-text-muted",
             )}
@@ -264,7 +263,11 @@ export function ConversationListItem({
             {displayName}
           </span>
           <span
-            className="shrink-0 text-[11px] tabular-nums text-text-subtle"
+            // Com não lidas a hora acende na cor da marca, junto com a bolinha.
+            className={cn(
+              "shrink-0 text-xs tabular-nums",
+              unread > 0 ? "font-semibold text-accent" : "text-text-subtle",
+            )}
             // O mesmo lugar da tela mostra duas coisas diferentes conforme a aba:
             // na Fila é "desde quando o cliente escreveu", nas outras é "há quanto
             // tempo a conversa mexeu". O rótulo existe só onde a leitura muda.
@@ -277,7 +280,7 @@ export function ConversationListItem({
         <div className="mt-0.5 flex items-center justify-between gap-2">
           <p
             className={cn(
-              "min-w-0 truncate text-[13px]",
+              "min-w-0 truncate text-sm leading-5",
               unread > 0 ? "text-text" : "text-text-muted",
             )}
           >
@@ -287,7 +290,7 @@ export function ConversationListItem({
             {truncated}
           </p>
           {unread > 0 && (
-            <span className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-[10px] font-semibold tabular-nums text-accent-foreground">
+            <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-semibold tabular-nums text-accent-foreground">
               {unread}
             </span>
           )}
@@ -366,7 +369,7 @@ export function ConversationListItem({
   return (
     <div
       className={cn(
-        "relative flex w-full items-start border-b border-border/70",
+        "relative flex w-full items-start",
         selecionado && "bg-accent-soft",
       )}
     >
@@ -379,7 +382,7 @@ export function ConversationListItem({
         data-testid={`selecao-em-lote-${conversation.id}`}
         onClick={() => onAlternarSelecao(conversation.id)}
         className={cn(
-          "mt-3 ml-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors",
+          "mt-7 ml-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors",
           "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent",
           selecionado
             ? "border-accent bg-accent text-accent-foreground"

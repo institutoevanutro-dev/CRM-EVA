@@ -93,12 +93,11 @@ interface Props {
   quemEnviouAoProntuario?: string | null;
   erroAoProntuario?: string | null;
   /**
-   * Posição no turno (I8, `lib/inbox/turnos.ts`): o rótulo de quem falou só na
-   * PRIMEIRA bolha da sequência e a ponta só na ÚLTIMA. Sem quem calcule (a
-   * leitura do super-admin), cada bolha é um turno — o desenho de antes.
+   * Posição no turno (I8, `lib/inbox/turnos.ts`): o rótulo de quem falou e a
+   * PONTA do balão só na PRIMEIRA bolha da sequência, como num app de mensagem.
+   * Sem quem calcule (a leitura do super-admin), cada bolha é um turno.
    */
   inicioDoTurno?: boolean;
-  fimDoTurno?: boolean;
 }
 
 /**
@@ -195,7 +194,6 @@ export const MessageBubble = memo(function MessageBubble({
   quemEnviouAoProntuario = null,
   erroAoProntuario = null,
   inicioDoTurno = true,
-  fimDoTurno = true,
 }: Props) {
   const [ocupado, setOcupado] = useState(false);
   const [confirmandoReenvio, setConfirmandoReenvio] = useState(false);
@@ -413,9 +411,14 @@ export const MessageBubble = memo(function MessageBubble({
           isBareSticker
             ? "px-0 py-0"
             : cn(
-                "rounded-2xl px-3 py-2",
-                // A ponta só na última bolha do turno (I8).
-                fimDoTurno && (isOutbound ? "rounded-br-sm" : "rounded-bl-sm"),
+                "rounded-lg px-3 py-1.5 shadow-xs",
+                // A ponta só na PRIMEIRA bolha do turno (I8), no canto de cima do
+                // lado de quem falou; o desenho mora no `globals.css` (`.bolha-ponta`).
+                inicioDoTurno &&
+                  cn(
+                    "bolha-ponta",
+                    isOutbound ? "bolha-ponta-enviada rounded-tr-none" : "bolha-ponta-recebida rounded-tl-none",
+                  ),
                 // Três vozes — quem lê a conversa precisa saber de relance se
                 // foi o paciente, o automático ou alguém da equipe: paciente em
                 // branco sobre o fundo creme; equipe CHEIA na cor escolhida; o
@@ -434,12 +437,14 @@ export const MessageBubble = memo(function MessageBubble({
                 //
                 // Falhou (I1): a bolha INTEIRA em tons de erro. A borda fina de
                 // antes media 1,03:1 — falha dita só por cor, e mal.
+                //
+                // Os balões com CONTORNO levam a ponta na cor dele (`bolha-ponta-contorno`).
                 falhou
-                  ? "border border-error bg-error-bg text-error-fg"
+                  ? "bolha-ponta-contorno border border-error bg-error-bg text-error-fg [--bolha-borda:1px] [--bolha-ponta:var(--color-error)]"
                   : !isOutbound
-                  ? "border border-border bg-[var(--bolha-recebida-fundo,var(--color-surface))] text-[var(--bolha-recebida-texto,var(--color-text))]"
+                  ? "bg-[var(--bolha-recebida-fundo,var(--color-surface))] text-[var(--bolha-recebida-texto,var(--color-text))]"
                   : message.sent_via === "ai"
-                    ? "border-[1.5px] border-accent bg-surface text-text"
+                    ? "bolha-ponta-contorno border-[1.5px] border-accent bg-surface text-text [--bolha-borda:1.5px] [--bolha-ponta:var(--color-accent)]"
                     : "bg-[var(--bolha-enviada-fundo,var(--primary))] text-[var(--bolha-enviada-texto,var(--primary-foreground))]",
               ),
           // Apagada sai das cores da DIREÇÃO e vai para o CINZA: a diferença

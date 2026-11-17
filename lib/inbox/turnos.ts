@@ -4,8 +4,8 @@ import type { Message } from "@/lib/types/messaging";
  * TURNOS DA CONVERSA (I8) — onde começa e onde termina cada sequência.
  *
  * Mensagens seguidas da MESMA voz, com até 5 min entre uma e a próxima, são um
- * turno: o rótulo de quem falou aparece só na primeira bolha e a ponta só na
- * última. "Mesma voz" é mesma direção, mesma origem (`sent_via`) e mesmo autor:
+ * turno: o rótulo de quem falou e a ponta do balão aparecem só na primeira
+ * bolha. "Mesma voz" é mesma direção, mesma origem (`sent_via`) e mesmo autor:
  * a pessoa da equipe (`sent_by_user_id`) ou, no automático, o agente gravado
  * (`ai_actor_name`) — e a resposta pronta é voz própria, porque tem rótulo
  * próprio. Qualquer outra coisa no meio (uma nota interna) quebra o turno.

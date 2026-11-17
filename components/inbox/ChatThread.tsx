@@ -372,7 +372,7 @@ export function ChatThread({
               {/* Pílula OPACA: ela fica presa no alto enquanto a conversa rola, e
                   a versão translúcida (fundo 80% + blur) deixava a data em cima
                   do texto da mensagem que passava por baixo (print de 07/10/2026). */}
-              <span className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-[11px] font-medium text-text-muted">
+              <span className="rounded-lg bg-surface px-3 py-1 text-xs font-medium text-text-muted shadow-xs">
                 {dayLabel(g.date, t, localeDaData)}
               </span>
             </div>
@@ -416,7 +416,6 @@ export function ChatThread({
                   erroAoProntuario={envioAoProntuario.ultimoErro.get(item.data.id) ?? null}
                   quemEnviouAoProntuario={nomePorUsuario.get(item.data.prontuario_exame?.enviado_por_user_id ?? "") ?? null}
                   inicioDoTurno={turnos.get(item.data.id)?.inicio ?? true}
-                  fimDoTurno={turnos.get(item.data.id)?.fim ?? true}
                 />
               ),
             )}

@@ -576,7 +576,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         className={cn(
-          "relative border-t border-border bg-bg px-3 py-2.5",
+          "relative border-t border-border bg-surface px-3 py-2.5",
           mode === "note" && "border-warning/40 bg-warning-bg",
         )}
       >
@@ -829,8 +829,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               // `min-w-0`: com os alvos de 44px do toque (porte do #3191) a
               // fileira de 390px não cabe o campo na largura intrínseca dele, e
               // quem encolhe tem de ser o campo, não o botão de enviar.
-              "max-h-40 min-h-11 min-w-0 flex-1 resize-none rounded-xl border border-border bg-surface px-3.5 py-2.5 text-base text-ellipsis md:text-sm lg:min-h-10",
-              "placeholder:truncate placeholder:text-muted-foreground focus:ring-1 focus:ring-ring focus:outline-hidden",
+              // Campo arredondado de app de mensagem: pílula numa linha, cantos
+              // de 20px quando cresce. Sobre a faixa em `surface`, o campo vai
+              // na superfície elevada e a borda de campo fica para o foco.
+              "max-h-40 min-h-11 min-w-0 flex-1 resize-none rounded-[1.25rem] border border-transparent bg-surface-elevated px-4 py-2.5 text-base text-ellipsis md:text-sm lg:min-h-10",
+              "placeholder:truncate placeholder:text-muted-foreground focus:border-border-input focus:ring-1 focus:ring-ring focus:outline-hidden",
             )}
             disabled={mode === "note" ? isDisabled : respostaBarrada}
             aria-label={t("Mensagem")}

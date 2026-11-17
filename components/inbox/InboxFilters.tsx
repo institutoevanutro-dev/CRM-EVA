@@ -54,13 +54,14 @@ export type InboxTab =
  * letra e cor do texto. Altura fixa (32px) para a faixa não dançar quando a
  * contagem aparece ou some.
  */
+/** Abas em PÍLULA, como os filtros de um app de mensagem: a ativa no tom da marca. */
 const CLASSE_DA_ABA =
-  "-mb-px h-8 shrink-0 gap-1 rounded-none border-b-2 border-transparent px-0.5 text-xs font-medium text-text-muted transition-colors hover:text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:border-accent data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-text data-[state=active]:shadow-none";
+  "h-8 shrink-0 gap-1 rounded-full bg-surface-elevated px-3 text-xs font-medium text-text-muted transition-colors hover:text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:bg-accent-soft data-[state=active]:font-semibold data-[state=active]:text-accent-hover data-[state=active]:shadow-none";
 
 /** A contagem da aba em pílula: número solto ao lado do rótulo parecia parte dele ("Fila6"). */
 function Contagem({ n }: { n: number }) {
   return (
-    <span className="rounded-full bg-surface-elevated px-1.5 text-[11px] leading-4 font-medium tabular-nums text-text-muted">
+    <span className="rounded-full bg-surface px-1.5 text-[11px] leading-4 font-medium tabular-nums text-text-muted">
       {n}
     </span>
   );
@@ -646,7 +647,7 @@ export function InboxFilters({ value, onChange }: Props) {
         onValueChange={(v) => onChange(comAba(value, v as InboxTab))}
         className="px-3"
       >
-        <TabsList className="h-auto w-full flex-wrap justify-start gap-x-3 gap-y-1 rounded-none bg-transparent p-0">
+        <TabsList className="h-auto w-full flex-wrap justify-start gap-1.5 rounded-none bg-transparent p-0 pb-2">
           {tabs.filter((tab) => ABAS_PRINCIPAIS.includes(tab)).map((tab) => {
             const meta = INBOX_TABS.find((t) => t.value === tab)!;
             const count = countFor[tab];
@@ -674,7 +675,7 @@ export function InboxFilters({ value, onChange }: Props) {
                   className={cn(
                     CLASSE_DA_ABA,
                     "inline-flex items-center",
-                    abaSecundariaAtiva && "border-accent font-semibold text-text",
+                    abaSecundariaAtiva && "bg-accent-soft font-semibold text-accent-hover",
                   )}
                   aria-label={t("Mais abas")}
                 >
