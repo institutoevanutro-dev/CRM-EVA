@@ -35,6 +35,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { emLotes, lerComparecimentos, lerEventosDoPeriodo, type Contato } from "@/lib/integrations/marketing/eventos-do-periodo";
 import type { VendaPorContato } from "@/lib/integrations/financeiro/cliente";
+import { logger } from "@/lib/logger";
 
 /** Pede as vendas por contato em lotes de 500 (o limite da rota do Financeiro). */
 export type ConsultaVendas = (contatos: string[]) => Promise<VendaPorContato[]>;
@@ -130,13 +131,15 @@ export async function consultaFunilPorOrigem(admin: SupabaseClient, org: string,
 
   const funil = montarFunil({ leads, agendamentos, comparecimentos, sinais, ganhos }, origens);
   if (!vendas || !contatos.length) return funil;
-  let todas: VendaPorContato[];
+  let s: ReturnType<typeof somarVendasPorOrigem>;
   try {
-    todas = [];
+    const todas: VendaPorContato[] = [];
     for (let i = 0; i < contatos.length; i += 500) todas.push(...(await vendas(contatos.slice(i, i + 500))));
-  } catch {
+    // A soma fica DENTRO do try: um valor_cents fora do formato (BigInt lança) não derruba o funil inteiro.
+    s = somarVendasPorOrigem(todas, origens);
+  } catch (err) {
+    logger.warn("funil_por_origem: vendas do Financeiro indisponíveis", { org, error: err instanceof Error ? err.message : String(err) });
     return funil; // Financeiro fora: o funil sai sem as vendas, nunca com zero inventado
   }
-  const s = somarVendasPorOrigem(todas, origens);
   return { ...funil, origens: funil.origens.map((l) => ({ ...l, vendido_cents: s.get(l.origem)!.vendido.toString(), compradores: s.get(l.origem)!.compradores })) };
 }
