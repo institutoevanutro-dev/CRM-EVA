@@ -181,34 +181,6 @@ export function KanbanCard({
           {/* ① identidade — altura FIXA de 2 linhas, com ou sem texto longo. */}
           <div className="flex items-start justify-between gap-2">
             <div className="flex min-w-0 flex-1 items-start gap-1.5">
-              {/* A largura é SEMPRE reservada (`h-4 w-4` num wrapper que não
-                  some), só a tinta é condicional: o card tem orçamento fixo de
-                  altura e largura, e uma caixa que aparece no hover EMPURRANDO
-                  o título faria o quadro inteiro tremer com o mouse. Some por
-                  opacidade, nunca por `hidden`. `focus:opacity-100` no próprio
-                  input: uma caixa invisível e tabulável seria armadilha de
-                  teclado. */}
-              <input
-                type="checkbox"
-                checked={Boolean(isSelected)}
-                aria-label={`${t("Selecionar")}: ${card.title}`}
-                onClick={(e) => {
-                  // O card inteiro tem onClick (abre o dossiê): sem parar a
-                  // propagação, marcar a caixa abriria o dossiê por cima.
-                  e.stopPropagation();
-                  onSelect?.(card.id, e.shiftKey ? "intervalo" : "alterna");
-                }}
-                onChange={() => {
-                  /* estado vem de `isSelected`; quem decide é o onClick acima */
-                }}
-                className={cn(
-                  "mt-1 h-4 w-4 shrink-0 cursor-pointer accent-accent transition-opacity",
-                  "focus:opacity-100 focus-visible:outline-2 focus-visible:outline-accent",
-                  isSelected || isSelecting
-                    ? "opacity-100"
-                    : "opacity-0 group-hover:opacity-100",
-                )}
-              />
               {card.canonicalTag && (
                 <span
                   className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
@@ -223,12 +195,21 @@ export function KanbanCard({
                   handle como button, e com o menu de ações dentro isso vira
                   nested-interactive no axe). Voltar o card para `button`
                   reintroduziria aquele defeito com cara de melhoria de
-                  acessibilidade; deixar só onKeyDown daria uma ação que existe
-                  e NÃO É DESCOBERTA por leitor de tela. O título como button
-                  atende mouse, teclado e leitor sem desfazer a decisão antiga. */}
+                  acessibilidade.
+
+                  ⚠️ NÃO É `<button>` (auditoria 16/11, achado 8). O
+                  @hello-pangea/dnd ignora o gesto que começa em elemento
+                  interativo (button, input, textarea, select…), e o nome é
+                  justamente onde se pega o card: quem arrastava pelo nome
+                  abria o dossiê em vez de mover. Com `role="button"` o leitor
+                  de tela continua anunciando um botão, o mouse arrasta, e o
+                  Enter abre. O Espaço fica com o arrasto por teclado: o sensor
+                  da biblioteca escuta na captura da janela, antes de qualquer
+                  handler daqui, e no card inteiro Espaço já é "levantar". */}
               <h3 className="line-clamp-2 h-10 text-sm font-medium leading-5 text-text">
-                <button
-                  type="button"
+                <span
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => {
                     // `stopPropagation` continua: sem ele o handler do card
                     // rodaria de novo e o gesto seria contado duas vezes (um
@@ -237,13 +218,51 @@ export function KanbanCard({
                     e.stopPropagation();
                     decidirClique(e);
                   }}
-                  className="text-left hover:underline"
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    decidirClique(e);
+                  }}
+                  className="cursor-pointer rounded-sm text-left hover:underline focus-visible:outline-2 focus-visible:outline-accent"
                 >
                   {card.title}
-                </button>
+                </span>
               </h3>
             </div>
-            <KanbanCardActions lead={lead} pipelineId={pipelineId} stages={stages} />
+            <div className="flex shrink-0 items-center gap-1">
+              {/* A caixa mora À DIREITA, junto do "⋯" (achado 31): à esquerda ela
+                  reservava 16 px invisíveis e recuava o título em relação ao
+                  valor logo abaixo. Aqui a largura continua reservada (o card
+                  não treme com o mouse) sem desalinhar nada.
+
+                  Só some onde HÁ hover (achado 30) — o mesmo padrão do "⋯".
+                  Em iPhone e iPad não existe "passar o mouse", e a caixa
+                  invisível escondia a ação em lote inteira. `focus:opacity-100`:
+                  uma caixa invisível e tabulável seria armadilha de teclado. */}
+              <input
+                type="checkbox"
+                checked={Boolean(isSelected)}
+                aria-label={`${t("Selecionar")}: ${card.title}`}
+                onClick={(e) => {
+                  // O card inteiro tem onClick (abre o dossiê): sem parar a
+                  // propagação, marcar a caixa abriria o dossiê por cima.
+                  e.stopPropagation();
+                  onSelect?.(card.id, e.shiftKey ? "intervalo" : "alterna");
+                }}
+                onChange={() => {
+                  /* estado vem de `isSelected`; quem decide é o onClick acima */
+                }}
+                className={cn(
+                  "h-4 w-4 shrink-0 cursor-pointer accent-accent transition-opacity",
+                  "focus:opacity-100 focus-visible:outline-2 focus-visible:outline-accent",
+                  !isSelected &&
+                    !isSelecting &&
+                    "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100",
+                )}
+              />
+              <KanbanCardActions lead={lead} pipelineId={pipelineId} stages={stages} />
+            </div>
           </div>
 
           {/* ② valor — altura reservada mesmo sem valor, senão o card encolhe. */}
@@ -314,18 +333,13 @@ export function KanbanCard({
               />
               <TarefasNoCard tarefas={lead.tarefas} />
             </div>
-            <span
-              className="min-w-0 truncate text-[11px] tabular-nums text-text-muted"
-              title={
-                state.showStageAge && age
-                  ? `${age} ${t("em")} ${card.stageName}`
-                  : `${t("em")} ${card.stageName}`
-              }
-            >
-              {state.showStageAge && age
-                ? `${age} ${t("em")} ${card.stageName}`
-                : `${t("em")} ${card.stageName}`}
-            </span>
+            {/* Só o TEMPO na etapa: o "em <etapa>" repetia em todo card o
+                nome que já está no topo da coluna (achado 31). */}
+            {state.showStageAge && age ? (
+              <span className="min-w-0 truncate text-[11px] tabular-nums text-text-muted" title={`${age} ${t("nesta etapa")}`}>
+                {age}
+              </span>
+            ) : null}
           </div>
         </div>
       )}
