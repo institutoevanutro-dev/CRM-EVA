@@ -56,7 +56,7 @@ export async function POST(
         motivo: input.lost_reason,
         // O detalhe de "Outro motivo" fica na timeline (a frase e o payload);
         // o motivo gravado continua sendo o código que o trigger aceita.
-        ...(input.detalhe
+        ...(input.detalhe && input.lost_reason === "other"
           ? {
               razaoNaTimeline: razaoDaPerdaNaTimeline(`Outro motivo: ${input.detalhe}`),
               payloadNaTimeline: { detalhe: input.detalhe },

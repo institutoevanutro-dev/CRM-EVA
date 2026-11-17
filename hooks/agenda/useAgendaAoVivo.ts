@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
@@ -46,8 +46,10 @@ export function useAgendaAoVivo(recorte: RecorteDaGrade | null) {
     enabled: !!orgId,
   });
 
+  // Chave memoizada: array novo a cada render refazia o intervalo de 30 s do refetch de segurança.
+  const queryKey = useMemo(() => ["agenda", "agendamentos", recorte] as const, [recorte]);
   const seguranca = useRefetchDeSeguranca<Agendamento[]>({
-    queryKey: ["agenda", "agendamentos", recorte],
+    queryKey,
     assinatura: (lista) =>
       (lista ?? [])
         .map((a) => `${a.id}:${a.revision ?? ""}:${a.comeca}:${a.situacao}`)
