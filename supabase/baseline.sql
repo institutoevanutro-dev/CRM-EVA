@@ -38934,6 +38934,38 @@ create or replace trigger trg_contacts_anonimizado_mensagens_agendadas
 
 
 
+-- ---- silencio sem retroativo: marca do acesso da IA no canal (migration 0418) ----
+-- Derivado de supabase/migrations/20261117120000_0418_silencio_sem_retroativo.sql
+-- (incidente e regra: cabeçalho de lá). Coluna nula + trigger, idempotente.
+alter table public.channel_sessions
+  add column if not exists ai_access_since timestamptz;
+comment on column public.channel_sessions.ai_access_since is
+  'Última vez que o alcance da IA no canal mudou (metadata.ai_gate, ai_gate_mode ou ai_test_phone_numbers), gravado pelo trigger trg_canal_marca_acesso_da_ia. A varredura de silêncio não cobra silêncio anterior. Nula = sem mudança desde a migration 0418. Migration 0418.';
+
+create or replace function public.fn_canal_marca_acesso_da_ia()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  new.ai_access_since := now();
+  return new;
+end
+$$;
+revoke execute on function public.fn_canal_marca_acesso_da_ia() from public, anon, authenticated;
+
+drop trigger if exists trg_canal_marca_acesso_da_ia on public.channel_sessions;
+create trigger trg_canal_marca_acesso_da_ia
+  before update of metadata on public.channel_sessions
+  for each row
+  when (
+    old.metadata -> 'ai_gate' is distinct from new.metadata -> 'ai_gate'
+    or old.metadata -> 'ai_gate_mode' is distinct from new.metadata -> 'ai_gate_mode'
+    or old.metadata -> 'ai_test_phone_numbers' is distinct from new.metadata -> 'ai_test_phone_numbers'
+  )
+  execute function public.fn_canal_marca_acesso_da_ia();
+-- ---- fim: silencio sem retroativo (migration 0418) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
@@ -39522,35 +39554,3 @@ end $$;
 comment on column public.calendar_appointments.booking_channel is
   'Como a equipe marcou a consulta: mensagem ou ligacao. Nula = legado ou marcada pela IA. Base do bônus por comparecimento. Migration 0417.';
 -- ---- fim: canal da marcação da consulta (migration 0417) ----
-
--- ---- silencio sem retroativo: marca do acesso da IA no canal (migration 0418) ----
--- Derivado de supabase/migrations/20261117120000_0418_silencio_sem_retroativo.sql
--- (incidente e regra: cabeçalho de lá). Coluna nula + trigger, idempotente.
-alter table public.channel_sessions
-  add column if not exists ai_access_since timestamptz;
-comment on column public.channel_sessions.ai_access_since is
-  'Última vez que o alcance da IA no canal mudou (metadata.ai_gate, ai_gate_mode ou ai_test_phone_numbers), gravado pelo trigger trg_canal_marca_acesso_da_ia. A varredura de silêncio não cobra silêncio anterior. Nula = sem mudança desde a migration 0418. Migration 0418.';
-
-create or replace function public.fn_canal_marca_acesso_da_ia()
-returns trigger
-language plpgsql
-set search_path = public, pg_temp
-as $$
-begin
-  new.ai_access_since := now();
-  return new;
-end
-$$;
-revoke execute on function public.fn_canal_marca_acesso_da_ia() from public, anon, authenticated;
-
-drop trigger if exists trg_canal_marca_acesso_da_ia on public.channel_sessions;
-create trigger trg_canal_marca_acesso_da_ia
-  before update of metadata on public.channel_sessions
-  for each row
-  when (
-    old.metadata -> 'ai_gate' is distinct from new.metadata -> 'ai_gate'
-    or old.metadata -> 'ai_gate_mode' is distinct from new.metadata -> 'ai_gate_mode'
-    or old.metadata -> 'ai_test_phone_numbers' is distinct from new.metadata -> 'ai_test_phone_numbers'
-  )
-  execute function public.fn_canal_marca_acesso_da_ia();
--- ---- fim: silencio sem retroativo (migration 0418) ----
