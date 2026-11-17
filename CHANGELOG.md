@@ -8,6 +8,26 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.19.0] — 2026-11-17
+
+### Adicionado
+
+- **Comparecimentos no funil por origem** A integração do Marketing (`/api/v1/integrations/marketing/funil-por-origem`) passa a devolver
+  `comparecimentos` em cada origem, com a mesma régua do resumo do Início (consultas concluídas pela
+  data da consulta). O cartão "Compareceram" do painel de anúncios deixa de mostrar "—".
+
+### Alterado
+
+- **Conversas com visual de app de mensagem** A tela de Conversas ganhou o desenho de um app de mensagem: na lista, foto maior, linhas sem borda,
+  hora e bolinha de não lidas na cor da marca e abas em pílula; na conversa, fundo com um desenho
+  suave nosso, balões com ponta, separador de dia centralizado e campo de digitar arredondado. As
+  cores seguem a marca da instalação e funcionam nos temas claro e escuro. Quem já tinha escolhido
+  outra aparência da conversa continua com a sua; nada muda em dados, envio ou atribuição.
+
+### Corrigido
+
+- **Next.js atualizado para 16.4.6 (correção de segurança)** O Next.js passou da 16.4.2 para a 16.4.6. A 16.4.2 tinha uma falha conhecida (GHSA-mfr8-8qww-v76h / CVE-2026-119790) que podia vazar dados guardados em cache entre parâmetros de rota, e o `next build` já recusava compilar com ela. Nada muda na tela nem no `.env`.
+
 ## [5.18.0] — 2026-11-16
 
 ### Adicionado
@@ -9256,7 +9276,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.18.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.0...HEAD
+[5.19.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.18.0...v5.19.0
 [5.18.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.17.1...v5.18.0
 [5.17.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.17.0...v5.17.1
 [5.17.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.16.1...v5.17.0
