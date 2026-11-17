@@ -163,6 +163,14 @@ export const DICIONARIO: Traducoes = {
   "Nenhum horário livre neste dia.": { es: "Ningún horario libre en este día." },
   "Escolha profissional, procedimento, dia e horário.": { es: "Elija profesional, procedimiento, día y horario." },
   "Marcando…": { es: "Agendando…" },
+  // Auditoria de 16/11, lote L1 da Agenda.
+  "Escolha como foi marcada: Mensagem ou Ligação.": { es: "Elija cómo se agendó: Mensaje o Llamada." },
+  "Bloqueie no máximo 62 dias de cada vez. Para um período maior, salve em partes.": {
+    es: "Bloquee como máximo 62 días cada vez. Para un período mayor, guarde por partes.",
+  },
+  "A grade mostra os horários de outro profissional ou procedimento. Use Remarcar neste compromisso.": {
+    es: "La grilla muestra los horarios de otro profesional o procedimiento. Use Reprogramar en esta cita.",
+  },
   "Paciente": { es: "Paciente" },
   "Buscar pelo nome ou telefone": { es: "Buscar por nombre o teléfono" },
   // Configurações › Conversões (migration 0391): aviso de agendamento.
@@ -7020,6 +7028,9 @@ export const DICIONARIO: Traducoes = {
   "Atualize os dados deste contato.": { es: "Actualiza los datos de este contacto." },
   // Autocompletar de etiquetas na ficha do contato (issue #2732).
   "Nenhuma etiqueta neste contato.": { es: "Ninguna etiqueta en este contacto." },
+  "Nenhuma etiqueta neste negócio.": { es: "Ninguna etiqueta en este negocio." },
+  "Nada mudou para salvar.": { es: "No hay cambios para guardar." },
+  "Peça a um gestor para juntar.": { es: "Pide a un gestor que los una." },
   "Digite para buscar etiquetas…": { es: "Escribe para buscar etiquetas…" },
   "Sugestões de etiquetas": { es: "Sugerencias de etiquetas" },
   "Criar etiqueta": { es: "Crear etiqueta" },
@@ -7638,6 +7649,10 @@ export const DICIONARIO: Traducoes = {
     es: "Esto no tiene vuelta atrás: el embudo y sus etapas desaparecen. Si ya recibió negocio, la eliminación se rechaza y sigue archivado.",
   },
   "Novo Lead": { es: "Nuevo Lead" },
+  "nesta etapa": { es: "en esta etapa" },
+  "Havia cartões na mesma posição nesta etapa: este ficou logo depois deles.": {
+    es: "Había tarjetas en la misma posición en esta etapa: esta quedó justo después de ellas.",
+  },
   "Novo negócio": { es: "Nuevo negocio" },
   "Não consegui carregar este funil:": { es: "No pude cargar este embudo:" },
   "sem responsável.": { es: "sin responsable." },

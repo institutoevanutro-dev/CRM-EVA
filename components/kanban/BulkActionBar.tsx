@@ -77,11 +77,14 @@ export function BulkActionBar({
   );
   const { data: members } = useAssignableMembers(podeAtribuir);
 
-  // Esc to clear selection
+  // Esc limpa a seleção — mas só o Esc que ninguém tratou. O Radix fecha menu
+  // e diálogo no `keydown` do documento (fase de captura) e marca o evento com
+  // `preventDefault`; sem olhar isso, cancelar "Excluir 30 selecionados" com
+  // Esc fechava o diálogo E apagava as 30 marcações (auditoria 16/11, achado 24).
   useEffect(() => {
     if (selectedIds.length === 0) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClear();
+      if (e.key === "Escape" && !e.defaultPrevented) onClear();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);

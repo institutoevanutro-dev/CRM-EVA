@@ -61,6 +61,10 @@ export function BloqueioDeHorario({
 
   const faixaInvalida = !diaInteiro && emMinutos(horaAte) <= emMinutos(horaDe);
   const periodoInvalido = Boolean(ate) && ate < de;
+  // Acima do teto o período NÃO é cortado em silêncio (achado 16, 16/11): eram
+  // gravados só os primeiros 62 dias e a IA voltava a oferecer o resto das
+  // férias. Recusa à vista, antes de gravar qualquer dia.
+  const periodoLongo = Boolean(de && ate) && !periodoInvalido && datasDoPeriodo(de, ate, TETO_DO_PERIODO + 1).length > TETO_DO_PERIODO;
 
   // Mesma chave da tela de configurações: um bloqueio feito aqui aparece lá.
   const query = useQuery({
@@ -101,7 +105,11 @@ export function BloqueioDeHorario({
       setComentario("");
       invalidar();
     },
-    onError: showApiError,
+    onError: (erro) => {
+      showApiError(erro);
+      // Os dias já gravados antes do erro existem: a lista tem de mostrá-los.
+      invalidar();
+    },
   });
 
   const remover = useMutation({
@@ -162,7 +170,7 @@ export function BloqueioDeHorario({
             id="bloqueio-ate"
             data-testid="bloqueio-ate"
             type="date"
-            className={cn(CAMPO, periodoInvalido && "border-danger")}
+            className={cn(CAMPO, (periodoInvalido || periodoLongo) && "border-danger")}
             min={de || undefined}
             value={ate}
             onChange={(e) => setAte(e.target.value)}
@@ -230,11 +238,13 @@ export function BloqueioDeHorario({
             ? t("A hora final precisa ser maior que a inicial.")
             : periodoInvalido
               ? t("O último dia precisa ser depois do primeiro.")
-              : t("O horário bloqueado deixa de ser oferecido, pela tela e pela IA. O que já estava marcado continua marcado.")}
+              : periodoLongo
+                ? t("Bloqueie no máximo 62 dias de cada vez. Para um período maior, salve em partes.")
+                : t("O horário bloqueado deixa de ser oferecido, pela tela e pela IA. O que já estava marcado continua marcado.")}
         </p>
         <Button
           data-testid="salvar-bloqueio"
-          disabled={!de || faixaInvalida || periodoInvalido || salvar.isPending}
+          disabled={!de || faixaInvalida || periodoInvalido || periodoLongo || salvar.isPending}
           onClick={() => salvar.mutate()}
         >
           {salvar.isPending ? t("Salvando…") : t("Salvar bloqueio")}

@@ -25,6 +25,7 @@ import { duracaoDoBloco, duracaoDoCampo } from "@/lib/agenda/duracao-escolhida";
 import { dataDeParede, diaLocalISO, partesNoFuso } from "@/lib/agenda/fuso";
 import { janelaDoMesVisivel } from "@/lib/agenda/janela-do-mes-visivel";
 import { resolverResponsavelDoPainel } from "@/lib/agenda/responsavel-do-painel";
+import { tipoDaRemarcacao } from "@/lib/agenda/tipo-da-remarcacao";
 import { ancoraLocalDoDia } from "@/lib/agenda/semana-semente";
 import { useVinculoDaMarcacao } from "@/lib/agenda/vinculo-da-marcacao";
 import { gravarPessoasDaGrade, lerPessoasDaGrade, selecaoValida } from "@/lib/agenda/pessoas-da-grade";
@@ -35,6 +36,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { quandoCurto } from "@/components/agenda/rotulo-do-bloco";
 import { useAgendamentos } from "@/hooks/agenda/useAgendamentos";
+import { useAgendaAoVivo } from "@/hooks/agenda/useAgendaAoVivo";
+import { useAgora } from "@/hooks/agenda/useAgora";
 import { useFechamentosDaGrade } from "@/hooks/agenda/useFechamentosDaGrade";
 import { useHorariosLivres } from "@/hooks/agenda/useHorariosLivres";
 import { useMarcarAgendamento } from "@/hooks/agenda/useMarcarAgendamento";
@@ -335,6 +338,14 @@ export function AgendaClient({
    * horas de qualquer borda de horário de verão.
    */
   const [ancora, setAncora] = React.useState(() => ancoraLocalDoDia(hojeNaOrganizacao));
+  // O relógio ANDA (achado 19, 16/11): a régua do agora, os horários que já
+  // passaram e o "Hoje" seguem o minuto, e não o instante em que a aba abriu.
+  // "Hoje" é derivado dele no fuso da ORGANIZAÇÃO, a mesma régua do servidor;
+  // até o primeiro tique vale a data que o servidor mandou.
+  const agora = useAgora();
+  const diaDeAgora = diaLocalISO(agora, fusoDaAgenda);
+  const [diaDaAbertura] = React.useState(diaDeAgora);
+  const hoje = diaDeAgora === diaDaAbertura ? hojeNaOrganizacao : diaDeAgora;
 
   // AS PESSOAS SÃO REAIS: vêm de `/api/v1/agenda/pessoas`, com a trilha de cor derivada do
   // `user_id`. Até esta linha o filtro por pessoa era invisível na tela do
@@ -345,51 +356,6 @@ export function AgendaClient({
   // Só vale quem o servidor devolveu a ESTA pessoa: um id guardado de alguém que
   // ela não enxerga (ou que saiu da equipe) cai fora, e a grade volta a "todos".
   const selecionadas = React.useMemo(() => selecaoValida(pedidas, pessoas), [pedidas, pessoas]);
-  // Uma pessoa só selecionada é o CONTEXTO da marcação: os horários livres da
-  // grade, o "com quem" do painel e o dono do compromisso passam a ser dela.
-  const profissional = selecionadas.length === 1 ? (pessoas.find((p) => p.id === selecionadas[0]) ?? null) : null;
-  // Remarcar mantém o dono que o compromisso já tem (a rota não o troca), então
-  // o filtro não muda os horários que o painel oferece para remarcar.
-  const donoDaMarcacao = remarcandoId ? undefined : profissional?.id;
-  // O que a consulta de horários pergunta: na marcação NOVA, o profissional e o
-  // procedimento escolhidos no modal; ao REMARCAR, o de sempre.
-  const tipoDaMarcacao = remarcandoId
-    ? tipo
-    : formDonoId
-      ? (tiposIniciais.find((t) => t.id === formTipoId) ?? null)
-      : null;
-  const donoDaConsulta = remarcandoId ? donoDaMarcacao : formDonoId || undefined;
-
-  // A JANELA ACOMPANHA O MÊS QUE O PAINEL MOSTRA — e continua ESTÁVEL.
-  //
-  // ⚠️ Isto era `hoje + 30 dias`, fixo na abertura: "Próximo mês" desligava
-  // assim que acabavam os dias já pedidos, e retorno em 60 ou 90 dias não se
-  // marcava pelo calendário, mesmo com a janela de agendamento do tipo valendo
-  // (porte de melgarafael/DeskcommCRM d5efd698a).
-  //
-  // A estabilidade é a mesma de antes: a chave do React Query inclui o
-  // recorte, e `new Date()` no corpo do render gerava chave nova a cada passagem
-  // — um laço de requisições com o painel nunca estabilizando. Aqui o relógio
-  // só é lido quando o painel REABRE ou o tipo muda, e o mês só muda pelo
-  // `onMesVisivel` do painel.
-  const [mesDoPainel, setMesDoPainel] = React.useState(() =>
-    startOfMonth(ancoraLocalDoDia(hojeNaOrganizacao)),
-  );
-  const onMesVisivel = React.useCallback((mes: Date) => {
-    const proximo = startOfMonth(mes);
-    setMesDoPainel((atual) => (atual.getTime() === proximo.getTime() ? atual : proximo));
-  }, []);
-  const agoraDaAbertura = React.useMemo(
-    () => new Date(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `new Date()` é o ponto: o valor só pode mudar quando a abertura ou o tipo mudam.
-    [marcando, tipoDaMarcacao?.id],
-  );
-  const janelaDeBusca = React.useMemo(() => {
-    const { de, ate } = janelaDoMesVisivel(mesDoPainel, agoraDaAbertura);
-    return { de: de.toISOString(), ate: ate.toISOString() };
-  }, [mesDoPainel, agoraDaAbertura]);
-
-
   // OS AGENDAMENTOS SÃO REAIS, e agora TAMBÉM se atualizam sem recarregar.
   //
   // ⚠️ O comentário que estava aqui dizia que `GET /api/v1/agenda/agendamentos`
@@ -429,8 +395,61 @@ export function AgendaClient({
     recorteDaGrade.de === recorteDoServidor.de && recorteDaGrade.ate === recorteDoServidor.ate;
 
   const { data: agendamentosVivos } = useAgendamentos(recorteDaGrade);
-  const todos: Agendamento[] =
-    agendamentosVivos ?? (naJanelaDoServidor ? agendamentosIniciais : []);
+  // Marcado pela IA ou por um colega aparece sem recarregar (achado 2, 16/11).
+  useAgendaAoVivo(recorteDaGrade);
+  const todos: Agendamento[] = React.useMemo(
+    () => agendamentosVivos ?? (naJanelaDoServidor ? agendamentosIniciais : []),
+    [agendamentosVivos, naJanelaDoServidor, agendamentosIniciais],
+  );
+
+  // Uma pessoa só selecionada é o CONTEXTO da marcação: os horários livres da
+  // grade, o "com quem" do painel e o dono do compromisso passam a ser dela.
+  const profissional = selecionadas.length === 1 ? (pessoas.find((p) => p.id === selecionadas[0]) ?? null) : null;
+  // REMARCAR pergunta pelo procedimento e pelo dono DO COMPROMISSO (a rota não
+  // troca nenhum dos dois), nunca pelo tipo escolhido na grade nem pelo dono
+  // padrão dele — ver `lib/agenda/tipo-da-remarcacao.ts` (achado 1, 16/11).
+  const alvoDaRemarcacao = remarcandoId ? todos.find((a) => a.id === remarcandoId) : undefined;
+  const remarcacao = remarcandoId ? tipoDaRemarcacao(alvoDaRemarcacao, tiposIniciais, tipo) : null;
+  const donoDaMarcacao = remarcacao ? remarcacao.donoId : profissional?.id;
+  // O que a consulta de horários pergunta: na marcação NOVA, o profissional e o
+  // procedimento escolhidos no modal; ao REMARCAR, os do compromisso.
+  const tipoDaMarcacao = remarcacao
+    ? remarcacao.tipo
+    : formDonoId
+      ? (tiposIniciais.find((t) => t.id === formTipoId) ?? null)
+      : null;
+  const donoDaConsulta = remarcacao ? remarcacao.donoId : formDonoId || undefined;
+
+  // A JANELA ACOMPANHA O MÊS QUE O PAINEL MOSTRA — e continua ESTÁVEL.
+  //
+  // ⚠️ Isto era `hoje + 30 dias`, fixo na abertura: "Próximo mês" desligava
+  // assim que acabavam os dias já pedidos, e retorno em 60 ou 90 dias não se
+  // marcava pelo calendário, mesmo com a janela de agendamento do tipo valendo
+  // (porte de melgarafael/DeskcommCRM d5efd698a).
+  //
+  // A estabilidade é a mesma de antes: a chave do React Query inclui o
+  // recorte, e `new Date()` no corpo do render gerava chave nova a cada passagem
+  // — um laço de requisições com o painel nunca estabilizando. Aqui o relógio
+  // só é lido quando o painel REABRE ou o tipo muda, e o mês só muda pelo
+  // `onMesVisivel` do painel.
+  const [mesDoPainel, setMesDoPainel] = React.useState(() =>
+    startOfMonth(ancoraLocalDoDia(hojeNaOrganizacao)),
+  );
+  const onMesVisivel = React.useCallback((mes: Date) => {
+    const proximo = startOfMonth(mes);
+    setMesDoPainel((atual) => (atual.getTime() === proximo.getTime() ? atual : proximo));
+  }, []);
+  const agoraDaAbertura = React.useMemo(
+    () => new Date(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `new Date()` é o ponto: o valor só pode mudar quando a abertura ou o tipo mudam.
+    [marcando, tipoDaMarcacao?.id],
+  );
+  const janelaDeBusca = React.useMemo(() => {
+    const { de, ate } = janelaDoMesVisivel(mesDoPainel, agoraDaAbertura);
+    return { de: de.toISOString(), ate: ate.toISOString() };
+  }, [mesDoPainel, agoraDaAbertura]);
+
+
 
   const agendamentos = React.useMemo(
     () =>
@@ -624,7 +643,7 @@ export function AgendaClient({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setAncora(ancoraLocalDoDia(hojeNaOrganizacao))}
+            onClick={() => setAncora(ancoraLocalDoDia(hoje))}
           >
             {t("Hoje")}
           </Button>
@@ -795,8 +814,8 @@ export function AgendaClient({
             </DialogDescription>
           </DialogHeader>
           <MarcacaoSimples
-            ancora={ancoraLocalDoDia(hojeNaOrganizacao)}
-            agora={new Date()}
+            ancora={ancoraLocalDoDia(hoje)}
+            agora={agora}
             usuarioId={usuarioId}
             pessoas={pessoas}
             tipos={tiposIniciais}
@@ -856,12 +875,11 @@ export function AgendaClient({
                 });
             }}
             onVerNaAgenda={(instante) => {
+              // O MESMO fechamento do X/Esc (achado 13, 16/11): fechar por aqui
+              // à mão esquecia o horário vindo da grade, e a remarcação
+              // seguinte abria com "Confirmar <horário antigo>" já pronto.
+              aoMudarAbertura(false);
               setAncora(startOfDay(new Date(instante)));
-              setMarcando(false);
-              setRemarcandoId(null);
-              setFormDonoId("");
-              setFormTipoId("");
-              setDuracaoEditada(null);
             }}
           />
         </DialogContent>
@@ -882,7 +900,7 @@ export function AgendaClient({
               const quando = quandoCurto(
                 new Date(alvo.comeca),
                 fusoDaAgenda,
-                new Date(),
+                agora,
                 localeDaData,
                 t("hoje"),
               );
@@ -939,12 +957,12 @@ export function AgendaClient({
               </p>
             </div>
           </details>
-          {tipo && (
+          {tipoDaMarcacao && (
             <div className="mt-4 shrink-0">
               <PainelDeMarcacao
                 // O mês que abre é o da organização, como a grade ao lado.
-                ancora={ancoraLocalDoDia(hojeNaOrganizacao)}
-                agora={new Date()}
+                ancora={ancoraLocalDoDia(hoje)}
+                agora={agora}
                 responsavel={
                   // O DONO DO TIPO, não o primeiro da lista. A tela dizia "com
                   // <primeira pessoa>" enquanto oferecia a jornada de outra —
@@ -955,13 +973,13 @@ export function AgendaClient({
                   // médica (porte de melgarafael/DeskcommCRM d7d18345b, #896).
                   resolverResponsavelDoPainel({
                     pessoas,
-                    donoId: donoDaMarcacao ?? tipo.donoId,
+                    donoId: donoDaMarcacao ?? tipoDaMarcacao.donoId,
                     usuarioId,
                   })
                 }
-                tipo={tipo.nome}
+                tipo={tipoDaMarcacao.nome}
                 // Remarcar preserva o comprimento do bloco (upstream #3714).
-                duracaoMin={duracaoDoCompromisso ?? tipo.duracaoMin}
+                duracaoMin={duracaoDoCompromisso ?? tipoDaMarcacao.duracaoMin}
                 // A10: quem pediu para não receber mensagens não recebe o
                 // lembrete do novo horário — o painel avisa para confirmar por
                 // telefone, como a marcação simples.
@@ -983,7 +1001,7 @@ export function AgendaClient({
                 // `fuso_da_regra` já vinha da rota e já era tipado pelo hook;
                 // ninguém em tela o lia. Chutar São Paulo para quem atende em
                 // Manaus é uma hora de diferença no horário oferecido ao cliente.
-                local={rotuloDoLocal(tipo.localKind, tipo.localDetalhes)}
+                local={rotuloDoLocal(tipoDaMarcacao.localKind, tipoDaMarcacao.localDetalhes)}
                 fuso={horarios?.fuso_da_regra}
                 horariosPorDia={horariosPorDia}
                 publicouHorarios={horarios?.publicou_horarios ?? true}
@@ -1023,9 +1041,7 @@ export function AgendaClient({
                       guest_email: convidado,
                     })
                     .then((r) => {
-                      setRemarcandoId(null);
-                      setMarcando(false);
-                      setEmailConvidado("");
+                      aoMudarAbertura(false);
                       return r;
                     });
                 }}
@@ -1044,9 +1060,8 @@ export function AgendaClient({
                 // acidente na visão de semana e escolheria a hora errada na de
                 // dia.
                 onVerNaAgenda={(instante) => {
+                  aoMudarAbertura(false);
                   setAncora(startOfDay(new Date(instante)));
-                  setMarcando(false);
-                  setRemarcandoId(null);
                 }}
               />
             </div>
@@ -1186,13 +1201,13 @@ export function AgendaClient({
         fuso={fusoDaAgenda}
         visao={visao}
         ancora={ancora}
-        agora={new Date()}
+        agora={agora}
         pessoas={pessoas}
         agendamentos={agendamentosDaGrade}
         fechamentos={fechamentosDaGrade}
         recorte={recorteDaGrade}
         tipos={tiposIniciais.map((t) => ({ id: t.id, nome: t.nome, duracaoMin: t.duracaoMin }))}
-        tipo={tipo ? { id: tipo.id, duracaoMin: tipo.duracaoMin } : null}
+        tipo={tipo ? { id: tipo.id, duracaoMin: tipo.duracaoMin, donoId: tipo.donoId } : null}
         donoId={profissional?.id}
         onEscolherTipo={escolherTipo}
         // SEGUNDA PORTA: o clique num bloco livre da grade. Sem `onMarcarEm`, a
@@ -1251,7 +1266,7 @@ export function AgendaClient({
       <HistoricoDaAgenda
         agendamentos={agendamentosAcionaveis}
         pessoas={pessoas}
-        agora={new Date()}
+        agora={agora}
         // Mesma régua da grade ao lado (upstream #1831): sem isto a lista
         // imprime o relógio do navegador.
         fuso={fusoDaAgenda}
