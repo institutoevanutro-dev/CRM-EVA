@@ -963,7 +963,7 @@ export function InboxLayout({
             (o que é esta coluna → o que se faz nela) sem gastar uma faixa
             inteira com um botão. */}
         <div className="flex min-h-11 items-center justify-between gap-2 px-3 pt-2">
-          <h2 className="text-sm font-semibold">{t("Conversas")}</h2>
+          <h2 className="text-lg font-bold">{t("Conversas")}</h2>
           <BotaoIniciarConversa />
         </div>
         <InboxFilters value={filterValue} onChange={setFilterValue} />
@@ -1174,7 +1174,7 @@ export function InboxLayout({
             </div>
           </div>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
+          <div className="conversa-fundo flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
             <ChatCircle size={36} weight="thin" className="text-text-subtle" aria-hidden />
             <p className="text-sm font-medium text-text-muted">{t("Selecione uma conversa")}</p>
             {/* Só com teclado e mouse (I12): no toque, "J e K" é ruído. */}

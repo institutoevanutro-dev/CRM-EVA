@@ -256,7 +256,7 @@ export function ConversationHeader({
     // (o header já travou em 707px de `min-content`, ver `inbox-header-nao-trava`).
     <div
       data-cabecalho-da-conversa=""
-      className="@container relative flex flex-wrap items-center gap-2 border-b border-border bg-background px-3 py-2 md:px-4"
+      className="@container relative flex flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2 md:px-4"
     >
       <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
         {/* O NOME NUNCA SOME. `min-w-min` faz o bloco do nome pedir a largura
@@ -266,7 +266,7 @@ export function ConversationHeader({
             8rem, o selo da janela comia o nome inteiro: medido em 1280px num
             canal oficial, o nome tinha 0px de largura com "Assumir" ao lado. */}
         <div className="flex min-w-min flex-1 items-center gap-3">
-          <AvatarDoContato contato={c} nome={displayName} reserva={phone ?? displayName} className="h-9 w-9 shrink-0" />
+          <AvatarDoContato contato={c} nome={displayName} reserva={phone ?? displayName} className="h-10 w-10 shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
               <SeloDoCanal
