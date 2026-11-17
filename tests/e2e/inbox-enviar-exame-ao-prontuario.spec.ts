@@ -97,10 +97,14 @@ async function buscarNoCrm(p: Pedido): Promise<{ status: number; corpo: unknown 
   const bytes = Buffer.from(await arq.arrayBuffer());
   const esperado = bytesDaMensagem.get(p.message_id)!;
   const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+  // Mesmo contrato do Prontuário real (lib/exames-whatsapp.ts): Content-Length é
+  // opcional — o Next >= 16.4.5 o remove e manda chunked —, mas, se vier, bate.
+  const tamanho = arq.headers.get("content-length");
   if (
     arq.status !== 200 ||
     arq.headers.get("content-type") !== esperado.mime ||
-    arq.headers.get("content-length") !== String(esperado.bytes.length) ||
+    (tamanho !== null && tamanho !== String(esperado.bytes.length)) ||
+    bytes.length !== esperado.bytes.length ||
     sha(bytes) !== sha(esperado.bytes)
   ) {
     reprovacoes.push(`arquivo:${arq.status}:${arq.headers.get("content-type")}:${arq.headers.get("content-length")}`);

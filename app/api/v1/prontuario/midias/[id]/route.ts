@@ -92,7 +92,9 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     headers: {
       ...cabecalhosDeMidia(midia.mime),
       "Content-Disposition": "attachment",
-      "Content-Length": String(buffer.byteLength),
+      // Sem Content-Length: o Next >= 16.4.5 tira esse cabeçalho de toda resposta
+      // de rota (send-response.ts, FORBIDDEN_HEADERS) e manda o corpo chunked. O
+      // Prontuário trata o cabeçalho como atalho opcional e lê com teto.
       "Cache-Control": "private, no-store",
       "X-Request-Id": requestId,
     },
