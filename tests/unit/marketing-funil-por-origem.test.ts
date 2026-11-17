@@ -31,7 +31,7 @@ describe("montarFunil", () => {
       ganhos: [{ contactId: "c-meta", valueCents: 150000 }, { contactId: "c-meta", valueCents: null }, { contactId: "c-ind", valueCents: 90000 }],
     }, origens);
     const de = (o: string) => f.origens.find((x) => x.origem === o)!;
-    expect(de("meta")).toEqual({ origem: "meta", leads: 2, agendamentos: 1, sinais: 1, ganhos: 2, ganhos_sem_valor: 1, receita_cents: "150000" });
+    expect(de("meta")).toEqual({ origem: "meta", leads: 2, agendamentos: 1, comparecimentos: 0, sinais: 1, ganhos: 2, ganhos_sem_valor: 1, receita_cents: "150000" });
     expect(de("indicacao")).toMatchObject({ agendamentos: 1, ganhos: 1, receita_cents: "90000" });
     expect(de("organico").leads).toBe(1);
   });
@@ -42,5 +42,14 @@ describe("montarFunil", () => {
   it("não carrega nada que identifique paciente", () => {
     const f = montarFunil({ leads: [{ contactId: "c-meta" }], agendamentos: [], sinais: [], ganhos: [] }, origens);
     expect(JSON.stringify(f)).not.toContain("c-meta");
+  });
+
+  it("conta comparecimentos pela origem do contato", () => {
+    const f = montarFunil(
+      { leads: [], agendamentos: [], comparecimentos: [{ contactId: "c-meta" }, { contactId: "c-meta" }, { contactId: null }], sinais: [], ganhos: [] },
+      new Map([["c-meta", "meta" as const]]),
+    );
+    expect(f.origens.find((l) => l.origem === "meta")?.comparecimentos).toBe(2);
+    expect(f.origens.find((l) => l.origem === "organico")?.comparecimentos).toBe(1);
   });
 });
