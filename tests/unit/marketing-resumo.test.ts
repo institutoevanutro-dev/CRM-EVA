@@ -94,10 +94,10 @@ it("toda consulta filtra a organização configurada", async () => {
   expect(r.por_anuncio[0]?.anuncio).toBe("120211234567890123");
 });
 
-it("o funil por origem não lê comparecimentos", async () => {
+it("o funil por origem lê comparecimentos com a régua do resumo (status completed)", async () => {
   const { cliente, consultas } = clienteFalso();
   await consultaFunilPorOrigem(cliente as never, "10000000-0000-4000-8000-000000000001", "2026-11-01", "2026-11-07");
-  expect(consultas.some((q) => q.filtros.includes("status=completed"))).toBe(false);
+  expect(consultas.some((q) => q.tabela === "calendar_appointments" && q.filtros.includes("status=completed"))).toBe(true);
 });
 
 it("o resumo lê comparecimentos (status completed)", async () => {

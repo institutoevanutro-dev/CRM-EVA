@@ -19,14 +19,15 @@
  *  - sinais: `lead.stage_changed` no `event_log` para uma etapa marcada como
  *    sinal pago em Configurações › Conversões, um por lead (o mesmo critério
  *    do aviso de sinal pago à plataforma);
- *  - ganhos: `crm_leads.closed_at` com `status = 'won'`, somando `value_cents`.
+ *  - ganhos: `crm_leads.closed_at` com `status = 'won'`, somando `value_cents`;
+ *  - comparecimentos: consultas `completed` por `starts_at` (`lerComparecimentos`, a mesma régua do resumo).
  *
  * A leitura desses eventos mora em `eventos-do-periodo.ts`, compartilhada com o resumo do Início.
  *
  * Desenho: docs do painel-meta, `specs/2026-10-23-funil-por-origem-design.md`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { emLotes, lerEventosDoPeriodo, type Contato } from "@/lib/integrations/marketing/eventos-do-periodo";
+import { emLotes, lerComparecimentos, lerEventosDoPeriodo, type Contato } from "@/lib/integrations/marketing/eventos-do-periodo";
 
 export type Origem = "meta" | "google" | "indicacao" | "organico";
 export const ORIGENS: readonly Origem[] = ["meta", "google", "indicacao", "organico"];
@@ -35,6 +36,7 @@ export interface LinhaDoFunil {
   origem: Origem;
   leads: number;
   agendamentos: number;
+  comparecimentos: number;
   sinais: number;
   ganhos: number;
   ganhos_sem_valor: number;
@@ -53,13 +55,14 @@ export function origemDe({ adPlatform, tags }: { adPlatform: string | null; tags
 }
 
 export function montarFunil(
-  e: { leads: Contato[]; agendamentos: Contato[]; sinais: Contato[]; ganhos: (Contato & { valueCents: number | null })[] },
+  e: { leads: Contato[]; agendamentos: Contato[]; comparecimentos?: Contato[]; sinais: Contato[]; ganhos: (Contato & { valueCents: number | null })[] },
   origens: ReadonlyMap<string, Origem>,
 ): FunilPorOrigem {
-  const linhas = new Map(ORIGENS.map((o) => [o, { leads: 0, agendamentos: 0, sinais: 0, ganhos: 0, sem: 0, receita: 0n }]));
+  const linhas = new Map(ORIGENS.map((o) => [o, { leads: 0, agendamentos: 0, comparecimentos: 0, sinais: 0, ganhos: 0, sem: 0, receita: 0n }]));
   const de = (c: Contato) => linhas.get((c.contactId && origens.get(c.contactId)) || "organico")!;
   for (const x of e.leads) de(x).leads += 1;
   for (const x of e.agendamentos) de(x).agendamentos += 1;
+  for (const x of e.comparecimentos ?? []) de(x).comparecimentos += 1;
   for (const x of e.sinais) de(x).sinais += 1;
   for (const x of e.ganhos) {
     const l = de(x);
@@ -71,7 +74,7 @@ export function montarFunil(
     currency: "BRL",
     origens: ORIGENS.map((origem) => {
       const l = linhas.get(origem)!;
-      return { origem, leads: l.leads, agendamentos: l.agendamentos, sinais: l.sinais, ganhos: l.ganhos, ganhos_sem_valor: l.sem, receita_cents: l.receita.toString() };
+      return { origem, leads: l.leads, agendamentos: l.agendamentos, comparecimentos: l.comparecimentos, sinais: l.sinais, ganhos: l.ganhos, ganhos_sem_valor: l.sem, receita_cents: l.receita.toString() };
     }),
   };
 }
@@ -79,10 +82,13 @@ export function montarFunil(
 // ---------- Leitura (service role: TODA consulta filtra a organização) ----------
 
 export async function consultaFunilPorOrigem(admin: SupabaseClient, org: string, de: string, ate: string): Promise<FunilPorOrigem> {
-  const { leads, agendamentos, sinais, ganhos } = await lerEventosDoPeriodo(admin, org, de, ate);
+  const [{ leads, agendamentos, sinais, ganhos }, comparecimentos] = await Promise.all([
+    lerEventosDoPeriodo(admin, org, de, ate),
+    lerComparecimentos(admin, org, de, ate),
+  ]);
 
   // Origem de cada contato envolvido: plataforma do anúncio e etiquetas de todos os leads dele.
-  const contatos = [...new Set([...leads, ...agendamentos, ...ganhos, ...sinais].map((x) => x.contactId).filter((x): x is string => Boolean(x)))];
+  const contatos = [...new Set([...leads, ...agendamentos, ...comparecimentos, ...ganhos, ...sinais].map((x) => x.contactId).filter((x): x is string => Boolean(x)))];
   const plataforma = new Map<string, string | null>();
   const etiquetas = new Map<string, string[]>();
   for (const lote of emLotes(contatos)) {
@@ -97,5 +103,5 @@ export async function consultaFunilPorOrigem(admin: SupabaseClient, org: string,
   }
   const origens = new Map(contatos.map((id) => [id, origemDe({ adPlatform: plataforma.get(id) ?? null, tags: etiquetas.get(id) ?? [] })]));
 
-  return montarFunil({ leads, agendamentos, sinais, ganhos }, origens);
+  return montarFunil({ leads, agendamentos, comparecimentos, sinais, ganhos }, origens);
 }
