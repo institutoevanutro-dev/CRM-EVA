@@ -571,7 +571,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       if (error) throw new Error(error.message);
 
       const pointers: SilencePointer[] = [];
-      for (const row of (data ?? []) as Array<{
+      for (const row of (data ?? []) as unknown as Array<{
         id: string;
         organization_id: string;
         active_version_id: string | null;
