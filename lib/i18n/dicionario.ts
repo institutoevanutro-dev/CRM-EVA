@@ -7653,9 +7653,6 @@ export const DICIONARIO: Traducoes = {
   "Havia cartões na mesma posição nesta etapa: este ficou logo depois deles.": {
     es: "Había tarjetas en la misma posición en esta etapa: esta quedó justo después de ellas.",
   },
-  "O motivo fica como “Outro”; o detalhe aparece no histórico do negócio.": {
-    es: "El motivo queda como “Otro”; el detalle aparece en el historial del negocio.",
-  },
   "Novo negócio": { es: "Nuevo negocio" },
   "Não consegui carregar este funil:": { es: "No pude cargar este embudo:" },
   "sem responsável.": { es: "sin responsable." },

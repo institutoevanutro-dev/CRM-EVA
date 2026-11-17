@@ -17,7 +17,6 @@ import { ApiError } from "@/lib/api/types";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { encerraDemanda } from "@/lib/leads/encerramento";
-import { razaoDaPerdaNaTimeline } from "@/lib/leads/motivo-da-perda";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { loseLeadSchema, validateRequest } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
@@ -50,19 +49,7 @@ export async function POST(
         requestId,
         idioma: authz.user.idioma,
       },
-      {
-        leadId,
-        desfecho: "lost",
-        motivo: input.lost_reason,
-        // O detalhe de "Outro motivo" fica na timeline (a frase e o payload);
-        // o motivo gravado continua sendo o código que o trigger aceita.
-        ...(input.detalhe && input.lost_reason === "other"
-          ? {
-              razaoNaTimeline: razaoDaPerdaNaTimeline(`Outro motivo: ${input.detalhe}`),
-              payloadNaTimeline: { detalhe: input.detalhe },
-            }
-          : {}),
-      },
+      { leadId, desfecho: "lost", motivo: input.lost_reason },
     );
     return ok(lead, { requestId });
   } catch (err) {
