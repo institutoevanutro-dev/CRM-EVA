@@ -344,6 +344,20 @@ export const MessageBubble = memo(function MessageBubble({
   // o fio continua desenhado com rótulo genérico e o clique carrega até ela.
   const idDaCitada = citada?.id ?? message.reply_to_message_id ?? null;
 
+  /** A cor da ponta (só na primeira bolha do turno): a do fundo, ou a do contorno nos balões com anel. */
+  const pontaDaBolha =
+    !inicioDoTurno || isBareSticker
+      ? null
+      : apagada
+        ? "bg-muted/60"
+        : falhou
+          ? "bg-error"
+          : !isOutbound
+            ? "bg-[var(--bolha-recebida-fundo,var(--color-surface))]"
+            : message.sent_via === "ai"
+              ? "bg-accent"
+              : "bg-[var(--bolha-enviada-fundo,var(--primary))]";
+
   return (
     <div
       data-search-match={searchMatch || undefined}
@@ -401,7 +415,18 @@ export const MessageBubble = memo(function MessageBubble({
         </button>
       )}
       {/* Coluna da bolha: a linha "Não enviada" (I1) fica FORA da bolha, logo abaixo. */}
-      <div className={cn("flex min-w-0 max-w-[75%] flex-col gap-1", isOutbound ? "items-end" : "items-start")}>
+      <div className={cn("relative flex min-w-0 max-w-[75%] flex-col gap-1", isOutbound ? "items-end" : "items-start")}>
+      {/* A PONTA do balão: irmã da bolha, não pseudo-elemento dela — dentro da
+          bolha ela entrava no `scrollWidth` e a régua de "nada vaza do balão"
+          (e2e `inbox-rotulo-de-origem`) lia a ponta como texto vazando. A cor é
+          a do fundo da bolha (ou a do contorno, nos balões com anel). */}
+      {pontaDaBolha && (
+        <span
+          aria-hidden
+          data-ponta-da-bolha=""
+          className={cn("bolha-ponta", isOutbound ? "bolha-ponta-enviada" : "bolha-ponta-recebida", pontaDaBolha)}
+        />
+      )}
       <div
         // Identidade, não aparência: specs contam bolhas por este id, não pela classe.
         data-testid="message-bubble"
@@ -412,13 +437,9 @@ export const MessageBubble = memo(function MessageBubble({
             ? "px-0 py-0"
             : cn(
                 "rounded-lg px-3 py-1.5 shadow-xs",
-                // A ponta só na PRIMEIRA bolha do turno (I8), no canto de cima do
-                // lado de quem falou; o desenho mora no `globals.css` (`.bolha-ponta`).
-                inicioDoTurno &&
-                  cn(
-                    "bolha-ponta",
-                    isOutbound ? "bolha-ponta-enviada rounded-tr-none" : "bolha-ponta-recebida rounded-tl-none",
-                  ),
+                // A ponta só na PRIMEIRA bolha do turno (I8): o canto de cima do
+                // lado de quem falou fica reto, e a `pontaDaBolha` encosta nele.
+                pontaDaBolha && (isOutbound ? "rounded-tr-none" : "rounded-tl-none"),
                 // Três vozes — quem lê a conversa precisa saber de relance se
                 // foi o paciente, o automático ou alguém da equipe: paciente em
                 // branco sobre o fundo creme; equipe CHEIA na cor escolhida; o
@@ -437,14 +458,12 @@ export const MessageBubble = memo(function MessageBubble({
                 //
                 // Falhou (I1): a bolha INTEIRA em tons de erro. A borda fina de
                 // antes media 1,03:1 — falha dita só por cor, e mal.
-                //
-                // Os balões com CONTORNO levam a ponta na cor dele (`bolha-ponta-contorno`).
                 falhou
-                  ? "bolha-ponta-contorno border border-error bg-error-bg text-error-fg [--bolha-borda:1px] [--bolha-ponta:var(--color-error)]"
+                  ? "border border-error bg-error-bg text-error-fg"
                   : !isOutbound
                   ? "bg-[var(--bolha-recebida-fundo,var(--color-surface))] text-[var(--bolha-recebida-texto,var(--color-text))]"
                   : message.sent_via === "ai"
-                    ? "bolha-ponta-contorno border-[1.5px] border-accent bg-surface text-text [--bolha-borda:1.5px] [--bolha-ponta:var(--color-accent)]"
+                    ? "border-[1.5px] border-accent bg-surface text-text"
                     : "bg-[var(--bolha-enviada-fundo,var(--primary))] text-[var(--bolha-enviada-texto,var(--primary-foreground))]",
               ),
           // Apagada sai das cores da DIREÇÃO e vai para o CINZA: a diferença

@@ -1174,39 +1174,22 @@
 }
 
 /* A PONTA do balão, como num app de mensagem: só na PRIMEIRA bolha do turno,
-   no canto de cima, do lado de quem falou. Herda a cor do próprio balão
-   (`inherit`), então acompanha a aparência escolhida, o tema e a marca sem
-   uma cor aqui. Balão com contorno (automático, falha) põe a ponta na cor do
-   CONTORNO e a desloca pela espessura dele (`--bolha-borda`/`--bolha-ponta`,
-   postos no componente). */
+   no canto de cima, do lado de quem falou. É um elemento IRMÃO da bolha (não
+   `::before` dela), para não entrar no `scrollWidth` do balão; a cor vem do
+   componente, pelos mesmos tokens do fundo (ou do contorno). */
 .bolha-ponta {
-  position: relative;
-}
-.bolha-ponta::before {
-  content: "";
   position: absolute;
   top: 0;
   width: 8px;
   height: 13px;
-  background-color: inherit;
 }
-.bolha-ponta-recebida::before {
+.bolha-ponta-recebida {
   left: -8px;
   clip-path: polygon(0 0, 100% 0, 100% 100%);
 }
-.bolha-ponta-enviada::before {
+.bolha-ponta-enviada {
   right: -8px;
   clip-path: polygon(0 0, 100% 0, 0 100%);
-}
-.bolha-ponta-contorno::before {
-  top: calc(-1 * var(--bolha-borda, 0px));
-  background-color: var(--bolha-ponta, currentColor);
-}
-.bolha-ponta-contorno.bolha-ponta-recebida::before {
-  left: calc(-8px - var(--bolha-borda, 0px));
-}
-.bolha-ponta-contorno.bolha-ponta-enviada::before {
-  right: calc(-8px - var(--bolha-borda, 0px));
 }
 
 /* ---- Movimento de diálogo, confirmação e gaveta (D1.1) ------------------
