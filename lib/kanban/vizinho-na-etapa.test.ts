@@ -13,7 +13,7 @@
 import { describe, expect, it } from "vitest";
 
 import { midpoint } from "./fractional-indexing";
-import { proximoNaEtapaInteira } from "./vizinho-na-etapa";
+import { posicaoAoSoltar, proximoNaEtapaInteira } from "./vizinho-na-etapa";
 
 type Card = { id: string; position_in_stage: number };
 
@@ -67,7 +67,7 @@ describe("proximoNaEtapaInteira", () => {
     expect(midpoint(acima.position_in_stage, visivel.position_in_stage)).toBe(1500);
   });
 
-  it("empate entre dois VISÍVEIS continua cancelando: devolve o de baixo e o midpoint dá NaN", () => {
+  it("empate entre dois VISÍVEIS: devolve o de baixo e o midpoint dá NaN (quem resolve é posicaoAoSoltar)", () => {
     const acima = card("a", 1000);
     const visivelEmpatado = card("b", 1000);
     const devolvido = proximoNaEtapaInteira(
@@ -96,5 +96,33 @@ describe("proximoNaEtapaInteira", () => {
     const antes = etapa.map((l) => l.id);
     proximoNaEtapaInteira(card("a", 1000), null, etapa, ARRASTADO);
     expect(etapa.map((l) => l.id)).toEqual(antes);
+  });
+});
+
+describe("posicaoAoSoltar (auditoria 16/11, achado 27)", () => {
+  it("sem empate: o midpoint de sempre, sem ajuste", () => {
+    expect(posicaoAoSoltar(card("a", 1000), card("b", 2000), null, ARRASTADO)).toEqual({
+      posicao: 1500,
+      ajustada: false,
+    });
+  });
+
+  it("empate entre dois visíveis não cancela: cai depois do grupo empatado, numa posição livre", () => {
+    const etapa = [card("a", 1000), card("b", 1000), card("c", 1000), card("d2", 3000)];
+    const r = posicaoAoSoltar(etapa[0]!, etapa[1]!, etapa, ARRASTADO);
+    expect(r.ajustada).toBe(true);
+    expect(r.posicao).toBe(2000);
+    expect(etapa.map((l) => l.position_in_stage)).not.toContain(r.posicao);
+  });
+
+  it("empate no fim da etapa: depois do último, como soltar no fim", () => {
+    const r = posicaoAoSoltar(card("a", 1000), card("b", 1000), [card("a", 1000), card("b", 1000)], ARRASTADO);
+    expect(r).toEqual({ posicao: 2000, ajustada: true });
+  });
+
+  it("sem o cache do quadro, usa os dois vizinhos visíveis", () => {
+    const r = posicaoAoSoltar(card("a", 1000), card("b", 1000), null, ARRASTADO);
+    expect(Number.isFinite(r.posicao)).toBe(true);
+    expect(r.ajustada).toBe(true);
   });
 });
