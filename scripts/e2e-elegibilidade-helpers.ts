@@ -211,10 +211,13 @@ async function main(): Promise<void> {
         break;
       }
 
-      // ---- recuar-vigencia <pointerId> <minutos> — recua o active_since do
-      // ---- ponteiro (migration 0324). O contato semeado calou ANTES da
-      // ---- publicação, e a regra "sem passado" da varredura o recusaria. Só
-      // ---- active_since muda, então o trigger de vigência não dispara.
+      // ---- recuar-vigencia <pointerId> <minutos> — recua TODOS os marcos de
+      // ---- "desde quando o fluxo vale" (migrations 0324 e 0418): active_since
+      // ---- do ponteiro, created_at da versão ativa (a publicação) e
+      // ---- ai_access_since dos canais da org marcados há menos que isso. O
+      // ---- contato semeado calou ANTES da publicação, e a regra "sem
+      // ---- retroativo" da varredura o recusaria. Só essas colunas mudam, então
+      // ---- os triggers de vigência não disparam.
       case "recuar-vigencia": {
         const pointerId = args[0];
         const minutos = Number(args[1]);
@@ -226,6 +229,17 @@ async function main(): Promise<void> {
           [pointerId, String(minutos), creds.org_id],
         );
         if (rowCount !== 1) throw new Error(`recuar-vigencia: ponteiro ${pointerId} não encontrado na org`);
+        await pool.query(
+          `update followup_flow_versions v set created_at = now() - ($2 || ' minutes')::interval
+             from followup_flow_pointers p
+            where p.id = $1 and p.organization_id = $3 and v.id = p.active_version_id`,
+          [pointerId, String(minutos), creds.org_id],
+        );
+        await pool.query(
+          `update channel_sessions set ai_access_since = now() - ($1 || ' minutes')::interval
+            where organization_id = $2 and ai_access_since > now() - ($1 || ' minutes')::interval`,
+          [String(minutos), creds.org_id],
+        );
         out({ ok: true });
         break;
       }
@@ -280,6 +294,34 @@ async function main(): Promise<void> {
           [creds.org_id, convRows[0]!.id, fix.channel_session_id, contactId, velho],
         );
         out({ contactId, conversationId: convRows[0]!.id, phone });
+        break;
+      }
+
+      // ── mexer-no-acesso-da-ia ─────────────────────────────────────────────
+      // Acrescenta e tira um telefone de teste no canal do gate: a metadata
+      // termina igual, mas o trigger da migration 0418 grava ai_access_since =
+      // agora nas duas mudanças. É o caminho real do marco, sem escrever a
+      // coluna à mão. (J20.12, silêncio anterior ao marco.)
+      case "mexer-no-acesso-da-ia": {
+        const creds = loadCreds();
+        const fix = creds.elegibilidade;
+        if (!fix) throw new Error("bloco `elegibilidade` ausente — rode scripts/seed-e2e-elegibilidade.ts");
+        await pool.query(
+          `update channel_sessions
+              set metadata = jsonb_set(coalesce(metadata, '{}'::jsonb), '{ai_test_phone_numbers}',
+                    coalesce(metadata -> 'ai_test_phone_numbers', '[]'::jsonb) || '["+5511900000418"]'::jsonb)
+            where id = $1 and organization_id = $2`,
+          [fix.channel_session_id, creds.org_id],
+        );
+        const { rows } = await pool.query<{ ai_access_since: Date | null }>(
+          `update channel_sessions
+              set metadata = jsonb_set(metadata, '{ai_test_phone_numbers}',
+                    (metadata -> 'ai_test_phone_numbers') - '+5511900000418')
+            where id = $1 and organization_id = $2
+            returning ai_access_since`,
+          [fix.channel_session_id, creds.org_id],
+        );
+        out({ ai_access_since: rows[0]?.ai_access_since ?? null });
         break;
       }
 
