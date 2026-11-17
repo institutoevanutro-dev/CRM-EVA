@@ -42,6 +42,8 @@ interface WinArgs {
 interface LoseArgs {
   leadId: string;
   lostReason: string;
+  /** O texto livre de "Outro motivo" — vai para a timeline, não para `lost_reason`. */
+  detalhe?: string;
 }
 
 export function useWinLead(pipelineId: string) {
@@ -67,10 +69,11 @@ export function useLoseLead(pipelineId: string) {
   const qc = useQueryClient();
   const queryKey = ["board", pipelineId] as const;
   return useMutation({
-    mutationFn: async ({ leadId, lostReason }: LoseArgs) => {
+    mutationFn: async ({ leadId, lostReason, detalhe }: LoseArgs) => {
       marcarEcoLocal(leadId);
       return apiClient.post<{ data: Lead }>(`/api/v1/leads/${leadId}/lose`, {
         lost_reason: lostReason,
+        ...(detalhe ? { detalhe } : {}),
       });
     },
     onSuccess: (res, { leadId }) => {

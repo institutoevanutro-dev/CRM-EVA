@@ -83,6 +83,13 @@ export type CanonicalLostReason = (typeof CANONICAL_LOST_REASONS)[number];
  */
 export const loseLeadSchema = z.object({
   lost_reason: z.string().min(1, "lost_reason é obrigatório").max(500),
+  /**
+   * O texto livre de "Outro motivo". Vai para a linha da timeline, e NÃO para
+   * `lost_reason`: o trigger só aceita ali canônico ∪ cadastrado no funil, e
+   * mandar o detalhe como motivo travava o Confirmar com qualquer frase
+   * (auditoria 16/11, achado 29).
+   */
+  detalhe: z.string().trim().max(500).optional(),
 });
 export type LoseLeadInput = z.infer<typeof loseLeadSchema>;
 

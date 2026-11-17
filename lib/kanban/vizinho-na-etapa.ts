@@ -1,4 +1,5 @@
 import type { Lead } from "@/lib/types/leads";
+import { midpoint } from "./fractional-indexing";
 
 /** O que a conta precisa de um card: identidade e posição na etapa. */
 type CardNaEtapa = Pick<Lead, "id" | "position_in_stage">;
@@ -20,8 +21,8 @@ type CardNaEtapa = Pick<Lead, "id" | "position_in_stage">;
  *
  * - `acima` nulo (solto no topo): o primeiro card da etapa inteira.
  * - Card escondido EMPATADO com o de cima (empate já gravado no banco): é
- *   pulado, senão o `midpoint` daria NaN. Empate entre dois VISÍVEIS fica como
- *   hoje (cancela).
+ *   pulado, senão o `midpoint` daria NaN. Empate entre dois VISÍVEIS é
+ *   resolvido por `posicaoAoSoltar`, abaixo.
  * - Sem o cache do quadro, ou com o de cima fora dele: o `after` visível.
  *
  * Ordena uma CÓPIA (`filter` já devolve array novo): a lista do cache é
@@ -43,4 +44,31 @@ export function proximoNaEtapaInteira<C extends CardNaEtapa>(
   if (i < 0) return abaixoVisivel;
   const empatado = (l: C) => l.position_in_stage === acima.position_in_stage;
   return todos.slice(i + 1).find((l) => l.id === abaixoVisivel?.id || !empatado(l)) ?? null;
+}
+
+/**
+ * A posição do card solto — e, com EMPATE já gravado entre os dois vizinhos,
+ * uma posição livre logo depois do grupo empatado em vez de nenhuma.
+ *
+ * Empate entre dois cards VISÍVEIS (`acima` e `abaixo` com a mesma
+ * `position_in_stage`, herança de dado antigo ou de importação) não tem número
+ * no meio: `midpoint` dá NaN, e o quadro cancelava o arrasto em silêncio — o
+ * card voltava e ninguém dizia por quê (auditoria 16/11, achado 27). Aqui o
+ * card cai depois do ÚLTIMO empatado: a ordem DENTRO do empate já era
+ * indefinida (o banco não a guarda), então essa é a posição mais próxima da
+ * pedida que existe. `ajustada` avisa quem chamou para dizer isso na tela.
+ */
+export function posicaoAoSoltar<C extends CardNaEtapa>(
+  acima: C | null,
+  abaixo: C | null,
+  etapaInteira: readonly C[] | null,
+  arrastadoId: string,
+): { posicao: number; ajustada: boolean } {
+  const posicao = midpoint(acima?.position_in_stage ?? null, abaixo?.position_in_stage ?? null);
+  if (!Number.isNaN(posicao) || !acima) return { posicao, ajustada: false };
+  const empate = acima.position_in_stage;
+  const seguinte = (etapaInteira ?? [acima, ...(abaixo ? [abaixo] : [])])
+    .filter((l) => l.id !== arrastadoId && l.position_in_stage > empate)
+    .reduce<C | null>((menor, l) => (!menor || l.position_in_stage < menor.position_in_stage ? l : menor), null);
+  return { posicao: midpoint(empate, seguinte?.position_in_stage ?? null), ajustada: true };
 }

@@ -7646,6 +7646,13 @@ export const DICIONARIO: Traducoes = {
     es: "Esto no tiene vuelta atrás: el embudo y sus etapas desaparecen. Si ya recibió negocio, la eliminación se rechaza y sigue archivado.",
   },
   "Novo Lead": { es: "Nuevo Lead" },
+  "nesta etapa": { es: "en esta etapa" },
+  "Havia cartões na mesma posição nesta etapa: este ficou logo depois deles.": {
+    es: "Había tarjetas en la misma posición en esta etapa: esta quedó justo después de ellas.",
+  },
+  "O motivo fica como “Outro”; o detalhe aparece no histórico do negócio.": {
+    es: "El motivo queda como “Otro”; el detalle aparece en el historial del negocio.",
+  },
   "Novo negócio": { es: "Nuevo negocio" },
   "Não consegui carregar este funil:": { es: "No pude cargar este embudo:" },
   "sem responsável.": { es: "sin responsable." },

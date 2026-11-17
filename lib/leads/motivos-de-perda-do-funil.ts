@@ -91,17 +91,3 @@ export function opcoesDeMotivoDePerda(motivosCadastrados: readonly string[]): Op
   if (!base.includes(OUTRO)) opcoes.push({ valor: OUTRO, doFunil: false });
   return opcoes;
 }
-
-/**
- * Este valor passa pelo trigger?
- *
- * `fn_validate_lost_reason_required` aceita canônico ∪ cadastrado no funil do
- * card. Repetir a regra aqui é o que evita o texto livre virar erro 22023
- * (`lost_reason_invalid`) DEPOIS do clique: a tela recusa antes, dizendo o que
- * fazer — que é o que a issue #918 pede por "validar os motivos do funil".
- */
-export function motivoDePerdaAceito(valor: string, motivosCadastrados: readonly string[]): boolean {
-  const texto = valor.trim();
-  if (!texto) return false;
-  return CANONICOS.includes(texto) || motivosCadastrados.includes(texto);
-}

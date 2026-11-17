@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -48,16 +48,40 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
   const { data: members } = useAssignableMembers(true);
   const { data: agents } = useAssignableAgents(true);
   const [searchInput, setSearchInput] = useState(filters.search ?? "");
-
-  // Debounce search 250ms
+  /**
+   * A CAIXA ACOMPANHA O FILTRO (auditoria 16/11, achado 26). O filtro mora na
+   * URL, e quem o muda não é só a caixa: "Limpar filtros" do aviso de quadro
+   * vazio e o voltar do navegador limpavam a URL e a caixa seguia mostrando o
+   * texto. Ajuste no RENDER, comparando com o valor anterior (o padrão que o
+   * React documenta, sem efeito). `enviada` é o que a própria caixa mandou: a
+   * URL que chega atrasada com ele não pode atropelar quem continuou digitando.
+   */
+  const buscaDoFiltro = filters.search ?? "";
+  const [buscaVista, setBuscaVista] = useState(buscaDoFiltro);
+  const [enviada, setEnviada] = useState<string | null>(null);
+  if (buscaDoFiltro !== buscaVista) {
+    setBuscaVista(buscaDoFiltro);
+    if (buscaDoFiltro !== enviada) setSearchInput(buscaDoFiltro);
+  }
+  // O atraso lê o filtro de AGORA, não o do render em que a tecla foi
+  // digitada: trocar Situação dentro dos 250 ms era desfeito quando a busca
+  // saía com o filtro velho por baixo.
+  const filtrosAtuais = useRef(filters);
+  const aoMudar = useRef(onChange);
   useEffect(() => {
-    const t = setTimeout(() => {
-      if ((filters.search ?? "") !== searchInput) {
-        onChange({ ...filters, search: searchInput });
+    filtrosAtuais.current = filters;
+    aoMudar.current = onChange;
+  });
+
+  useEffect(() => {
+    const espera = setTimeout(() => {
+      const atuais = filtrosAtuais.current;
+      if ((atuais.search ?? "") !== searchInput) {
+        setEnviada(searchInput);
+        aoMudar.current({ ...atuais, search: searchInput });
       }
     }, 250);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => clearTimeout(espera);
   }, [searchInput]);
 
   /**
@@ -154,10 +178,14 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2">
       <Input
         type="search"
-        placeholder={t("Buscar por título…")}
+        placeholder={t("Buscar por nome…")}
         value={searchInput}
         onChange={(e) => setSearchInput(e.target.value)}
-        className="h-9 w-full sm:w-64"
+        // A mesma altura e letra dos botões de filtro ao lado (Button `sm`):
+        // a busca era mais alta e "Apenas atrasados" tinha letra maior
+        // (achado 31). `md:text-xs` porque abaixo disso a letra fica em 16px,
+        // o piso que impede o Safari do iPhone de dar zoom no campo.
+        className="h-11 w-full md:text-xs lg:h-8 sm:w-64"
       />
 
       <DropdownMenu>
@@ -276,7 +304,7 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
 
       <label
         className={cn(
-          "flex cursor-pointer select-none items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm",
+          "flex h-11 cursor-pointer select-none items-center gap-2 rounded-md border border-border px-3 text-xs font-medium lg:h-8",
           filters.overdueOnly && "border-accent bg-accent/10",
         )}
       >
