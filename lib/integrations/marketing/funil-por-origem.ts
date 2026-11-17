@@ -24,16 +24,41 @@
  *
  * A leitura desses eventos mora em `eventos-do-periodo.ts`, compartilhada com o resumo do Início.
  *
+ * Vendas (16/11, para CAC e ROAS por canal): com o Financeiro ligado, cada origem leva também
+ * `vendido_cents` (o VENDIDO no período, parcelado inclusive, decisão do André) e `compradores`
+ * (contatos com venda no período). Os contatos são os mesmos do funil (com algum evento no período);
+ * quem comprou sem nenhum evento no CRM no período não entra (limite conhecido). Sem o Financeiro, ou
+ * com ele fora do ar, os dois campos não vêm e o painel segue com a receita dos ganhos.
+ *
  * Desenho: docs do painel-meta, `specs/2026-10-23-funil-por-origem-design.md`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { emLotes, lerComparecimentos, lerEventosDoPeriodo, type Contato } from "@/lib/integrations/marketing/eventos-do-periodo";
+import type { VendaPorContato } from "@/lib/integrations/financeiro/cliente";
+
+/** Pede as vendas por contato em lotes de 500 (o limite da rota do Financeiro). */
+export type ConsultaVendas = (contatos: string[]) => Promise<VendaPorContato[]>;
+
+/** Soma, por origem, o vendido e quantos contatos compraram. */
+export function somarVendasPorOrigem(vendas: VendaPorContato[], origens: ReadonlyMap<string, Origem>) {
+  const s = new Map(ORIGENS.map((o) => [o, { vendido: 0n, compradores: 0 }]));
+  for (const v of vendas) {
+    if (!(v.vendas > 0)) continue;
+    const l = s.get(origens.get(v.contato_id) ?? "organico")!;
+    l.vendido += BigInt(v.valor_cents);
+    l.compradores += 1;
+  }
+  return s;
+}
 
 export type Origem = "meta" | "google" | "indicacao" | "organico";
 export const ORIGENS: readonly Origem[] = ["meta", "google", "indicacao", "organico"];
 
 export interface LinhaDoFunil {
   origem: Origem;
+  /** Só com o Financeiro ligado e respondendo. */
+  vendido_cents?: string;
+  compradores?: number;
   leads: number;
   agendamentos: number;
   comparecimentos: number;
@@ -81,7 +106,7 @@ export function montarFunil(
 
 // ---------- Leitura (service role: TODA consulta filtra a organização) ----------
 
-export async function consultaFunilPorOrigem(admin: SupabaseClient, org: string, de: string, ate: string): Promise<FunilPorOrigem> {
+export async function consultaFunilPorOrigem(admin: SupabaseClient, org: string, de: string, ate: string, vendas?: ConsultaVendas): Promise<FunilPorOrigem> {
   const [{ leads, agendamentos, sinais, ganhos }, comparecimentos] = await Promise.all([
     lerEventosDoPeriodo(admin, org, de, ate),
     lerComparecimentos(admin, org, de, ate),
@@ -103,5 +128,15 @@ export async function consultaFunilPorOrigem(admin: SupabaseClient, org: string,
   }
   const origens = new Map(contatos.map((id) => [id, origemDe({ adPlatform: plataforma.get(id) ?? null, tags: etiquetas.get(id) ?? [] })]));
 
-  return montarFunil({ leads, agendamentos, comparecimentos, sinais, ganhos }, origens);
+  const funil = montarFunil({ leads, agendamentos, comparecimentos, sinais, ganhos }, origens);
+  if (!vendas || !contatos.length) return funil;
+  let todas: VendaPorContato[];
+  try {
+    todas = [];
+    for (let i = 0; i < contatos.length; i += 500) todas.push(...(await vendas(contatos.slice(i, i + 500))));
+  } catch {
+    return funil; // Financeiro fora: o funil sai sem as vendas, nunca com zero inventado
+  }
+  const s = somarVendasPorOrigem(todas, origens);
+  return { ...funil, origens: funil.origens.map((l) => ({ ...l, vendido_cents: s.get(l.origem)!.vendido.toString(), compradores: s.get(l.origem)!.compradores })) };
 }
