@@ -118,6 +118,8 @@ vi.mock("@/hooks/agenda/useHorariosLivres", () => ({
 
 /** Vazio por padrão; o caso do card da grade põe um compromisso aqui. */
 const compromissosDaGrade = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+// O canal ao vivo tem teste próprio (`agenda-ao-vivo.test.tsx`); aqui não há Supabase.
+vi.mock("@/hooks/agenda/useAgendaAoVivo", () => ({ useAgendaAoVivo: () => ({}) }));
 vi.mock("@/hooks/agenda/useAgendamentos", () => ({
   useAgendamentos: () => ({ data: compromissosDaGrade, isError: false, isLoading: false }),
 }));

@@ -19,7 +19,10 @@ import { normalizarTags } from "@/lib/contacts/tag-normalizada";
 import { contactPatchSchema, type ContactPatch } from "@/lib/schemas/contacts";
 import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
-import { EtiquetasDoContato } from "@/components/contacts/EtiquetasDoContato";
+import {
+  EtiquetasDoContato,
+  escSoLimpaORascunhoDeEtiqueta,
+} from "@/components/contacts/EtiquetasDoContato";
 import type { Contact } from "@/lib/types/contacts";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
 
@@ -118,10 +121,22 @@ export function EditContactDialog({
     ]);
 
     const payload: Record<string, unknown> = {};
-    if (values.name?.trim()) payload.name = values.name.trim();
-    if (values.email?.trim()) payload.email = values.email.trim();
-    if (values.phone_number?.trim()) payload.phone_number = values.phone_number.trim();
-    if (values.birthdate) payload.birthdate = values.birthdate;
+    // Campo LIMPO vai como `null` (auditoria L4, achado 33): antes o vazio
+    // simplesmente não viajava, o servidor não mexia em nada e a tela dizia
+    // "Contato atualizado" com o e-mail velho ainda gravado. Vazio que já era
+    // vazio continua fora do payload — não há o que apagar.
+    const texto = (atual: string | undefined, gravado: string | null | undefined) => {
+      const limpo = atual?.trim() ?? "";
+      if (limpo) return limpo;
+      return gravado ? null : undefined;
+    };
+    const campos = {
+      name: texto(values.name, contact.name),
+      email: texto(values.email, contact.email),
+      phone_number: texto(values.phone_number, contact.phone_number),
+      birthdate: texto(values.birthdate, contact.birthdate),
+    };
+    for (const [k, v] of Object.entries(campos)) if (v !== undefined) payload[k] = v;
     if (values.cpf?.trim()) payload.cpf = values.cpf.trim();
     payload.tags = tags;
     // Sempre no payload, mesmo vazio: o PATCH SUBSTITUI, e é assim que apagar um
@@ -148,7 +163,10 @@ export function EditContactDialog({
 
   return (
     <Dialog open={open} onOpenChange={mudarAbertura}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="max-h-[90vh] overflow-y-auto"
+        onEscapeKeyDown={escSoLimpaORascunhoDeEtiqueta}
+      >
         <DialogHeader>
           <DialogTitle>{t("Editar contato")}</DialogTitle>
           <DialogDescription>{t("Atualize os dados deste contato.")}</DialogDescription>
@@ -179,7 +197,7 @@ export function EditContactDialog({
             <Textarea id="ec-endereco" rows={2} {...form.register("endereco")} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ec-tags">{t("Tags")}</Label>
+            <Label htmlFor="ec-tags">{t("Etiquetas")}</Label>
             <EtiquetasDoContato
               inputId="ec-tags"
               value={tags}

@@ -141,7 +141,11 @@ export function StageColumn({
               className={cn(
                 "h-4 w-4 shrink-0 cursor-pointer accent-accent transition-opacity",
                 "focus:opacity-100 disabled:cursor-default",
-                selecionadosAqui > 0 ? "opacity-100" : "opacity-0 group-hover/etapa:opacity-100",
+                // Só some onde HÁ hover (auditoria 16/11, achado 30): no toque
+                // não existe "passar o mouse", e a caixa invisível escondia o
+                // "selecionar a etapa inteira".
+                selecionadosAqui === 0 &&
+                  "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/etapa:opacity-100",
               )}
             />
             <span

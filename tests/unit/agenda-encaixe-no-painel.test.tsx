@@ -269,3 +269,21 @@ describe("o calendário não trava no mês seguinte", () => {
     });
   });
 });
+
+describe("Confirmar trava enquanto envia (achado 14, auditoria de 16/11)", () => {
+  it("dois cliques no Confirmar mandam UMA remarcação", async () => {
+    let soltar: () => void = () => {};
+    const onConfirmar = vi.fn(() => new Promise<void>((r) => (soltar = r)));
+    montar({
+      onConfirmar,
+      horarioInicial: { instante: "2026-09-16T13:00:00.000Z", rotulo: "10:00" },
+    });
+    const botao = screen.getByTestId("confirmar-marcacao");
+    fireEvent.click(botao);
+    fireEvent.click(botao);
+    expect(onConfirmar).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByTestId("confirmar-marcacao")).toBeDisabled());
+    soltar();
+    await waitFor(() => expect(painel()).toBeInTheDocument());
+  });
+});

@@ -132,8 +132,15 @@ export const contactCreateSchema = z.object({
 });
 export type ContactCreate = z.infer<typeof contactCreateSchema>;
 
+// `null` apaga (auditoria L4, achado 33): sem isso não havia como tirar um
+// e-mail, telefone, nascimento ou nome de um contato — o campo vazio não viajava
+// e a tela dizia "Contato atualizado". As colunas são todas anuláveis no banco.
 export const contactPatchSchema = contactCreateSchema.partial().extend({
   source: z.string().min(1).optional(),
+  name: contactCreateSchema.shape.name.unwrap().nullable().optional(),
+  email: contactCreateSchema.shape.email.unwrap().nullable().optional(),
+  phone_number: contactCreateSchema.shape.phone_number.unwrap().nullable().optional(),
+  birthdate: contactCreateSchema.shape.birthdate.unwrap().nullable().optional(),
 });
 export type ContactPatch = z.infer<typeof contactPatchSchema>;
 

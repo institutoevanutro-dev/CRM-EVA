@@ -147,3 +147,24 @@ export function etiquetaParaGravar(args: {
   // o que o autocompletar cria é o que o filtro `?tag=` casa.
   return normalizarTag(args.digitado);
 }
+
+/**
+ * As opções do filtro de etiquetas da lista de contatos (auditoria L4, achado
+ * 34): o vocabulário da organização, mais o que já veio carregado, mais as
+ * marcadas (uma marcada nunca some da lista enquanto estiver marcada), mais as
+ * extras fixas. Sem repetir, em ordem alfabética.
+ */
+export function opcoesDoFiltroDeEtiquetas(fontes: {
+  vocabulario?: readonly string[] | null;
+  carregadas?: readonly string[];
+  selecionadas?: readonly string[];
+  extra?: readonly string[];
+}): string[] {
+  const set = new Set<string>([
+    ...(fontes.vocabulario ?? []),
+    ...(fontes.carregadas ?? []),
+    ...(fontes.selecionadas ?? []),
+    ...(fontes.extra ?? []),
+  ]);
+  return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+}

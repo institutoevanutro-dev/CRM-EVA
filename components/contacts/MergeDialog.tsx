@@ -95,9 +95,13 @@ const ROTULO_DO_MOTIVO: Record<MotivoDeDuplicidade, string> = {
 function GrupoDeDuplicados({
   grupo,
   onFundido,
+  podeJuntar,
 }: {
   grupo: GrupoDuplicado;
   onFundido: () => void;
+  /** Sem o papel, o botão não aparece: oferecê-lo só para o 403 vir depois
+   *  da confirmação era o achado 35 da auditoria L4. */
+  podeJuntar: boolean;
 }) {
   const t = useT();
   const merge = useMergeContacts();
@@ -183,13 +187,19 @@ function GrupoDeDuplicados({
             "Conversas, mensagens, negócios e histórico passam para quem fica. O cadastro antigo não é apagado — vira registro de fusão. Não há como desfazer.",
           )}
         </p>
-        <Button
-          size="sm"
-          onClick={() => setConfirmando(true)}
-          disabled={merge.isPending || secundarios.length === 0}
-        >
-          {merge.isPending ? t("Juntando…") : t("Juntar")}
-        </Button>
+        {podeJuntar ? (
+          <Button
+            size="sm"
+            onClick={() => setConfirmando(true)}
+            disabled={merge.isPending || secundarios.length === 0}
+          >
+            {merge.isPending ? t("Juntando…") : t("Juntar")}
+          </Button>
+        ) : (
+          <p className="shrink-0 text-xs text-muted-foreground">
+            {t("Peça a um gestor para juntar.")}
+          </p>
+        )}
       </div>
 
       <ConfirmarJuncao
@@ -362,6 +372,7 @@ export function MergeDialog({ open, onOpenChange }: Props) {
                 key={grupo.chave}
                 grupo={grupo}
                 onFundido={() => void q.refetch()}
+                podeJuntar={podeJuntar}
               />
             ))}
 

@@ -591,6 +591,13 @@ export interface AgendamentoListado {
    * contrato do campo acima: é da TELA, a ferramenta da IA não o repassa.
    */
   contatoNaoRecebeMensagens?: boolean;
+  /**
+   * O procedimento (`event_type_id`) e o nome dele. A TELA precisa dos dois:
+   * remarcar consulta os horários do procedimento DESTE compromisso (não o
+   * escolhido na grade), e o histórico diz qual procedimento foi.
+   */
+  tipoId?: string | null;
+  tipoNome?: string | null;
 }
 
 export interface ParametrosDaLista {
@@ -655,6 +662,12 @@ function contatoDoEmbed(
 /** O mesmo embed, para a pergunta do lembrete: o contato pediu para não receber mensagens? */
 function bloqueadoNoEmbed(c: { is_blocked?: boolean | null } | Array<{ is_blocked?: boolean | null }> | null | undefined): boolean {
   return (Array.isArray(c) ? c[0] : c)?.is_blocked === true;
+}
+
+/** O nome do procedimento pelo embed de `calendar_event_types` (objeto ou lista). */
+function nomeDoTipoNoEmbed(t: { name?: string | null } | Array<{ name?: string | null }> | null | undefined): string | null {
+  const nome = (Array.isArray(t) ? t[0] : t)?.name;
+  return nome ? String(nome) : null;
 }
 
 /** O mesmo embed, para a pergunta do prontuário: o cadastro tem nome completo? */
@@ -745,7 +758,7 @@ export async function listaAgendamentos(
   let q = supabase
     .from("calendar_appointments")
     .select(
-      "id, title, starts_at, ends_at, time_zone, status, revision, meeting_state, meeting_url, owner_user_id, contact_id, contacts(name, display_name, is_blocked)",
+      "id, title, starts_at, ends_at, time_zone, status, revision, meeting_state, meeting_url, owner_user_id, contact_id, event_type_id, calendar_event_types(name), contacts(name, display_name, is_blocked)",
     )
     .eq("organization_id", organizationId)
     // Lançado por engano ou de teste (migration 0364): não é compromisso de
@@ -818,6 +831,8 @@ export async function listaAgendamentos(
       contatoNome: contatoDoEmbed(l.contacts),
       contatoSemNomeCompleto: l.contact_id ? semNomeCompletoNoEmbed(l.contacts) : false,
       contatoNaoRecebeMensagens: l.contact_id ? bloqueadoNoEmbed(l.contacts) : false,
+      tipoId: l.event_type_id ? String(l.event_type_id) : null,
+      tipoNome: nomeDoTipoNoEmbed(l.calendar_event_types),
     })),
   };
 }

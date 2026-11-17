@@ -49,14 +49,45 @@ import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
  */
 const ALTURA_DA_HORA = 48;
 
-/** A janela que a grade desenha. Fora dela, rola. */
+/** A janela PADRÃO que a grade desenha. Fora dela, rola. */
 const PRIMEIRA_HORA = 7;
 const ULTIMA_HORA = 21;
 
-const HORAS = Array.from(
-  { length: ULTIMA_HORA - PRIMEIRA_HORA + 1 },
-  (_, i) => PRIMEIRA_HORA + i,
-);
+/** Primeira e última hora (inclusive) que a grade desenha. */
+export interface JanelaDaGrade {
+  primeira: number;
+  ultima: number;
+}
+
+/**
+ * A janela CRESCE para caber o que está marcado no período (achado 20 da
+ * auditoria de 16/11): com 07–21 fixo, um compromisso das 06:00 ficava acima
+ * da área desenhada, sob o cabeçalho, e um das 22:00 aparecia sem rótulo de
+ * hora. Nunca encolhe abaixo do padrão: a grade vazia continua sendo o dia de
+ * trabalho de sempre. Cancelado não alarga — ele não ocupa nada.
+ */
+export function janelaDoPeriodo(agendamentos: Agendamento[], fuso: string): JanelaDaGrade {
+  let primeira = PRIMEIRA_HORA;
+  let ultima = ULTIMA_HORA;
+  for (const a of agendamentos) {
+    if (a.situacao === "cancelled") continue;
+    const ini = partesNoFuso(new Date(a.comeca), fuso);
+    const fim = partesNoFuso(new Date(a.termina), fuso);
+    primeira = Math.min(primeira, ini.hora);
+    // Termina às 23:00 em ponto → a última hora desenhada é a das 22. Termina
+    // depois da meia-noite (outro dia) → até o fim do dia.
+    const outroDia = diaLocalISO(new Date(a.termina), fuso) !== diaLocalISO(new Date(a.comeca), fuso);
+    const ultimaDoBloco = outroDia ? 23 : fim.minuto > 0 ? fim.hora : fim.hora - 1;
+    ultima = Math.max(ultima, ultimaDoBloco);
+  }
+  return { primeira, ultima: Math.min(ultima, 23) };
+}
+
+const JanelaContexto = React.createContext<JanelaDaGrade>({ primeira: PRIMEIRA_HORA, ultima: ULTIMA_HORA });
+
+function horasDa(j: JanelaDaGrade): number[] {
+  return Array.from({ length: j.ultima - j.primeira + 1 }, (_, i) => j.primeira + i);
+}
 
 /**
  * O que transforma a grade de DESENHO em AGENDA.
@@ -134,9 +165,9 @@ interface PropostaDeRemarcacao {
  * Quando os dois fusos são o mesmo — a maioria, e o CI inteiro — `partesNoFuso`
  * devolve exatamente o que `getHours()` devolvia: a conversão é a identidade.
  */
-function minutosDesdeOTopo(d: Date, fuso: string): number {
+function minutosDesdeOTopo(d: Date, fuso: string, primeiraHora: number): number {
   const p = partesNoFuso(d, fuso);
-  return (p.hora - PRIMEIRA_HORA) * 60 + p.minuto;
+  return (p.hora - primeiraHora) * 60 + p.minuto;
 }
 
 /** Minuto do dia SEM deslocar da primeira hora — o que o teclado e o arraste pedem. */
@@ -195,10 +226,12 @@ function instanteDoMinuto(dia: Date, minuto: number, fuso: string): Date {
 }
 
 /** Os começos de célula que a camada de marcação desenha, em minutos do dia. */
-const CELULAS = Array.from(
-  { length: ((ULTIMA_HORA - PRIMEIRA_HORA + 1) * 60) / PASSO_DA_CELULA_MIN },
-  (_, i) => PRIMEIRA_HORA * 60 + i * PASSO_DA_CELULA_MIN,
-);
+function celulasDa(j: JanelaDaGrade): number[] {
+  return Array.from(
+    { length: ((j.ultima - j.primeira + 1) * 60) / PASSO_DA_CELULA_MIN },
+    (_, i) => j.primeira * 60 + i * PASSO_DA_CELULA_MIN,
+  );
+}
 
 function diasDaSemanaDe(ancora: Date): Date[] {
   const inicio = startOfWeek(ancora, { weekStartsOn: 0 });
@@ -298,10 +331,11 @@ function CamadaDeMarcacao({
   const diaCurto = format(dia, "dd/MM");
   const encaixeLigado =
     interacao.encaixe === true && interacao.motivo !== "sem-jornada" && interacao.motivo !== "erro";
+  const janela = React.useContext(JanelaContexto);
 
   return (
     <>
-      {CELULAS.map((minuto) => {
+      {celulasDa(janela).map((minuto) => {
         const livre = horarioNaCelula(publicados, minuto, fuso);
         const inicio = instanteDoMinuto(dia, minuto, fuso);
         const fim = instanteDoMinuto(dia, minuto + PASSO_DA_CELULA_MIN, fuso);
@@ -343,7 +377,7 @@ function CamadaDeMarcacao({
                   // mouse, no cursor e no motivo escrito.
                   "cursor-default",
             )}
-            style={{ top: pixelsDe(minuto - PRIMEIRA_HORA * 60), height: pixelsDe(PASSO_DA_CELULA_MIN) }}
+            style={{ top: pixelsDe(minuto - janela.primeira * 60), height: pixelsDe(PASSO_DA_CELULA_MIN) }}
           />
         );
       })}
@@ -423,8 +457,9 @@ function FaixaFechada({
   mostrarQuem: boolean;
 }) {
   const t = useT();
-  const topo = Math.max(trecho.de, PRIMEIRA_HORA * 60);
-  const fim = Math.min(trecho.ate, (ULTIMA_HORA + 1) * 60);
+  const janela = React.useContext(JanelaContexto);
+  const topo = Math.max(trecho.de, janela.primeira * 60);
+  const fim = Math.min(trecho.ate, (janela.ultima + 1) * 60);
   // Fechamento todo fora da janela desenhada (22h–23h, por exemplo): não há
   // onde pô-lo, e uma faixa de altura zero só confundiria o teste e o leitor.
   if (fim <= topo) return null;
@@ -438,7 +473,7 @@ function FaixaFechada({
       data-responsavel={fechamento.responsavelId}
       className="pointer-events-none absolute inset-x-0 overflow-hidden border-y border-border px-1.5 py-0.5"
       style={{
-        top: pixelsDe(topo - PRIMEIRA_HORA * 60),
+        top: pixelsDe(topo - janela.primeira * 60),
         height: pixelsDe(fim - topo),
         background: HACHURA_DO_FECHAMENTO,
       }}
@@ -506,6 +541,7 @@ function BlocoDeAgendamento({
   };
 }) {
   const t = useT();
+  const janela = React.useContext(JanelaContexto);
   const comeca = new Date(agendamento.comeca);
   const termina = new Date(agendamento.termina);
   const duracao = Math.max(differenceInMinutes(termina, comeca), 15);
@@ -623,7 +659,7 @@ function BlocoDeAgendamento({
         arraste?.ativo && "opacity-40",
       )}
       style={{
-        top: pixelsDe(minutosDesdeOTopo(comeca, fuso)),
+        top: pixelsDe(minutosDesdeOTopo(comeca, fuso, janela.primeira)),
         height: Math.max(pixelsDe(duracao) - 2, 18),
         // `calc` em vez de porcentagem crua para os 2px de respiro entre
         // colunas vizinhas não saírem da largura útil de cada bloco.
@@ -716,8 +752,9 @@ function IconeDeSituacao({ icone, id }: { icone: IconeDaSituacao; id: string }) 
 
 /** A régua do agora — a linha que faz a tela parecer viva em vez de impressa. */
 function ReguaDoAgora({ agora, fuso }: { agora: Date; fuso: string }) {
-  const minutos = minutosDesdeOTopo(agora, fuso);
-  if (minutos < 0 || minutos > (ULTIMA_HORA - PRIMEIRA_HORA + 1) * 60) return null;
+  const janela = React.useContext(JanelaContexto);
+  const minutos = minutosDesdeOTopo(agora, fuso, janela.primeira);
+  if (minutos < 0 || minutos > (janela.ultima - janela.primeira + 1) * 60) return null;
   return (
     <div
       data-testid="regua-do-agora"
@@ -736,10 +773,11 @@ function ReguaDoAgora({ agora, fuso }: { agora: Date; fuso: string }) {
 }
 
 function ColunaDeHoras() {
+  const janela = React.useContext(JanelaContexto);
   return (
     <div className="w-12 shrink-0 select-none border-r border-border" aria-hidden>
       <div className="h-8 border-b border-border" />
-      {HORAS.map((h) => (
+      {horasDa(janela).map((h) => (
         <div
           key={h}
           className="relative border-b border-border/50 text-right"
@@ -777,6 +815,7 @@ function FantasmaDoArraste({
   fuso: string;
 }) {
   const localeDaData = useLocaleDeData();
+  const janela = React.useContext(JanelaContexto);
   const valido = proposta.instante !== null;
   return (
     <div
@@ -789,7 +828,7 @@ function FantasmaDoArraste({
         valido ? "border-accent bg-accent-soft" : "border-error bg-error-bg",
       )}
       style={{
-        top: pixelsDe(proposta.minuto - PRIMEIRA_HORA * 60),
+        top: pixelsDe(proposta.minuto - janela.primeira * 60),
         height: Math.max(pixelsDe(duracaoMin) - 2, 18),
       }}
     >
@@ -852,6 +891,7 @@ function ColunaDeDia({
   // "Hoje" é o dia da ORGANIZAÇÃO, não o do navegador: a mesma data marca
   // colunas diferentes em cada lado do mundo.
   const ehHoje = chaveDoDia(dia) === chaveDoDiaDoInstante(agora, fuso);
+  const horas = horasDa(React.useContext(JanelaContexto));
 
   return (
     <div
@@ -890,9 +930,9 @@ function ColunaDeDia({
         // corpo de dia é determinístico e independe do que está desenhado por
         // cima — que é exatamente o que muda durante um arraste.
         data-corpo-do-dia={chaveDoDia(dia)}
-        style={{ height: HORAS.length * ALTURA_DA_HORA }}
+        style={{ height: horas.length * ALTURA_DA_HORA }}
       >
-        {HORAS.map((h) => (
+        {horas.map((h) => (
           <div
             key={h}
             className="border-b border-border/50"
@@ -1222,7 +1262,9 @@ export function GradeDaAgenda({
     moveu: boolean;
   } | null>(null);
 
-  const limites = { primeiro: PRIMEIRA_HORA * 60, ultimo: (ULTIMA_HORA + 1) * 60 };
+  // Só os dias DESENHADOS alargam a janela: no Mês esta parte nem aparece.
+  const janela = React.useMemo(() => janelaDoPeriodo(agendamentos, fuso), [agendamentos, fuso]);
+  const limites = { primeiro: janela.primeira * 60, ultimo: (janela.ultima + 1) * 60 };
 
   /** A proposta para um instante — a mesma conta para o ponteiro e para o teclado. */
   const montarProposta = React.useCallback(
@@ -1282,7 +1324,7 @@ export function GradeDaAgenda({
       const bruto = minutoSobY({
         y: clientYDoTopo - r.top,
         alturaDaHoraPx: ALTURA_DA_HORA,
-        primeiraHora: PRIMEIRA_HORA,
+        primeiraHora: janela.primeira,
       });
       return montarProposta(
         id,
@@ -1290,7 +1332,7 @@ export function GradeDaAgenda({
         Math.min(Math.max(bruto, limites.primeiro), limites.ultimo - PASSO_DA_CELULA_MIN),
       );
     },
-    [montarProposta, limites.primeiro, limites.ultimo],
+    [montarProposta, limites.primeiro, limites.ultimo, janela.primeira],
   );
 
   const aoApontar = React.useCallback(
@@ -1454,6 +1496,7 @@ export function GradeDaAgenda({
         // A rolagem mora AQUI dentro, e não na página: `html, body` têm
         // `overflow-x: hidden` no globals.css, então uma grade que estourasse a
         // largura simplesmente sumiria pela direita, sem barra para trazê-la de volta.
+        <JanelaContexto.Provider value={janela}>
         <div ref={gradeRef} className="flex min-h-0 flex-1 overflow-auto">
           <ColunaDeHoras />
           <div className="flex min-w-0 flex-1">
@@ -1478,6 +1521,7 @@ export function GradeDaAgenda({
             ))}
           </div>
         </div>
+        </JanelaContexto.Provider>
       )}
       {visao !== "mes" ? <LegendaDaGrade /> : null}
     </div>

@@ -18,9 +18,13 @@ import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
+import { ApiError } from "@/lib/api/types";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
 import { ExcluirCompromisso } from "./ExcluirCompromisso";
 import { NomeCompletoDoPaciente } from "./NomeCompletoDoPaciente";
+
+/** O mesmo piso do motivo que a rota de cancelar exige. */
+const MINIMO_DO_MOTIVO = 3;
 
 type Detalhe = {
   meeting?: MeetingDetail | null;
@@ -135,7 +139,9 @@ export function DetalheDoCompromisso({
   }
   function mutationFailed(error: unknown) {
     showApiError(error);
-    setConflict(true);
+    // Só a 409 é "o compromisso mudou" (achado 15, 16/11). Qualquer outra recusa
+    // travava o painel como conflito, e só saía descartando o motivo digitado.
+    if (error instanceof ApiError && error.status === 409) setConflict(true);
     void query.refetch();
   }
   const mutation = useMutation({
@@ -456,8 +462,9 @@ export function DetalheDoCompromisso({
                 </label>
                 <Button
                   variant="outline"
-                  disabled={!reason.trim() || cancel.isPending || staleDraft}
-                  onClick={() => cancel.mutate({ revision: draftRevision ?? a.revision, reason })}
+                  // O mínimo de 3 é o da rota (`DELETE /agenda/agendamentos`).
+                  disabled={reason.trim().length < MINIMO_DO_MOTIVO || cancel.isPending || staleDraft}
+                  onClick={() => cancel.mutate({ revision: draftRevision ?? a.revision, reason: reason.trim() })}
                 >
                   {t("Cancelar agendamento")}
                 </Button>

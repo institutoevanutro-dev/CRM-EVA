@@ -223,10 +223,12 @@ test.describe("visão Calendário do funil", () => {
     await expect(page.getByTestId(`calendario-dia-${NESTE_MES}`).getByRole("button", { name: T_ESTE })).toBeVisible();
 
     // O filtro da barra vale no calendário: buscar por um título tira o outro.
-    await page.getByPlaceholder("Buscar por título…").fill(T_SEM);
+    // O placeholder diz "nome" desde a auditoria de 16/11 (achado 31): a busca
+    // continua casando o título do negócio.
+    await page.getByPlaceholder("Buscar por nome…").fill(T_SEM);
     await expect(calendario.getByRole("button", { name: T_ESTE })).toHaveCount(0);
     await expect(page.getByTestId("calendario-sem-data")).toHaveText("1 sem data neste campo");
-    await page.getByPlaceholder("Buscar por título…").fill("");
+    await page.getByPlaceholder("Buscar por nome…").fill("");
     await expect(calendario.getByRole("button", { name: T_ESTE })).toHaveCount(1);
 
     // De volta ao quadro: os cards de sempre, e a escolha fica guardada.
