@@ -75,7 +75,13 @@ export type Agendamento = {
   /** ISO-8601. */
   comeca: string;
   termina: string;
+  /** Nome do procedimento — o histórico o mostra. */
   tipo?: string;
+  /**
+   * O procedimento (`event_type_id`) DESTE compromisso. Remarcar consulta os
+   * horários dele e do dono dele, nunca os do procedimento escolhido na grade.
+   */
+  tipoId?: string;
   local?: string;
   origem: OrigemDoAgendamento;
   situacao: SituacaoDoAgendamento;

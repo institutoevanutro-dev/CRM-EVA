@@ -90,7 +90,7 @@ export function AgendaInterativa({
    * Inventar aqui uma quarta razão de bloqueio repetiria a mensagem no lugar
    * errado.
    */
-  tipo: { id: string; duracaoMin: number } | null;
+  tipo: { id: string; duracaoMin: number; donoId?: string | null } | null;
   /**
    * OS TIPOS, para o seletor que esta tela não tinha — e a ausência dele virou
    * defeito no primeiro contato com dado real.
@@ -416,6 +416,24 @@ export function AgendaInterativa({
                 encaixe: true,
                 onMarcarEm,
                 onArrastarPara: ({ instante, razao, id }) => {
+                  // Os horários da grade são de UM procedimento e de UM dono.
+                  // Soltar ali o compromisso de outra agenda o mandaria para um
+                  // horário que não é dele (achado 1, 16/11): a rota só confere
+                  // sobreposição para a equipe. O Remarcar do compromisso
+                  // pergunta pela agenda certa.
+                  const arrastado = agendamentos.find((a) => a.id === id);
+                  const donoDosHorarios = donoId ?? tipo.donoId ?? undefined;
+                  if (
+                    arrastado &&
+                    ((arrastado.tipoId && arrastado.tipoId !== tipo.id) ||
+                      (donoDosHorarios && arrastado.responsavelId && arrastado.responsavelId !== donoDosHorarios))
+                  ) {
+                    setPendente(null);
+                    setRecusa(
+                      t("A grade mostra os horários de outro profissional ou procedimento. Use Remarcar neste compromisso."),
+                    );
+                    return;
+                  }
                   if (!instante) {
                     // RECUSA EXPLÍCITA, sem tocar no servidor: o destino não
                     // está na disponibilidade publicada. Remarcar assim mesmo

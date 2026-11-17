@@ -213,6 +213,10 @@ export function PainelDeMarcacao({
    * que é verdade: nada mudou nele.
    */
   const [recusa, setRecusa] = React.useState<{ instante: string; mensagem: string } | null>(null);
+  // Trava o Confirmar enquanto o pedido viaja (achado 14, 16/11): dois cliques
+  // mandavam duas mudanças, e a segunda voltava com erro. Mesmo desenho de
+  // `MarcacaoSimples`.
+  const [enviando, setEnviando] = React.useState(false);
 
   /**
    * A confirmação nasce ONDE a pessoa possa vê-la.
@@ -839,7 +843,10 @@ export function PainelDeMarcacao({
               <Button
                 size="sm"
                 data-testid="confirmar-marcacao"
+                disabled={enviando}
                 onClick={async () => {
+                  if (enviando) return;
+                  setEnviando(true);
                   // ⚠️ ERA `setMarcado(horario); onConfirmar?.(...)` — nesta ordem
                   // e sem esperar. A vista de sucesso aparecia por estado local do
                   // React, ANTES de o servidor responder, e continuava aparecendo
@@ -866,10 +873,12 @@ export function PainelDeMarcacao({
                           ? err.message
                           : t("Não foi marcado. Tente de novo."),
                     });
+                  } finally {
+                    setEnviando(false);
                   }
                 }}
               >
-                {t("Confirmar")}
+                {enviando ? t("Salvando…") : t("Confirmar")}
               </Button>
             </div>
           </div>

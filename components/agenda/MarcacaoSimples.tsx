@@ -781,6 +781,13 @@ export function MarcacaoSimples({
               ) : (
                 <p className="text-text-subtle">{t("Escolha profissional, procedimento, dia e horário.")}</p>
               )}
+              {horario && !canal ? (
+                // Com tudo escolhido, o Confirmar ficava cinza sem dizer por quê
+                // (achado 17, 16/11): falta só como a consulta foi marcada.
+                <p data-testid="falta-canal-na-marcacao" className="mt-1 text-xs text-warning-fg">
+                  {t("Escolha como foi marcada: Mensagem ou Ligação.")}
+                </p>
+              ) : null}
               {semLembrete ? <AvisoSemLembrete nome={semLembrete} className="mt-2" /> : null}
               {!nomeResolvido ? (
                 <p data-testid="falta-nome-na-marcacao" className="mt-1 text-xs text-warning-fg">
