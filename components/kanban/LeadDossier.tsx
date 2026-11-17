@@ -13,6 +13,7 @@ import { ConversaNoDossie } from "./ConversaNoDossie";
 import { NiveisDaOrigemGoogle } from "@/components/contacts/NiveisDaOrigemGoogle";
 import { origemGoogleAds } from "@/lib/leads/origem-google-ads";
 import { LeadFieldsForm } from "./LeadFieldsForm";
+import { escSoLimpaORascunhoDeEtiqueta } from "@/components/contacts/EtiquetasDoContato";
 import { ScoreSlot } from "./ScoreSlot";
 import { LeadTimeline } from "./LeadTimeline";
 import { TarefasDoNegocio } from "./TarefasDoNegocio";
@@ -131,6 +132,8 @@ export function LeadDossier({
         // têm a mesma aparência, e no dossiê a segunda é ainda mais crível —
         // negócio sem novidade é um estado normal.
         data-refetch-divergencias={timeline.seguranca.divergencias}
+        // Esc com texto no campo de etiqueta limpa só o texto (achado 36).
+        onEscapeKeyDown={escSoLimpaORascunhoDeEtiqueta}
       >
         <SheetHeader className="pb-3">
           <SheetTitle className="text-base leading-6">{lead.title}</SheetTitle>

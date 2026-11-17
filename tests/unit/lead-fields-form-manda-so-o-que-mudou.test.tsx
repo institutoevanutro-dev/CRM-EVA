@@ -17,7 +17,11 @@ import type { Lead } from "@/lib/types/leads";
 
 const mutateAsync = vi.fn(async (_: unknown) => ({}));
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
+vi.mock("@/hooks/auth/AuthProvider", () => ({ useActiveOrg: () => ({ orgId: "org-1" }) }));
+vi.mock("@/hooks/contacts/useContactTagVocabulary", () => ({
+  useContactTagVocabulary: () => ({ data: [] }),
+}));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));
 vi.mock("@/hooks/kanban/useUpdateLead", () => ({
   useEditLead: () => ({ mutateAsync, isPending: false }),
@@ -60,9 +64,18 @@ describe("ficha do negócio: custom_fields vai só com o que a pessoa mudou", ()
   it("salvar sem mexer nos campos do funil não sobrescreve nenhum", async () => {
     mutateAsync.mockClear();
     render(<LeadFieldsForm lead={LEAD} pipelineId="p-1" fieldDefs={CAMPOS} />);
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Consulta Ana Lima" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     expect(patchEnviado().custom_fields ?? {}).toEqual({});
+  });
+
+  it("salvar sem mexer em nada não manda pedido nenhum (achado 6)", async () => {
+    mutateAsync.mockClear();
+    render(<LeadFieldsForm lead={LEAD} pipelineId="p-1" fieldDefs={CAMPOS} />);
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(mutateAsync).not.toHaveBeenCalled();
   });
 
   it("limpar um campo preenchido chega ao servidor como string vazia", async () => {

@@ -53,7 +53,7 @@ function ehObjeto(v: unknown): v is Record<string, unknown> {
  * objeto não é valor, e mandar de novo por causa da ordem seria reimportar o
  * defeito deste arquivo.
  */
-function igual(a: unknown, b: unknown): boolean {
+export function igual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (ausente(a) && ausente(b)) return true;
   if (Array.isArray(a) && Array.isArray(b)) {

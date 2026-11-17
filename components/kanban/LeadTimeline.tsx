@@ -95,7 +95,10 @@ function Linha({ item, aoVivo }: { item: TimelineItemView; aoVivo?: boolean }) {
  */
 export function LeadTimeline({ itens, chegouAoVivo, isLoading, isError }: Props) {
   const t = useT();
-  const [abertos, setAbertos] = useState<Set<number>>(new Set());
+  // Aberto/fechado guardado pela IDENTIDADE do bloco, não pela posição
+  // (auditoria L4, achado 37): uma entrada nova ao vivo desloca os índices, e o
+  // grupo aberto passava a ser outro.
+  const [abertos, setAbertos] = useState<Set<string>>(new Set());
   const blocos = agrupaTimeline(itens, chegouAoVivo);
 
   if (isLoading) {
@@ -121,7 +124,7 @@ export function LeadTimeline({ itens, chegouAoVivo, isLoading, isError }: Props)
 
   return (
     <ul className="border-l border-border pl-3">
-      {blocos.map((b, i) => {
+      {blocos.map((b) => {
         if (b.tipo === "item") {
           return <Linha key={b.item.id} item={b.item} aoVivo={b.aoVivo} />;
         }
@@ -129,16 +132,17 @@ export function LeadTimeline({ itens, chegouAoVivo, isLoading, isError }: Props)
           // Bloco de dia com UM item só não vira bloco: "terça · 1 ação" custa
           // um clique e não informa nada que a própria linha não informe.
           if (!ehBlocoDeDia(b)) return <Linha key={b.itens[0]!.id} item={b.itens[0]!} />;
-          const aberto = abertos.has(i);
+          const chave = `d:${b.dia}`;
+          const aberto = abertos.has(chave);
           return (
-            <li key={b.dia} className="py-1.5">
+            <li key={chave} className="py-1.5">
               <button
                 type="button"
                 onClick={() =>
                   setAbertos((prev) => {
                     const next = new Set(prev);
-                    if (next.has(i)) next.delete(i);
-                    else next.add(i);
+                    if (next.has(chave)) next.delete(chave);
+                    else next.add(chave);
                     return next;
                   })
                 }
@@ -168,8 +172,9 @@ export function LeadTimeline({ itens, chegouAoVivo, isLoading, isError }: Props)
         if (!ehBlocoColapsavel(b)) {
           return <Linha key={b.itens[0]!.id} item={b.itens[0]!} />;
         }
-        const aberto = abertos.has(i);
         const primeiro = b.itens[0]!;
+        const chave = `g:${primeiro.id}`;
+        const aberto = abertos.has(chave);
         const nome = actorName(
           primeiro.actor_kind ?? null,
           {
@@ -179,14 +184,14 @@ export function LeadTimeline({ itens, chegouAoVivo, isLoading, isError }: Props)
           t,
         );
         return (
-          <li key={`g${i}`} className="py-1.5">
+          <li key={chave} className="py-1.5">
             <button
               type="button"
               onClick={() =>
                 setAbertos((prev) => {
                   const next = new Set(prev);
-                  if (next.has(i)) next.delete(i);
-                  else next.add(i);
+                  if (next.has(chave)) next.delete(chave);
+                  else next.add(chave);
                   return next;
                 })
               }

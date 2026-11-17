@@ -7020,6 +7020,9 @@ export const DICIONARIO: Traducoes = {
   "Atualize os dados deste contato.": { es: "Actualiza los datos de este contacto." },
   // Autocompletar de etiquetas na ficha do contato (issue #2732).
   "Nenhuma etiqueta neste contato.": { es: "Ninguna etiqueta en este contacto." },
+  "Nenhuma etiqueta neste negócio.": { es: "Ninguna etiqueta en este negocio." },
+  "Nada mudou para salvar.": { es: "No hay cambios para guardar." },
+  "Peça a um gestor para juntar.": { es: "Pide a un gestor que los una." },
   "Digite para buscar etiquetas…": { es: "Escribe para buscar etiquetas…" },
   "Sugestões de etiquetas": { es: "Sugerencias de etiquetas" },
   "Criar etiqueta": { es: "Crear etiqueta" },

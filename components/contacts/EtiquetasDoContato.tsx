@@ -79,6 +79,28 @@ interface Props {
    * este valor para o `Salvar` não descartar o texto em silêncio.
    */
   onPendente?: (tag: string | null) => void;
+  /** O texto de quando não há etiqueta — o dossiê do negócio diz "negócio". */
+  textoVazio?: string;
+}
+
+/**
+ * Esc com texto no campo de etiqueta limpa SÓ o texto (auditoria L4, achado 36).
+ *
+ * O Radix escuta o Esc no `document`, em captura — antes do `onKeyDown` do
+ * campo —, então parar a propagação ali não segura nada: o diálogo inteiro
+ * fechava e levava a edição junto. Quem monta o diálogo passa isto ao
+ * `onEscapeKeyDown` do `DialogContent`/`SheetContent`; o `onKeyDown` do campo
+ * continua limpando o rascunho.
+ */
+export function escSoLimpaORascunhoDeEtiqueta(e: KeyboardEvent): void {
+  const alvo = e.target;
+  if (
+    alvo instanceof HTMLInputElement &&
+    alvo.hasAttribute("data-rascunho-de-etiqueta") &&
+    alvo.value !== ""
+  ) {
+    e.preventDefault();
+  }
 }
 
 /** O teto de etiquetas por contato — o MESMO dos editores do produto. */
@@ -92,6 +114,7 @@ export function EtiquetasDoContato({
   disabled = false,
   inputId = "etiquetas-do-contato",
   onPendente,
+  textoVazio,
 }: Props) {
   const t = useT();
   const [draft, setDraft] = useState("");
@@ -156,7 +179,7 @@ export function EtiquetasDoContato({
       <div className="flex flex-wrap gap-1">
         {value.length === 0 ? (
           <span className="text-xs text-muted-foreground">
-            {t("Nenhuma etiqueta neste contato.")}
+            {textoVazio ?? t("Nenhuma etiqueta neste contato.")}
           </span>
         ) : (
           value.map((tag) => (
@@ -177,6 +200,7 @@ export function EtiquetasDoContato({
 
       <Input
         id={inputId}
+        data-rascunho-de-etiqueta=""
         value={draft}
         onChange={(e) => definirDraft(e.target.value)}
         onKeyDown={(e) => {

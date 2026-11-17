@@ -99,7 +99,12 @@ export function ContactDetailClient({ contactId }: Props) {
   if (q.isError || !q.data) {
     return (
       <div>
-        <Card className="p-6 text-center text-sm text-error-fg">{t("Erro ao carregar contato.")}</Card>
+        <Card className="space-y-3 p-6 text-center text-sm text-error-fg">
+          <p>{t("Erro ao carregar contato.")}</p>
+          <Button variant="outline" size="sm" onClick={() => void q.refetch()} disabled={q.isFetching}>
+            {q.isFetching ? t("Carregando…") : t("Tentar de novo")}
+          </Button>
+        </Card>
       </div>
     );
   }
