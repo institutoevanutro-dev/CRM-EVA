@@ -8,6 +8,15 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.20.0] — 2026-11-17
+
+### Adicionado
+
+- **Vendido por origem no funil do Marketing** Com o Financeiro ligado, a integração do Marketing (`/api/v1/integrations/marketing/funil-por-origem`)
+  passa a devolver, em cada origem, `vendido_cents` (o vendido no período, parcelado inclusive) e
+  `compradores` (contatos com venda no período), lidos do Financeiro pelos contatos do funil. O painel
+  de anúncios usa isso para mostrar CAC e ROAS por canal. Sem o Financeiro, os campos não vêm.
+
 ## [5.19.2] — 2026-11-17
 
 ### Corrigido
@@ -9324,7 +9333,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.2...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.20.0...HEAD
+[5.20.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.2...v5.20.0
 [5.19.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.1...v5.19.2
 [5.19.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.0...v5.19.1
 [5.19.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.18.0...v5.19.0
