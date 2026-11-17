@@ -64,6 +64,10 @@ export function mergeThreadItems(messages: Message[], notes: Note[]): ThreadItem
  */
 const DESTAQUE_DA_CITADA_MS = 2400;
 const PAGINAS_ATE_A_CITADA = 10;
+/** Quanto tempo a pílula do dia fica no alto depois que a rolagem para. */
+const DIA_FLUTUA_MS = 1200;
+/** Rolagem até este tempo depois de um gesto é da pessoa, não do auto-scroll. */
+const GESTO_VALE_MS = 1500;
 
 function dayLabel(d: Date, t: (texto: string) => string = (texto) => texto, locale: Locale): string {
   if (isToday(d)) return t("Hoje");
@@ -180,6 +184,44 @@ export function ChatThread({
     searching: !!termo,
   });
   const { scrollerRef, contentRef, bottomRef } = scroll;
+
+  /**
+   * O DIA QUE FLUTUA, como num app de mensagem. Os separadores de dia ficam no
+   * FLUXO, então parados nunca cobrem mensagem; só enquanto a PESSOA rola
+   * aparece no alto a pílula do dia que ficou para trás, e ela some
+   * `DIA_FLUTUA_MS` depois de a rolagem parar. "Pessoa" é gesto (roda, toque,
+   * ponteiro, tecla): a rolagem automática ao abrir a conversa não acende a
+   * pílula, senão ela nasceria por cima do texto. Antes o separador era
+   * `sticky`, e parado no alto escondia a primeira mensagem (captura de
+   * 16/11/2026, "…horário para avaliação…").
+   */
+  const [diaQueFlutua, setDiaQueFlutua] = useState<string | null>(null);
+  const ultimoGesto = useRef(0);
+  const apagarDia = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (apagarDia.current) clearTimeout(apagarDia.current);
+    },
+    [],
+  );
+  const { onScroll: seguirRolagem } = scroll;
+  const aoRolar = useCallback(() => {
+    seguirRolagem();
+    const fio = scrollerRef.current;
+    if (!fio || Date.now() - ultimoGesto.current > GESTO_VALE_MS) return;
+    const topo = fio.getBoundingClientRect().top;
+    let dia: string | null = null;
+    for (const separador of fio.querySelectorAll<HTMLElement>("[data-separador-de-dia]")) {
+      if (separador.getBoundingClientRect().bottom > topo) break;
+      dia = separador.dataset.separadorDeDia ?? null;
+    }
+    setDiaQueFlutua(dia);
+    if (apagarDia.current) clearTimeout(apagarDia.current);
+    apagarDia.current = setTimeout(() => setDiaQueFlutua(null), DIA_FLUTUA_MS);
+  }, [seguirRolagem, scrollerRef]);
+  const marcarGesto = useCallback(() => {
+    ultimoGesto.current = Date.now();
+  }, []);
 
   /**
    * IR ATÉ A MENSAGEM CITADA (porte do DeskcommCRM #4583). Se a original já está
@@ -333,17 +375,41 @@ export function ChatThread({
           {t("Resultados nas mensagens carregadas")}: {resultados.size}
         </div>
       )}
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      {diaQueFlutua && (
+        <div
+          aria-hidden
+          data-dia-que-flutua=""
+          className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center"
+        >
+          <span className="rounded-lg bg-surface px-3 py-1 text-xs font-medium text-text-muted shadow-sm">
+            {diaQueFlutua}
+          </span>
+        </div>
+      )}
       <div
         data-testid="message-thread"
         ref={scrollerRef}
         role="region"
         aria-label={t("Mensagens da conversa")}
         tabIndex={0}
-        onScroll={scroll.onScroll}
-        onWheel={scroll.onWheel}
-        onTouchMove={scroll.onTouchMove}
-        onPointerDown={scroll.onPointerDown}
-        onKeyDown={scroll.onKeyDown}
+        onScroll={aoRolar}
+        onWheel={() => {
+          marcarGesto();
+          scroll.onWheel();
+        }}
+        onTouchMove={() => {
+          marcarGesto();
+          scroll.onTouchMove();
+        }}
+        onPointerDown={(e) => {
+          marcarGesto();
+          scroll.onPointerDown(e);
+        }}
+        onKeyDown={(e) => {
+          marcarGesto();
+          scroll.onKeyDown(e);
+        }}
         className="conversa-fundo min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain py-2"
       >
         <div ref={contentRef}>
@@ -368,10 +434,9 @@ export function ChatThread({
           const turnos = posicoesNoTurno(g.items.map((i) => (i.kind === "message" ? i.data : null)));
           return (
           <div key={g.key}>
-            <div className="sticky top-0 z-10 flex justify-center py-1">
-              {/* Pílula OPACA: ela fica presa no alto enquanto a conversa rola, e
-                  a versão translúcida (fundo 80% + blur) deixava a data em cima
-                  do texto da mensagem que passava por baixo (print de 07/10/2026). */}
+            {/* No FLUXO, nunca `sticky`: parado, o separador não cobre mensagem.
+                Quem acompanha a rolagem é a pílula de `diaQueFlutua`, acima. */}
+            <div data-separador-de-dia={dayLabel(g.date, t, localeDaData)} className="flex justify-center py-1">
               <span className="rounded-lg bg-surface px-3 py-1 text-xs font-medium text-text-muted shadow-xs">
                 {dayLabel(g.date, t, localeDaData)}
               </span>
@@ -425,6 +490,7 @@ export function ChatThread({
 
         <div ref={bottomRef} />
         </div>
+      </div>
       </div>
       {scroll.hasNewMessages && (
         <div className="absolute inset-x-0 bottom-3 z-20 flex justify-center px-3" role="status" aria-live="polite">

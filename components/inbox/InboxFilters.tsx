@@ -1,6 +1,6 @@
 "use client";
 import { useT } from "@/hooks/i18n/useT";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type WheelEvent as ReactWheelEvent } from "react";
 import { CaretDown, MagnifyingGlass } from "@/lib/ui/icons";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -395,6 +395,13 @@ export function InboxFilters({ value, onChange }: Props) {
     return () => clearTimeout(t);
   }, [searchInput]);
 
+  /** A roda do mouse (vertical) anda a faixa de abas e filtros de lado, quando ela transborda. */
+  const rolarDeLado = (e: ReactWheelEvent<HTMLDivElement>) => {
+    const faixa = e.currentTarget;
+    if (faixa.scrollWidth <= faixa.clientWidth || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    faixa.scrollLeft += e.deltaY;
+  };
+
   const secundarias = tabs.filter((tab) => !ABAS_PRINCIPAIS.includes(tab));
   const abaSecundariaAtiva = secundarias.includes(value.tab);
 
@@ -405,7 +412,7 @@ export function InboxFilters({ value, onChange }: Props) {
           conversa, não tem busca nem canal), e mostrar esta linha ali prometeria
           um filtro que não filtra nada. */}
       {value.tab !== "comentarios" && (
-      <div className="space-y-2 px-3 pt-2 pb-2">
+      <div className="px-3 pt-2 pb-0.5">
         <div className="relative min-w-0">
           <MagnifyingGlass
             size={15}
@@ -434,282 +441,280 @@ export function InboxFilters({ value, onChange }: Props) {
           />
         </div>
 
-        {/* OS FILTROS NUMA LINHA SÓ, todos com 32px: "Não lidos" morava ao lado da
-            busca com 36px e os seletores embaixo com 32px — duas alturas e um
-            campo de busca espremido pela metade. Botão pressionável em vez de
-            Switch: o Switch com rótulo pedia uma linha inteira só para si. */}
-        <div className="flex min-w-0 items-center gap-2">
-          <button
-            type="button"
-            aria-pressed={value.onlyUnread}
-            onClick={() => onChange({ ...value, onlyUnread: !value.onlyUnread })}
-            className={cn(
-              "h-8 shrink-0 rounded-full border px-3 text-xs font-medium transition-colors",
-              "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-              value.onlyUnread
-                ? "border-accent bg-accent text-accent-foreground"
-                : "border-border bg-transparent text-text-muted hover:bg-surface-elevated",
-            )}
-          >
-            {t("Não lidos")}
-          </button>
-            {showChannelSwitch && (
-              <Select
-                value={value.canal ? `canal:${value.canal}` : value.channel_session_id ?? "all"}
-                onValueChange={(v) => {
-                  if (v === "all") {
-                    onChange({ ...value, channel_session_id: undefined, canal: undefined });
-                  } else if (v.startsWith("canal:")) {
-                    onChange({
-                      ...value,
-                      channel_session_id: undefined,
-                      canal: v.slice(6) as "instagram" | "whatsapp",
-                    });
-                  } else {
-                    onChange({ ...value, channel_session_id: v, canal: undefined });
-                  }
-                }}
-              >
-                <SelectTrigger
-                  className={cn(
-                    "h-8 min-w-0 flex-1 rounded-full border-transparent bg-surface-elevated px-3 text-xs shadow-none",
-                    (value.channel_session_id != null || value.canal != null) &&
-                      "border-accent bg-accent-soft text-accent",
-                  )}
-                  aria-label={t("Filtrar por número de WhatsApp")}
+      </div>
+      )}
+
+      {/* ⚠️ ABAS E FILTROS NUMA LINHA SÓ, QUE ROLA PARA O LADO (16/11/2026).
+
+          Eram três linhas de pílulas antes da primeira conversa (filtros, abas
+          e a quebra das abas), e o dono pediu a lista enxuta de um app de
+          mensagem. Nenhum filtro saiu: as abas vêm primeiro (são o trabalho),
+          depois um fio e os filtros de conversa.
+
+          A quebra de linha existia porque a faixa antiga ESCONDIA o que não
+          cabia ("Automático", com 267 conversas, sumia sem rastro). Aqui nada
+          some: a faixa declara `overflow-x-auto`, o foco do teclado rola até o
+          item, a barra fina aparece onde o sistema mostra barra, e a roda do
+          mouse (vertical) anda a faixa de lado (`rolarDeLado`). A ponta direita
+          esmaece (máscara) para dizer que há mais; o `pr-6` e o `scroll-pe-6`
+          tiram do esmaecido a última pílula e a que recebe foco. O `py-1.5` é
+          para o anel de foco das pílulas não ser cortado pelo `overflow`. */}
+      <div
+        data-faixa-de-filtros=""
+        onWheel={rolarDeLado}
+        className="flex scroll-pe-6 items-center gap-1.5 overflow-x-auto py-1.5 pr-6 pl-3 [mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] [scrollbar-width:thin]"
+      >
+        <Tabs
+          value={value.tab}
+          onValueChange={(v) => onChange(comAba(value, v as InboxTab))}
+          className="shrink-0"
+        >
+          <TabsList className="h-auto flex-nowrap justify-start gap-1.5 rounded-none bg-transparent p-0">
+            {tabs.filter((tab) => ABAS_PRINCIPAIS.includes(tab)).map((tab) => {
+              const meta = INBOX_TABS.find((t) => t.value === tab)!;
+              const count = countFor[tab];
+              return (
+                <TabsTrigger
+                  key={tab}
+                  value={tab}
+                  className={CLASSE_DA_ABA}
                 >
-                  <SelectValue placeholder={t("Todos os números")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("Todos os números")}</SelectItem>
-                  <SelectItem value="canal:instagram">{t("Só Instagram")}</SelectItem>
-                  <SelectItem value="canal:whatsapp">{t("Só WhatsApp")}</SelectItem>
-                  {filtroForaDaLista && value.channel_session_id != null && (
-                    <SelectItem value={value.channel_session_id}>{t("Número removido")}</SelectItem>
-                  )}
-                  {channels?.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {channelLabel(c)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-
-            {mostrarSeletorDeTag && (
-              <DropdownMenu
-                onOpenChange={(aberto) => {
-                  if (!aberto) setBuscaDeEtiqueta("");
-                }}
-              >
-                {/*
-                  ⚠️ POR QUE ISTO DEIXOU DE SER UM `Select` (#1274).
-                  O `Select` do Radix é de escolha ÚNICA e — o que mata a
-                  multi-seleção — FECHA o menu a cada item escolhido. Para uma
-                  etiqueta só isso era certo; para duas, o operador teria de
-                  reabrir o menu entre a primeira e a segunda. O
-                  `DropdownMenuCheckboxItem` marca e NÃO fecha, que é a
-                  diferença entre um filtro de duas etiquetas e um formulário.
-
-                  O gatilho continua com `aria-label="Filtrar por tag"` e a MESMA
-                  aparência de cápsula, porque quem procura este controle no
-                  Inbox (e o teste `inbox-filtro-de-tag-nao-desmonta`, que
-                  vigia a desmontagem) não pode ver o filtro mudar de figura.
-                */}
+                  {t(meta.label)}
+                  {depoisDeMontar && typeof count === "number" && count > 0 && <Contagem n={count} />}
+                </TabsTrigger>
+              );
+            })}
+            {/* As abas de consulta (Automático, Fechadas, Arquivadas, Comentários)
+                moram em "Mais": são lugares que se visita, não a fila de trabalho.
+                Com as sete numa faixa só, ela quebrava em duas linhas na coluna da
+                lista (print de 07/10/2026). Quando a aba ativa é uma delas, o
+                gatilho mostra o NOME dela — senão a pessoa perderia onde está. */}
+            {secundarias.length > 0 && (
+              <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
                     className={cn(
-                      "h-8 min-w-0 flex-1 truncate rounded-full border border-transparent bg-surface-elevated px-3 text-left text-xs shadow-none",
-                      "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                      etiquetas.length > 0 && "border-accent bg-accent-soft text-accent",
+                      CLASSE_DA_ABA,
+                      "inline-flex items-center",
+                      abaSecundariaAtiva && "bg-accent-soft font-semibold text-accent-hover",
                     )}
-                    aria-label={t("Filtrar por tag")}
+                    aria-label={t("Mais abas")}
                   >
-                    {etiquetas[0] ? (
-                      <PontoDaEtiqueta tag={etiquetas[0]} className="mr-1.5" />
-                    ) : null}
-                    {etiquetas.length === 0
-                      ? t("Todas as etiquetas")
-                      : etiquetas.length === 1
-                        ? etiquetas[0]
-                        : `${etiquetas[0]} +${etiquetas.length - 1}`}
+                    {abaSecundariaAtiva
+                      ? t(INBOX_TABS.find((x) => x.value === value.tab)!.label)
+                      : t("Mais")}
+                    {depoisDeMontar && abaSecundariaAtiva && typeof countFor[value.tab] === "number" && countFor[value.tab]! > 0 && (
+                      <Contagem n={countFor[value.tab]!} />
+                    )}
+                    <CaretDown size={11} aria-hidden />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-64">
-                  <DropdownMenuLabel>{t("Todas as etiquetas")}</DropdownMenuLabel>
-                  {/* Acima dos itens: "Todas as etiquetas" (que limpa o filtro) e o
-                      E/OU continuam alcançáveis com a lista toda filtrada. */}
-                  <div className="px-2 pb-1">
-                    <Input
-                      value={buscaDeEtiqueta}
-                      onChange={(e) => setBuscaDeEtiqueta(e.target.value)}
-                      onKeyDown={(e) => {
-                        // O menu lê qualquer tecla imprimível e salta o foco para
-                        // o item que começa com ela, roubando a segunda letra.
-                        // Só as de caractere param aqui: Escape ainda fecha.
-                        if (e.key.length === 1) e.stopPropagation();
-                      }}
-                      placeholder={t("Buscar etiqueta")}
-                      aria-label={t("Buscar etiqueta")}
-                      className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs shadow-none focus-visible:border-border"
-                    />
-                  </div>
-                  <DropdownMenuItem
-                    onClick={() => onChange({ ...value, tag: undefined, tagMode: undefined })}
-                  >
-                    {t("Todas as etiquetas")}
-                  </DropdownMenuItem>
-                  {/*
-                    O E/OU só aparece havendo DUAS etiquetas. Com uma só o parâmetro
-                    não muda o resultado, e um botão que não muda nada é um
-                    controle morto.
-                  */}
-                  {etiquetas.length > 1 && (
-                    <>
-                      <DropdownMenuSeparator />
-                      {/* Rádio, e não item comum: marca o modo ATIVO (e só ele) e
-                          expõe `aria-checked` a quem usa leitor de tela. */}
-                      <DropdownMenuRadioGroup
-                        value={value.tagMode === "ou" ? "ou" : "e"}
-                        onValueChange={(modo) =>
-                          onChange({ ...value, tagMode: modo === "ou" ? "ou" : undefined })
-                        }
+                <DropdownMenuContent align="start">
+                  {secundarias.map((tab) => {
+                    const meta = INBOX_TABS.find((x) => x.value === tab)!;
+                    const count = countFor[tab];
+                    return (
+                      <DropdownMenuItem
+                        key={tab}
+                        onSelect={() => onChange(comAba(value, tab))}
+                        className="justify-between gap-6 text-xs"
                       >
-                        <DropdownMenuRadioItem value="e">{t("Todas (E)")}</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="ou">
-                          {t("Qualquer uma (OU)")}
-                        </DropdownMenuRadioItem>
-                      </DropdownMenuRadioGroup>
-                    </>
-                  )}
-                  <DropdownMenuSeparator />
-                  {/* As órfãs entram na lista: sem elas o gatilho mostraria o
-                      resumo de um filtro cujas opções não estão mais lá, e o
-                      operador não teria como tirá-las. */}
-                  {opcoesVisiveis.map((tag) => (
-                    <DropdownMenuCheckboxItem
-                      key={tag}
-                      checked={etiquetas.includes(tag)}
-                      onCheckedChange={() => alternaEtiqueta(tag)}
-                      onSelect={(e) => e.preventDefault()}
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <PontoDaEtiqueta tag={tag} />
-                        {tag}
-                      </span>
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                  {/* Dizer que nada casou é diferente de um menu em branco. */}
-                  {termoDaEtiqueta !== "" && opcoesVisiveis.length === 0 && (
-                    <p className="px-2 py-1.5 text-xs text-text-subtle">
-                      {t("Nenhuma etiqueta com esse texto")}
-                    </p>
-                  )}
+                        {t(meta.label)}
+                        {typeof count === "number" && count > 0 && (
+                          <span className="tabular-nums text-text-subtle">{count}</span>
+                        )}
+                      </DropdownMenuItem>
+                    );
+                  })}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-
-            {mostrarSeletorDeAtendente && (
-              <SeletorDeAtendente
-                value={value.assigned_to}
-                onChange={(atendente) => onChange({ ...value, assigned_to: atendente })}
-              />
-            )}
-        </div>
-      </div>
-      )}
-
-      {/* Faixa sublinhada, não caixa cinza: cinco abas num grid de 280px
-          espremiam "Fechadas" contra "Automático" até os rótulos se tocarem.
-
-          ⚠️ QUEBRA LINHA EM VEZ DE CORTAR. Com `justify-between` e sem
-          `overflow`, as abas que não cabiam simplesmente sumiam da tela:
-          medido na coluna de 299px de uma clínica, a faixa pedia 359px e a
-          aba "Automático" — com 267 conversas atrás dela — ficava fora, sem
-          nada indicando que existia. O `[scrollbar-width:none]` que estava
-          aqui sugeria rolagem, mas nenhum `overflow-x` foi declarado: não
-          havia o que rolar, só conteúdo escondido.
-
-          Wrap e não `overflow-x-auto` porque rolagem lateral numa faixa de
-          seis itens curtos é gesto que ninguém descobre — e a alternativa
-          custa uma segunda linha só quando a primeira não dá conta.
-
-          O `flex-wrap` tinha saído no visual novo (#164) e este comentário
-          ficou prometendo a quebra sozinho. Medido em browser real em
-          13/10/2026, com o CSS compilado e contagens de três dígitos: na coluna
-          de 272px (o padrão em 1280px) com "Automático" aberto no "Mais", a
-          faixa rolava 67px para fora; na de 240px (o mínimo do arraste), 34px
-          já com o "Mais" fechado. Com a quebra de volta: rolagem zero de 240 a
-          380px, e a segunda linha só aparece onde a primeira não dá conta. */}
-      <Tabs
-        value={value.tab}
-        onValueChange={(v) => onChange(comAba(value, v as InboxTab))}
-        className="px-3"
-      >
-        <TabsList className="h-auto w-full flex-wrap justify-start gap-1.5 rounded-none bg-transparent p-0 pb-2">
-          {tabs.filter((tab) => ABAS_PRINCIPAIS.includes(tab)).map((tab) => {
-            const meta = INBOX_TABS.find((t) => t.value === tab)!;
-            const count = countFor[tab];
-            return (
-              <TabsTrigger
-                key={tab}
-                value={tab}
-                className={CLASSE_DA_ABA}
-              >
-                {t(meta.label)}
-                {depoisDeMontar && typeof count === "number" && count > 0 && <Contagem n={count} />}
-              </TabsTrigger>
-            );
-          })}
-          {/* As abas de consulta (Automático, Fechadas, Arquivadas, Comentários)
-              moram em "Mais": são lugares que se visita, não a fila de trabalho.
-              Com as sete numa faixa só, ela quebrava em duas linhas na coluna da
-              lista (print de 07/10/2026). Quando a aba ativa é uma delas, o
-              gatilho mostra o NOME dela — senão a pessoa perderia onde está. */}
-          {secundarias.length > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    CLASSE_DA_ABA,
-                    "inline-flex items-center",
-                    abaSecundariaAtiva && "bg-accent-soft font-semibold text-accent-hover",
-                  )}
-                  aria-label={t("Mais abas")}
+          </TabsList>
+        </Tabs>
+        {value.tab !== "comentarios" && (
+          <>
+            <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
+            <button
+              type="button"
+              aria-pressed={value.onlyUnread}
+              onClick={() => onChange({ ...value, onlyUnread: !value.onlyUnread })}
+              className={cn(
+                "h-8 shrink-0 rounded-full border px-3 text-xs font-medium transition-colors",
+                "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                value.onlyUnread
+                  ? "border-accent bg-accent text-accent-foreground"
+                  : "border-border bg-transparent text-text-muted hover:bg-surface-elevated",
+              )}
+            >
+              {t("Não lidos")}
+            </button>
+              {showChannelSwitch && (
+                <Select
+                  value={value.canal ? `canal:${value.canal}` : value.channel_session_id ?? "all"}
+                  onValueChange={(v) => {
+                    if (v === "all") {
+                      onChange({ ...value, channel_session_id: undefined, canal: undefined });
+                    } else if (v.startsWith("canal:")) {
+                      onChange({
+                        ...value,
+                        channel_session_id: undefined,
+                        canal: v.slice(6) as "instagram" | "whatsapp",
+                      });
+                    } else {
+                      onChange({ ...value, channel_session_id: v, canal: undefined });
+                    }
+                  }}
                 >
-                  {abaSecundariaAtiva
-                    ? t(INBOX_TABS.find((x) => x.value === value.tab)!.label)
-                    : t("Mais")}
-                  {depoisDeMontar && abaSecundariaAtiva && typeof countFor[value.tab] === "number" && countFor[value.tab]! > 0 && (
-                    <Contagem n={countFor[value.tab]!} />
-                  )}
-                  <CaretDown size={11} aria-hidden />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                {secundarias.map((tab) => {
-                  const meta = INBOX_TABS.find((x) => x.value === tab)!;
-                  const count = countFor[tab];
-                  return (
-                    <DropdownMenuItem
-                      key={tab}
-                      onSelect={() => onChange(comAba(value, tab))}
-                      className="justify-between gap-6 text-xs"
-                    >
-                      {t(meta.label)}
-                      {typeof count === "number" && count > 0 && (
-                        <span className="tabular-nums text-text-subtle">{count}</span>
+                  <SelectTrigger
+                    className={cn(
+                      "h-8 w-auto max-w-44 shrink-0 gap-1 rounded-full border-transparent bg-surface-elevated px-3 text-xs shadow-none",
+                      (value.channel_session_id != null || value.canal != null) &&
+                        "border-accent bg-accent-soft text-accent",
+                    )}
+                    aria-label={t("Filtrar por número de WhatsApp")}
+                  >
+                    <SelectValue placeholder={t("Todos os números")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("Todos os números")}</SelectItem>
+                    <SelectItem value="canal:instagram">{t("Só Instagram")}</SelectItem>
+                    <SelectItem value="canal:whatsapp">{t("Só WhatsApp")}</SelectItem>
+                    {filtroForaDaLista && value.channel_session_id != null && (
+                      <SelectItem value={value.channel_session_id}>{t("Número removido")}</SelectItem>
+                    )}
+                    {channels?.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {channelLabel(c)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {mostrarSeletorDeTag && (
+                <DropdownMenu
+                  onOpenChange={(aberto) => {
+                    if (!aberto) setBuscaDeEtiqueta("");
+                  }}
+                >
+                  {/*
+                    ⚠️ POR QUE ISTO DEIXOU DE SER UM `Select` (#1274).
+                    O `Select` do Radix é de escolha ÚNICA e — o que mata a
+                    multi-seleção — FECHA o menu a cada item escolhido. Para uma
+                    etiqueta só isso era certo; para duas, o operador teria de
+                    reabrir o menu entre a primeira e a segunda. O
+                    `DropdownMenuCheckboxItem` marca e NÃO fecha, que é a
+                    diferença entre um filtro de duas etiquetas e um formulário.
+
+                    O gatilho continua com `aria-label="Filtrar por tag"` e a MESMA
+                    aparência de cápsula, porque quem procura este controle no
+                    Inbox (e o teste `inbox-filtro-de-tag-nao-desmonta`, que
+                    vigia a desmontagem) não pode ver o filtro mudar de figura.
+                  */}
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        "h-8 max-w-44 shrink-0 truncate rounded-full border border-transparent bg-surface-elevated px-3 text-left text-xs shadow-none",
+                        "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        etiquetas.length > 0 && "border-accent bg-accent-soft text-accent",
                       )}
+                      aria-label={t("Filtrar por tag")}
+                    >
+                      {etiquetas[0] ? (
+                        <PontoDaEtiqueta tag={etiquetas[0]} className="mr-1.5" />
+                      ) : null}
+                      {etiquetas.length === 0
+                        ? t("Todas as etiquetas")
+                        : etiquetas.length === 1
+                          ? etiquetas[0]
+                          : `${etiquetas[0]} +${etiquetas.length - 1}`}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-64">
+                    <DropdownMenuLabel>{t("Todas as etiquetas")}</DropdownMenuLabel>
+                    {/* Acima dos itens: "Todas as etiquetas" (que limpa o filtro) e o
+                        E/OU continuam alcançáveis com a lista toda filtrada. */}
+                    <div className="px-2 pb-1">
+                      <Input
+                        value={buscaDeEtiqueta}
+                        onChange={(e) => setBuscaDeEtiqueta(e.target.value)}
+                        onKeyDown={(e) => {
+                          // O menu lê qualquer tecla imprimível e salta o foco para
+                          // o item que começa com ela, roubando a segunda letra.
+                          // Só as de caractere param aqui: Escape ainda fecha.
+                          if (e.key.length === 1) e.stopPropagation();
+                        }}
+                        placeholder={t("Buscar etiqueta")}
+                        aria-label={t("Buscar etiqueta")}
+                        className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs shadow-none focus-visible:border-border"
+                      />
+                    </div>
+                    <DropdownMenuItem
+                      onClick={() => onChange({ ...value, tag: undefined, tagMode: undefined })}
+                    >
+                      {t("Todas as etiquetas")}
                     </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </TabsList>
-      </Tabs>
+                    {/*
+                      O E/OU só aparece havendo DUAS etiquetas. Com uma só o parâmetro
+                      não muda o resultado, e um botão que não muda nada é um
+                      controle morto.
+                    */}
+                    {etiquetas.length > 1 && (
+                      <>
+                        <DropdownMenuSeparator />
+                        {/* Rádio, e não item comum: marca o modo ATIVO (e só ele) e
+                            expõe `aria-checked` a quem usa leitor de tela. */}
+                        <DropdownMenuRadioGroup
+                          value={value.tagMode === "ou" ? "ou" : "e"}
+                          onValueChange={(modo) =>
+                            onChange({ ...value, tagMode: modo === "ou" ? "ou" : undefined })
+                          }
+                        >
+                          <DropdownMenuRadioItem value="e">{t("Todas (E)")}</DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="ou">
+                            {t("Qualquer uma (OU)")}
+                          </DropdownMenuRadioItem>
+                        </DropdownMenuRadioGroup>
+                      </>
+                    )}
+                    <DropdownMenuSeparator />
+                    {/* As órfãs entram na lista: sem elas o gatilho mostraria o
+                        resumo de um filtro cujas opções não estão mais lá, e o
+                        operador não teria como tirá-las. */}
+                    {opcoesVisiveis.map((tag) => (
+                      <DropdownMenuCheckboxItem
+                        key={tag}
+                        checked={etiquetas.includes(tag)}
+                        onCheckedChange={() => alternaEtiqueta(tag)}
+                        onSelect={(e) => e.preventDefault()}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <PontoDaEtiqueta tag={tag} />
+                          {tag}
+                        </span>
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                    {/* Dizer que nada casou é diferente de um menu em branco. */}
+                    {termoDaEtiqueta !== "" && opcoesVisiveis.length === 0 && (
+                      <p className="px-2 py-1.5 text-xs text-text-subtle">
+                        {t("Nenhuma etiqueta com esse texto")}
+                      </p>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+
+              {mostrarSeletorDeAtendente && (
+                <SeletorDeAtendente
+                  value={value.assigned_to}
+                  onChange={(atendente) => onChange({ ...value, assigned_to: atendente })}
+                />
+              )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

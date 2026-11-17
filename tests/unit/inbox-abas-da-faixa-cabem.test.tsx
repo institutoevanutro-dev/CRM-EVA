@@ -1,13 +1,14 @@
 /**
- * A faixa de abas do Inbox QUEBRA em vez de esconder (porte do upstream
+ * A faixa de abas do Inbox NUNCA ESCONDE aba (porte do upstream
  * melgarafael/DeskcommCRM#2766, adaptado às abas deste fork: Fila, Minhas,
  * Todas e o menu "Mais").
  *
- * O jsdom não calcula layout, então isto é só a catraca barata: a classe que
- * faz a quebra. A medida foi tirada em browser real com o CSS compilado, e
- * está no comentário da faixa em `components/inbox/InboxFilters.tsx`: sem o
- * `flex-wrap`, a `TabsList` (que tem `overflow-x-auto`) rolava para o lado e o
- * "Mais" ficava cortado na coluna de 240 a 272px.
+ * Até 16/11/2026 a garantia era a QUEBRA de linha (`flex-wrap`). Com o visual
+ * de app de mensagem, abas e filtros passaram a uma linha só que ROLA para o
+ * lado (comentário da faixa em `components/inbox/InboxFilters.tsx`): o defeito
+ * que a quebra evitava era a faixa cortar o "Mais" sem ter para onde rolar.
+ * O jsdom não calcula layout, então isto é a catraca barata: a faixa declara a
+ * rolagem, as abas não quebram, e abas e filtros moram na MESMA faixa.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
@@ -31,10 +32,16 @@ const VALUE: InboxFiltersValue = { tab: "ai", search: "", onlyUnread: false };
 
 afterEach(cleanup);
 
-describe("faixa de abas do Inbox: quebra em vez de esconder", () => {
-  it("a faixa tem `flex-wrap`: sem ele ela rola para o lado e o \"Mais\" fica cortado", () => {
+describe("faixa de abas do Inbox: uma linha que rola, nunca aba escondida", () => {
+  it("abas e filtros numa faixa só, que declara a rolagem lateral", () => {
     render(<InboxFilters value={VALUE} onChange={() => {}} />);
-    expect(screen.getByRole("tablist").className.split(/\s+/)).toContain("flex-wrap");
+    const abas = screen.getByRole("tablist");
+    expect(abas.className.split(/\s+/)).toContain("flex-nowrap");
+    const faixa = abas.closest("[data-faixa-de-filtros]");
+    expect(faixa, "as abas saíram da faixa que rola").not.toBeNull();
+    expect(faixa!.className.split(/\s+/)).toContain("overflow-x-auto");
+    // O filtro de não lidos mora na MESMA linha: uma segunda faixa seria a lista carregada de volta.
+    expect(faixa!.contains(screen.getByRole("button", { name: "Não lidos" }))).toBe(true);
   });
 
   it("as três abas de trabalho e o menu \"Mais\" estão na faixa, com o rótulo inteiro", () => {
