@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "Gatilho de silêncio — uma sequência por silêncio",
-    "subtitle": "Vigência do ponteiro (active_since) e episódio: a sequência não recomeça sozinha (migration 0324)",
+    "subtitle": "Sem retroativo (vigência do ponteiro, versão publicada, acesso da IA no canal, teto de idade) e episódio: a sequência não recomeça sozinha (migrations 0324 e 0418)",
     "output": "gatilho-de-silencio.html",
     "quality_profile": "standard"
   },
@@ -20,18 +20,22 @@
     { "id": "rotas-fluxo", "lane": "api", "col": 0, "type": "service", "label": "publish / disable / PATCH de followup-flows" },
     { "id": "cron", "lane": "api", "col": 1, "type": "service", "label": "cron followup-flow-worker e relógio (1×/min) — audita só com efeito" },
     { "id": "gate", "lane": "motor", "col": 1, "type": "service", "label": "resolveAgentForAutomaticTrigger — agente publicado que arma o ponteiro" },
-    { "id": "varredura", "lane": "motor", "col": 2, "type": "service", "label": "runSilenceSweep — vigência, episódio, vivo em outro fluxo, resposta a automática, insert" },
+    { "id": "varredura", "lane": "motor", "col": 2, "type": "service", "label": "runSilenceSweep — sem retroativo, teto de idade, episódio, vivo em outro fluxo, resposta a automática, insert" },
     { "id": "resposta-a-automacao", "lane": "motor", "col": 3, "type": "service", "label": "contatosQueSoResponderamAAutomacao — só emoji a mensagem automática nossa (48 h)" },
+    { "id": "rota-acesso", "lane": "api", "col": 3, "type": "service", "label": "PATCH channel-sessions/[id]/ai-access — abrir ou fechar a IA no canal" },
     { "id": "ponteiros", "lane": "dados", "col": 0, "type": "database", "label": "followup_flow_pointers.active_since + trg_followup_ponteiro_marca_vigencia" },
     { "id": "conversas", "lane": "dados", "col": 1, "type": "database", "label": "conversations + messages inbound carimbadas (keyset por id, até a página vazia)" },
-    { "id": "inscricoes", "lane": "dados", "col": 2, "type": "database", "label": "followup_enrollments — idx_one_live e idx_pointer_contact_cooldown (0411 do original)" }
+    { "id": "inscricoes", "lane": "dados", "col": 2, "type": "database", "label": "followup_enrollments — idx_one_live e idx_pointer_contact_cooldown (0411 do original)" },
+    { "id": "canais", "lane": "dados", "col": 3, "type": "database", "label": "channel_sessions.ai_access_since + trg_canal_marca_acesso_da_ia (0418)" }
   ],
   "edges": [
     { "id": "editor-rotas", "from": "editor", "to": "rotas-fluxo", "label": "publicar, desativar, salvar gatilho" },
     { "id": "rotas-ponteiro", "from": "rotas-fluxo", "to": "ponteiros", "label": "trigger avança active_since só em status, kind ou segments" },
     { "id": "cron-varredura", "from": "cron", "to": "varredura", "label": "mesmo tick do motor" },
     { "id": "varredura-gate", "from": "varredura", "to": "gate", "label": "null = gate-out" },
-    { "id": "varredura-le-ponteiro", "from": "varredura", "to": "ponteiros", "label": "lê active_since: silêncio anterior não conta" },
+    { "id": "varredura-le-ponteiro", "from": "varredura", "to": "ponteiros", "label": "lê active_since e o created_at da versão ativa: silêncio anterior não conta" },
+    { "id": "rota-acesso-canal", "from": "rota-acesso", "to": "canais", "label": "trigger avança ai_access_since quando ai_gate, modo ou testadores mudam" },
+    { "id": "varredura-le-canal", "from": "varredura", "to": "canais", "label": "silêncio anterior à abertura do canal não conta; limiar + 24 h é o teto" },
     { "id": "varredura-le-conversas", "from": "varredura", "to": "conversas", "label": "sent_at mede o limiar e a vigência; created_at mede o episódio; anonimizado fora" },
     { "id": "varredura-le-inscricoes", "from": "varredura", "to": "inscricoes", "label": "maior started_at deste ponteiro (qualquer status) e vivos da org" },
     { "id": "varredura-resposta-a-automacao", "from": "varredura", "to": "resposta-a-automacao", "label": "só emoji a automática e nada com conteúdo nas 48 h antes: não inscreve; leitura falhou = segue sem a guarda" },

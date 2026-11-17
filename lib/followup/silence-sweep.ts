@@ -44,6 +44,19 @@ import { StaleServiceBoundaryError, parseServiceBoundary, assertCurrentServiceBo
  * abria episódio novo na conclusão, com a mensagem 1 encostada na última da
  * sequência anterior. O cooldown conta o limiar a partir do FIM.
  *
+ * Sem retroativo (migration 0418, incidente da clínica Rosa em 17/11/2026: abrir
+ * o acesso da IA ao canal inscreveu 80 conversas paradas desde 02/11 e saíram
+ * 68 mensagens): o silêncio só conta se a última mensagem do contato é
+ * POSTERIOR ao mais recente entre (1) `active_since` do ponteiro, (2) a
+ * publicação da versão ativa (`followup_flow_versions.created_at` — a 0324 não
+ * avançava a vigência ao trocar de versão) e (3) `channel_sessions.
+ * ai_access_since` do canal da conversa (trigger: qualquer mudança do alcance da
+ * IA). Segunda trava: silêncio mais velho que limiar + `FOLLOWUP_SILENCIO_
+ * ATRASO_MAXIMO_HORAS` (padrão 24 h) não entra (`skipped_silencio_antigo`) —
+ * cobre canal sem marca (anterior à 0418) e rollback para versão antiga. Não há
+ * marco por contato: `contacts.ai_authorized_at` é renovado a cada turno e pela
+ * origem na própria ingestão, então usá-lo barraria o silêncio legítimo.
+ *
  * Teto de recomeço (opcional, `trigger_config.params.reentrada_minima_horas`):
  * o episódio e o cooldown deixam cada resposta abrir uma sequência nova — medido
  * em produção, um contato recebeu 8 mensagens em 4 dias. Com o parâmetro, uma
