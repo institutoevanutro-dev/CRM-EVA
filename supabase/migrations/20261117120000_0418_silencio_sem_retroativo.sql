@@ -37,8 +37,7 @@ end
 $$;
 revoke execute on function public.fn_canal_marca_acesso_da_ia() from public, anon, authenticated;
 
-drop trigger if exists trg_canal_marca_acesso_da_ia on public.channel_sessions;
-create trigger trg_canal_marca_acesso_da_ia
+create or replace trigger trg_canal_marca_acesso_da_ia
   before update of metadata on public.channel_sessions
   for each row
   when (
