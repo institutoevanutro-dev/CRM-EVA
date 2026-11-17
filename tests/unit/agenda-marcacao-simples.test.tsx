@@ -17,10 +17,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const post = vi.fn((..._a: unknown[]) => Promise.resolve({ data: {} }));
 let excecoes: unknown[] = [];
+let leiturasDeExcecoes = 0;
 vi.mock("@/lib/api/client", () => ({
   apiClient: {
-    get: (url: string) =>
-      Promise.resolve(url.includes("excecoes") ? { data: excecoes } : { data: { contacts: [], conversations: [] } }),
+    get: (url: string) => {
+      if (url.includes("excecoes")) leiturasDeExcecoes++;
+      return Promise.resolve(url.includes("excecoes") ? { data: excecoes } : { data: { contacts: [], conversations: [] } });
+    },
     post: (...a: unknown[]) => post(...a),
     delete: () => Promise.resolve({}),
   },
@@ -88,7 +91,7 @@ describe("regras puras", () => {
   });
 });
 
-function montarMarcacao(props: Partial<ComponentProps<typeof MarcacaoSimples>> = {}) {
+function montarMarcacao(props: Partial<ComponentProps<typeof MarcacaoSimples>> = {}, semCanal = false) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const base: ComponentProps<typeof MarcacaoSimples> = {
     ancora: new Date(2026, 9, 22, 12),
@@ -118,11 +121,12 @@ function montarMarcacao(props: Partial<ComponentProps<typeof MarcacaoSimples>> =
     onConfirmar: vi.fn(() => Promise.resolve()),
     onVerNaAgenda: vi.fn(),
   };
-  return comCanal(render(
+  const r = render(
     <QueryClientProvider client={qc}>
       <MarcacaoSimples {...base} {...props} />
     </QueryClientProvider>,
-  ));
+  );
+  return semCanal ? r : comCanal(r);
 }
 
 describe("Novo agendamento: profissional antes do procedimento", () => {
@@ -212,6 +216,17 @@ describe("consulta exige paciente (migration 0411)", () => {
     expect(screen.queryByTestId("recusa-da-marcacao")).toBeNull();
   });
 
+  it("sem 'Marcada por', o Confirmar cinza diz o que falta (achado 17, 16/11)", () => {
+    montarMarcacao({ ...comHorario, tipos: TIPOS }, true);
+    expect(screen.getByTestId("confirmar-marcacao")).toBeDisabled();
+    expect(screen.getByTestId("falta-canal-na-marcacao").textContent).toBe(
+      "Escolha como foi marcada: Mensagem ou Ligação.",
+    );
+    fireEvent.click(screen.getByTestId("canal-ligacao"));
+    expect(screen.queryByTestId("falta-canal-na-marcacao")).toBeNull();
+    expect(screen.getByTestId("confirmar-marcacao")).toBeEnabled();
+  });
+
   it("tipo que não exige marca sem paciente", async () => {
     const onConfirmar = vi.fn(() => Promise.resolve());
     montarMarcacao({ ...comHorario, tipos: TIPOS, onConfirmar });
@@ -267,6 +282,30 @@ describe("Bloquear horário: o mesmo caminho da tela de dias fora da rotina", ()
     fireEvent.click(screen.getByTestId("salvar-bloqueio"));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     expect(post.mock.calls[0]?.[1]).toMatchObject({ start_minute: 0, end_minute: 1440, is_unavailable: true });
+  });
+
+  it("acima de 62 dias recusa à vista, sem gravar só o começo (achado 16, 16/11)", () => {
+    montarBloqueio();
+    fireEvent.click(screen.getByTestId("bloqueio-dia-inteiro"));
+    // 22/10 a 31/12: 71 dias de férias.
+    fireEvent.change(screen.getByTestId("bloqueio-ate"), { target: { value: "2026-12-31" } });
+    expect(screen.getByTestId("salvar-bloqueio")).toBeDisabled();
+    expect(screen.getByText(/no máximo 62 dias/)).toBeInTheDocument();
+    // Exatamente 62 (22/10 a 22/12) ainda passa.
+    fireEvent.change(screen.getByTestId("bloqueio-ate"), { target: { value: "2026-12-22" } });
+    expect(screen.getByTestId("salvar-bloqueio")).toBeEnabled();
+  });
+
+  it("erro no meio do período: a lista relê os dias que já foram gravados", async () => {
+    post.mockImplementationOnce(() => Promise.resolve({ data: {} }));
+    post.mockImplementationOnce(() => Promise.reject(new Error("rede")));
+    leiturasDeExcecoes = 0;
+    montarBloqueio();
+    await waitFor(() => expect(leiturasDeExcecoes).toBe(1));
+    fireEvent.change(screen.getByTestId("bloqueio-ate"), { target: { value: "2026-10-23" } });
+    fireEvent.click(screen.getByTestId("salvar-bloqueio"));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(leiturasDeExcecoes).toBe(2));
   });
 
   it("hora final antes da inicial não deixa salvar", () => {

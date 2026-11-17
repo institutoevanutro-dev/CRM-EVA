@@ -163,6 +163,14 @@ export const DICIONARIO: Traducoes = {
   "Nenhum horário livre neste dia.": { es: "Ningún horario libre en este día." },
   "Escolha profissional, procedimento, dia e horário.": { es: "Elija profesional, procedimiento, día y horario." },
   "Marcando…": { es: "Agendando…" },
+  // Auditoria de 16/11, lote L1 da Agenda.
+  "Escolha como foi marcada: Mensagem ou Ligação.": { es: "Elija cómo se agendó: Mensaje o Llamada." },
+  "Bloqueie no máximo 62 dias de cada vez. Para um período maior, salve em partes.": {
+    es: "Bloquee como máximo 62 días cada vez. Para un período mayor, guarde por partes.",
+  },
+  "A grade mostra os horários de outro profissional ou procedimento. Use Remarcar neste compromisso.": {
+    es: "La grilla muestra los horarios de otro profesional o procedimiento. Use Reprogramar en esta cita.",
+  },
   "Paciente": { es: "Paciente" },
   "Buscar pelo nome ou telefone": { es: "Buscar por nombre o teléfono" },
   // Configurações › Conversões (migration 0391): aviso de agendamento.

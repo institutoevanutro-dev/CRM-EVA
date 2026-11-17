@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DetalheDoCompromisso } from "@/components/agenda/DetalheDoCompromisso";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
+import { ApiError } from "@/lib/api/types";
 const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), delete: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ apiClient: api }));
 vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: vi.fn() }));
@@ -118,7 +119,7 @@ it("CAS recusado mantém decisão bloqueada após refetch até revisão explíci
   const reason = await open();
   fireEvent.change(reason, { target: { value: "Rascunho antigo" } });
   api.get.mockResolvedValue({ data: { ...initial, revision: 2 } });
-  api.delete.mockRejectedValueOnce(new Error("revision_conflict"));
+  api.delete.mockRejectedValueOnce(new ApiError(409, "conflict", undefined, "req", "O compromisso mudou."));
   fireEvent.click(screen.getByRole("button", { name: "Cancelar agendamento" }));
   await screen.findByRole("alert");
   await waitFor(() =>
@@ -153,4 +154,29 @@ it("resultado assíncrono sem mudança de revisão conserva intenção válida",
   await waitFor(() =>
     expect(api.delete.mock.calls[0]?.[1]).toMatchObject({ revision: 1, reason: "Decisão atual" }),
   );
+});
+
+// Achado 15 da auditoria de 16/11: o botão liberava com 1 letra (a rota exige 3)
+// e QUALQUER erro virava "o compromisso mudou", travando o painel.
+it("o cancelar só libera com o mínimo de 3 letras da rota", async () => {
+  const reason = await open();
+  const cancel = screen.getByRole("button", { name: "Cancelar agendamento" }) as HTMLButtonElement;
+  fireEvent.change(reason, { target: { value: "ok" } });
+  expect(cancel.disabled).toBe(true);
+  fireEvent.change(reason, { target: { value: "  ok  " } });
+  expect(cancel.disabled).toBe(true);
+  fireEvent.change(reason, { target: { value: "Viajou" } });
+  expect(cancel.disabled).toBe(false);
+});
+it("recusa que não é 409 não vira conflito: o motivo fica e o botão segue vivo", async () => {
+  const reason = await open();
+  fireEvent.change(reason, { target: { value: "Pediu outro dia" } });
+  api.delete.mockRejectedValueOnce(new ApiError(422, "validation_failed", undefined, "req", "Inválido."));
+  fireEvent.click(screen.getByRole("button", { name: "Cancelar agendamento" }));
+  await waitFor(() => expect(api.delete).toHaveBeenCalledOnce());
+  await waitFor(() =>
+    expect((screen.getByRole("button", { name: "Cancelar agendamento" }) as HTMLButtonElement).disabled).toBe(false),
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect((reason as HTMLInputElement).value).toBe("Pediu outro dia");
 });

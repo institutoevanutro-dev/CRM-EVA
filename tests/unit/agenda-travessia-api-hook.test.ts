@@ -75,6 +75,8 @@ const MARIA: AgendamentoListado = {
   donoId: "u-ana",
   contatoId: "c-maria",
   contatoNome: "Maria Ferraz",
+  tipoId: "tipo-retorno",
+  tipoNome: "Retorno",
 };
 
 /** O corpo EXATO do wire: `ok()` é o mesmo wrapper que a rota chama no `return`. */
@@ -151,6 +153,12 @@ describe("o compromisso atravessa a rota até a grade", () => {
       "sem situação o cancelado é desenhado igual ao confirmado, e o paciente " +
         "cancelado continua ocupando o horário aos olhos de quem atende",
     ).toBe("confirmed");
+  });
+
+  it("tipoId e tipo ← tipoId/tipoNome: remarcar e o histórico sabem o procedimento (L1, 16/11)", async () => {
+    const bloco = unico(await oQueAGradeRecebe(await corpoDaRota([MARIA])));
+    expect(bloco.tipoId, "sem ele remarcar oferece a agenda do tipo da grade (achado 1)").toBe("tipo-retorno");
+    expect(bloco.tipo, "sem ele o histórico diz sempre 'Agendamento' (achado 18)").toBe("Retorno");
   });
 
   it("quemSeraAtendido ← contatoNome: a grade diz DE QUEM é o compromisso", async () => {

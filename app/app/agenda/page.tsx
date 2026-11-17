@@ -133,7 +133,7 @@ export default async function AgendaPage() {
     supabase
       .from("calendar_appointments")
       .select(
-        "id, revision, title, starts_at, ends_at, status, owner_user_id, contact_id, event_type_id, location_kind, contacts(name, display_name, is_blocked)",
+        "id, revision, title, starts_at, ends_at, status, owner_user_id, contact_id, event_type_id, location_kind, calendar_event_types(name), contacts(name, display_name, is_blocked)",
       )
       .eq("organization_id", activeOrg.orgId)
       // A MESMA régua de `listaAgendamentos`: o excluído (migration 0364) não
@@ -300,6 +300,12 @@ export default async function AgendaPage() {
         revision: a.revision,
         titulo: a.title ?? "Agendamento",
         responsavelId: a.owner_user_id ?? "",
+        // O procedimento DESTE compromisso: remarcar pergunta os horários dele,
+        // e o histórico diz o nome (mesma forma de `listaAgendamentos`).
+        tipoId: a.event_type_id ?? undefined,
+        tipo:
+          (Array.isArray(a.calendar_event_types) ? a.calendar_event_types[0] : a.calendar_event_types)?.name ??
+          undefined,
         comeca: a.starts_at,
         termina: a.ends_at,
         origem: "ui" as const,
