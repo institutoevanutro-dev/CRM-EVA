@@ -149,6 +149,7 @@ test.describe("J20.12 — o follow-up automático respeita o gate", () => {
     let agentId = "";
     let autorizadoId = "";
     let semAutorizacaoId = "";
+    let anteriorAoMarcoId = "";
 
     try {
       await login(page, creds.users.manager!.email);
@@ -187,8 +188,22 @@ test.describe("J20.12 — o follow-up automático respeita o gate", () => {
         helper<{ id: string } | null>("enrollment-for-contact", semAutorizacaoId),
         "contato silencioso NÃO autorizado, no canal com gate: a varredura NÃO enrola",
       ).toBeNull();
+
+      // (5) Sem retroativo (migration 0418): autorizado, mesmo silêncio, mas o
+      // acesso da IA ao canal mudou DEPOIS de ele calar — incidente de
+      // 17/11/2026. A varredura NÃO o inscreve.
+      anteriorAoMarcoId = helper<{ contactId: string }>("seed-silent-contact", "1", String(THRESHOLD_MIN)).contactId;
+      expect(helper<{ ai_access_since: string | null }>("mexer-no-acesso-da-ia").ai_access_since).not.toBeNull();
+      for (let i = 0; i < 3; i++) {
+        await rodarCronDeFollowup();
+        await page.waitForTimeout(800);
+      }
+      expect(
+        helper<{ id: string } | null>("enrollment-for-contact", anteriorAoMarcoId),
+        "silêncio anterior à mudança do acesso da IA no canal: a varredura NÃO enrola",
+      ).toBeNull();
     } finally {
-      for (const id of [autorizadoId, semAutorizacaoId]) {
+      for (const id of [autorizadoId, semAutorizacaoId, anteriorAoMarcoId]) {
         if (id) {
           try {
             helper("cleanup-contact", id);

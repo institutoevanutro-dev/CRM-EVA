@@ -151,6 +151,7 @@ describe("loadSilentContacts — cada relógio alimenta a sua regra", () => {
         contact_id: "atrasada",
         ultima_entrada_em: "2026-08-01T10:00:00.000Z",
         ultima_entrada_gravada_em: "2026-09-01T10:00:00.000Z",
+        acesso_da_ia_desde: null,
       },
     ]);
   });
@@ -396,5 +397,33 @@ describe("loadUltimaInscricaoNoPonteiro — a consulta de produção", () => {
     await expect(
       createSupabaseSilenceSweepDb(admin).loadUltimaInscricaoNoPonteiro("org", "p-1", ["c-1"], DESDE),
     ).rejects.toThrow("silence_episode_page_did_not_advance");
+  });
+});
+
+describe("sem retroativo — os marcos chegam da consulta (migration 0418)", () => {
+  it("o ponteiro traz a publicação da versão ativa como version_since", async () => {
+    const linha = {
+      id: "p-1",
+      organization_id: "org",
+      active_version_id: "v-1",
+      trigger_config: { kind: "silence", params: { threshold_minutes: 30 } },
+      active_since: "2026-10-06T12:00:00+00:00",
+      versao: { created_at: "2026-11-16T17:56:00+00:00" },
+    };
+    const { admin, consultas } = supabaseRoteirizado([[linha]]);
+    const pointers = await createSupabaseSilenceSweepDb(admin).loadActiveSilencePointers();
+    expect(consultas[0]!.find((c) => c.metodo === "select")?.args[0]).toMatch(
+      /followup_flow_versions!followup_flow_pointers_active_version_id_fkey\(created_at\)/,
+    );
+    expect(pointers[0]!.version_since).toBe("2026-11-16T17:56:00+00:00");
+  });
+
+  it("o contato calado traz ai_access_since do canal como acesso_da_ia_desde", async () => {
+    const linha = conversa("c-1");
+    (linha.sessao as Record<string, unknown>).ai_access_since = "2026-11-17T00:39:00+00:00";
+    const { admin, consultas } = supabaseDeConversas([linha]);
+    const contatos = await createSupabaseSilenceSweepDb(admin).loadSilentContacts("org", CORTE, []);
+    expect(consultas[0]!.find((c) => c.metodo === "select")?.args[0]).toMatch(/sessao:channel_session_id\([^)]*ai_access_since/);
+    expect(contatos[0]!.acesso_da_ia_desde).toBe("2026-11-17T00:39:00+00:00");
   });
 });

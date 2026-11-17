@@ -44,6 +44,7 @@ import {
 } from "@/lib/kanban/visao-do-funil";
 import { FUSO_PADRAO } from "@/lib/tempo/fusos";
 import { estiloDoFunil } from "@/lib/pipelines/cor-do-funil";
+import { resolveVocabulary } from "@/lib/kanban/vocabulary";
 import { cn } from "@/lib/utils";
 
 /**
@@ -105,6 +106,14 @@ export function PipelinePageClient({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [newOpen, setNewOpen] = useState(false);
   /**
+   * O diálogo de novo negócio nasce na PRIMEIRA abertura e não desmonta mais.
+   * Montá-lo só aberto (#161, para não pagar o formulário de quem só olha o
+   * quadro) matava o "Salvar e iniciar conversa": a conversa é aberta DEPOIS
+   * de o diálogo fechar, por um componente que mora nele, e o fechamento o
+   * desmontava junto com o pedido (auditoria 16/11, achado 7).
+   */
+  const [novoMontado, setNovoMontado] = useState(false);
+  /**
    * A visão do funil: Quadro (o padrão, e o que o servidor renderiza) ou
    * Calendário. Porte do upstream #2790, que guardava isto em estado local; aqui
    * a escolha vem do navegador de quem olha e sobrevive à recarga e à troca de
@@ -147,6 +156,16 @@ export function PipelinePageClient({
   // e devolve um array NOVO a cada vez. E esta página re-renderiza a cada tecla
   // da busca (o debounce do FilterBar mexe na query string) e a cada mudança de
   // seleção de card.
+  // A SELEÇÃO É SÓ DO QUE ESTÁ NA TELA (achado 25). Trocar o filtro com cards
+  // marcados deixava os escondidos na seleção, e Mover/Excluir/Etiqueta agiam
+  // sobre negócios que o operador não via mais. Derivada, e não podada no
+  // estado: a barra e o quadro leem a mesma lista, e a ação nunca alcança um
+  // card escondido, seja qual for o caminho que o escondeu.
+  const selecionadosVisiveis = useMemo(() => {
+    if (selectedIds.length === 0) return selectedIds;
+    const visiveis = new Set(filteredLeads.map((l) => l.id));
+    return selectedIds.filter((id) => visiveis.has(id));
+  }, [selectedIds, filteredLeads]);
   const tagsDoQuadro = useMemo(
     () => [...new Set((data?.leads ?? []).flatMap((l) => l.tags))].sort(),
     [data?.leads],
@@ -155,6 +174,13 @@ export function PipelinePageClient({
   const corAtual = (data?.pipeline as { color?: string | null } | undefined)?.color ?? initialColor;
   // Um funil só = nada para trocar: o seletor seria ruído permanente.
   const podeTrocar = funis.length > 1;
+  // O botão fala a língua do funil (achado 32): "Novo Lead" num funil que
+  // chama o negócio de Paciente era a única palavra do quadro fora do
+  // vocabulário. O verbo é "Adicionar" porque não tem gênero — "Novo" erraria
+  // em "Negociação". Sem vocabulário próprio, o rótulo de sempre.
+  const termoDoLead = resolveVocabulary(data?.pipeline.vocabulary ?? null).lead;
+  const rotuloNovo =
+    termoDoLead === "Lead" ? t("Novo Lead") : `${t("Adicionar")} ${termoDoLead.toLocaleLowerCase("pt-BR")}`;
 
   return (
     <div
@@ -165,7 +191,10 @@ export function PipelinePageClient({
       // comprida para andar para o lado. Piso de 20rem para tela baixa demais (era 28rem;
       // com as abas da área no topo, 28rem passava da janela de 600px — e2e lote-no-quadro).
       // Porte do original b0ade1e44 (jmpo).
-      className="flex h-[calc(100dvh-var(--altura-do-topo)-var(--altura-das-abas,0px)-2*var(--margem-do-conteudo))] min-h-[20rem] flex-col gap-4"
+      // Desconta também `--faixas-de-cima` (o aviso de WhatsApp desconectado,
+      // como o Inbox já faz): sem isso a barra de rolagem horizontal caía
+      // abaixo da tela sempre que havia faixa (achado 28).
+      className="flex h-[calc(100dvh-var(--faixas-de-cima,0px)-var(--altura-do-topo)-var(--altura-das-abas,0px)-2*var(--margem-do-conteudo))] min-h-[20rem] flex-col gap-4"
       // OBSERVÁVEL de propósito, e é a razão de existir desta linha: "a
       // assinatura morreu" e "nada aconteceu" produzem o MESMO silêncio na
       // tela, e sem este valor nem o produto nem o teste conseguem separar as
@@ -259,17 +288,25 @@ export function PipelinePageClient({
               </button>
             ))}
           </div>
-          <Button onClick={() => setNewOpen(true)} disabled={!data} className="shrink-0">
-            <Plus size={16} className="mr-2" /> {t("Novo Lead")}
+          <Button
+            onClick={() => {
+              setNovoMontado(true);
+              setNewOpen(true);
+            }}
+            disabled={!data}
+            className="shrink-0"
+          >
+            <Plus size={16} className="mr-2" /> {rotuloNovo}
           </Button>
         </div>
       </header>
-      {data && newOpen && (
+      {data && novoMontado && (
         <NewLeadDialog
           open={newOpen}
           onOpenChange={setNewOpen}
           pipelineId={pipelineId}
           stages={data.stages}
+          titulo={rotuloNovo}
         />
       )}
       <FilterBar filters={filters} onChange={setFilters} leads={data?.leads ?? []} />
@@ -342,13 +379,13 @@ export function PipelinePageClient({
           leads={filteredLeads}
           pulses={pulses}
           pipeline={data.pipeline}
-          selectedIds={selectedIds}
+          selectedIds={selecionadosVisiveis}
           onSelectionChange={setSelectedIds}
           leadInicial={searchParams.get("lead")}
         />
       )}
       <BulkActionBar
-        selectedIds={selectedIds}
+        selectedIds={selecionadosVisiveis}
         stages={data?.stages ?? []}
         pipelineId={pipelineId}
         vocabulary={data?.pipeline.vocabulary ?? null}

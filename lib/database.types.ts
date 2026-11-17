@@ -3142,6 +3142,7 @@ export type Database = {
       }
       channel_sessions: {
         Row: {
+          ai_access_since: string | null
           archived_at: string | null
           consecutive_health_fails: number
           created_at: string
@@ -3175,6 +3176,7 @@ export type Database = {
           zernio_token_encrypted: string | null
         }
         Insert: {
+          ai_access_since?: string | null
           archived_at?: string | null
           consecutive_health_fails?: number
           created_at?: string
@@ -3208,6 +3210,7 @@ export type Database = {
           zernio_token_encrypted?: string | null
         }
         Update: {
+          ai_access_since?: string | null
           archived_at?: string | null
           consecutive_health_fails?: number
           created_at?: string

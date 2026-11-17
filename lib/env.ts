@@ -329,6 +329,11 @@ const schema = z.object({
    */
   JOB_QUEUE_RETENTION_DAYS: z.string().optional().default(""),
   AUDIT_LOG_RETENTION_DAYS: z.string().optional().default(""),
+  /**
+   * Teto do follow-up de silêncio: limiar + N horas (migration 0418). Quem lê é
+   * `atrasoMaximoDoSilencioMs`, onde lixo cai no padrão (24 h).
+   */
+  FOLLOWUP_SILENCIO_ATRASO_MAXIMO_HORAS: z.string().optional().default(""),
 
   /**
    * Jev (System One, da TypeSafe AI) — decisões rápidas: observa e, nos dois

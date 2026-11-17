@@ -1,7 +1,7 @@
 "use client";
 
 import { useT } from "@/hooks/i18n/useT";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -9,21 +9,29 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useActiveOrg } from "@/hooks/auth/AuthProvider";
+import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
 import { useEditLead } from "@/hooks/kanban/useUpdateLead";
 import type { Lead } from "@/lib/types/leads";
 import { updateLeadSchema, type UpdateLeadInput } from "@/lib/schemas/leads";
 import { parseReaisToCents } from "@/lib/money";
 import { soChavesAlteradas } from "@/lib/leads/custom-fields-so-diff";
+import {
+  camposMexidos,
+  mesclarEtiquetas,
+  mesmasEtiquetas,
+  rebaseCampos,
+} from "@/lib/leads/rebase-do-dossie";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
+import { EtiquetasDoContato } from "@/components/contacts/EtiquetasDoContato";
 import { EcoDoValor } from "./EcoDoValor";
 
-interface FormShape {
+type FormShape = {
   title: string;
   description: string;
   valueReais: string;
-  tagsRaw: string;
   expected_close_date: string;
-}
+};
 
 interface Props {
   lead: Lead;
@@ -40,6 +48,26 @@ function centsToReais(cents: number | null | undefined): string {
   return (cents / 100).toFixed(2).replace(".", ",");
 }
 
+function valoresDoLead(lead: Lead): FormShape {
+  return {
+    title: lead.title,
+    description: lead.description ?? "",
+    valueReais: centsToReais(lead.value_cents),
+    expected_close_date: lead.expected_close_date ?? "",
+  };
+}
+
+/** O que o formulário viu do servidor da última vez — a ponta "base" do merge. */
+interface Base {
+  valores: FormShape;
+  tags: string[];
+  campos: Record<string, unknown>;
+}
+
+function baseDoLead(lead: Lead): Base {
+  return { valores: valoresDoLead(lead), tags: lead.tags ?? [], campos: lead.custom_fields ?? {} };
+}
+
 /**
  * Os campos do lead — extraídos do `EditLeadDialog` para o dossiê usar os
  * MESMOS, em vez de uma cópia que diverge no mês.
@@ -48,69 +76,98 @@ function centsToReais(cents: number | null | undefined): string {
  * atividade que acabou de gerar entrar na timeline. Fechar esconderia o
  * registro justamente de quem o produziu — a funcionalidade que prova "sua ação
  * fica registrada" provaria isso para todo mundo menos para o autor.
+ *
+ * O LEAD É VIVO (auditoria L4, achado 6): o que chega por realtime com o
+ * dossiê aberto entra nos campos que a pessoa não mexeu, e o Salvar manda só
+ * os campos que ela mexeu. A régua está em `lib/leads/rebase-do-dossie.ts`.
  */
 export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCancel }: Props) {
   const t = useT();
   const edit = useEditLead(pipelineId);
+  const vocabulario = useContactTagVocabulary(useActiveOrg()?.orgId ?? null);
+  const base = useRef<Base>(baseDoLead(lead));
+  const idCarregado = useRef(lead.id);
   const [customFields, setCustomFields] = useState<Record<string, unknown>>(lead.custom_fields ?? {});
-  // A régua do diff: o valor carregado ao abrir. Só o que a pessoa mudar daqui
-  // viaja — reenviar o objeto inteiro desfazia o que a IA (MCP
-  // `crm_update_lead`) ou um colega gravou com a ficha aberta. O servidor
-  // continua mesclando (`fn_lead_anotar_campos`, PR 114). Porte de 4bf4202ca.
-  const [camposCarregados, setCamposCarregados] = useState<Record<string, unknown>>(
-    lead.custom_fields ?? {},
-  );
+  const [tags, setTags] = useState<string[]>(lead.tags ?? []);
+  // O texto digitado no campo de etiqueta e ainda sem Enter — o Salvar o inclui,
+  // como na ficha do contato. A `chave` remonta o campo depois de salvar, para
+  // o texto que já virou etiqueta não ficar no input.
+  const [etiquetaPendente, setEtiquetaPendente] = useState<string | null>(null);
+  const [chaveDasEtiquetas, setChaveDasEtiquetas] = useState(0);
 
-  const form = useForm<FormShape>({
-    defaultValues: {
-      title: lead.title,
-      description: lead.description ?? "",
-      valueReais: centsToReais(lead.value_cents),
-      tagsRaw: (lead.tags ?? []).join(", "),
-      expected_close_date: lead.expected_close_date ?? "",
-    },
-  });
+  const form = useForm<FormShape>({ defaultValues: valoresDoLead(lead) });
+
+  // A identidade do conteúdo do lead: muda quando o servidor muda algo que o
+  // formulário mostra, e só então o efeito roda.
+  const versaoDoLead = JSON.stringify([valoresDoLead(lead), lead.tags ?? [], lead.custom_fields ?? {}]);
 
   useEffect(() => {
-    form.reset({
-      title: lead.title,
-      description: lead.description ?? "",
-      valueReais: centsToReais(lead.value_cents),
-      tagsRaw: (lead.tags ?? []).join(", "),
-      expected_close_date: lead.expected_close_date ?? "",
-    });
-    setCustomFields(lead.custom_fields ?? {});
-    setCamposCarregados(lead.custom_fields ?? {});
+    const novo = baseDoLead(lead);
+    if (idCarregado.current !== lead.id) {
+      // Outro lead: recomeça do zero.
+      idCarregado.current = lead.id;
+      base.current = novo;
+      form.reset(novo.valores);
+      setTags(novo.tags);
+      setCustomFields(novo.campos);
+      setEtiquetaPendente(null);
+      setChaveDasEtiquetas((k) => k + 1);
+      return;
+    }
+    // O mesmo lead mudou no servidor: o que a pessoa não mexeu acompanha.
+    const anterior = base.current;
+    const atuais = form.getValues();
+    const rebase = rebaseCampos(anterior.valores, atuais, novo.valores);
+    for (const campo of Object.keys(rebase) as (keyof FormShape)[]) {
+      if (rebase[campo] !== atuais[campo]) form.setValue(campo, rebase[campo]);
+    }
+    setTags((atual) => mesclarEtiquetas(anterior.tags, atual, novo.tags));
+    setCustomFields((atual) => rebaseCampos(anterior.campos, atual, novo.campos));
+    base.current = novo;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lead.id]);
+  }, [lead.id, versaoDoLead]);
 
   async function onSubmit(values: FormShape) {
-    const tags = values.tagsRaw
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const b = base.current;
+    const mexidos = camposMexidos(b.valores, values);
+    const patch: Record<string, unknown> = {};
 
-    const reais = values.valueReais.trim();
-    let valueCents: number | null = null;
-    if (reais.length > 0) {
-      valueCents = parseReaisToCents(reais);
-      if (valueCents === null) {
-        form.setError("valueReais", { message: t("Valor inválido") });
-        return;
+    if (mexidos.title !== undefined) patch.title = values.title.trim();
+    if (mexidos.description !== undefined) {
+      patch.description = values.description.trim() ? values.description.trim() : null;
+    }
+    if (mexidos.valueReais !== undefined) {
+      const reais = values.valueReais.trim();
+      let valueCents: number | null = null;
+      if (reais.length > 0) {
+        valueCents = parseReaisToCents(reais);
+        if (valueCents === null) {
+          form.setError("valueReais", { message: t("Valor inválido") });
+          return;
+        }
       }
+      patch.value_cents = valueCents;
+    }
+    if (mexidos.expected_close_date !== undefined) {
+      patch.expected_close_date = values.expected_close_date || null;
     }
 
-    const camposAlterados = soChavesAlteradas(camposCarregados, customFields);
-    const patch: Record<string, unknown> = {
-      title: values.title.trim(),
-      description: values.description.trim() ? values.description.trim() : null,
-      value_cents: valueCents,
-      tags,
-      expected_close_date: values.expected_close_date || null,
-      ...(fieldDefs.length > 0 && Object.keys(camposAlterados).length > 0
-        ? { custom_fields: camposAlterados }
-        : {}),
-    };
+    const tagsDaTela =
+      etiquetaPendente && !tags.includes(etiquetaPendente) ? [...tags, etiquetaPendente] : tags;
+    if (!mesmasEtiquetas(b.tags, tagsDaTela)) {
+      // Aplicadas sobre o conjunto do servidor: a etiqueta que a IA pôs no meio fica.
+      patch.tags = mesclarEtiquetas(b.tags, tagsDaTela, lead.tags ?? []);
+    }
+
+    const camposAlterados = soChavesAlteradas(b.campos, customFields);
+    if (fieldDefs.length > 0 && Object.keys(camposAlterados).length > 0) {
+      patch.custom_fields = camposAlterados;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      toast(t("Nada mudou para salvar."));
+      return;
+    }
 
     const parsed = updateLeadSchema.safeParse(patch);
     if (!parsed.success) {
@@ -124,8 +181,16 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
         leadId: lead.id,
         patch: parsed.data as UpdateLeadInput,
       });
-      // O que acabou de gravar vira a nova régua do próximo salvamento.
-      setCamposCarregados({ ...customFields });
+      // O que acabou de gravar vira a nova base: o lead que volta do servidor
+      // entra inteiro, sem nada parecer "mexido".
+      base.current = {
+        valores: { ...values },
+        tags: (patch.tags as string[] | undefined) ?? b.tags,
+        campos: { ...b.campos, ...camposAlterados },
+      };
+      if (patch.tags) setTags(patch.tags as string[]);
+      setEtiquetaPendente(null);
+      setChaveDasEtiquetas((k) => k + 1);
       toast.success(t("Lead atualizado"));
       onSaved?.();
     } catch {
@@ -133,9 +198,8 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
     }
   }
 
-
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={(e) => void form.handleSubmit(onSubmit)(e)} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="title">{t("Título")}</Label>
           <Input
@@ -176,8 +240,17 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="tagsRaw">{t("Tags (separadas por vírgula)")}</Label>
-          <Input id="tagsRaw" placeholder="vip, recompra" {...form.register("tagsRaw")} />
+          <Label htmlFor="etiquetas-do-lead">{t("Etiquetas")}</Label>
+          <EtiquetasDoContato
+            key={chaveDasEtiquetas}
+            inputId="etiquetas-do-lead"
+            value={tags}
+            onChange={setTags}
+            onPendente={setEtiquetaPendente}
+            vocabulario={vocabulario.data}
+            disabled={edit.isPending}
+            textoVazio={t("Nenhuma etiqueta neste negócio.")}
+          />
         </div>
 
         {fieldDefs.length > 0 && (

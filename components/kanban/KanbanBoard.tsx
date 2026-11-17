@@ -2,6 +2,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,8 +11,7 @@ import { useMoveCard } from "@/hooks/kanban/useMoveCard";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAtRiskLeads } from "@/hooks/leads/useAtRiskLeads";
 import { useReactivations } from "@/hooks/leads/useReactivations";
-import { midpoint } from "@/lib/kanban/fractional-indexing";
-import { proximoNaEtapaInteira } from "@/lib/kanban/vizinho-na-etapa";
+import { posicaoAoSoltar, proximoNaEtapaInteira } from "@/lib/kanban/vizinho-na-etapa";
 import type { Lead } from "@/lib/types/leads";
 import type { BoardData, Pipeline, Stage } from "@/lib/kanban/types";
 import { StageColumn } from "./StageColumn";
@@ -217,14 +217,17 @@ export function KanbanBoard({
         draggableId,
       );
 
-      const newPosition = midpoint(
-        before?.position_in_stage ?? null,
-        after?.position_in_stage ?? null,
+      // Empate já gravado entre os dois vizinhos não cancela mais o arrasto em
+      // silêncio (achado 27): o card cai logo depois do grupo empatado, e a
+      // tela diz por que não ficou exatamente onde foi solto.
+      const { posicao: newPosition, ajustada } = posicaoAoSoltar(
+        before ?? null,
+        after,
+        etapaInteira,
+        draggableId,
       );
-
-      if (Number.isNaN(newPosition)) {
-        // Collision — Wave 8 will handle global rebalance. For now, abort silently.
-        return;
+      if (ajustada) {
+        toast.info(t("Havia cartões na mesma posição nesta etapa: este ficou logo depois deles."));
       }
 
       moveCard.mutate({
@@ -234,7 +237,7 @@ export function KanbanBoard({
         expectedUpdatedAt: lead.updated_at,
       });
     },
-    [data, grouped, moveCard, qc, pipelineId],
+    [data, grouped, moveCard, qc, pipelineId, t],
   );
 
   if (isLoading) {

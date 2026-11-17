@@ -44,6 +44,19 @@ import { StaleServiceBoundaryError, parseServiceBoundary, assertCurrentServiceBo
  * abria episódio novo na conclusão, com a mensagem 1 encostada na última da
  * sequência anterior. O cooldown conta o limiar a partir do FIM.
  *
+ * Sem retroativo (migration 0418, incidente da clínica Rosa em 17/11/2026: abrir
+ * o acesso da IA ao canal inscreveu 80 conversas paradas desde 02/11 e saíram
+ * 68 mensagens): o silêncio só conta se a última mensagem do contato é
+ * POSTERIOR ao mais recente entre (1) `active_since` do ponteiro, (2) a
+ * publicação da versão ativa (`followup_flow_versions.created_at` — a 0324 não
+ * avançava a vigência ao trocar de versão) e (3) `channel_sessions.
+ * ai_access_since` do canal da conversa (trigger: qualquer mudança do alcance da
+ * IA). Segunda trava: silêncio mais velho que limiar + `FOLLOWUP_SILENCIO_
+ * ATRASO_MAXIMO_HORAS` (padrão 24 h) não entra (`skipped_silencio_antigo`) —
+ * cobre canal sem marca (anterior à 0418) e rollback para versão antiga. Não há
+ * marco por contato: `contacts.ai_authorized_at` é renovado a cada turno e pela
+ * origem na própria ingestão, então usá-lo barraria o silêncio legítimo.
+ *
  * Teto de recomeço (opcional, `trigger_config.params.reentrada_minima_horas`):
  * o episódio e o cooldown deixam cada resposta abrir uma sequência nova — medido
  * em produção, um contato recebeu 8 mensagens em 4 dias. Com o parâmetro, uma
@@ -112,6 +125,12 @@ export interface ContatoEmSilencio {
   contact_id: string;
   ultima_entrada_em: string;
   ultima_entrada_gravada_em: string;
+  /**
+   * Quando o acesso da IA ao canal da conversa foi aberto ou mudou
+   * (`channel_sessions.ai_access_since`, migration 0418). Ausente ou nulo =
+   * canal sem marca (legado), sem piso por canal.
+   */
+  acesso_da_ia_desde?: string | null;
 }
 
 export interface SilencePointer {
@@ -122,6 +141,8 @@ export interface SilencePointer {
   segments: string[];
   /** Desde quando o ponteiro vale com o status e o gatilho atuais (migration 0324). */
   active_since: string;
+  /** Publicação da versão ativa (`followup_flow_versions.created_at`). Ausente = sem piso por versão. */
+  version_since?: string;
   /** Teto de recomeço em horas (`params.reentrada_minima_horas`). Ausente = sem teto. */
   reentrada_minima_horas?: number;
 }
@@ -231,8 +252,14 @@ export interface SilenceSweepSummary {
   pointers_gated_out: number;
   enrolled: number;
   skipped_existing: number;
-  /** Calou antes de o ponteiro valer — "nada aconteceu", fora da auditoria. */
+  /**
+   * Calou antes de o fluxo valer para a conversa (vigência do ponteiro,
+   * publicação da versão ou abertura do acesso da IA no canal) — "nada
+   * aconteceu", fora da auditoria.
+   */
   skipped_before_activation: number;
+  /** Silêncio mais velho que limiar + atraso máximo (segunda trava). Fora da auditoria. */
+  skipped_silencio_antigo: number;
   /** Já inscrito neste ponteiro neste silêncio — "nada aconteceu", fora da auditoria. */
   skipped_same_episode: number;
   /** Episódio novo, mas a inscrição anterior terminou há menos que o limiar — fora da auditoria (2240b215e). */
@@ -258,16 +285,33 @@ export interface SilenceSweepDeps {
   db: SilenceSweepDb;
   gateDb: FollowupGateDb;
   clock: () => Date;
+  /** Atraso máximo depois do limiar. Omitido = `atrasoMaximoDoSilencioMs(process.env)`. */
+  atrasoMaximoMs?: number;
+}
+
+const ATRASO_MAXIMO_HORAS_PADRAO = 24;
+
+/**
+ * Segunda trava do "sem retroativo": silêncio mais velho que limiar + N horas
+ * não é inscrito, mesmo que todos os marcos de vigência o deixassem passar
+ * (canal sem marca, versão antiga reativada por rollback). Knob
+ * `FOLLOWUP_SILENCIO_ATRASO_MAXIMO_HORAS`; vazio, zero ou lixo = 24 h.
+ */
+export function atrasoMaximoDoSilencioMs(env: Record<string, string | undefined>): number {
+  const horas = Number(env.FOLLOWUP_SILENCIO_ATRASO_MAXIMO_HORAS);
+  return (Number.isFinite(horas) && horas > 0 ? horas : ATRASO_MAXIMO_HORAS_PADRAO) * 3_600_000;
 }
 
 export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSweepSummary> {
   const { db, gateDb, clock } = deps;
+  const atrasoMaximoMs = deps.atrasoMaximoMs ?? atrasoMaximoDoSilencioMs(process.env);
   const summary: SilenceSweepSummary = {
     pointers_scanned: 0,
     pointers_gated_out: 0,
     enrolled: 0,
     skipped_existing: 0,
     skipped_before_activation: 0,
+    skipped_silencio_antigo: 0,
     skipped_same_episode: 0,
     skipped_cooldown: 0,
     skipped_reentrada: 0,
@@ -306,19 +350,28 @@ export async function runSilenceSweep(deps: SilenceSweepDeps): Promise<SilenceSw
     if (!triggerNodeId) continue;
 
     const cutoffIso = new Date(clock().getTime() - pointer.threshold_minutes * 60_000).toISOString();
-    // Sem passado: só conta silêncio cuja última mensagem (pelo `sent_at`,
-    // quando o contato falou) é POSTERIOR à vigência do ponteiro. Ligar o
-    // fluxo não cobra quem calou antes — inclusive conversa aberta de meses.
-    const vigencia = Date.parse(pointer.active_since);
+    // Sem retroativo: só conta silêncio cuja última mensagem (pelo `sent_at`)
+    // é POSTERIOR a todo marco de "desde quando o fluxo vale para esta
+    // conversa" — vigência do ponteiro, publicação da versão ativa e abertura
+    // do acesso da IA no canal. Ligar o fluxo, publicar versão ou abrir o
+    // canal não cobra quem calou antes (incidente de 17/11/2026: 80 conversas
+    // paradas desde 02/11 inscritas de uma vez). O teto (limiar + atraso
+    // máximo) é a segunda trava, para o que nenhum marco cobre.
+    const teto = Date.parse(cutoffIso) - atrasoMaximoMs;
+    const vigencia = Math.max(Date.parse(pointer.active_since), Date.parse(pointer.version_since ?? "") || -Infinity);
+    const piso = new Date(Math.max(vigencia, teto)).toISOString();
     const contatos = (
-      await db.loadSilentContacts(pointer.organization_id, cutoffIso, pointer.segments, pointer.active_since)
-    ).filter(
-      (c) => {
-        if (Date.parse(c.ultima_entrada_em) > vigencia) return true;
-        summary.skipped_before_activation++;
+      await db.loadSilentContacts(pointer.organization_id, cutoffIso, pointer.segments, piso)
+    ).filter((c) => {
+      const em = Date.parse(c.ultima_entrada_em);
+      if (em < teto) {
+        summary.skipped_silencio_antigo++;
         return false;
-      },
-    );
+      }
+      if (em > vigencia && em > (Date.parse(c.acesso_da_ia_desde ?? "") || -Infinity)) return true;
+      summary.skipped_before_activation++;
+      return false;
+    });
     if (contatos.length === 0) continue;
     // Episódio: um contato entra neste ponteiro no máximo UMA vez por
     // silêncio. Já existe inscrição deste ponteiro (qualquer status: viva,
@@ -510,18 +563,21 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
     async loadActiveSilencePointers() {
       const { data, error } = await admin
         .from("followup_flow_pointers")
-        .select("id, organization_id, active_version_id, trigger_config, active_since")
+        .select(
+          "id, organization_id, active_version_id, trigger_config, active_since, versao:followup_flow_versions!followup_flow_pointers_active_version_id_fkey(created_at)",
+        )
         .eq("status", "active")
         .not("active_version_id", "is", null);
       if (error) throw new Error(error.message);
 
       const pointers: SilencePointer[] = [];
-      for (const row of (data ?? []) as Array<{
+      for (const row of (data ?? []) as unknown as Array<{
         id: string;
         organization_id: string;
         active_version_id: string | null;
         trigger_config: unknown;
         active_since: string;
+        versao?: { created_at: string } | null;
       }>) {
         if (!row.active_version_id) continue;
         const parsed = triggerConfigSchema.safeParse(row.trigger_config);
@@ -533,6 +589,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
           threshold_minutes: parsed.data.params.threshold_minutes,
           segments: parsed.data.params.segments ?? [],
           active_since: row.active_since,
+          ...(row.versao?.created_at ? { version_since: row.versao.created_at } : {}),
           ...(parsed.data.params.reentrada_minima_horas !== undefined
             ? { reentrada_minima_horas: parsed.data.params.reentrada_minima_horas }
             : {}),
@@ -559,7 +616,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         contact_id: string;
         last_inbound_at: string;
         contacts: ContactEmbed;
-        sessao: { metadata: Record<string, unknown> | null } | null;
+        sessao: { metadata: Record<string, unknown> | null; ai_access_since?: string | null } | null;
       };
       // Keyset por conversations.id: sem ordem nem página, o PostgREST cortava
       // em max_rows (1000) e cada tick via um recorte que o banco escolhia.
@@ -572,7 +629,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         let consulta = admin
           .from("conversations")
           .select(
-            "id, service_revision, current_demanda_id, demandas!conversations_current_demanda_id_fkey(revision,fechada_em), status, messages!messages_conversation_id_fkey(organization_id,contact_id,conversation_id,service_revision,demanda_id,demanda_revision,sent_at,created_at), contact_id, last_inbound_at, contacts:contact_id(tags, is_blocked, is_anonymized, ai_authorized_at, phone_number, inbox_hidden_at), sessao:channel_session_id(metadata)",
+            "id, service_revision, current_demanda_id, demandas!conversations_current_demanda_id_fkey(revision,fechada_em), status, messages!messages_conversation_id_fkey(organization_id,contact_id,conversation_id,service_revision,demanda_id,demanda_revision,sent_at,created_at), contact_id, last_inbound_at, contacts:contact_id(tags, is_blocked, is_anonymized, ai_authorized_at, phone_number, inbox_hidden_at), sessao:channel_session_id(metadata, ai_access_since)",
           )
           .eq("organization_id", orgId).eq("demandas.organization_id", orgId)
           .eq("contacts.organization_id", orgId).eq("sessao.organization_id", orgId)
@@ -613,7 +670,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
       const latest = new Map<
         string,
         {
-          boundary: ServiceBoundary; at: number; sentAt: string; createdAt: string;
+          boundary: ServiceBoundary; at: number; sentAt: string; createdAt: string; acessoDesde: string | null;
           tags: string[]; blocked: boolean; anonymized: boolean; permitidoPeloGate: boolean;
         }
       >();
@@ -649,6 +706,7 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
           );
           latest.set(row.contact_id, {
             boundary, at, sentAt: source.sent_at, createdAt: source.created_at,
+            acessoDesde: row.sessao?.ai_access_since ?? null,
             tags: row.contacts?.tags ?? [],
             blocked: row.contacts?.is_blocked ?? false,
             anonymized: row.contacts?.is_anonymized ?? false,
@@ -669,7 +727,10 @@ export function createSupabaseSilenceSweepDb(admin: SupabaseClient): SilenceSwee
         if (!v.permitidoPeloGate) continue;
         if (v.at > cutoff) continue; // conversou depois do corte — não é silêncio
         if (segments.length > 0 && !segments.some((s) => v.tags.includes(s))) continue;
-        silentes.push({ contact_id: contactId, ultima_entrada_em: v.sentAt, ultima_entrada_gravada_em: v.createdAt });
+        silentes.push({
+          contact_id: contactId, ultima_entrada_em: v.sentAt, ultima_entrada_gravada_em: v.createdAt,
+          acesso_da_ia_desde: v.acessoDesde,
+        });
         origins.set(`${orgId}:${contactId}`, v.boundary);
       }
       return silentes;

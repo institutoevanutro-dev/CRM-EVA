@@ -28,6 +28,8 @@ interface AgendamentoListado {
   contatoNome: string | null;
   contatoSemNomeCompleto?: boolean;
   contatoNaoRecebeMensagens?: boolean;
+  tipoId?: string | null;
+  tipoNome?: string | null;
 }
 
 export interface RecorteDaGrade {
@@ -107,6 +109,10 @@ export function useAgendamentos(recorte: RecorteDaGrade | null) {
           faltaNomeCompleto: a.contatoSemNomeCompleto === true,
           // A10: sino cortado na grade e aviso no Remarcar. Mesma tolerância.
           naoRecebeMensagens: a.contatoNaoRecebeMensagens === true,
+          // Remarcar consulta os horários DESTE procedimento, e o histórico diz
+          // o nome dele (achados 1 e 18 da auditoria de 16/11).
+          tipoId: a.tipoId ?? undefined,
+          tipo: a.tipoNome ?? undefined,
         }));
       } catch (err) {
         showApiError(err);

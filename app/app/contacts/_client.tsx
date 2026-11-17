@@ -23,6 +23,8 @@ import { PontoDaEtiqueta } from "@/components/tags/PontoDaEtiqueta";
 import { NewContactDialog } from "@/components/contacts/NewContactDialog";
 import { ImportContactsDialog } from "@/components/contacts/ImportContactsDialog";
 import { TAG_DE_CLIENTE } from "@/lib/contacts/cliente";
+import { opcoesDoFiltroDeEtiquetas } from "@/lib/contacts/etiquetas";
+import { useContactTagVocabulary } from "@/hooks/contacts/useContactTagVocabulary";
 import { type ModoDeEtiqueta } from "@/lib/inbox/marcador-da-conversa";
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
 import { MergeDialog } from "@/components/contacts/MergeDialog";
@@ -89,19 +91,23 @@ export function ContactsListClient() {
     [q.data],
   );
 
-  const tagOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const c of allContacts) for (const tag of c.tags) set.add(tag);
-    // `cliente` na lista mesmo que nenhum contato da página carregada a tenha —
-    // COM A REGRA LIGADA. As demais opções saem do que já foi paginado — o que
-    // basta para etiqueta que a equipe criou e usa em bloco, e falha justamente
-    // para esta, que o sistema escreve sozinho e cujo primeiro uso é "filtrar
-    // quem já é cliente" numa base grande, onde a primeira página pode não ter
-    // nenhum. Desligada, a opção fixa ofereceria um filtro de uma regra que não
-    // roda; quem já tem a etiqueta continua aparecendo pela linha de cima.
-    if (clientesLigado) set.add(TAG_DE_CLIENTE);
-    return Array.from(set).sort();
-  }, [allContacts, clientesLigado]);
+  // O vocabulário da ORGANIZAÇÃO, não o da página filtrada (auditoria L4,
+  // achado 34): tirado dos contatos já carregados, marcar uma etiqueta encolhia
+  // a lista às etiquetas de quem tem aquela — combinar grupos ficava impossível.
+  const vocabulario = useContactTagVocabulary(useActiveOrg()?.orgId ?? null);
+  const tagOptions = useMemo(
+    () =>
+      opcoesDoFiltroDeEtiquetas({
+        vocabulario: vocabulario.data,
+        carregadas: allContacts.flatMap((c) => c.tags),
+        selecionadas: tags,
+        // `cliente` com a regra LIGADA, mesmo sem contato carregado que a tenha:
+        // o sistema a escreve sozinho, e "filtrar quem já é cliente" é o primeiro
+        // uso dela. Desligada, seria filtro de uma regra que não roda.
+        extra: clientesLigado ? [TAG_DE_CLIENTE] : [],
+      }),
+    [vocabulario.data, allContacts, tags, clientesLigado],
+  );
 
   const handleSort = useCallback(
     (column: ContactOrderBy) => {

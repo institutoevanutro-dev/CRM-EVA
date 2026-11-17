@@ -8,6 +8,54 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.19.2] — 2026-11-17
+
+### Corrigido
+
+- **Follow-up de silêncio não manda mais mensagem para conversa antiga** Publicar um fluxo de silêncio, ativá-lo ou abrir o acesso da IA ao canal não inscreve mais conversas que já
+  estavam paradas antes disso: só conta o silêncio que começou depois de o fluxo valer para aquela conversa.
+  Como segunda trava, ninguém calado há mais que o limiar do fluxo + 24 horas é inscrito (ajustável em
+  `FOLLOWUP_SILENCIO_ATRASO_MAXIMO_HORAS`, sem precisar editar o `.env`). Quem já roda não precisa fazer nada.
+
+## [5.19.1] — 2026-11-17
+
+### Corrigido
+
+- **Agenda remarca na agenda certa e se atualiza sozinha** Remarcar passou a oferecer os horários do procedimento e do profissional do
+  próprio compromisso, e não os do tipo escolhido na grade; arrastar um
+  compromisso de outra agenda para a grade é recusado com o motivo. A grade se
+  atualiza sem recarregar quando a IA ou um colega marca, remarca ou cancela, e a
+  linha do agora, os horários passados e o botão Hoje acompanham o relógio.
+
+  Também: "Ver na agenda" não deixa o horário antigo pronto na remarcação
+  seguinte; o Confirmar da remarcação trava durante o envio; cancelar pelo
+  detalhe pede o mínimo de 3 letras e só trata como conflito a resposta 409;
+  bloqueio acima de 62 dias é recusado com aviso em vez de gravar só o começo; a
+  marcação diz quando falta escolher "Marcada por"; o histórico mostra o
+  procedimento; e a grade cresce para mostrar compromissos antes das 07:00 e
+  depois das 22:00.
+
+- **Funil — arrastar pelo nome, "Salvar e iniciar conversa" e seleção em lote** Correções no quadro do funil (auditoria de 16/11, lote L3):
+
+  - "Salvar e iniciar conversa" volta a abrir a conversa depois de criar o negócio.
+  - O cartão agora arrasta também quando é pego pelo nome (antes abria o dossiê).
+  - Cancelar um menu ou diálogo com Esc não apaga mais a seleção em lote.
+  - A seleção em lote só leva os cartões que o filtro deixa na tela.
+  - A busca acompanha "Limpar filtros" e o voltar do navegador, e trocar a Situação logo depois de digitar não é mais desfeito.
+  - Arrastar entre dois cartões com a mesma posição não é mais cancelado em silêncio: o cartão fica logo depois deles e a tela avisa.
+  - A barra de rolagem do quadro não cai mais abaixo da tela quando há faixa de aviso no topo.
+  - No iPhone e no iPad as caixas de seleção do cartão e da etapa aparecem sem precisar de mouse.
+  - Cartão mais limpo (título alinhado, sem repetir a etapa), filtros com a mesma altura, busca "por nome", e o botão de criar usa o vocabulário do funil (ex.: "Adicionar paciente").
+
+- **O dossiê do negócio não desfaz mais o que a IA ou um colega gravou** Salvar o dossiê de um negócio aberto há algum tempo devolvia ao valor antigo o
+  que a IA ou um colega tinha gravado nesse meio-tempo. Agora o dossiê acompanha o
+  negócio ao vivo e o Salvar grava só os campos que você mudou; as etiquetas do
+  negócio usam o mesmo seletor dos contatos. Na ficha do contato, apagar e-mail,
+  telefone, nascimento ou nome passa a funcionar; o Esc no campo de etiqueta limpa
+  só o texto; o filtro de etiquetas oferece todas as etiquetas da organização; o
+  "Juntar" dos duplicados só aparece para quem pode juntar; e o erro ao abrir a
+  ficha ganhou o botão "Tentar de novo".
+
 ## [5.19.0] — 2026-11-17
 
 ### Adicionado
@@ -9276,7 +9324,9 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.2...HEAD
+[5.19.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.1...v5.19.2
+[5.19.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.0...v5.19.1
 [5.19.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.18.0...v5.19.0
 [5.18.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.17.1...v5.18.0
 [5.17.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.17.0...v5.17.1

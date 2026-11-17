@@ -89,3 +89,21 @@ describe("BulkActionBar: perdido em lote", () => {
     expect(screen.queryByRole("button", { name: "Marcar como perdido…" })).toBeNull();
   });
 });
+
+describe("BulkActionBar: Esc (auditoria 16/11, achado 24)", () => {
+  it("o Esc que fecha o diálogo de motivo NÃO apaga a seleção", async () => {
+    const onClear = montar();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Marcar como perdido…" }));
+    await screen.findByRole("dialog");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(onClear).not.toHaveBeenCalled();
+  });
+
+  it("o Esc solto, sem nada aberto, continua limpando a seleção", async () => {
+    const onClear = montar();
+    await userEvent.keyboard("{Escape}");
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+});
