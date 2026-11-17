@@ -133,7 +133,8 @@ export function AudioRecorder({ conversationId, disabled }: Props) {
       <Button
         type="button"
         size="icon"
-        className="shrink-0"
+        // Redondo, como o botão de enviar que toma o lugar dele quando há texto.
+        className="shrink-0 rounded-full"
         aria-label={t("Gravar áudio")}
         onClick={start}
         disabled={disabled}
