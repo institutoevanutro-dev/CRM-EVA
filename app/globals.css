@@ -1152,10 +1152,44 @@
   --bolha-recebida-fundo: var(--bolha-recebida-fundo-escuro);
   --bolha-recebida-texto: var(--bolha-recebida-texto-escuro);
 }
+/* O DESENHO do fundo "Desenho" (o padrão desde 16/11/2026): traços nossos —
+   folha, cruz, coração, calendário, gota, raminho — em azulejo de 240px. Nada
+   do papel de parede de outro app. Cor NEUTRA (o texto do tema a 8–9%), em
+   duas versões porque `url()` de dado não lê variável; a marca entra pelos
+   balões, não pelo fundo. Sem `;` no dado: os leitores de CSS dos testes
+   partem declaração por `;`. O fundo da tela de espera (sem conversa
+   aberta) usa a mesma classe e cai neste desenho. */
+.conversa-fundo,
+[data-aparencia-conversa] {
+  --conversa-desenho: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='%23171717' stroke-opacity='0.09' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 46c0-15 10-25 27-25 0 16-10 27-25 27z'/%3E%3Cpath d='M19 46l15-14'/%3E%3Cpath d='M124 16v18M115 25h18'/%3E%3Cpath d='M64 122c-10-6-15-11-15-17a7 7 0 0 1 15-4a7 7 0 0 1 15 4c0 6-5 11-15 17z'/%3E%3Cpath d='M164 98h22a4 4 0 0 1 4 4v18a4 4 0 0 1-4 4h-22a4 4 0 0 1-4-4v-18a4 4 0 0 1 4-4z'/%3E%3Cpath d='M160 106h30'/%3E%3Cpath d='M168 93v8M182 93v8'/%3E%3Cpath d='M34 158l3.5 10.5L48 172l-10.5 3.5L34 186l-3.5-10.5L20 172l10.5-3.5z'/%3E%3Cpath d='M114 170c7 9 10 15 10 19a10 10 0 0 1-20 0c0-4 3-10 10-19z'/%3E%3Cpath d='M204 214v-30'/%3E%3Cpath d='M204 200c-7 0-11-4-11-11 7 0 11 4 11 11z'/%3E%3Cpath d='M204 192c7 0 11-4 11-11-7 0-11 4-11 11z'/%3E%3Cpath d='M96 60q6-6 12 0t12 0'/%3E%3Cpath d='M222 66a10 10 0 1 1-20 0a10 10 0 1 1 20 0z'/%3E%3Cpath d='M207 68q5 5 10 0'/%3E%3Ccircle cx='200' cy='32' r='5'/%3E%3Ccircle cx='84' cy='40' r='2'/%3E%3Ccircle cx='152' cy='62' r='2'/%3E%3Ccircle cx='228' cy='132' r='2'/%3E%3Ccircle cx='62' cy='224' r='2'/%3E%3Ccircle cx='150' cy='150' r='1.6'/%3E%3Ccircle cx='14' cy='104' r='1.6'/%3E%3Ccircle cx='120' cy='232' r='1.6'/%3E%3Ccircle cx='176' cy='226' r='2'/%3E%3C/g%3E%3C/svg%3E");
+}
+[data-theme="dark"] .conversa-fundo,
+[data-theme="dark"] [data-aparencia-conversa] {
+  --conversa-desenho: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='%23f1ede0' stroke-opacity='0.08' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 46c0-15 10-25 27-25 0 16-10 27-25 27z'/%3E%3Cpath d='M19 46l15-14'/%3E%3Cpath d='M124 16v18M115 25h18'/%3E%3Cpath d='M64 122c-10-6-15-11-15-17a7 7 0 0 1 15-4a7 7 0 0 1 15 4c0 6-5 11-15 17z'/%3E%3Cpath d='M164 98h22a4 4 0 0 1 4 4v18a4 4 0 0 1-4 4h-22a4 4 0 0 1-4-4v-18a4 4 0 0 1 4-4z'/%3E%3Cpath d='M160 106h30'/%3E%3Cpath d='M168 93v8M182 93v8'/%3E%3Cpath d='M34 158l3.5 10.5L48 172l-10.5 3.5L34 186l-3.5-10.5L20 172l10.5-3.5z'/%3E%3Cpath d='M114 170c7 9 10 15 10 19a10 10 0 0 1-20 0c0-4 3-10 10-19z'/%3E%3Cpath d='M204 214v-30'/%3E%3Cpath d='M204 200c-7 0-11-4-11-11 7 0 11 4 11 11z'/%3E%3Cpath d='M204 192c7 0 11-4 11-11-7 0-11 4-11 11z'/%3E%3Cpath d='M96 60q6-6 12 0t12 0'/%3E%3Cpath d='M222 66a10 10 0 1 1-20 0a10 10 0 1 1 20 0z'/%3E%3Cpath d='M207 68q5 5 10 0'/%3E%3Ccircle cx='200' cy='32' r='5'/%3E%3Ccircle cx='84' cy='40' r='2'/%3E%3Ccircle cx='152' cy='62' r='2'/%3E%3Ccircle cx='228' cy='132' r='2'/%3E%3Ccircle cx='62' cy='224' r='2'/%3E%3Ccircle cx='150' cy='150' r='1.6'/%3E%3Ccircle cx='14' cy='104' r='1.6'/%3E%3Ccircle cx='120' cy='232' r='1.6'/%3E%3Ccircle cx='176' cy='226' r='2'/%3E%3C/g%3E%3C/svg%3E");
+}
 .conversa-fundo {
   background-color: var(--conversa-fundo-cor, var(--color-bg));
-  background-image: var(--conversa-fundo-imagem, none);
-  background-size: 16px 16px;
+  background-image: var(--conversa-fundo-imagem, var(--conversa-desenho));
+  background-size: var(--conversa-fundo-tamanho, 240px 240px);
+}
+
+/* A PONTA do balão, como num app de mensagem: só na PRIMEIRA bolha do turno,
+   no canto de cima, do lado de quem falou. É um elemento IRMÃO da bolha (não
+   `::before` dela), para não entrar no `scrollWidth` do balão; a cor vem do
+   componente, pelos mesmos tokens do fundo (ou do contorno). */
+.bolha-ponta {
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 13px;
+}
+.bolha-ponta-recebida {
+  left: -8px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+}
+.bolha-ponta-enviada {
+  right: -8px;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
 }
 
 /* ---- Movimento de diálogo, confirmação e gaveta (D1.1) ------------------

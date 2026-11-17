@@ -252,9 +252,21 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
         const lista = await busca.evaluate((input) => {
           const coluna = input.closest("div.border-r") as HTMLElement;
           const caixa = coluna.getBoundingClientRect();
-          const vazam = [...coluna.querySelectorAll("button, input, [role=tab]")]
-            .map((e) => e.getBoundingClientRect())
-            .filter((r) => r.width > 0 && r.right > caixa.right + 1).length;
+          // Controle RECORTADO por uma faixa que rola de lado (abas e filtros
+          // numa linha só, 16/11/2026) não vaza: ele está dentro da coluna,
+          // atrás da rolagem. Só conta assim se a própria faixa couber na coluna
+          // e declarar o recorte (`overflow-x` diferente de `visible`).
+          const recortado = (e: Element) => {
+            for (let a = e.parentElement; a && a !== coluna; a = a.parentElement) {
+              const ox = getComputedStyle(a).overflowX;
+              if (ox !== "visible" && a.getBoundingClientRect().right <= caixa.right + 1) return true;
+            }
+            return false;
+          };
+          const vazam = [...coluna.querySelectorAll("button, input, [role=tab]")].filter((e) => {
+            const r = e.getBoundingClientRect();
+            return r.width > 0 && r.right > caixa.right + 1 && !recortado(e);
+          }).length;
           const alturas = [...coluna.querySelectorAll('[role="tab"]')].map((t) =>
             Math.round(t.getBoundingClientRect().height),
           );

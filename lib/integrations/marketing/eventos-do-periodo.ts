@@ -1,7 +1,7 @@
 /**
  * Leitura dos eventos do funil num período, compartilhada pelo funil por origem e pelo resumo do Início.
- * Os critérios de cada contagem estão no topo de `funil-por-origem.ts`. Comparecimento (só o resumo usa,
- * em `lerComparecimentos`) é `calendar_appointments.status = 'completed'`, contado por `starts_at`, sem o
+ * Os critérios de cada contagem estão no topo de `funil-por-origem.ts`. Comparecimento (o resumo e o funil
+ * por origem usam, em `lerComparecimentos`) é `calendar_appointments.status = 'completed'`, contado por `starts_at`, sem o
  * lançado por engano (`excluded_at`) e sem a importação da agenda antiga.
  *
  * Service role: TODA consulta filtra a organização.

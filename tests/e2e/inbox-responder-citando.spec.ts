@@ -60,7 +60,7 @@ async function login(page: Page, email: string): Promise<void> {
  */
 async function abrirConversaComMensagens(page: Page): Promise<boolean> {
   await page.goto("/app/inbox?filter=all");
-  const bolhas = page.locator("[class*='rounded-2xl']");
+  const bolhas = page.getByTestId("message-bubble");
   const primeira = page.locator("li, [role='listitem']").first();
   if (await primeira.count()) await primeira.click();
   await expect(bolhas.first())
@@ -80,7 +80,7 @@ test.describe("responder citando", () => {
     // O botão vive em `opacity-0` até o hover. `toBeVisible` do Playwright
     // considera opacidade 0 como visível, então o hover é o que prova de
     // verdade que ele é alcançável — e o clique, que é clicável.
-    await page.locator("[class*='rounded-2xl']").first().hover();
+    await page.getByTestId("message-bubble").first().hover();
     await expect(responder).toBeVisible();
     await responder.click();
 
@@ -103,7 +103,7 @@ test.describe("responder citando", () => {
     const temMensagens = await abrirConversaComMensagens(page);
     test.skip(!temMensagens, "ambiente sem conversa com mensagens");
 
-    await page.locator("[class*='rounded-2xl']").first().hover();
+    await page.getByTestId("message-bubble").first().hover();
     const responder = page.getByRole("button", { name: /Responder a esta mensagem/i }).first();
     await responder.click();
     await expect(page.getByRole("button", { name: /Cancelar resposta/i })).toBeVisible();

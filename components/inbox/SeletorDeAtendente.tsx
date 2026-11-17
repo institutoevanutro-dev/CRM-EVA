@@ -46,7 +46,7 @@ function SeletorComEquipe({
     <Select value={value ?? "all"} onValueChange={(v) => onChange(v === "all" ? undefined : v)}>
       <SelectTrigger
         className={cn(
-          "h-8 min-w-0 flex-1 rounded-full border-transparent bg-surface-elevated px-3 text-xs shadow-none",
+          "h-8 w-auto max-w-44 shrink-0 gap-1 rounded-full border-transparent bg-surface-elevated px-3 text-xs shadow-none",
           value != null && "border-accent bg-accent-soft text-accent",
         )}
         aria-label={t("Filtrar por atendente")}

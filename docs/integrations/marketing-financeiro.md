@@ -34,7 +34,7 @@ Há logins independentes entre aplicações. Não há envio automático de conve
 ## Funil por origem (`/api/v1/integrations/marketing/funil-por-origem`)
 
 Mesma credencial (`x-integracao-token`), organização, limite e janela de 90 dias. Devolve, por origem (`meta`, `google`,
-`indicacao`, `organico`, sempre as quatro), quantos leads, agendamentos, sinais pagos e ganhos houve no período, a receita
+`indicacao`, `organico`, sempre as quatro), quantos leads, agendamentos, comparecimentos (consultas `completed` por `starts_at`, a régua do resumo), sinais pagos e ganhos houve no período, a receita
 dos ganhos (`receita_cents`, texto de dígitos) e quantos ganhos vieram sem valor. Regras em
 `lib/integrations/marketing/funil-por-origem.ts`; o painel de anúncios calcula custo por agendamento, por sinal e retorno.
 

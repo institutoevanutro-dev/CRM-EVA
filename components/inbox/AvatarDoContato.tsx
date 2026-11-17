@@ -37,7 +37,7 @@ export function AvatarDoContato({
       {temFoto && contato ? (
         <AvatarImage src={`/api/v1/contacts/${contato.id}/avatar`} alt="" className="object-cover" />
       ) : null}
-      <AvatarFallback className="bg-accent-soft text-xs font-medium text-accent-hover">
+      <AvatarFallback className="bg-accent-soft text-sm font-semibold text-accent-hover">
         {iniciais(nome, reserva)}
       </AvatarFallback>
     </Avatar>

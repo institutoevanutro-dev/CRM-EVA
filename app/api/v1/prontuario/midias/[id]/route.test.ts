@@ -98,7 +98,8 @@ describe("GET /api/v1/prontuario/midias/{id}", () => {
     expect(Array.from(new Uint8Array(await r.arrayBuffer()))).toEqual(Array.from(BYTES));
     expect(r.headers.get("content-type")).toBe("application/pdf");
     expect(r.headers.get("content-disposition")).toBe("attachment");
-    expect(r.headers.get("content-length")).toBe(String(BYTES.byteLength));
+    // O Next >= 16.4.5 apaga o Content-Length na saída; a rota não o promete.
+    expect(r.headers.get("content-length")).toBeNull();
     expect(r.headers.get("cache-control")).toBe("private, no-store");
     expect(r.headers.get("x-content-type-options")).toBe("nosniff");
     expect(r.headers.get("x-request-id")).toBeTruthy();
