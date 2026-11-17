@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { montarFunil, origemDe } from "@/lib/integrations/marketing/funil-por-origem";
+import { montarFunil, origemDe, somarVendasPorOrigem } from "@/lib/integrations/marketing/funil-por-origem";
 
 describe("origemDe", () => {
   it("anúncio vence etiqueta: quem clicou no anúncio da Meta é Meta, mesmo marcado como indicação", () => {
@@ -51,5 +51,20 @@ describe("montarFunil", () => {
     );
     expect(f.origens.find((l) => l.origem === "meta")?.comparecimentos).toBe(2);
     expect(f.origens.find((l) => l.origem === "organico")?.comparecimentos).toBe(1);
+  });
+});
+
+describe("somarVendasPorOrigem", () => {
+  it("soma o vendido e conta quem comprou, por origem; contato sem origem é orgânico; sem venda não conta", () => {
+    const origens = new Map([["c-meta", "meta"], ["c-meta2", "meta"], ["c-goo", "google"]] as const);
+    const s = somarVendasPorOrigem([
+      { contato_id: "c-meta", vendas: 2, valor_cents: "300000", recebido_cents: "100000" },
+      { contato_id: "c-meta2", vendas: 1, valor_cents: "50000", recebido_cents: "0" },
+      { contato_id: "c-goo", vendas: 0, valor_cents: "0", recebido_cents: "0" },
+      { contato_id: "c-x", vendas: 1, valor_cents: "70000", recebido_cents: "70000" },
+    ], origens);
+    expect(s.get("meta")).toEqual({ vendido: 350000n, compradores: 2 });
+    expect(s.get("google")).toEqual({ vendido: 0n, compradores: 0 });
+    expect(s.get("organico")).toEqual({ vendido: 70000n, compradores: 1 });
   });
 });

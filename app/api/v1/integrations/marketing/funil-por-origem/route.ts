@@ -3,6 +3,7 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 import { fail, ok } from "@/lib/api/wrappers";
 import { consultaFunilPorOrigem } from "@/lib/integrations/marketing/funil-por-origem";
+import { configFinanceiro, consultaVendasPorContatos } from "@/lib/integrations/financeiro/cliente";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Funil por origem para o painel de anúncios. Mesma credencial, organização,
@@ -27,7 +28,10 @@ export async function GET(req: NextRequest): Promise<Response> {
       (Date.parse(parsed.data.ate) - Date.parse(parsed.data.de)) / 86400000 > 90)
     return fail("validation_failed", "Período inválido.", 422, { requestId });
   try {
-    const response = ok(await consultaFunilPorOrigem(createAdminClient(), org.data, parsed.data.de, parsed.data.ate), { requestId });
+    // Com o Financeiro ligado, cada origem leva o vendido no período (CAC e ROAS por canal no painel).
+    const fin = configFinanceiro(org.data);
+    const vendas = fin ? (lote: string[]) => consultaVendasPorContatos(fin, lote, parsed.data.de, parsed.data.ate) : undefined;
+    const response = ok(await consultaFunilPorOrigem(createAdminClient(), org.data, parsed.data.de, parsed.data.ate, vendas), { requestId });
     response.headers.set("Cache-Control", "no-store");
     return response;
   } catch {
