@@ -336,7 +336,7 @@ export async function ingestMetaInbound(
  * Eco do CELULAR (`smb_message_echoes`): uma pessoa respondeu pelo WhatsApp
  * Business do aparelho. É o mesmo gesto do `fromMe` do outro canal
  * (`lib/waha/ingest.ts`, `handleOutboundFromUserPhone`) e tem o mesmo desfecho:
- * linha outbound `external_device` (a bolha a rotula "Celular"), conversa
+ * linha outbound `external_device` (a bolha a rotula "WhatsApp (fora do CRM)"), conversa
  * carimbada como saída (zera não-lidas, não toca `last_inbound_at`), IA pausada
  * por `pausarIaPorAtendimentoManual` — a mesma pausa que o composer usa (ajuste da
  * organização, padrão 5 min). NÃO passa por `aplicarEfeitosPosEntrada`: ninguém entrou, alguém saiu. E

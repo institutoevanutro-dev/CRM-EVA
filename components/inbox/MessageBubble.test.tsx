@@ -59,9 +59,9 @@ function msg(over: Partial<Message> = {}): Message {
 }
 
 describe("MessageBubble — rótulo de origem", () => {
-  it("resposta pelo celular (external_device) mostra 'Celular'", () => {
+  it("resposta pelo celular (external_device) mostra 'WhatsApp (fora do CRM)'", () => {
     render(<MessageBubble message={msg({ sent_via: "external_device" })} />);
-    expect(screen.getByText("Celular")).toBeInTheDocument();
+    expect(screen.getByText("WhatsApp (fora do CRM)")).toBeInTheDocument();
   });
 
   it("resposta pronta (ai + metadata.resposta_pronta_id) mostra 'Resposta pronta', não 'Automático'", () => {
@@ -159,12 +159,12 @@ describe("MessageBubble — rótulo de origem", () => {
     render(
       <MessageBubble message={msg({ sent_via: "external_device", direction: "inbound" })} />,
     );
-    expect(screen.queryByText("Celular")).not.toBeInTheDocument();
+    expect(screen.queryByText("WhatsApp (fora do CRM)")).not.toBeInTheDocument();
   });
 
   it("system não inventa rótulo", () => {
     render(<MessageBubble message={msg({ sent_via: "system" })} />);
-    for (const rotulo of ["Celular", "Automação", "Você", "Atendente", "Automático"]) {
+    for (const rotulo of ["WhatsApp (fora do CRM)", "Automação", "Você", "Atendente", "Automático"]) {
       expect(screen.queryByText(rotulo)).not.toBeInTheDocument();
     }
   });

@@ -11165,6 +11165,7 @@ export const DICIONARIO: Traducoes = {
   "Progresso da importação do histórico": { es: "Progreso de la importación del historial" },
   "Não deu para importar o histórico.": { es: "No se pudo importar el historial." },
   "Resposta pronta": { es: "Respuesta lista" },
+  "WhatsApp (fora do CRM)": { es: "WhatsApp (fuera del CRM)" },
   "Erro ao ler as perguntas frequentes.": { es: "Error al leer las preguntas frecuentes." },
   "7 dias": { es: "7 días" },
   "30 dias": { es: "30 días" },
