@@ -14,6 +14,7 @@ import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-se
 import { escolherProfissionalEProcedimento } from "./helpers/marcacao-simples";
 import { enviarTextoFixoPendente } from "../../lib/followup/enviar-texto-fixo";
 import { abrirMenuLateral } from "./utils/menu-lateral";
+import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
   auth: { persistSession: false },
@@ -444,10 +445,13 @@ test.describe("datas do compromisso seguem idioma e fuso próprios", () => {
     for (const locale of ["pt-BR", "es"] as const) {
       if (locale === "es") {
         await page.keyboard.press("Escape");
+        // A barra de cima fica escondida desde 18/11: abre como a pessoa abre.
+        await mostrarBarraDeCima(page);
         await page.getByTestId("seletor-de-idioma").click();
         const reload = page.waitForEvent("load");
         await page.getByTestId("idioma-es").click();
         await reload;
+        await mostrarBarraDeCima(page);
         await expect(page.getByTestId("seletor-de-idioma")).toHaveText("ES");
         await detail(page, id, "Consulta atravessa meia-noite");
         await expect(page.getByTestId("compromisso-horario")).toHaveText(
