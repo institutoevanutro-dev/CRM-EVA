@@ -5,10 +5,8 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import type { Locale } from "date-fns";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { Check, Clock, Funnel, InstagramLogo, Phone, Robot, UserCircle } from "@/lib/ui/icons";
+import { Check, Robot } from "@/lib/ui/icons";
 import { AvatarDoContato } from "@/components/inbox/AvatarDoContato";
-import { Badge } from "@/components/ui/badge";
-import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
 import { SeloDoCanal } from "@/components/inbox/SeloDoCanal";
 import { comandoDaConversa, esperaDaConversa } from "@/lib/inbox/comando-da-conversa";
 import { cn } from "@/lib/utils";
@@ -24,37 +22,13 @@ interface Props {
   /** Posição 1-based na fila (G5-03). Presente só na visão Fila. */
   queuePosition?: number;
   /**
-   * Mostrar POR ONDE a conversa entrou.
-   *
-   * Só com mais de um número conectado. Com um só, o rótulo seria a mesma
-   * palavra em toda linha da lista — ruído que ensina o olho a ignorar a área
-   * onde vivem os avisos que importam (bloqueado, tags).
-   */
-  mostrarCanal?: boolean;
-  /**
-   * Mostrar QUEM está no comando de cada conversa.
-   *
-   * Mesma regra do canal, e pelo mesmo motivo: só quando o rótulo DISCRIMINA. Nas
-   * abas "Fila" (todas sem dono), "Minhas" (todas do mesmo dono) e "IA" o badge
-   * seria a mesma palavra em toda linha — ruído que ensina o olho a ignorar a
-   * área onde vivem os avisos que importam. Quem decide é a lista, que é quem
-   * sabe quantos donos distintos ela tem.
-   */
-  mostrarAtendente?: boolean;
-  /**
    * Mostrar o ícone de robô na prévia da mensagem, quando quem manda é o
-   * automático. Mesma regra dos dois badges acima: só quando DISCRIMINA. Na
+   * automático. Só quando DISCRIMINA. Na
    * aba "Automático" toda linha já é robô, e o ícone repetido em cada uma vira
    * ruído. Ausente ou `true` = mostra (comportamento anterior, seguro para o
    * teste que não passa esta prop).
    */
   mostrarAutomatico?: boolean;
-  /**
-   * Mostrar o selo escrito de quem atende (IA, Equipe, Aguardando, Encerrada).
-   * A lista desliga quando todas as linhas teriam o mesmo selo (aba filtrada
-   * por um comando só). Ausente = mostra.
-   */
-  mostrarComando?: boolean;
   /**
    * A org tem atendimento automático de pé? Vem por PROP e não por hook: um hook
    * por linha faria 50 assinaturas de query na mesma lista para responder a MESMA
@@ -70,27 +44,6 @@ interface Props {
    */
   onAlternarSelecao?: (id: string) => void;
 }
-
-/**
- * A COR SAI DE QUEM MANDA, NÃO DO STATUS.
- *
- * O mapa anterior era por `conversations.status`, e o `bg-purple-500` de
- * `ai_handling` era a mesma mentira das abas em forma de cor: `ai_handling` é
- * escrito por UM caminho só em produção, então a bolinha do automático quase
- * nunca aparecia — enquanto o robô atendia a maior parte da lista — e, quando
- * aparecia, sobrevivia ao silêncio, porque o status não muda quando o atendente
- * cala o automático.
- *
- * As chaves são as de `Comando["quem"]`, ao lado de `ROTULO_DO_COMANDO`, pela
- * mesma razão que ele mora ali: a cor e a palavra dizem a mesma coisa e não
- * podem ser mantidas em arquivos diferentes.
- */
-const SELO_DO_COMANDO: Record<string, { rotulo: string; classe: string; Icone: typeof Robot } | undefined> = {
-  automatico: { rotulo: "Automático", classe: "bg-info-bg text-info-fg", Icone: Robot },
-  aguardando: { rotulo: "Aguardando", classe: "bg-warning-bg text-warning-fg", Icone: Clock },
-  humano: { rotulo: "Equipe", classe: "bg-accent-soft text-accent-hover", Icone: UserCircle },
-  encerrada: { rotulo: "Encerrada", classe: "bg-surface-elevated text-text-muted", Icone: Clock },
-};
 
 function relativeTime(iso: string | null, locale: Locale): string {
   if (!iso) return "";
@@ -126,10 +79,7 @@ export function ConversationListItem({
   isSelected,
   onSelect,
   queuePosition,
-  mostrarCanal,
-  mostrarAtendente,
   mostrarAutomatico = true,
-  mostrarComando = true,
   automaticoDaOrg,
   selecionado = false,
   onAlternarSelecao,
@@ -139,9 +89,6 @@ export function ConversationListItem({
   const c = conversation.contacts ?? null;
   const displayName = rotuloDoContato(c, t);
   const phoneFallback = c?.phone_number ? phoneForDisplay(c.phone_number) : displayName;
-  const tags = c?.tags ?? [];
-  const visibleTags = tags.slice(0, 2);
-  const overflow = tags.length - visibleTags.length;
   const preview = previaNaTela(conversation.last_message_preview?.trim() ?? "", t) || t("Sem mensagens");
   const truncated = preview.length > 60 ? `${preview.slice(0, 60)}…` : preview;
   const naFila = queuePosition !== undefined;
@@ -188,32 +135,21 @@ export function ConversationListItem({
     automaticoDaOrg,
   });
   const isAi = comando.quem === "automatico";
-  // Na Fila a linha já diz "Aguardando há…" no alto: o selo repetiria a palavra.
-  const selo = mostrarComando && !naFila ? SELO_DO_COMANDO[comando.quem] : undefined;
-  // Quem atende ganha NOME quando a lista tem mais de um dono — "Equipe" em toda
-  // linha não diria de quem é.
-  const rotuloDoSelo =
-    comando.quem === "humano" && mostrarAtendente ? (comando.nome ?? t("Equipe")) : selo ? t(selo.rotulo) : null;
-  const etapa = conversation.etapa_atual ?? null;
-
-  // O número DA EMPRESA por onde esta conversa chegou — não o do cliente. Com
-  // dois canais é o que decide o tom da resposta e qual número a pessoa vê
-  // respondendo. Cai no nome do canal quando não há número (canal recém-criado).
-  const canal = conversation.channel_sessions ?? null;
-  const rotuloCanal = canal?.phone_number ?? canal?.display_name ?? null;
-  // Instagram: sempre diz por qual conta entrou ("via @conta"), mesmo com um
-  // canal só: é o que diferencia a conversa do Direct da do WhatsApp na lista.
   const viaInstagram = conversation.channel === "instagram";
+  // A ÚLTIMA MENSAGEM FOI NOSSA? O tique da prévia, como no WhatsApp. A lista
+  // só conhece os horários (não o status da mensagem): o tique diz "nossa
+  // mensagem", sem afirmar entregue ou lida.
+  // ponytail: entregue/lida pedem o status da última mensagem na rota da lista.
+  const ultimaFoiNossa =
+    conversation.last_outbound_at != null &&
+    (conversation.last_inbound_at == null ||
+      new Date(conversation.last_outbound_at).getTime() >= new Date(conversation.last_inbound_at).getTime());
 
-  const temSelos =
-    Boolean(selo) ||
-    Boolean(etapa) ||
-    visibleTags.length > 0 ||
-    (mostrarCanal && rotuloCanal != null) ||
-    viaInstagram ||
-    Boolean(c?.is_blocked) ||
-    Boolean(c?.is_anonymized);
-
+  // A LINHA DE APP DE MENSAGEM (pedido do André, 18/11/2026): foto, nome (ou
+  // número), hora à direita, prévia com o tique e a bolinha de não lidas. Os
+  // selos de etapa, etiqueta, situação e número do canal saíram da linha: moram
+  // no painel do contato, no menu ⋯ da conversa e nos filtros. Fica só, na
+  // Fila, a posição e a espera — é a régua por que ela é ordenada.
   const linha = (
     <button
       type="button"
@@ -222,7 +158,7 @@ export function ConversationListItem({
       // Linha de app de mensagem: sem borda entre as linhas (o respiro separa),
       // a escolhida com fundo um tom acima e o foco do teclado num anel por dentro.
       className={cn(
-        "group relative flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-surface-elevated/60",
+        "group relative flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-elevated/60",
         onAlternarSelecao && "min-w-0 flex-1",
         "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         isSelected && "bg-surface-elevated hover:bg-surface-elevated",
@@ -240,9 +176,9 @@ export function ConversationListItem({
 
       <div className="min-w-0 flex-1">
         {naFila && (
-          <div className="mb-1 flex items-center gap-1.5">
+          <div className="mb-0.5 flex items-center gap-1.5">
             <span
-              className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-soft px-1 text-[10px] font-medium tabular-nums text-accent"
+              className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-soft px-1 text-[11px] font-medium tabular-nums text-accent"
               aria-label={`${t("Posição")} ${queuePosition} ${t("na fila")}`}
             >
               {queuePosition}º
@@ -252,7 +188,7 @@ export function ConversationListItem({
             </span>
           </div>
         )}
-        <div className="flex items-baseline justify-between gap-2 pt-0.5">
+        <div className="flex items-baseline justify-between gap-2">
           <span
             className={cn(
               "truncate text-[15px] leading-5",
@@ -280,83 +216,27 @@ export function ConversationListItem({
         <div className="mt-0.5 flex items-center justify-between gap-2">
           <p
             className={cn(
-              "min-w-0 truncate text-sm leading-5",
+              "flex min-w-0 items-center gap-1 text-sm leading-5",
               unread > 0 ? "text-text" : "text-text-muted",
             )}
           >
+            {ultimaFoiNossa && (
+              <Check size={14} weight="bold" className="shrink-0 text-text-subtle" aria-label={t("Sua mensagem")} />
+            )}
             {isAi && mostrarAutomatico ? (
-              <Robot size={12} weight="duotone" className="mr-1 inline align-[-2px]" aria-hidden />
+              <Robot size={12} weight="duotone" className="shrink-0" aria-label={t("Automático")} />
             ) : null}
-            {truncated}
+            <span className="truncate">{truncated}</span>
           </p>
           {unread > 0 && (
-            <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-semibold tabular-nums text-accent-foreground">
+            <span
+              className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-semibold tabular-nums text-accent-foreground"
+              aria-label={unread === 1 ? t("1 não lida") : t("{n} não lidas").replace("{n}", String(unread))}
+            >
               {unread}
             </span>
           )}
         </div>
-
-        {temSelos && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1">
-            {selo && rotuloDoSelo && (
-              <span
-                className={cn(
-                  "inline-flex h-4 items-center gap-1 rounded-full px-1.5 text-[10px] font-medium",
-                  selo.classe,
-                )}
-                data-selo-do-comando={comando.quem}
-              >
-                <selo.Icone size={9} weight="bold" aria-hidden />
-                {rotuloDoSelo}
-              </span>
-            )}
-            {etapa && (
-              <span
-                className="inline-flex h-4 max-w-[9rem] items-center gap-1 truncate rounded-full border border-border px-1.5 text-[10px] text-text-muted"
-                title={t("Etapa do funil")}
-                data-etapa-da-conversa
-              >
-                <Funnel size={9} aria-hidden />
-                <span className="truncate">{etapa}</span>
-              </span>
-            )}
-            {visibleTags.map((t) => (
-              <ChipDeEtiqueta key={t} tag={t} className="h-4 px-1.5 text-[10px]" />
-            ))}
-            {overflow > 0 && (
-              <span className="text-[10px] text-text-muted" title={tags.slice(visibleTags.length).join(", ")}>+{overflow}</span>
-            )}
-            {viaInstagram && (
-              <Badge
-                variant="outline"
-                className="h-4 gap-1 border-canal-instagram/30 bg-canal-instagram/10 px-1.5 text-[10px] font-normal text-canal-instagram"
-              >
-                <InstagramLogo size={9} weight="regular" aria-hidden />
-                {rotuloCanal ? `${t("via")} ${rotuloCanal}` : t("Instagram")}
-              </Badge>
-            )}
-            {!viaInstagram && mostrarCanal && rotuloCanal && (
-              <Badge
-                variant="outline"
-                className="h-4 gap-1 border-canal-whatsapp/30 bg-canal-whatsapp/10 px-1.5 text-[10px] font-normal text-canal-whatsapp"
-                title={`${t("Entrou por")} ${rotuloCanal}`}
-              >
-                <Phone size={9} weight="regular" aria-hidden />
-                {rotuloCanal}
-              </Badge>
-            )}
-            {c?.is_blocked && (
-              <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
-                {t("Bloqueado")}
-              </Badge>
-            )}
-            {c?.is_anonymized && (
-              <Badge variant="outline" className="h-4 px-1.5 text-[10px]">
-                {t("Anonimizado")}
-              </Badge>
-            )}
-          </div>
-        )}
       </div>
     </button>
   );

@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CaretUp, Check } from "@/lib/ui/icons";
 import { ordemSegurada } from "@/lib/inbox/ordem-segurada";
-import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
 
@@ -56,18 +55,6 @@ export function ConversationList({
   onSelecionarTodosVisiveis,
 }: Props) {
   const t = useT();
-  // Só mostra POR ONDE a conversa entrou quando há mais de um número. Com um
-  // só, o rótulo seria a mesma palavra em toda linha — ruído que ensina o olho
-  // a ignorar a área onde vivem os avisos que importam.
-  //
-  // `?? []` e não `undefined`: enquanto a lista de canais carrega, o certo é
-  // NÃO mostrar. Mostrar e sumir depois é pior que aparecer um instante tarde.
-  const canais = useChannelSessions().data ?? [];
-  // Só números de WhatsApp contam: a conta do Instagram já se anuncia no selo
-  // dela, e contá-la punha o número da clínica em TODA linha do WhatsApp de quem
-  // tem um número só — o chip mais repetido da lista (print de 07/10/2026).
-  const maisDeUmCanal = canais.filter((c) => c.can_send !== false).length > 1;
-
   // Fila (G5-03): a lista já vem ordenada por tempo de espera (server), então a
   // posição é o índice na lista visível. Só mostramos posição/espera nessa visão.
   // A Fila deixou de mandar `assigned_to=unassigned` (agora pede `comando`), e
@@ -104,39 +91,13 @@ export function ConversationList({
   // which React 19 forbids.
 
   /**
-   * O badge de atendente só entra quando DISCRIMINA — mesma regra do badge de
-   * canal, e pelo mesmo motivo escrito lá: rótulo que se repete em toda linha
-   * ensina o olho a ignorar a área onde vivem os avisos que importam.
-   *
-   * Medido nas abas: "Fila" pede `comando=aguardando` (nenhuma linha tem dono —
-   * a régua põe quem tem dono em `humano`), "Minhas" filtra `assigned_to=me`
-   * (todas têm o MESMO) e "Automático" pede `comando=automatico` (também sem
-   * dono, pela mesma razão). Sobram "Todas" e "Fechadas" — e mesmo nelas, só
-   * vale se a página realmente tiver mais de um dono distinto.
-   *
-   * O `filters.comando` entrou junto com as abas novas: sem ele, a Fila voltaria
-   * a repetir o mesmo selo de atendente em cada uma das linhas.
-   */
-  const mostrarAtendente = useMemo(() => {
-    if (filters.assigned_to) return false;
-    if (filters.comando && !filters.comando.includes("humano")) return false;
-    const donos = new Set(
-      items.map((i) => i.assigned_to_user_id).filter((id): id is string => Boolean(id)),
-    );
-    return donos.size > 1;
-  }, [filters.assigned_to, filters.comando, items]);
-
-  /**
-   * O ícone de robô, mesma regra dos dois badges acima: só entra quando
-   * DISCRIMINA. A aba "Automático" pede `comando=["automatico"]` — toda linha
+   * O ícone de robô só entra quando DISCRIMINA (os selos de canal, de quem
+   * atende e de etapa saíram da linha em 18/11, com a linha de app de mensagem). A aba "Automático" pede `comando=["automatico"]` — toda linha
    * já é robô, e repetir o ícone em cada uma vira ruído. Nas outras abas a
    * lista é mista (ou pode ser), então o ícone segue dizendo algo.
    */
   const mostrarAutomatico =
     !(filters.comando?.length === 1 && filters.comando[0] === "automatico");
-  // O selo de quem atende some quando a aba já filtra por um comando só: em
-  // "Automático" toda linha diria "Automático".
-  const mostrarComando = !(filters.comando?.length === 1);
 
   useEffect(() => {
     if (onVisibleChange) onVisibleChange(items.map((i) => i.id));
@@ -245,10 +206,7 @@ export function ConversationList({
             isSelected={c.id === selectedId}
             onSelect={onSelect}
             queuePosition={isQueue ? i + 1 : undefined}
-            mostrarCanal={maisDeUmCanal}
-            mostrarAtendente={mostrarAtendente}
             mostrarAutomatico={mostrarAutomatico}
-            mostrarComando={mostrarComando}
             automaticoDaOrg={automaticoDaOrg.data}
             selecionado={selecionados?.has(c.id)}
             onAlternarSelecao={onAlternarSelecao}
