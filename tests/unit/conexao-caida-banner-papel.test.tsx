@@ -1,5 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConexaoCaidaBanner } from "@/components/app/ConexaoCaidaBanner";
 import { AuthProvider } from "@/hooks/auth/AuthProvider";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
@@ -27,9 +27,18 @@ function view(role: Role, locale: "pt-BR" | "es", who = baseUser, caidas: Conexa
   </AuthProvider>;
 }
 const copy = {
-  "pt-BR": { qr: "Escanear o QR", connections: "Ver conexões", help: "Peça a quem administra para revisar a conexão do WhatsApp.", outage: "nenhuma mensagem entra nem sai." },
-  es: { qr: "Escanear el QR", connections: "Ver conexiones", help: "Pide a quien administra que revise la conexión de WhatsApp.", outage: "ningún mensaje entra ni sale." },
+  "pt-BR": { qr: "Escanear o QR", connections: "Ver conexões", help: "Peça a quem administra para revisar a conexão do WhatsApp.", outage: "nenhuma mensagem entra nem sai.", details: "Detalhes" },
+  es: { qr: "Escanear el QR", connections: "Ver conexiones", help: "Pide a quien administra que revise la conexión de WhatsApp.", outage: "ningún mensaje entra ni sale.", details: "Detalles" },
 };
+
+// A faixa também consulta a lista de conexões (item 57). Aqui a consulta não
+// responde: o que governa é a primeira pintura, `caidas`, vinda do servidor.
+beforeEach(() => {
+  vi.stubGlobal("fetch", () => new Promise(() => {}));
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe.each(["pt-BR", "es"] as const)("alerta de conexão em %s", locale => {
   it.each([
@@ -57,6 +66,9 @@ describe.each(["pt-BR", "es"] as const)("alerta de conexão em %s", locale => {
     expect(alert).toHaveTextContent("Vendas");
     expect(alert).toHaveTextContent(copy[locale].outage);
     expect(within(alert).queryByRole("link")).toBeNull();
+    // A orientação mora em "Detalhes" desde que a faixa virou uma linha (item 59):
+    // a um toque, e não mais quebrando a faixa em quatro linhas no celular.
+    fireEvent.click(within(alert).getByText(copy[locale].details));
     expect(within(alert).getByText(copy[locale].help)).toBeVisible();
   });
 
@@ -65,5 +77,39 @@ describe.each(["pt-BR", "es"] as const)("alerta de conexão em %s", locale => {
     expect(screen.getByRole("alert")).toBeVisible();
     mounted.rerender(view("agent", locale, baseUser, []));
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+/**
+ * Auditoria de 17/11, itens 57 e 58. A faixa só era calculada ao carregar a
+ * página: o número caía e ninguém via; voltava, e ela ficava até o F5. E uma
+ * conexão que alguém começou e nunca pareou fazia todos lerem "WhatsApp sem nome
+ * está desconectado".
+ */
+describe("a faixa segue a lista de conexões, sem recarregar", () => {
+  const lista = (sessoes: Array<Record<string, unknown>>) =>
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ data: sessoes }), {
+      status: 200, headers: { "content-type": "application/json" },
+    }));
+  const sessao = (status: string, extra: Record<string, unknown> = {}) => ({
+    id: "s1", display_name: "Recepção", phone_number: "5527999990000", status, nunca_pareou: false, ...extra,
+  });
+
+  it("o número cai depois de a página abrir: a faixa aparece", async () => {
+    lista([sessao("FAILED")]);
+    render(view("agent", "pt-BR", baseUser, []));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Recepção");
+  });
+
+  it("o número volta: a faixa some", async () => {
+    lista([sessao("WORKING")]);
+    render(view("agent", "pt-BR", baseUser, [{ id: "s1", apelido: "Recepção", status: "SCAN_QR_CODE" }]));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
+
+  it("conexão que nunca pareou não vira faixa", async () => {
+    lista([sessao("SCAN_QR_CODE", { id: "s2", display_name: null, phone_number: null, nunca_pareou: true }), sessao("WORKING")]);
+    render(view("agent", "pt-BR", baseUser, [{ id: "s2", apelido: "sem nome", status: "SCAN_QR_CODE" }]));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   });
 });

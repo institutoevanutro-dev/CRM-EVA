@@ -13,7 +13,17 @@ import { cn } from "@/lib/utils";
  */
 const nuncaMuda = () => () => undefined;
 
-export function SearchTrigger({ recolhida = false, atalho = true }: { naLateral?: boolean; recolhida?: boolean; atalho?: boolean }) {
+/**
+ * `noTopo`: a lupa do topo do celular (auditoria 17/11, item 64). Abaixo de `md`
+ * a busca morava só dentro da gaveta do menu: dois toques para chegar. Abre a
+ * MESMA busca; sem atalho próprio, porque a lateral (escondida, mas montada) já
+ * escuta o ⌘K.
+ */
+export function SearchTrigger({
+  recolhida = false,
+  atalho = true,
+  noTopo = false,
+}: { naLateral?: boolean; recolhida?: boolean; atalho?: boolean; noTopo?: boolean }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   // "⌘K" só no Mac e no iPad; fora deles a tecla é Ctrl. O servidor não sabe o
@@ -27,6 +37,22 @@ export function SearchTrigger({ recolhida = false, atalho = true }: { naLateral?
   // `enableOnFormTags`: o atalho precisa funcionar com o cursor dentro do
   // composer do inbox, que é onde o operador passa o dia.
   useHotkeys("mod+k", () => setOpen(true), { preventDefault: true, enableOnFormTags: true, enabled: atalho });
+
+  if (noTopo) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label={t("Buscar tela")}
+          className="inline-flex h-11 w-11 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-elevated hover:text-text md:hidden"
+        >
+          <MagnifyingGlass size={18} aria-hidden />
+        </button>
+        {open && <CommandPalette open={open} onOpenChange={setOpen} />}
+      </>
+    );
+  }
 
   return (
     <>

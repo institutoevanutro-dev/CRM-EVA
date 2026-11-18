@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { setActiveOrg } from "@/app/actions/shell/setActiveOrg";
+import { avisarOutrasAbas } from "@/components/shell/TenantSwitcher";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -24,6 +25,7 @@ export function OutrasOrganizacoes({ organizacoes }: { organizacoes: { id: strin
     setFalhou(false);
     const r = await setActiveOrg(id).catch(() => ({ ok: false }));
     if (r.ok) {
+      avisarOutrasAbas(id);
       window.location.assign("/app/inbox");
       return;
     }

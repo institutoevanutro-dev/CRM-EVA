@@ -5573,6 +5573,10 @@ export const DICIONARIO: Traducoes = {
     es: "No fue posible abrir esta organización. Tu acceso puede haber cambiado.",
   },
   "Entrou com outra conta? Sair": { es: "¿Entraste con otra cuenta? Salir" },
+  "Nenhuma mensagem entra nem sai.": { es: "Ningún mensaje entra ni sale." },
+  "A organização foi trocada em outra aba. Abrindo a mesma aqui…": {
+    es: "La organización se cambió en otra pestaña. Abriendo la misma aquí…",
+  },
   // ─── fim do bloco da auditoria 17/11 ───
   "A verificação em duas etapas da sua conta, os códigos de recuperação e as sessões abertas.": {
     es: "La verificación en dos pasos de tu cuenta, los códigos de recuperación y las sesiones abiertas.",
@@ -8183,9 +8187,8 @@ export const DICIONARIO: Traducoes = {
   "Excluir este template?": { es: "¿Eliminar esta plantilla?" },
   "Essa ação não pode ser desfeita.": { es: "Esta acción no se puede deshacer." },
   "Scripts salvos para responder mais rápido; pessoais ou compartilhados com a equipe.": { es: "Guiones guardados para responder más rápido; personales o compartidos con el equipo." },
-  "está desconectado": { es: "está desconectado" },
   "conexões": { es: "conexiones" },
-  "de WhatsApp estão desconectadas": { es: "de WhatsApp están desconectadas" },
+  "de WhatsApp desconectadas": { es: "de WhatsApp desconectadas" },
   "nenhuma mensagem entra nem sai.": { es: "ningún mensaje entra ni sale." },
   "Escanear o QR": { es: "Escanear el QR" },
   "Ver conexões": { es: "Ver conexiones" },

@@ -1,6 +1,7 @@
 "use client";
 import { AlertsBell } from "./AlertsBell";
 import { MobileSidebar } from "./MobileSidebar";
+import { SearchTrigger } from "./SearchTrigger";
 import { TenantSwitcher } from "./TenantSwitcher";
 import { UserMenu } from "./UserMenu";
 
@@ -20,6 +21,7 @@ export function TopBar() {
       {/* Avisos | preferências (idioma, tema), separados por um fio: são
           perguntas diferentes — "o que aconteceu?" e "como quero ver?". */}
       <div className="flex shrink-0 items-center gap-1">
+        <SearchTrigger noTopo atalho={false} />
         <AlertsBell />
         <span aria-hidden className="mx-1 h-5 w-px bg-border" />
         <UserMenu />
