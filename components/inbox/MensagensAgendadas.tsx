@@ -25,6 +25,7 @@ import { PencilSimple, Trash } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { desfechoDoAgendamento, type Desfecho } from "@/lib/agendamento-mensagem/desfecho";
+import { ConfirmarNaTela } from "@/components/inbox/ConfirmarNaTela";
 
 interface Agendamento {
   id: string;
@@ -104,11 +105,18 @@ export function MensagensAgendadasBotao({
   textoInicial,
   aberto,
   onAbertoChange,
+  onAgendouOTexto,
 }: {
   conversationId: string;
   textoInicial?: string;
   aberto: boolean;
   onAbertoChange: (v: boolean) => void;
+  /**
+   * O texto do campo virou agendamento (item 34 da auditoria de 17/11): quem
+   * chama limpa o campo. Sem isto o texto ficava lá, e o Enter seguinte mandava
+   * na hora a mesma mensagem que acabara de ser agendada.
+   */
+  onAgendouOTexto?: () => void;
 }) {
   const t = useT();
   const consulta = useAgendamentos(conversationId);
@@ -134,7 +142,12 @@ export function MensagensAgendadasBotao({
         ) : null}
       </Button>
       {aberto && (
-        <MensagensAgendadasDialog conversationId={conversationId} textoInicial={textoInicial ?? ""} onOpenChange={onAbertoChange} />
+        <MensagensAgendadasDialog
+          conversationId={conversationId}
+          textoInicial={textoInicial ?? ""}
+          onOpenChange={onAbertoChange}
+          onAgendouOTexto={onAgendouOTexto}
+        />
       )}
     </>
   );
@@ -144,10 +157,12 @@ function MensagensAgendadasDialog({
   conversationId,
   textoInicial,
   onOpenChange,
+  onAgendouOTexto,
 }: {
   conversationId: string;
   textoInicial: string;
   onOpenChange: (v: boolean) => void;
+  onAgendouOTexto?: () => void;
 }) {
   const t = useT();
   const tag = useTagDeIdioma();
@@ -155,6 +170,10 @@ function MensagensAgendadasDialog({
   const consulta = useAgendamentos(conversationId);
   const [relatorio, setRelatorio] = useState(false);
   const [editando, setEditando] = useState<Agendamento | "novo" | null>(null);
+  // Cancelar pergunta antes e trava enquanto sai (item 34): era um toque, sem
+  // volta, e o segundo toque disparava outro DELETE.
+  const [cancelarQual, setCancelarQual] = useState<Agendamento | null>(null);
+  const [cancelando, setCancelando] = useState<string | null>(null);
 
   const todos = consulta.data?.data ?? [];
   const pendentes = todos.filter((a) => a.status === "agendada");
@@ -163,12 +182,16 @@ function MensagensAgendadasDialog({
   const atualizar = () => qc.invalidateQueries({ queryKey: chave(conversationId) });
 
   async function cancelar(id: string) {
+    if (cancelando) return;
+    setCancelando(id);
     try {
       await apiClient.delete(`/api/v1/mensagens-agendadas/${id}`);
       toast.success(t("Mensagem agendada cancelada."));
       await atualizar();
     } catch {
       toast.error(t("Não consegui cancelar o agendamento."));
+    } finally {
+      setCancelando(null);
     }
   }
 
@@ -195,6 +218,7 @@ function MensagensAgendadasDialog({
             textoInicial={textoInicial}
             onCancelar={() => setEditando(null)}
             onSalvo={async () => {
+              if (editando === "novo" && textoInicial.trim()) onAgendouOTexto?.();
               setEditando(null);
               await atualizar();
             }}
@@ -258,6 +282,7 @@ function MensagensAgendadasDialog({
                       variant="ghost"
                       aria-label={t("Editar agendamento")}
                       title={t("Editar agendamento")}
+                      disabled={cancelando === a.id}
                       onClick={() => setEditando(a)}
                     >
                       <PencilSimple size={16} weight="regular" aria-hidden />
@@ -268,7 +293,8 @@ function MensagensAgendadasDialog({
                       variant="ghost"
                       aria-label={t("Cancelar mensagem agendada")}
                       title={t("Cancelar mensagem agendada")}
-                      onClick={() => void cancelar(a.id)}
+                      disabled={cancelando === a.id}
+                      onClick={() => setCancelarQual(a)}
                     >
                       <Trash size={16} weight="regular" aria-hidden />
                     </Button>
@@ -287,6 +313,15 @@ function MensagensAgendadasDialog({
           </div>
         )}
       </DialogContent>
+      <ConfirmarNaTela
+        aberto={cancelarQual !== null}
+        onAbertoChange={(aberto) => !aberto && setCancelarQual(null)}
+        titulo={t("Cancelar esta mensagem agendada?")}
+        descricao={cancelarQual ? `${quando(cancelarQual.scheduled_at)} · ${cancelarQual.title || cancelarQual.body}` : undefined}
+        acao={t("Cancelar envio")}
+        destrutiva
+        onConfirmar={() => cancelarQual && void cancelar(cancelarQual.id)}
+      />
     </Dialog>
   );
 }

@@ -891,6 +891,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               textoInicial={text}
               aberto={agendaAberta}
               onAbertoChange={setAgendaAberta}
+              onAgendouOTexto={() => setText("")}
             />
           ) : null}
           {text.trim() || mode === "note" ? (

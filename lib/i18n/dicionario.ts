@@ -11868,6 +11868,8 @@ export const DICIONARIO: Traducoes = {
   "Esta mensagem foi apagada pelo atendente": { es: "Este mensaje fue eliminado por el agente" },
   // Portes 23/10, grupo B (PR #2841): encaminhar mensagem para outra conversa.
   Encaminhar: { es: "Reenviar" },
+  "Cancelar esta mensagem agendada?": { es: "¿Cancelar este mensaje programado?" },
+  "Cancelar envio": { es: "Cancelar envío" },
   "Encaminhando…": { es: "Reenviando…" },
   "Encaminhar para {nome}": { es: "Reenviar a {nome}" },
   "Encaminhar mensagem": { es: "Reenviar mensaje" },
