@@ -191,6 +191,19 @@ describe("problema da última preparação (item 24)", () => {
   });
 });
 
+describe("cópia de campanha enviada (decisão do André, 18/11)", () => {
+  it("diz quantos que já receberam a original ficam de fora", () => {
+    campanha = aCampanha({ ja_receberam_a_original: 37 });
+    render(<DetalheDaCampanha id="c1" />);
+    expect(screen.getByText("37 pessoas que já receberam a original ficam de fora")).toBeTruthy();
+  });
+
+  it("campanha que não é cópia não fala disso", () => {
+    render(<DetalheDaCampanha id="c1" />);
+    expect(screen.queryByText(/já receberam a original/)).toBeNull();
+  });
+});
+
 describe("a tela da campanha (item 25)", () => {
   it("rascunho não mostra os quatro zeros", () => {
     render(<DetalheDaCampanha id="c1" />);

@@ -2,9 +2,10 @@
  * O vocabulário do módulo de Campanhas — os dois conjuntos de estado e os
  * motivos de exclusão, num lugar só.
  *
- * Os valores são os mesmos do CHECK da migration 0374. Quem mudar um lado muda o
- * outro: `tests/invariants/vocabulario-banco-x-typescript.test.ts` varre as
- * colunas que têm CHECK e reprova divergência.
+ * Os valores de estado são os mesmos do CHECK da migration 0374. Quem mudar um
+ * lado muda o outro: `tests/invariants/vocabulario-banco-x-typescript.test.ts`
+ * varre as colunas que têm CHECK e reprova divergência. `exclusion_reason` NÃO
+ * tem CHECK (vocabulário aberto): o motivo novo entra só aqui.
  */
 
 export const STATUS_DA_CAMPANHA = [
@@ -74,6 +75,7 @@ export const MOTIVOS_DE_EXCLUSAO = [
   "variavel_ausente",
   "ja_em_campanha",
   "suprimido",
+  "ja_recebeu_a_original",
 ] as const;
 
 export type MotivoDeExclusao = (typeof MOTIVOS_DE_EXCLUSAO)[number];
@@ -91,4 +93,5 @@ export const TEXTO_DA_EXCLUSAO: Record<MotivoDeExclusao, string> = {
   variavel_ausente: "Falta um dado que a mensagem usa",
   ja_em_campanha: "Já está em outra campanha ainda não concluída",
   suprimido: "Está na lista de exclusão de campanhas",
+  ja_recebeu_a_original: "Já recebeu a campanha original",
 };

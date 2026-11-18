@@ -84,10 +84,22 @@ describe("duplicar (item 17)", () => {
       stage_id: "22222222-2222-4222-8222-222222222222",
       agent_id: "33333333-3333-4333-8333-333333333333",
       intervalo_segundos: 60,
-      audience_filter: { funis: ["f"] },
+      audience_filter: { funis: ["f"], sem_quem_recebeu_campanhas: [ID] },
     });
     const pool = banco.tabelas.campaign_channel_sessions!.filter((l) => l.campaign_id === copia.id);
     expect(pool.map((l) => l.channel_session_id)).toEqual([EXTRA]);
+  });
+
+  it("a cópia deixa de fora quem já recebeu a original — e das origens anteriores", async () => {
+    const ANTERIOR = "99999999-9999-4999-8999-999999999999";
+    await duplicarAcao(
+      admin(),
+      campanha({ audience_filter: { funis: ["f"], sem_quem_recebeu_campanhas: [ANTERIOR] } }),
+      "eeeeeeee-0000-4000-8000-000000000001",
+    );
+
+    const copia = banco.tabelas.campaigns!.find((c) => c.id !== ID)!;
+    expect(copia.audience_filter).toEqual({ funis: ["f"], sem_quem_recebeu_campanhas: [ANTERIOR, ID] });
   });
 });
 

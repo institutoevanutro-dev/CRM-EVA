@@ -363,7 +363,7 @@ export async function duplicarAcao(
       message_body: c.message_body,
       base_legal: c.base_legal,
       lia_ref: c.lia_ref,
-      audience_filter: c.audience_filter,
+      audience_filter: filtroDaCopia(c),
       intervalo_segundos: c.intervalo_segundos,
       janela_inicio_hora: c.janela_inicio_hora,
       janela_fim_hora: c.janela_fim_hora,
@@ -409,6 +409,26 @@ export async function duplicarAcao(
     });
   }
   return { ok: true, id };
+}
+
+/**
+ * O público da cópia: o mesmo da original, MAIS "sem quem recebeu a original".
+ *
+ * Decisão do André (18/11/2026, pergunta 25 da auditoria): a cópia de uma
+ * campanha enviada não fala de novo com quem já recebeu. Vale sempre, inclusive
+ * para cópia de rascunho — se a original nunca enviar, ninguém fica de fora; se
+ * enviar, quem recebeu fica fora da cópia quando ela for preparada. Teto de 20
+ * origens (cópia de cópia de cópia…): ficam as mais recentes.
+ */
+function filtroDaCopia(c: CampanhaCarregada): Record<string, unknown> {
+  const filtro =
+    c.audience_filter && typeof c.audience_filter === "object" && !Array.isArray(c.audience_filter)
+      ? (c.audience_filter as Record<string, unknown>)
+      : {};
+  const anteriores = Array.isArray(filtro.sem_quem_recebeu_campanhas)
+    ? filtro.sem_quem_recebeu_campanhas.filter((v): v is string => typeof v === "string")
+    : [];
+  return { ...filtro, sem_quem_recebeu_campanhas: [...new Set([...anteriores, c.id])].slice(-20) };
 }
 
 /**

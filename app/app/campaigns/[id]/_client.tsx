@@ -149,6 +149,15 @@ export function DetalheDaCampanha({ id }: { id: string }) {
           {c.failure_code && (
             <p className="mt-1 text-sm text-warning-fg">{t(FRASE_DO_PROBLEMA[c.failure_code] ?? PROBLEMA_DESCONHECIDO)}</p>
           )}
+          {/* Cópia: quem já recebeu a original não recebe de novo (decisão do André, 18/11). */}
+          {(c.ja_receberam_a_original ?? 0) > 0 && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {c.ja_receberam_a_original}{" "}
+              {c.ja_receberam_a_original === 1
+                ? t("pessoa que já recebeu a original fica de fora")
+                : t("pessoas que já receberam a original ficam de fora")}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
           {c.status === "draft" && (

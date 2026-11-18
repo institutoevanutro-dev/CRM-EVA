@@ -142,6 +142,26 @@ describe("PATCH — a janela vale mesclada (item 18)", () => {
   });
 });
 
+describe("GET — cópia diz quantos já receberam a original", () => {
+  it("conta quem recebeu a campanha de origem", async () => {
+    const ORIGEM = "cccccccc-0000-4000-8000-000000000009";
+    banco.tabelas.campaigns![0] = campanha({
+      audience_filter: { ...FILTRO_VAZIO, funis: [FUNIL], sem_quem_recebeu_campanhas: [ORIGEM] },
+    });
+    banco.tabelas.campaign_recipients = [
+      { id: "r1", organization_id: ORG, campaign_id: ORIGEM, contact_id: "k1", sent_at: "2026-11-17T12:00:00.000Z" },
+      { id: "r2", organization_id: ORG, campaign_id: ORIGEM, contact_id: "k2", sent_at: "2026-11-17T12:00:00.000Z" },
+      { id: "r3", organization_id: ORG, campaign_id: ORIGEM, contact_id: "k3", sent_at: null },
+    ];
+
+    const res = await GET(new NextRequest(`http://localhost/api/v1/campaigns/${ID}`), {
+      params: Promise.resolve({ id: ID }),
+    });
+
+    expect((await res.json()).data.ja_receberam_a_original).toBe(2);
+  });
+});
+
 describe("GET — a janela que vale agora (item 23)", () => {
   it("cruza a janela do número com a da campanha", async () => {
     banco.tabelas.campaigns![0] = campanha({ janela_inicio_hora: 9, janela_fim_hora: 23 });

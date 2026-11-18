@@ -78,6 +78,15 @@ export const filtroDeAudienciaSchema = z
     incluir_contatos: z.array(z.string().uuid()).max(5000).default([]),
     /** Contatos a tirar, mesmo que o recorte os pegue. */
     excluir_contatos: z.array(z.string().uuid()).max(5000).default([]),
+    /**
+     * Campanhas cujos destinatários que JÁ RECEBERAM ficam de fora. É o que a
+     * cópia ganha ao duplicar (decisão do André, 18/11/2026: a cópia de uma
+     * campanha enviada não fala de novo com quem recebeu a original). Guarda a
+     * CAMPANHA, não a lista: quem receber a original depois da cópia criada
+     * também fica de fora quando a cópia for preparada. Não conta como
+     * critério — é exclusão, como `excluir_contatos`.
+     */
+    sem_quem_recebeu_campanhas: z.array(z.string().uuid()).max(20).default([]),
 
     /** Teto do lote. A mesma régua do import de CSV para "quanta gente de uma vez". */
     limite: z
@@ -147,6 +156,7 @@ export const FILTRO_VAZIO = {
   origens: [],
   incluir_contatos: [],
   excluir_contatos: [],
+  sem_quem_recebeu_campanhas: [],
   limite: 500,
 } satisfies FiltroDeAudiencia;
 

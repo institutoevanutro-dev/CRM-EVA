@@ -10,11 +10,13 @@
 import { randomUUID } from "node:crypto";
 
 import type { NextRequest } from "next/server";
+import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { carregarCampanha } from "@/lib/campanhas/acoes";
 import { mesclarFiltroDeAudiencia } from "@/lib/campanhas/audiencia";
+import { contatosQueReceberam } from "@/lib/campanhas/consulta-de-audiencia";
 import { ehEditavel, ehTerminal } from "@/lib/campanhas/maquina-de-estados";
 import { gravarPool, lerPoolExtra } from "@/lib/campanhas/pool-de-numeros";
 import { janelaDeEnvio } from "@/lib/campanhas/ritmo";
@@ -65,14 +67,25 @@ export async function GET(
     janela_fim_hora: number | null;
   };
   const knobs = await knobsDoCanal(admin, authz.org.orgId, linha.channel_session_id);
+  // Cópia de campanha: quantas pessoas já receberam a original e ficam de fora
+  // (a tela diz o número antes de preparar). Só lê quando há origem.
+  const origens = origensDaCopia((data as { audience_filter?: unknown }).audience_filter);
+  const jaReceberam = origens.length > 0 ? (await contatosQueReceberam(admin, authz.org.orgId, origens)).size : null;
   return ok(
     {
       ...(data as object),
       channel_session_ids: extras,
       janela_de_envio: janelaDeEnvio(knobs, linha, new Date()),
+      ja_receberam_a_original: jaReceberam,
     },
     { requestId },
   );
+}
+
+/** As campanhas de origem gravadas no filtro, sem exigir o filtro inteiro válido. */
+function origensDaCopia(filtro: unknown): string[] {
+  const lista = (filtro as { sem_quem_recebeu_campanhas?: unknown } | null)?.sem_quem_recebeu_campanhas;
+  return Array.isArray(lista) ? lista.filter((v): v is string => z.string().uuid().safeParse(v).success) : [];
 }
 
 export async function PATCH(

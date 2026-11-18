@@ -53,6 +53,8 @@ export interface CampanhaDetalhada extends CampanhaDaLista {
   teto_horario: number | null;
   /** A janela que vale agora (número × campanha). Ver `janelaDeEnvio` em `lib/campanhas/ritmo.ts`. */
   janela_de_envio?: JanelaDeEnvio;
+  /** Cópia: quantas pessoas já receberam a original e ficam de fora. `null` = não é cópia. */
+  ja_receberam_a_original?: number | null;
 }
 
 export interface Destinatario {

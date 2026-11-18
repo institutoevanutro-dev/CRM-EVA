@@ -11,7 +11,8 @@ o que foi enviado.
 Também nas campanhas:
 
 - "Voltar para rascunho" depois de preparar a lista, para corrigir o texto ou o público.
-- Duplicar abre a cópia, com funil, etapa, agente e números do rodízio.
+- Duplicar abre a cópia, com funil, etapa, agente e números do rodízio, e a cópia não fala de novo
+  com quem já recebeu a original ("N pessoas que já receberam a original ficam de fora").
 - O envio de teste só lista contatos depois da busca e pede confirmação com o nome.
 - A campanha nova já vem com o ritmo padrão da organização; hora de envio sem a de parada é avisada
   na tela.
