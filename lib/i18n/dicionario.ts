@@ -11868,6 +11868,10 @@ export const DICIONARIO: Traducoes = {
   "Esta mensagem foi apagada pelo atendente": { es: "Este mensaje fue eliminado por el agente" },
   // Portes 23/10, grupo B (PR #2841): encaminhar mensagem para outra conversa.
   Encaminhar: { es: "Reenviar" },
+  "{n} não lidas": { es: "{n} no leídas" },
+  "1 não lida": { es: "1 no leída" },
+  "Sua mensagem": { es: "Tu mensaje" },
+  "Situação da conversa": { es: "Situación de la conversación" },
   "Nenhuma resposta rápida. Crie em Configurações.": { es: "Ninguna respuesta rápida. Crea una en Configuración." },
   "Campo {n} do texto": { es: "Campo {n} del texto" },
   "campo {n}": { es: "campo {n}" },

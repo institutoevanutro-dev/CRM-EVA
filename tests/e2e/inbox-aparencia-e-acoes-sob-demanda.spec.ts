@@ -6,13 +6,15 @@
  *   1. Fundo da conversa e cor dos balões escolhidos POR PESSOA, e a escolha
  *      vale em OUTRO computador (aqui: outro contexto de browser, sem nada em
  *      comum com o primeiro além do login).
- *   2. Cabeçalho da conversa (I3 do pacote de design 2): o botão principal e
- *      Transferir/Lembrar/Fechar sempre à vista, sem depender do mouse; o resto
- *      num menu ⋯ ("Ações da conversa") aberto por clique.
+ *   2. Cabeçalho da conversa de app de mensagem (pedido do André, 18/11): só
+ *      foto, nome e número à vista; TODAS as ações num menu ⋯ ("Ações da
+ *      conversa") aberto por clique ou teclado, com a principal em primeiro e a
+ *      situação (quem responde, estado, janela de 24 h) no alto.
  *   3. Responder / Nota interna SEMPRE À VISTA acima do campo (item 44 da
  *      auditoria de 17/11), alcançáveis pelo TECLADO; "Sugerir resposta" fica à
  *      vista, como ícone na linha de ações (porte do original #3234).
- *   4. "Janela 23h 59m" numa linha só, dentro da pílula, em 1280, 1440 e 390.
+ *   4. "Janela 23h 59m" numa linha só, dentro da pílula (agora no alto do ⋯),
+ *      em 1280, 1440 e 390.
  *   5. Nenhum transbordo horizontal da página nessas três larguras.
  *
  * Medidas por `getBoundingClientRect`, nunca a olho. Evidência em
@@ -190,52 +192,58 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
         const cabecalho = page.locator("[data-cabecalho-da-conversa]");
         const alternador = page.getByRole("button", { name: "Ações da conversa" });
         await expect(alternador).toHaveAttribute("aria-expanded", "false");
-        // I3: Transferir (e a ação principal, quando há) fica à vista sem passar o mouse.
-        await expect(page.getByRole("button", { name: "Transferir" })).toBeVisible();
+        // 18/11: nenhuma ação fora do ⋯ — o cabeçalho é o de app de mensagem.
+        await expect(cabecalho.getByRole("button")).toHaveCount(1);
 
         const medida = await cabecalho.evaluate((el) => {
-          const selo = [...el.querySelectorAll("span,div")].find(
-            (e) => e.children.length === 0 && /^Janela \d/.test(e.textContent?.trim() ?? ""),
-          ) as HTMLElement | undefined;
-          // Linhas de TEXTO dentro do selo: topos distintos dos retângulos do conteúdo.
-          let linhas = 0;
-          if (selo) {
-            const r = document.createRange();
-            r.selectNodeContents(selo);
-            linhas = new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size;
-          }
           const doc = document.documentElement;
           const nome = el.querySelector("h2") as HTMLElement;
           return {
             alturaDoCabecalho: el.getBoundingClientRect().height,
             // Largura que o NOME tem na tela (a caixa), contra a que o texto pede.
             nome: { visivel: nome.getBoundingClientRect().width, inteiro: nome.scrollWidth },
-            selo: selo
-              ? { altura: selo.getBoundingClientRect().height, linhas, cabe: selo.scrollWidth <= selo.clientWidth + 1 }
-              : null,
             transbordo: doc.scrollWidth - doc.clientWidth,
           };
         });
-        expect(medida.selo, "o selo da janela não apareceu (canal oficial)").not.toBeNull();
-        expect(medida.selo!.linhas, "o texto do selo quebrou em mais de uma linha").toBe(1);
-        expect(medida.selo!.altura).toBeLessThanOrEqual(20);
-        expect(medida.selo!.cabe, "o texto saiu da pílula").toBe(true);
-        // O NOME NÃO SOME (I3). Com o piso fixo de 8rem o selo da janela comia
-        // o nome inteiro: 0px de largura em 1280 com "Assumir" ao lado. Agora,
-        // sem espaço para os dois, as ações descem e o nome fica com ≥7,5rem.
+        // O NOME NÃO SOME: ele divide a linha só com a foto e o ⋯.
         expect(
           medida.nome.visivel,
-          "o nome do contato encolheu até sumir ao lado das ações",
+          "o nome do contato encolheu até sumir",
         ).toBeGreaterThanOrEqual(Math.min(medida.nome.inteiro, 120) - 1);
-        // Antes de 16/10: 152px em 1280, 114px em 1440, 122px em 390 (duas
-        // fileiras de botões). Com a I3: UMA fileira de botões no máximo. Quando
-        // nome e ações cabem lado a lado, ela divide a linha do nome (1440:
-        // 81px); quando não cabem (1280 e 1366 neste canal, que mostra o selo
-        // da janela), ela desce sozinha: medido 103px. No celular a fileira tem
-        // alvos de 44px.
-        const teto = largura < 768 ? 140 : 108;
-        expect(medida.alturaDoCabecalho, "o cabeçalho voltou a ter fileiras de botões").toBeLessThanOrEqual(teto);
+        // Uma linha só: foto de 40px (ou o ⋯ de 44px no toque) mais o respiro.
+        // Antes de 18/11 eram 81 a 140px, com fileira de botões e selos.
+        expect(medida.alturaDoCabecalho, "o cabeçalho voltou a ter mais de uma linha").toBeLessThanOrEqual(64);
         expect(medida.transbordo, "a página rola de lado").toBeLessThanOrEqual(0);
+
+        // O selo da janela, agora no alto do ⋯: uma linha, dentro da pílula.
+        await alternador.click();
+        const menu = page.getByTestId("menu-da-conversa");
+        await expect(menu).toBeVisible();
+        const noMenu = await menu.evaluate((el) => {
+          const selo = [...el.querySelectorAll("span,div")].find(
+            (e) => e.children.length === 0 && /^Janela \d/.test(e.textContent?.trim() ?? ""),
+          ) as HTMLElement | undefined;
+          let linhas = 0;
+          if (selo) {
+            const r = document.createRange();
+            r.selectNodeContents(selo);
+            linhas = new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size;
+          }
+          const caixa = el.getBoundingClientRect();
+          return {
+            selo: selo
+              ? { altura: selo.getBoundingClientRect().height, linhas, cabe: selo.scrollWidth <= selo.clientWidth + 1 }
+              : null,
+            menuCabe: caixa.left >= -1 && caixa.right <= window.innerWidth + 1,
+          };
+        });
+        expect(noMenu.selo, "o selo da janela não apareceu (canal oficial)").not.toBeNull();
+        expect(noMenu.selo!.linhas, "o texto do selo quebrou em mais de uma linha").toBe(1);
+        expect(noMenu.selo!.altura).toBeLessThanOrEqual(20);
+        expect(noMenu.selo!.cabe, "o texto saiu da pílula").toBe(true);
+        expect(noMenu.menuCabe, "o menu vazou da tela").toBe(true);
+        await foto(page, `${largura}-${tema}-menu`);
+        await page.keyboard.press("Escape");
         // O placeholder do campo vazio numa linha: quebrado, ele empurra o
         // `scrollHeight` acima da altura do campo (e aparece cortado ao meio).
         const campo = await page
@@ -280,26 +288,29 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
     }
   }
 
-  test("ações: à vista sem mouse; o ⋯ abre por clique e o Escape fecha", async ({ browser }) => {
+  test("ações: todas no ⋯, a principal em primeiro; abre por clique ou Enter e o Escape fecha", async ({ browser }) => {
     const page = await novaPagina(browser, "light", 1440);
     await login(page);
     await abrirConversa(page);
     const alternador = page.getByRole("button", { name: "Ações da conversa" });
-    const transferir = page.getByRole("button", { name: "Transferir" });
     const menu = page.getByTestId("menu-da-conversa");
 
-    // Mouse longe do cabeçalho: as ações fixas continuam lá.
+    // Nenhuma ação solta no cabeçalho, com ou sem o mouse por perto.
     await page.mouse.move(5, 500);
-    await expect(transferir).toBeVisible();
+    await expect(page.locator("[data-cabecalho-da-conversa]").getByRole("button", { name: "Transferir" })).toHaveCount(0);
     // Passar o mouse NÃO abre o menu: só o clique (ou Enter) abre.
     await alternador.hover();
     await expect(menu).toHaveCount(0);
 
-    // Teclado: Enter abre; Escape fecha e devolve o foco ao ⋯.
+    // Teclado: Enter abre; a principal vem primeiro; Escape fecha e devolve o foco ao ⋯.
     await alternador.focus();
     await page.keyboard.press("Enter");
     await expect(alternador).toHaveAttribute("aria-expanded", "true");
-    await expect(menu.getByRole("button", { name: "Arquivar" })).toBeVisible();
+    await expect(menu.getByRole("button").first()).toHaveText("Assumir");
+    for (const nome of ["Transferir", "Lembrar", "Fechar conversa", "Arquivar"]) {
+      await expect(menu.getByRole("button", { name: nome, exact: true })).toBeVisible();
+    }
+    await expect(menu.getByRole("group", { name: "Situação da conversa" })).toBeVisible();
     await foto(page, "acoes-menu-aberto");
     await page.keyboard.press("Escape");
     await expect(menu).toHaveCount(0);

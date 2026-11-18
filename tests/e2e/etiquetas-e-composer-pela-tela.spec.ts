@@ -295,33 +295,49 @@ test.describe("Etiquetas e compositor (portes de 15/10)", () => {
     await captura(page, "excluir-uma-etiqueta-preserva-a-outra");
   });
 
-  test("no celular as ações fixas cabem numa fileira, sem rolar de lado", async ({ page }) => {
+  test("no celular o cabeçalho é uma linha (foto, nome, número, ⋯) e as ações do ⋯ têm alvo de dedo", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, creds.users.manager!.email);
     await page.goto(`/app/inbox/${conversaId}`);
     await expect(page.getByText("MENSAGEM DO PACIENTE 1510").first()).toBeVisible({ timeout: 60_000 });
 
-    // I3: sem faixa a revelar. Principal + Transferir/Lembrar/Fechar (só ícone
-    // no cabeçalho estreito) + ⋯, numa fileira de alvos de 44px.
-    const grupo = page.getByTestId("acoes-fixas-da-conversa");
-    await expect(grupo.getByRole("button", { name: "Transferir" })).toBeVisible();
-    const medida = await grupo.evaluate((barra) => {
-      const filhos = [...barra.children].map((f) => (f as HTMLElement).getBoundingClientRect());
+    // Cabeçalho de app de mensagem (18/11): nada além de foto, nome, número e o
+    // ⋯ — uma linha só, e o ⋯ com 44px.
+    const cabecalho = page.locator("[data-cabecalho-da-conversa]");
+    const gatilho = page.getByRole("button", { name: "Ações da conversa" });
+    await expect(gatilho).toBeVisible();
+    const medida = await cabecalho.evaluate((el) => {
+      const filhos = [...el.children].map((f) => (f as HTMLElement).getBoundingClientRect());
+      const meio = filhos.map((r) => Math.round(r.top + r.height / 2));
+      const botoes = [...el.querySelectorAll("button")].map((b) => b.getAttribute("aria-label"));
       return {
-        fileiras: new Set(filhos.map((r) => Math.round(r.top))).size,
-        alturaMinima: Math.min(...filhos.map((r) => Math.round(r.height))),
-        larguraMinima: Math.min(...filhos.map((r) => Math.round(r.width))),
-        cabeNaTela: barra.getBoundingClientRect().right <= window.innerWidth + 1,
+        // Os filhos no mesmo eixo: centros a menos de 6px um do outro.
+        umaLinha: Math.max(...meio) - Math.min(...meio) <= 6,
+        botoes,
         transbordo: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       };
     });
-    expect(medida.fileiras, "as ações fixas empilharam fileiras").toBe(1);
-    expect(medida.alturaMinima, "alvo de toque abaixo de 44px").toBeGreaterThanOrEqual(44);
-    // Medido: Transferir, Lembrar e Fechar só com ícone tinham 42px de largura.
-    expect(medida.larguraMinima, "alvo de toque mais estreito que 44px").toBeGreaterThanOrEqual(44);
-    expect(medida.cabeNaTela, "as ações vazaram da largura da tela").toBe(true);
+    expect(medida.umaLinha, "o cabeçalho quebrou em mais de uma linha").toBe(true);
+    expect(medida.botoes, "botão de ação fora do ⋯").toEqual(["Ações da conversa"]);
     expect(medida.transbordo, "a página rola de lado").toBeLessThanOrEqual(0);
-    await captura(page, "acoes-fixas-no-celular");
+    const caixa = (await gatilho.boundingBox())!;
+    expect(Math.round(caixa.width), "⋯ mais estreito que 44px").toBeGreaterThanOrEqual(44);
+    expect(Math.round(caixa.height), "⋯ mais baixo que 44px").toBeGreaterThanOrEqual(44);
+
+    // As ações estão no ⋯, cada uma com alvo de dedo, e o menu cabe na tela.
+    await gatilho.click();
+    const menu = page.getByTestId("menu-da-conversa");
+    await expect(menu.getByRole("button", { name: "Transferir" })).toBeVisible();
+    const noMenu = await menu.evaluate((m) => ({
+      alturaMinima: Math.min(
+        ...[...m.querySelectorAll("button")].map((b) => Math.round(b.getBoundingClientRect().height)),
+      ),
+      cabe: m.getBoundingClientRect().right <= window.innerWidth + 1 && m.getBoundingClientRect().left >= -1,
+    }));
+    expect(noMenu.alturaMinima, "ação do menu abaixo de 44px no toque").toBeGreaterThanOrEqual(44);
+    expect(noMenu.cabe, "o menu vazou da largura da tela").toBe(true);
+    await captura(page, "cabecalho-e-menu-no-celular");
+    await page.keyboard.press("Escape");
   });
 
   // ÚLTIMO de propósito: termina encerrando a conversa.

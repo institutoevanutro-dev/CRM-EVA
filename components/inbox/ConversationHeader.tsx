@@ -9,7 +9,6 @@ import { capabilitiesOf } from "@/lib/channels/capabilities";
 import type { ChannelProvider } from "@/lib/channels/types";
 import {
   InstagramLogo,
-  Phone,
   ArrowRight,
   MagnifyingGlass,
   IdentificationCard,
@@ -242,153 +241,108 @@ export function ConversationHeader({
       ? t("Religa o atendimento automático para este cliente — vale para todas as conversas dele.")
       : t("Devolve esta conversa ao atendimento automático.");
 
+  // O subtítulo é o NÚMERO, como no WhatsApp. Sem telefone (Instagram), a conta
+  // por onde ela escreveu. Quando o nome já é o número, não repete.
+  const viaInstagram =
+    conversation.channel === "instagram"
+      ? conversation.channel_sessions?.display_name
+        ? `${t("via")} ${conversation.channel_sessions.display_name}`
+        : t("Instagram")
+      : null;
+  const subtitulo = phone && phone !== displayName ? phone : !phone ? viaInstagram : null;
+
   return (
-    // I3 — AÇÃO PRINCIPAL SEMPRE À VISTA. A faixa que aparecia com o mouse
-    // (`useRevelacao`) saiu daqui: no iPhone o "Assumir" ficava sempre atrás do
-    // ⋯, e a faixa flutuante cobria as primeiras mensagens. Agora são três
-    // camadas, todas no fluxo:
-    //
-    //   - o botão PRINCIPAL, um só, que muda com o estado (`acaoPrincipalDaConversa`);
-    //   - Transferir, Lembrar e Fechar, fixos, com ícone e nome — o nome sai
-    //     quando o CABEÇALHO (não a tela) tem menos de 40rem e fica na dica e no
-    //     `aria-label`;
-    //   - o resto num menu ⋯ aberto por clique.
-    //
-    // `flex-wrap` na linha: quando nome e botões não cabem lado a lado, os
-    // botões descem para uma segunda linha em vez de travar a largura da tela
-    // (o header já travou em 707px de `min-content`, ver `inbox-header-nao-trava`).
+    // CABEÇALHO DE APP DE MENSAGEM (pedido do André, 18/11/2026): só a foto, o
+    // nome e o número, como no WhatsApp. NENHUMA ação some: todas moram no ⋯ da
+    // direita, com a ação principal (Assumir, Devolver ao automático ou
+    // Reabrir) em primeiro. Quem responde, o porquê, a situação e a janela de
+    // 24 h vão para o alto do mesmo menu — informação a um clique, não selos
+    // disputando a linha do nome. Os atalhos de teclado (a, e, r) seguem no
+    // InboxLayout, e o menu é aberto por clique, Enter ou espaço.
     <div
       data-cabecalho-da-conversa=""
-      className="@container relative flex flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2 md:px-4"
+      className="relative flex min-w-0 items-center gap-3 border-b border-border bg-surface px-3 py-2 md:px-4"
     >
-      <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-        {/* O NOME NUNCA SOME. `min-w-min` faz o bloco do nome pedir a largura
-            mínima do PRÓPRIO conteúdo (avatar, selo do canal, 7,5rem de nome e
-            o selo da janela, quando há); se nome e ações não cabem lado a lado,
-            são as AÇÕES que descem para a linha de baixo. Com um piso fixo de
-            8rem, o selo da janela comia o nome inteiro: medido em 1280px num
-            canal oficial, o nome tinha 0px de largura com "Assumir" ao lado. */}
-        <div className="flex min-w-min flex-1 items-center gap-3">
-          <AvatarDoContato contato={c} nome={displayName} reserva={phone ?? displayName} className="h-10 w-10 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2">
-              <SeloDoCanal
-                canal={conversation.channel === "instagram" ? "instagram" : "whatsapp"}
-                tamanho="grande"
-              />
-              {/* `[contain:inline-size]` tira o comprimento do nome da conta da
-                  largura mínima (senão nome longo nunca truncaria); o piso de
-                  7,5rem é o que entra no lugar. */}
-              <h2 className="min-w-[7.5rem] flex-1 truncate text-[15px] font-semibold leading-5 [contain:inline-size]">
-                {displayName}
-              </h2>
-              {/* Ao lado do nome, não escondido num painel: a pergunta "dá para
-                  escrever agora?" se faz ANTES de digitar, não depois de receber um
-                  `failed` com um código de cinco dígitos. */}
-              <JanelaSelo
-                provider={conversation.channel_sessions?.provider ?? null}
-                lastInboundAt={conversation.last_inbound_at}
-              />
-            </div>
+      <div className="relative shrink-0">
+        <AvatarDoContato contato={c} nome={displayName} reserva={phone ?? displayName} className="h-10 w-10" />
+        <SeloDoCanal
+          canal={conversation.channel === "instagram" ? "instagram" : "whatsapp"}
+          tamanho="pequeno"
+          className="absolute -bottom-0.5 -left-0.5"
+        />
+      </div>
+      <div className="min-w-0 flex-1">
+        <h2 className="truncate text-[15px] font-semibold leading-5">{displayName}</h2>
+        {subtitulo && (
+          <p className="truncate text-xs leading-4 text-text-muted tabular-nums" data-testid="numero-do-contato">
+            {subtitulo}
+          </p>
+        )}
+      </div>
 
-            {/* QUEM ESTÁ NO COMANDO, com nome e por GEOMETRIA — disco cheio para
-                pessoa, anel vazado para o automático. É o mesmo componente do card do
-                funil e do dossiê: um terceiro jeito de dizer "quem manda", por cor ou
-                por texto, faria a mesma pergunta ter três respostas diferentes na
-                mesma tela. Cor não sobrevive ao daltonismo nem ao teste do metro. */}
-            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-              <div className="flex items-center gap-2" data-testid="comando-da-conversa">
-                {comando.quem === "humano" ? (
-                  <OwnerBadge ownerKind="user" ownerName={comando.nome ?? t("Atendente")} />
-                ) : comando.quem === "automatico" ? (
-                  <OwnerBadge ownerKind="ai" ownerName={t("Automático")} />
-                ) : (
-                  // `ninguem`, `aguardando` e `encerrada` sem dono caem aqui: o disco
-                  // TRACEJADO do OwnerBadge, que é como o funil já desenha "ninguém".
-                  <OwnerBadge ownerKind={null} ownerName={null} />
-                )}
-              </div>
-              {/* O PORQUÊ de quem responde, junto dele. Sem esta marca, a conversa
-                  em que o robô está calado tem exatamente a mesma cara de uma
-                  conversa normal — e ninguém entende por que as respostas
-                  automáticas pararam. O testid é contrato: `escalacao-ciclo.spec.ts`
-                  o procura. Sem IA no canal, o selo falaria de um automático que
-                  não existe; o opt-out do cliente continua valendo e aparecendo. */}
-              {motivo !== null && (iaResponde || motivo === "contato_descadastrado") && (
-                <Badge
-                  variant="outline"
-                  className="h-4 shrink-0 px-1.5 text-[10px] leading-none"
-                  data-testid="badge-atendimento-humano"
-                >
-                  {t(ROTULO_DO_MOTIVO[motivo])}
-                </Badge>
-              )}
-              {/* Aberta pela aba "Ocultos" ou por link: a tela diz que esta conversa
-                  está fora do Inbox, e por que a IA não responde. */}
-              {conversation.contato_oculto && (
-                <SeloDeOculto className="h-4 shrink-0 px-1.5 text-[10px] leading-none" />
-              )}
-              {/* O estado do episódio (aberta, fechada…): leitura de consulta, na
-                  linha de quem responde. Saiu da faixa, que deixou de existir. */}
-              <Badge variant="outline" className="h-4 shrink-0 px-1.5 text-xs leading-none">
-                {t(STATUS_LABEL[status] ?? status)}
-              </Badge>
-              {/* No celular o telefone sai (porte do #3190): cada linha do
-                  cabeçalho é altura tirada do fio, e o número continua na Ficha. */}
-              {phone && (
-                <p className="flex min-w-0 items-center gap-1 text-xs text-text-muted max-md:hidden">
-                  <Phone size={11} weight="regular" aria-hidden className="shrink-0" />
-                  <span className="truncate">{phone}</span>
-                </p>
-              )}
-              {conversation.channel === "instagram" && (
-                <p className="flex items-center gap-1 text-xs text-canal-instagram">
-                  <InstagramLogo size={11} weight="regular" aria-hidden />
-                  {conversation.channel_sessions?.display_name
-                    ? `${t("via")} ${conversation.channel_sessions.display_name}`
-                    : t("Instagram")}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* AS AÇÕES. `ml-auto` as encosta à direita, inclusive quando descem
-            para a segunda linha. Sem `shrink-0` no grupo (era ele que impunha o
-            piso de largura); quem não encolhe são os botões, um a um. */}
-        <div
-          role="group"
-          aria-label={t("Ações da conversa")}
-          data-testid="acoes-fixas-da-conversa"
-          className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5 [&>*]:shrink-0"
+      {/* O MENU ⋯, aberto por CLIQUE (nunca por hover). Popover não-modal, e
+          não DropdownMenu, de propósito: Aparência, Lembrar e Ocultar abrem
+          coisa própria que precisa continuar montada. O nome "Ações da
+          conversa" é o que as specs e o leitor de tela conhecem; o estado vai
+          em `aria-expanded`. */}
+      <Popover open={menuAberto} onOpenChange={setMenuAberto}>
+        <PopoverTrigger asChild>
+          <Button
+            ref={botaoBuscaRef}
+            type="button"
+            size="sm"
+            variant={menuAberto ? "secondary" : "ghost"}
+            // 44px no celular (o `size="sm"` dá `h-11` abaixo do `lg`); a
+            // partir do `md`, os 36px de antes.
+            className="w-11 shrink-0 px-0 md:h-9 md:w-9"
+            title={t("Mais ações")}
+            aria-label={t("Ações da conversa")}
+          >
+            <DotsThree size={20} weight="bold" aria-hidden />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          className="flex max-h-[min(36rem,calc(100dvh-6rem))] w-72 flex-col gap-0.5 overflow-y-auto p-1.5"
+          data-testid="menu-da-conversa"
+          // A busca abre um campo com foco próprio; devolver o foco ao ⋯
+          // tiraria o cursor dele.
+          onCloseAutoFocus={(e) => {
+            if (focoFicaOnde.current) {
+              e.preventDefault();
+              focoFicaOnde.current = false;
+            }
+          }}
         >
-          {/* O PRINCIPAL. Rótulo "Assumir" e atalho `a` são contrato
-              (`inbox-header-nao-trava` e o dicionário de espanhol). */}
+          {/* 1. A AÇÃO PRINCIPAL, em primeiro. Rótulo "Assumir" e atalho `a`
+              são contrato (o dicionário de espanhol e a ajuda de atalhos). */}
           {acaoPrincipal === "assumir" && (
             <Button
               size="sm"
               variant="default"
+              className="w-full justify-start"
               data-acao-principal="assumir"
               disabled={claim.isPending}
               // Desde a 0173 assumir também para o atendimento automático, e um
               // botão que muda duas coisas precisa anunciar as duas.
               title={t("Você passa a responder esta conversa e o atendimento automático para aqui.")}
-              onClick={assumir}
+              onClick={doMenu(assumir)}
             >
               {t("Assumir")}
             </Button>
           )}
-          {/* O `data-testid` da VOLTA é o mesmo de antes, aqui ou no ⋯:
+          {/* O `data-testid` da VOLTA é o mesmo, principal ou não:
               `escalacao-ciclo` o clica, e testid visível é contrato. */}
           {acaoPrincipal === "devolver" && (
             <Button
               size="sm"
               variant="default"
+              className="w-full justify-start"
               data-acao-principal="devolver"
               disabled={retomar.isPending}
               data-testid="devolver-ao-automatico"
               title={dicaDaVolta}
-              onClick={devolver}
+              onClick={doMenu(devolver)}
             >
               {retomar.isPending ? t("Devolvendo...") : t("Devolver ao automático")}
             </Button>
@@ -400,204 +354,203 @@ export function ConversationHeader({
             <Button
               size="sm"
               variant="default"
+              className="w-full justify-start"
               data-acao-principal="reabrir"
               disabled={reopen.isPending}
-              onClick={() =>
-                reopen.mutate({ conversation_id: conversation.id, expected_revision: conversation.service_revision })
-              }
+              onClick={doMenu(() =>
+                reopen.mutate({ conversation_id: conversation.id, expected_revision: conversation.service_revision }),
+              )}
             >
               {t("Reabrir")}
             </Button>
           )}
+
+          {/* 2. A SITUAÇÃO: quem responde (por GEOMETRIA, o mesmo componente do
+              funil e do dossiê), o porquê, o estado do episódio e a janela. Os
+              testids são contrato das specs (`comando-da-conversa`,
+              `badge-atendimento-humano`). */}
+          <div
+            role="group"
+            aria-label={t("Situação da conversa")}
+            className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1.5 text-xs"
+          >
+            <div className="flex items-center gap-2" data-testid="comando-da-conversa">
+              {comando.quem === "humano" ? (
+                <OwnerBadge ownerKind="user" ownerName={comando.nome ?? t("Atendente")} />
+              ) : comando.quem === "automatico" ? (
+                <OwnerBadge ownerKind="ai" ownerName={t("Automático")} />
+              ) : (
+                // `ninguem`, `aguardando` e `encerrada` sem dono: o disco
+                // TRACEJADO, que é como o funil já desenha "ninguém".
+                <OwnerBadge ownerKind={null} ownerName={null} />
+              )}
+            </div>
+            {/* Sem IA no canal, o selo falaria de um automático que não existe;
+                o opt-out do cliente continua valendo e aparecendo. */}
+            {motivo !== null && (iaResponde || motivo === "contato_descadastrado") && (
+              <Badge variant="outline" className="h-5 px-1.5 text-xs leading-none" data-testid="badge-atendimento-humano">
+                {t(ROTULO_DO_MOTIVO[motivo])}
+              </Badge>
+            )}
+            {conversation.contato_oculto && <SeloDeOculto className="h-5 px-1.5 text-xs leading-none" />}
+            <Badge variant="outline" className="h-5 px-1.5 text-xs leading-none">
+              {t(STATUS_LABEL[status] ?? status)}
+            </Badge>
+            {/* "Dá para escrever agora?" — a janela de 24 h do canal oficial. */}
+            <JanelaSelo
+              provider={conversation.channel_sessions?.provider ?? null}
+              lastInboundAt={conversation.last_inbound_at}
+            />
+            {viaInstagram && subtitulo !== viaInstagram && (
+              <span className="flex items-center gap-1 text-canal-instagram">
+                <InstagramLogo size={11} weight="regular" aria-hidden />
+                {viaInstagram}
+              </span>
+            )}
+          </div>
+
+          {/* 3. O DIA A DIA: Transferir, Lembrar, Fechar. */}
           {podeAgir && !encerrada && (
+            <>
+              <div role="separator" className="my-1 h-px bg-border" />
+              <Button size="sm" variant="ghost" className={ITEM} onClick={doMenu(() => setReassignOpen(true))}>
+                <ArrowsLeftRight size={16} aria-hidden />
+                {t("Transferir")}
+              </Button>
+              <SnoozeButton
+                conversationId={conversation.id}
+                snoozeUntil={conversation.snooze_until ?? null}
+                variante="item"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                className={ITEM}
+                disabled={close.isPending}
+                onClick={doMenu(() =>
+                  setConfirmando({ acao: "fechar", id: conversation.id, revisao: conversation.service_revision }),
+                )}
+              >
+                <CheckCircle size={16} aria-hidden />
+                {t("Fechar conversa")}
+              </Button>
+            </>
+          )}
+
+          {/* 4. O que muda o comando e não é o principal agora. "Liberar"
+              devolve a conversa ao AUTOMÁTICO (RPC da 0173); num canal onde a
+              IA nunca responde, isso tiraria a conversa da Fila sem pôr
+              ninguém no lugar. Quem pegou por engano ainda tem "Transferir". */}
+          {podeAgir && ((isMineAssigned && iaResponde) || (podeDevolver && acaoPrincipal !== "devolver") || podePausar) && (
+            <div role="separator" className="my-1 h-px bg-border" />
+          )}
+          {podeAgir && isMineAssigned && iaResponde && (
             <Button
               size="sm"
-              variant="outline"
-              // 44px de largura no toque: só com o ícone, o botão ficava com 42.
-              className="min-w-11 gap-1 lg:min-w-0"
-              aria-label={t("Transferir")}
-              title={t("Transferir")}
-              onClick={() => setReassignOpen(true)}
+              variant="ghost"
+              className={ITEM}
+              disabled={release.isPending}
+              onClick={doMenu(() => release.mutate({ conversation_id: conversation.id }))}
             >
-              <ArrowsLeftRight size={16} aria-hidden />
-              <span className="hidden @[40rem]:inline">{t("Transferir")}</span>
+              {t("Liberar")}
             </Button>
           )}
-          {podeAgir && !encerrada && (
-            <SnoozeButton
-              conversationId={conversation.id}
-              snoozeUntil={conversation.snooze_until ?? null}
-            />
-          )}
-          {podeAgir && !encerrada && (
+          {/* A VOLTA aparece sempre que há algo a devolver — inclusive em
+              conversa ENCERRADA, onde "Liberar" não alcança quem não é dono. */}
+          {podeAgir && podeDevolver && acaoPrincipal !== "devolver" && (
             <Button
               size="sm"
-              variant="outline"
-              // 44px de largura no toque: só com o ícone, o botão ficava com 42.
-              className="min-w-11 gap-1 lg:min-w-0"
-              aria-label={t("Fechar")}
-              title={t("Fechar")}
-              disabled={close.isPending}
-              onClick={() =>
-                setConfirmando({ acao: "fechar", id: conversation.id, revisao: conversation.service_revision })
-              }
+              variant="ghost"
+              className={ITEM}
+              disabled={retomar.isPending}
+              data-testid="devolver-ao-automatico"
+              title={dicaDaVolta}
+              onClick={doMenu(devolver)}
             >
-              <CheckCircle size={16} aria-hidden />
-              <span className="hidden @[40rem]:inline">{t("Fechar")}</span>
+              {retomar.isPending ? t("Devolvendo...") : t("Devolver ao automático")}
+            </Button>
+          )}
+          {/* PAUSAR só quando é um gesto diferente de assumir: com dono e o
+              automático de pé (o rodízio distribui sem calar). */}
+          {podeAgir && podePausar && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className={ITEM}
+              disabled={pausar.isPending}
+              data-testid="pausar-o-automatico"
+              title={t("O atendimento automático para nesta conversa. O dono não muda.")}
+              onClick={doMenu(() => pausar.mutate({ conversation_id: conversation.id }))}
+            >
+              {pausar.isPending ? t("Pausando...") : t("Pausar o automático")}
             </Button>
           )}
 
-          {/* O MENU ⋯, aberto por CLIQUE (nunca por hover). Popover não-modal,
-              e não DropdownMenu, de propósito: Aparência e Ocultar abrem coisa
-              própria (seletor, pergunta) que precisa continuar montada, e o
-              clique fora — em "Fechar", por exemplo — passa direto. O nome
-              estável "Ações da conversa" é o que as specs e o leitor de tela
-              conhecem; o estado vai em `aria-expanded`. */}
-          <Popover open={menuAberto} onOpenChange={setMenuAberto}>
-            <PopoverTrigger asChild>
-              <Button
-                ref={botaoBuscaRef}
-                type="button"
-                size="sm"
-                variant={menuAberto ? "secondary" : "ghost"}
-                // 44px no celular (o `size="sm"` dá `h-11` abaixo do `lg`); a
-                // partir do `md`, os 36px de antes.
-                className="w-11 px-0 md:h-9 md:w-9"
-                title={t("Mais ações")}
-                aria-label={t("Ações da conversa")}
-              >
-                <DotsThree size={18} weight="bold" aria-hidden />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              align="end"
-              className="flex w-60 flex-col gap-0.5 p-1.5"
-              data-testid="menu-da-conversa"
-              // A busca abre um campo com foco próprio; devolver o foco ao ⋯
-              // tiraria o cursor dele.
-              onCloseAutoFocus={(e) => {
-                if (focoFicaOnde.current) {
-                  e.preventDefault();
-                  focoFicaOnde.current = false;
-                }
+          {/* 5. Ferramentas de LEITURA e o resto. */}
+          <div role="separator" className="my-1 h-px bg-border" />
+          {onBuscar && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className={ITEM}
+              onClick={() => {
+                setMenuAberto(false);
+                focoFicaOnde.current = !buscaAberta;
+                onBuscar();
               }}
+              aria-expanded={buscaAberta}
             >
-              {/* O que muda o comando da conversa e não é o principal agora. */}
-              {/* "Liberar" devolve a conversa ao AUTOMÁTICO: a rota limpa
-                  `bot_silenced_until` (RPC da 0173). Num canal onde a IA nunca
-                  responde (o Instagram), isso tiraria a conversa da Fila sem pôr
-                  ninguém no lugar. Quem pegou por engano ainda tem "Transferir". */}
-              {podeAgir && isMineAssigned && iaResponde && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className={ITEM}
-                  disabled={release.isPending}
-                  onClick={doMenu(() => release.mutate({ conversation_id: conversation.id }))}
-                >
-                  {t("Liberar")}
-                </Button>
+              <MagnifyingGlass size={16} aria-hidden />
+              {t("Buscar nesta conversa")}
+            </Button>
+          )}
+          {podeAgir && <ExportarConversaEmPdf conversationId={conversation.id} comNome />}
+          {aparencia && onAparenciaChange && (
+            <AparenciaDaConversa valor={aparencia} onChange={onAparenciaChange} comNome />
+          )}
+          {/* `xl:hidden`: a partir de 1280px o painel lateral entra na tela com
+              a ficha e o "Ver contato" próprios. Abaixo, esta é a única porta. */}
+          {onAbrirFicha && (
+            <Button size="sm" variant="ghost" className={cn(ITEM, "xl:hidden")} onClick={doMenu(onAbrirFicha)}>
+              <IdentificationCard size={16} aria-hidden />
+              {t("Ficha")}
+            </Button>
+          )}
+          {c?.id && (
+            <Button asChild size="sm" variant="ghost" className={cn(ITEM, "xl:hidden")}>
+              <Link href={`/app/contacts/${c.id}`} onClick={() => setMenuAberto(false)}>
+                <ArrowRight size={16} weight="regular" aria-hidden />
+                {t("Ver contato")}
+              </Link>
+            </Button>
+          )}
+          {/* Ocultar do Inbox (migration 0372). Grupo não tem contato. */}
+          {podeAgir && c?.id && (
+            <OcultarDoInbox
+              contactId={c.id}
+              conversationId={conversation.id}
+              nome={displayName}
+              oculto={conversation.contato_oculto === true}
+              variante="item"
+            />
+          )}
+          {/* ARQUIVAR (#923): tira da frente sem destruir. Pergunta antes. */}
+          {podeAgir && status !== "archived" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className={ITEM}
+              disabled={arquivar.isPending}
+              onClick={doMenu(() =>
+                setConfirmando({ acao: "arquivar", id: conversation.id, revisao: conversation.service_revision }),
               )}
-              {/* A VOLTA aparece sempre que há algo a devolver — inclusive em
-                  conversa ENCERRADA, onde "Liberar" não alcança quem não é dono.
-                  A condição é `travaVigente`, e não `!automaticoAtivo`: conversa
-                  encerrada tem o automático inativo sem trava nenhuma. */}
-              {podeAgir && podeDevolver && acaoPrincipal !== "devolver" && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className={ITEM}
-                  disabled={retomar.isPending}
-                  data-testid="devolver-ao-automatico"
-                  title={dicaDaVolta}
-                  onClick={doMenu(devolver)}
-                >
-                  {retomar.isPending ? t("Devolvendo...") : t("Devolver ao automático")}
-                </Button>
-              )}
-              {/* PAUSAR só quando é um gesto diferente de assumir: com dono e o
-                  automático de pé (o rodízio distribui sem calar). */}
-              {podeAgir && podePausar && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className={ITEM}
-                  disabled={pausar.isPending}
-                  data-testid="pausar-o-automatico"
-                  title={t("O atendimento automático para nesta conversa. O dono não muda.")}
-                  onClick={doMenu(() => pausar.mutate({ conversation_id: conversation.id }))}
-                >
-                  {pausar.isPending ? t("Pausando...") : t("Pausar o automático")}
-                </Button>
-              )}
-              {/* Ferramentas de LEITURA: não mudam com o estado da conversa. */}
-              {onBuscar && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className={ITEM}
-                  onClick={() => {
-                    setMenuAberto(false);
-                    focoFicaOnde.current = !buscaAberta;
-                    onBuscar();
-                  }}
-                  aria-expanded={buscaAberta}
-                >
-                  <MagnifyingGlass size={16} aria-hidden />
-                  {t("Buscar nesta conversa")}
-                </Button>
-              )}
-              {podeAgir && <ExportarConversaEmPdf conversationId={conversation.id} comNome />}
-              {aparencia && onAparenciaChange && (
-                <AparenciaDaConversa valor={aparencia} onChange={onAparenciaChange} comNome />
-              )}
-              {/* `xl:hidden`: a partir de 1280px o painel lateral entra na tela
-                  com a ficha e o "Ver contato" próprios. Abaixo, esta é a única
-                  porta para o contato. */}
-              {onAbrirFicha && (
-                <Button size="sm" variant="ghost" className={cn(ITEM, "xl:hidden")} onClick={doMenu(onAbrirFicha)}>
-                  <IdentificationCard size={16} aria-hidden />
-                  {t("Ficha")}
-                </Button>
-              )}
-              {c?.id && (
-                <Button asChild size="sm" variant="ghost" className={cn(ITEM, "xl:hidden")}>
-                  <Link href={`/app/contacts/${c.id}`} onClick={() => setMenuAberto(false)}>
-                    <ArrowRight size={16} weight="regular" aria-hidden />
-                    {t("Ver contato")}
-                  </Link>
-                </Button>
-              )}
-              {/* Ocultar do Inbox (migration 0372). Grupo não tem contato. */}
-              {podeAgir && c?.id && (
-                <OcultarDoInbox
-                  contactId={c.id}
-                  conversationId={conversation.id}
-                  nome={displayName}
-                  oculto={conversation.contato_oculto === true}
-                  variante="item"
-                />
-              )}
-              {/* ARQUIVAR (#923): tira da frente sem destruir. A já arquivada não
-                  mostra o botão. Pergunta antes, pelo `ConfirmarNaTela`. */}
-              {podeAgir && status !== "archived" && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className={ITEM}
-                  disabled={arquivar.isPending}
-                  onClick={doMenu(() =>
-                    setConfirmando({ acao: "arquivar", id: conversation.id, revisao: conversation.service_revision }),
-                  )}
-                >
-                  <Archive size={16} aria-hidden />
-                  {arquivar.isPending ? t("Arquivando...") : t("Arquivar")}
-                </Button>
-              )}
-            </PopoverContent>
-          </Popover>
-        </div>
-      </div>
+            >
+              <Archive size={16} aria-hidden />
+              {arquivar.isPending ? t("Arquivando...") : t("Arquivar")}
+            </Button>
+          )}
+        </PopoverContent>
+      </Popover>
       <ReassignDialog
         conversationId={conversation.id}
         open={reassignOpen}

@@ -53,21 +53,20 @@ describe("item 37 — o visualizador só lê", () => {
     papel = "viewer";
   });
 
-  it("⭐ cabeçalho: sem Assumir, Transferir, Lembrar, Fechar nem ações do menu", () => {
+  it("⭐ cabeçalho: o menu só tem as ações de leitura", () => {
     comQuery(<ConversationHeader conversation={conversa} onBuscar={() => {}} />);
-    for (const nome of ["Assumir", "Transferir", "Fechar", "Lembrar"]) {
-      expect(screen.queryByRole("button", { name: nome }), nome).toBeNull();
-    }
     fireEvent.click(screen.getByRole("button", { name: "Ações da conversa" }));
     const menu = screen.getByTestId("menu-da-conversa");
     expect(menu).toHaveTextContent("Buscar nesta conversa");
-    expect(menu).not.toHaveTextContent("Arquivar");
-    expect(menu).not.toHaveTextContent("Ocultar");
+    for (const nome of ["Assumir", "Transferir", "Fechar conversa", "Lembrar", "Arquivar", "Ocultar do Inbox"]) {
+      expect(screen.queryByRole("button", { name: nome }), nome).toBeNull();
+    }
   });
 
   it("o atendente continua vendo as ações", () => {
     papel = "agent";
     comQuery(<ConversationHeader conversation={conversa} onBuscar={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ações da conversa" }));
     expect(screen.getByRole("button", { name: "Assumir" })).toBeInTheDocument();
   });
 
