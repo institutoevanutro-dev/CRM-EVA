@@ -79,6 +79,12 @@ interface Props {
    * troca — que é o certo: texto de uma conversa nunca aparece noutra.
    */
   rascunhos?: Map<string, RascunhoDoCampo>;
+  /**
+   * Abre a conversa com o cursor no campo (item 29): quem já sai digitando
+   * escreve a mensagem, em vez de disparar atalho. Só no computador — no toque o
+   * teclado virtual cobriria a conversa que a pessoa acabou de abrir.
+   */
+  focarAoAbrir?: boolean;
   /** Liga as mensagens agendadas (a conversa tem contato e número). Porte do DeskcommCRM #4131. */
   agendamentoLigado?: boolean;
   disabled?: boolean;
@@ -138,6 +144,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   {
     conversationId,
     rascunhos,
+    focarAoAbrir = false,
     agendamentoLigado = false,
     disabled,
     blockedReason,
@@ -291,9 +298,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
   }
-  // O rascunho que voltou com a conversa ganha a altura dele já na montagem.
+  // Na montagem (o campo nasce a cada conversa): o rascunho que voltou ganha a
+  // altura dele, e o cursor vai ao campo no computador.
   useEffect(() => {
     if (inicial?.texto) autoresize();
+    if (focarAoAbrir && window.matchMedia?.("(hover: hover) and (pointer: fine)").matches) {
+      const ta = taRef.current;
+      ta?.focus({ preventScroll: true });
+      ta?.setSelectionRange(ta.value.length, ta.value.length);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

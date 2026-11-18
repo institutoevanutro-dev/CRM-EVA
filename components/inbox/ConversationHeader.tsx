@@ -618,7 +618,6 @@ export function ConversationHeader({
             : t("O atendimento termina. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.")
         }
         acao={confirmando?.acao === "arquivar" ? t("Arquivar") : t("Fechar conversa")}
-        focoNaAcao={confirmando?.acao === "fechar"}
         onConfirmar={() => {
           if (!confirmando) return;
           const alvo = { conversation_id: confirmando.id, expected_revision: confirmando.revisao };

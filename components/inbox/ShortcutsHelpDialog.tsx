@@ -29,6 +29,11 @@ export function ShortcutsHelpDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>{t("Atalhos de teclado")}</DialogTitle>
         </DialogHeader>
+        {/* Item 29: as letras não disparam enquanto se escreve, nem com o
+            cursor fora da lista. */}
+        <p className="text-sm text-muted-foreground">
+          {t("As letras valem com o cursor na lista de conversas.")}
+        </p>
         <ul className="space-y-2 text-sm">
           {BINDINGS.map((b) => (
             <li key={b.keys} className="flex items-center justify-between">

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,9 +19,10 @@ import {
  * não segue o tema e, no celular, aparece com o endereço do site no título.
  * Quem chama decide o texto — a frase tem de dizer o que ACONTECE.
  *
- * `focoNaAcao`: o foco nasce no botão da ação, não no "Cancelar". É o que
- * mantém o atalho `e` seguido de Enter fechando a conversa, como sempre foi.
- * Ação que apaga para sempre (excluir nota) não liga isto.
+ * O foco nasce no "Cancelar", sempre (item 29 da auditoria de 17/11). Ele já
+ * nasceu no botão da ação, para `e` + Enter fechar a conversa: quem digitava
+ * com o foco fora do campo abria a confirmação com "e" e a confirmava com o
+ * espaço seguinte. Confirmar pede um gesto de propósito.
  */
 export function ConfirmarNaTela({
   aberto,
@@ -31,7 +31,6 @@ export function ConfirmarNaTela({
   descricao,
   acao,
   onConfirmar,
-  focoNaAcao = false,
   destrutiva = false,
 }: {
   aberto: boolean;
@@ -40,23 +39,12 @@ export function ConfirmarNaTela({
   descricao?: string;
   acao: string;
   onConfirmar: () => void;
-  focoNaAcao?: boolean;
   destrutiva?: boolean;
 }) {
   const t = useT();
-  const acaoRef = useRef<HTMLButtonElement>(null);
   return (
     <AlertDialog open={aberto} onOpenChange={onAbertoChange}>
-      <AlertDialogContent
-        onOpenAutoFocus={
-          focoNaAcao
-            ? (e) => {
-                e.preventDefault();
-                acaoRef.current?.focus();
-              }
-            : undefined
-        }
-      >
+      <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{titulo}</AlertDialogTitle>
           {/* Sem frase, o Radix ainda pede a descrição: vazia e escondida. */}
@@ -67,7 +55,6 @@ export function ConfirmarNaTela({
         <AlertDialogFooter>
           <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
           <Button
-            ref={acaoRef}
             variant={destrutiva ? "destructive" : "default"}
             onClick={() => {
               onAbertoChange(false);

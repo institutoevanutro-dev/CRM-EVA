@@ -583,7 +583,12 @@ export function InboxLayout({
   // desfazem esse passo (`navegarNoInbox`), em vez de o gesto sair do Inbox. No
   // computador a seleção continua sendo estado da tela, como sempre foi aqui: o
   // voltar do navegador não passeia pelas conversas clicadas.
-  const handleSelect = useCallback((id: string | null) => {
+  // Quem abriu pelo j/k continua navegando pela lista: o foco não vai ao campo
+  // (o próximo j cairia lá como letra). Os outros caminhos abrem com o cursor no
+  // campo, no computador (item 29).
+  const [abertaPeloTeclado, setAbertaPeloTeclado] = useState(false);
+  const handleSelect = useCallback((id: string | null, origem?: "teclado") => {
+    setAbertaPeloTeclado(origem === "teclado");
     // Sem isto, escolher "responder" numa conversa e trocar para outra levaria
     // a citação junto — e a resposta sairia citando mensagem de outro cliente.
     setRespondendo(null);
@@ -608,7 +613,8 @@ export function InboxLayout({
       expected_assignee: selectedConversation.assigned_to_user_id,
     });
   }, [claim, selectedConversation]);
-  // O atalho `e` pede; a confirmação na tela decide (I6). O alvo é a conversa
+  // O atalho `e` pede; a confirmação na tela decide (I6), com o foco no
+  // "Cancelar" (item 29): um espaço ou Enter a mais não fecha nada. O alvo é a conversa
   // do MOMENTO do atalho — com o diálogo aberto a seleção não muda (os atalhos
   // ficam desligados), mas a foto não depende disso.
   const [fechandoPeloAtalho, setFechandoPeloAtalho] = useState<string | null>(null);
@@ -957,6 +963,8 @@ export function InboxLayout({
       */}
       <div
         ref={listaRef}
+        // Os atalhos de uma letra só valem com o foco aqui dentro (item 29).
+        data-coluna-da-lista=""
         className={cn(
           "h-full min-h-0 flex-col border-r border-border bg-surface md:flex",
           colunas.lista,
@@ -1138,6 +1146,7 @@ export function InboxLayout({
                 ref={composerRef}
                 conversationId={selectedConversation.id}
                 rascunhos={rascunhos}
+                focarAoAbrir={!abertaPeloTeclado}
                 agendamentoLigado={
                   Boolean(selectedConversation.contacts?.id && selectedConversation.channel_session_id) && !supportReadonly
                 }
@@ -1258,7 +1267,7 @@ export function InboxLayout({
       <InboxKeyboardShortcuts
         visibleIds={visibleIds}
         selectedId={selectedId}
-        onSelect={handleSelect}
+        onSelect={(id) => handleSelect(id, "teclado")}
         onFocusReply={handleFocusReply}
         onClaim={supportReadonly ? () => {} : handleClaim}
         onClose={supportReadonly ? () => {} : handleClose}
@@ -1271,7 +1280,6 @@ export function InboxLayout({
         titulo={t("Fechar esta conversa?")}
         descricao={t("O atendimento termina. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.")}
         acao={t("Fechar conversa")}
-        focoNaAcao
         onConfirmar={() => {
           if (fechandoPeloAtalho) close.mutate({ conversation_id: fechandoPeloAtalho });
         }}

@@ -1114,6 +1114,9 @@ export const DICIONARIO: Traducoes = {
   "Nenhum atendente disponível para transferir.": { es: "Ningún agente disponible para transferir." },
   "Selecionar conversa": { es: "Seleccionar conversación" },
   "Selecionar todas": { es: "Seleccionar todas" },
+  "As letras valem com o cursor na lista de conversas.": {
+    es: "Las letras funcionan con el cursor en la lista de conversaciones.",
+  },
   "Selecionar todas as conversas visíveis": { es: "Seleccionar todas las conversaciones visibles" },
   Máximo: { es: "Máximo" },
   "conversas por chamada.": { es: "conversaciones por llamada." },
