@@ -155,7 +155,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
 
     if (e.kind === "echo_message") {
       // Resposta dada pelo CELULAR da clínica (coexistência): entra como
-      // "Celular" e pausa a IA, sem acordar nada de entrada (`ingestMetaEcho`).
+      // "WhatsApp (fora do CRM)" e pausa a IA, sem acordar nada de entrada (`ingestMetaEcho`).
       const r = await ingestMetaEcho(admin, e, { organizationId: session.organizationId });
       desfechos.push(`echo:${r.status}`);
       if (r.status === "failed" || r.status === "no_session") {
