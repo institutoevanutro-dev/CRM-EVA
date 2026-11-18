@@ -705,6 +705,7 @@ jobs:
         cor-da-etapa.spec.ts
         funil-visao-calendario.spec.ts
         inbox-aparencia-e-acoes-sob-demanda.spec.ts
+        inbox-campo-da-conversa.spec.ts
         inbox-conversa-em-pdf.spec.ts
         inbox-divisorias-e-troca-de-funil.spec.ts
         inbox-em-lote-e-iniciar-conversa.spec.ts
