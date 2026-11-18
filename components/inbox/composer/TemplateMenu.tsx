@@ -2,6 +2,7 @@
 import { useT } from "@/hooks/i18n/useT";
 import type { MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
 import { termoSemAcento } from "@/lib/inbox/termo-de-busca";
+import { cn } from "@/lib/utils";
 
 /** Estado do slash-menu a partir do texto do composer. Puro (testável). */
 export function resolveSlash(text: string): { open: boolean; query: string } {
@@ -34,9 +35,16 @@ interface Props {
   templates: MessageTemplate[];
   onPick: (t: MessageTemplate) => void;
   onClose: () => void;
+  /** A opção destacada pelas setas (item 43): Enter escolhe esta. */
+  indice?: number;
 }
 
-export function TemplateMenu({ open, query, templates, onPick, onClose: _onClose }: Props) {
+/**
+ * O menu do "/" (item 43 da auditoria de 17/11): setas e Enter escolhem, como no
+ * menu de menção — antes só o mouse —, e o nome é o da tela onde elas se
+ * cadastram, "Respostas rápidas".
+ */
+export function TemplateMenu({ open, query, templates, onPick, onClose: _onClose, indice = 0 }: Props) {
   const t = useT();
   if (!open) return null;
   const filtered = filtrarRespostas(templates, query);
@@ -44,16 +52,23 @@ export function TemplateMenu({ open, query, templates, onPick, onClose: _onClose
     <div
       className="absolute bottom-14 left-3 z-20 max-h-64 w-80 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-lg"
       role="listbox"
-      aria-label={t("Templates de script")}
+      aria-label={t("Respostas rápidas")}
     >
       {filtered.length === 0 ? (
-        <div className="px-3 py-2 text-xs text-muted-foreground">{t("Nenhum template. Crie em Configurações.")}</div>
+        <div className="px-3 py-2 text-xs text-muted-foreground">
+          {t("Nenhuma resposta rápida. Crie em Configurações.")}
+        </div>
       ) : (
-        filtered.map((tpl) => (
+        filtered.map((tpl, i) => (
           <button
             key={tpl.id}
             type="button"
-            className="flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left hover:bg-muted"
+            role="option"
+            aria-selected={i === indice}
+            className={cn(
+              "flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left hover:bg-muted",
+              i === indice && "bg-muted",
+            )}
             onClick={() => onPick(tpl)}
           >
             <span className="text-sm font-medium">{tpl.title}</span>

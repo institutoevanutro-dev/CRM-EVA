@@ -1,7 +1,8 @@
 /**
  * E2E — jornada completa de criação de conta (usuário real, browser real):
  *
- * 1. /login → clica "Criar conta"
+ * 1. /signup (com o EvaLink ligado, como no e2e, o login NÃO oferece "Criar
+ *    conta": quem é da equipe criava uma clínica vazia — auditoria 17/11, item 52)
  * 2. preenche o formulário de signup e envia
  * 3. abre o e-mail de confirmação (Mailpit) e clica no link
  * 4. cai autenticado no onboarding (tenant provisionado)
@@ -23,9 +24,14 @@ test("criar conta: signup → e-mail de confirmação → onboarding → re-logi
   const email = uniqueEmail("signup");
   const password = "SenhaForte!123";
 
-  // 1. Login → botão "Criar conta"
+  // 1. Com o EvaLink ligado (o ambiente do e2e), o login não oferece "Criar
+  //    conta" (item 52 da auditoria de 17/11): o cadastro continua em /signup.
+  //    Sem EvaLink e com cadastro aberto o link segue lá — coberto em
+  //    `tests/unit/login-entrada-sessao-e-evalink.test.tsx`.
   await page.goto("/login");
-  await page.getByRole("link", { name: "Criar conta" }).click();
+  await expect(page.getByRole("link", { name: "Entrar com o EvaLink" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Criar conta" })).toHaveCount(0);
+  await page.goto("/signup");
   await expect(page).toHaveURL(/\/signup$/);
 
   // 2. Formulário de signup

@@ -30,7 +30,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { nomeDoCanal, PROVIDERS_DE_MENSAGEM } from "./capabilities";
+import { CHANNEL_PROVIDER_WAHA, nomeDoCanal, PROVIDERS_DE_MENSAGEM } from "./capabilities";
 
 /** Único estado em que mensagem entra e sai. Contrato do CRM (uppercase). */
 export const STATUS_SAUDAVEL = "WORKING";
@@ -236,6 +236,44 @@ export interface ConexaoCaida {
 }
 
 /**
+ * A conexão por QR que NUNCA pareou: alguém começou a conectar e não escaneou.
+ *
+ * O número só é gravado quando o transporte fala do aparelho em `WORKING`
+ * (`numero-observado.ts`), então conexão por QR sem número é conexão que nunca
+ * esteve no ar. Anunciá-la na faixa fazia a clínica inteira ler "WhatsApp sem
+ * nome está desconectado — nenhuma mensagem entra nem sai" com o número de
+ * verdade funcionando (auditoria 17/11, item 58). Ela continua em Conexões,
+ * aguardando o QR. Os outros transportes nascem com o número (ou não têm um,
+ * como o Instagram) e ficam fora desta regra.
+ */
+export function nuncaPareou(s: { provider?: string | null; phone_number?: string | null }): boolean {
+  return (s.provider ?? CHANNEL_PROVIDER_WAHA) === CHANNEL_PROVIDER_WAHA && !s.phone_number;
+}
+
+/**
+ * A regra da faixa, uma só para o servidor (primeira pintura, no layout) e para
+ * a tela (a cada 30 s, pela mesma lista da bolinha do menu): estado que avisa e
+ * conexão que já pareou alguma vez.
+ */
+export function conexoesCaidasDe(
+  sessoes: ReadonlyArray<{
+    id: string;
+    display_name?: string | null;
+    phone_number?: string | null;
+    status?: string | null;
+    nunca_pareou?: boolean;
+  }>,
+): ConexaoCaida[] {
+  return sessoes
+    .filter((s) => (STATUS_QUE_AVISAM as readonly string[]).includes(s.status ?? "") && !s.nunca_pareou)
+    .map((s) => ({
+      id: s.id,
+      apelido: s.display_name ?? s.phone_number ?? "sem nome",
+      status: s.status ?? "",
+    }));
+}
+
+/**
  * As conexões desta organização que estão fora do ar AGORA.
  *
  * Mora aqui, e não na tela, por duas razões que o repo já pagou caro: telas que
@@ -254,7 +292,7 @@ export async function listarConexoesCaidas(
 ): Promise<ConexaoCaida[]> {
   const { data } = await admin
     .from("channel_sessions")
-    .select("id, display_name, phone_number, status")
+    .select("id, display_name, phone_number, status, provider")
     .eq("organization_id", organizationId)
     .is("archived_at", null)
     // A faixa diz "nenhuma mensagem entra nem sai por esta conexão" e leva a
@@ -264,11 +302,15 @@ export async function listarConexoesCaidas(
     .in("provider", [...PROVIDERS_DE_MENSAGEM])
     .in("status", [...STATUS_QUE_AVISAM]);
 
-  return (data ?? []).map((s) => ({
-    id: s.id as string,
-    apelido: (s.display_name as string | null) ?? (s.phone_number as string | null) ?? "sem nome",
-    status: (s.status as string | null) ?? "",
-  }));
+  return conexoesCaidasDe(
+    (data ?? []).map((s) => ({
+      id: s.id as string,
+      display_name: s.display_name as string | null,
+      phone_number: s.phone_number as string | null,
+      status: s.status as string | null,
+      nunca_pareou: nuncaPareou(s as { provider?: string | null; phone_number?: string | null }),
+    })),
+  );
 }
 
 interface SessaoParaVigiar {

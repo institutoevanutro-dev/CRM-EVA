@@ -46,6 +46,7 @@
  * código como defesa, e o menu do arquivado (que mostra "Pausar") continua
  * bloqueado, é o que o caso CONTROLE mede.
  */
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -113,10 +114,13 @@ function estaBloqueado(item: HTMLElement): boolean {
 
 async function abrirMenu(over: Partial<AgentRow>) {
   const user = userEvent.setup();
+  // O menu recarrega a lista pelo cache do React Query depois de cada ação.
   render(
-    <IdiomaProvider locale="pt-BR">
-      <AgentRowMenu agent={{ ...AGENTE, ...over } as AgentRow} />
-    </IdiomaProvider>,
+    <QueryClientProvider client={new QueryClient()}>
+      <IdiomaProvider locale="pt-BR">
+        <AgentRowMenu agent={{ ...AGENTE, ...over } as AgentRow} />
+      </IdiomaProvider>
+    </QueryClientProvider>,
   );
   await user.click(screen.getByRole("button", { name: "Menu de ações" }));
   return user;
@@ -211,7 +215,12 @@ describe("menu do agente — Despausar na lista (issue #1141)", () => {
     const item = await screen.findByRole("menuitem", { name: "Pausar" });
     expect(estaBloqueado(item)).toBe(false);
 
+    // Pausar tira a IA do atendimento: o menu pergunta antes (auditoria de
+    // 17/11, item 10). O que este controle mede — a ação é ALCANÇÁVEL para
+    // mcp_agent — não muda: ela chega depois do "Pausar" do diálogo.
     await user.click(item);
+    expect(pausar).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole("button", { name: "Pausar" }));
     await waitFor(() => expect(pausar).toHaveBeenCalledWith(ID));
   });
 });

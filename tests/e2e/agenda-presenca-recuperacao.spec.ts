@@ -14,6 +14,8 @@ import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-se
 import { escolherProfissionalEProcedimento } from "./helpers/marcacao-simples";
 import { enviarTextoFixoPendente } from "../../lib/followup/enviar-texto-fixo";
 import { abrirMenuLateral } from "./utils/menu-lateral";
+import { abrirPainelDoContato } from "./helpers/acoes-da-conversa";
+import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
   auth: { persistSession: false },
@@ -165,6 +167,13 @@ async function detail(page: Page, id: string, title: string) {
 async function evidence(page: Page, info: TestInfo, name: string) {
   const directory = info.outputPath(name);
   mkdirSync(directory, { recursive: true });
+  // Mede a gaveta PARADA. Ela entra deslizando (`eva-gaveta-entra`, 300 ms), e
+  // medida no meio do caminho ela "passa da tela": no caminho em espanhol, que
+  // mede logo depois de abrir, deu right 1283,9 com a animação em 250 ms e
+  // `translate: 1.03%`; terminada, 1280 e 384 px, igual ao português.
+  await page
+    .getByRole("dialog")
+    .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished.catch(() => undefined))));
   const measured = await page.getByRole("dialog").evaluate((el) => {
     const r = el.getBoundingClientRect();
     return {
@@ -294,6 +303,9 @@ test("Inbox marca cliente/conversa; detalhe antigo confirma presença com evidê
   await inbound(f, p, "Preciso marcar uma consulta");
   await login(page, f.email);
   await page.goto(`/app/inbox/${p.conversation}`);
+  // "Marcar compromisso" mora no painel do contato, que nasce recolhido
+  // (18/11/2026): abre pelo trilho, como quem usa.
+  await abrirPainelDoContato(page);
   await page.getByRole("link", { name: "Marcar compromisso", exact: true }).click();
   const panel = page.getByTestId("painel-de-marcacao");
   await expect(panel).toBeVisible();
@@ -444,10 +456,13 @@ test.describe("datas do compromisso seguem idioma e fuso próprios", () => {
     for (const locale of ["pt-BR", "es"] as const) {
       if (locale === "es") {
         await page.keyboard.press("Escape");
+        // A barra de cima fica escondida desde 18/11: abre como a pessoa abre.
+        await mostrarBarraDeCima(page);
         await page.getByTestId("seletor-de-idioma").click();
         const reload = page.waitForEvent("load");
         await page.getByTestId("idioma-es").click();
         await reload;
+        await mostrarBarraDeCima(page);
         await expect(page.getByTestId("seletor-de-idioma")).toHaveText("ES");
         await detail(page, id, "Consulta atravessa meia-noite");
         await expect(page.getByTestId("compromisso-horario")).toHaveText(
@@ -499,6 +514,9 @@ test("ir para a Agenda pelo menu apaga o cliente da conversa — \"Novo agendame
   await inbound(f, p, "Preciso marcar uma consulta");
   await login(page, f.email);
   await page.goto(`/app/inbox/${p.conversation}`);
+  // "Marcar compromisso" mora no painel do contato, que nasce recolhido
+  // (18/11/2026): abre pelo trilho, como quem usa.
+  await abrirPainelDoContato(page);
   await page.getByRole("link", { name: "Marcar compromisso", exact: true }).click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible();
   await expect(page.getByTestId("paciente-escolhido")).toHaveAttribute("data-contact-id", p.contact);

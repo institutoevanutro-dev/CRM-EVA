@@ -8,6 +8,84 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.21.0] — 2026-11-18
+
+### Alterado
+
+- **No Inbox, o painel do contato começa fechado** O painel da direita (demandas, tarefas, negócio, contato, etiquetas e memória)
+  agora começa fechado, e a conversa ganha a largura. Para abrir, clique no trilho
+  "Contato" à direita; quem abre fica com o painel aberto das próximas vezes, e
+  quem fecha volta a vê-lo fechado. As ações da conversa continuam no "⋯" do
+  cabeçalho.
+
+  Fechado, o painel não lê mais a ficha do contato por trás: a auditoria só
+  registra a abertura da ficha quando alguém de fato a abre.
+
+### Corrigido
+
+- **O editor do agente de IA não perde mais o que foi escrito** Trocar de aba (por exemplo, para o Teste) apagava sem aviso o prompt que ainda
+  não tinha sido salvo, e o Teste rodava a versão salva como se fosse o texto da
+  tela. Agora a Configuração guarda o texto, e Teste, Propostas e Histórico avisam
+  quando há mudança não salva em vez de agir por cima dela. Sair da tela com
+  mudança não salva (fechar a aba ou clicar num link do menu) pergunta antes.
+
+  "Aplicar como versão nova" pergunta antes, mostrando o trecho que entra no ar, e
+  a tela passa a mostrar a versão nova (salvar depois não desfaz mais a
+  melhoria). "Pausar" e a troca entre Automático e Assistido também pedem
+  confirmação, dizendo o que muda para os pacientes. "Reverter" avisa quando tira
+  do editor um rascunho em andamento, e esse rascunho abre de novo pelo Histórico.
+
+  Também: número fora da faixa nos freios mostra a faixa certa embaixo do campo;
+  "Publicar" lista o que muda pelo conteúdo, com materiais, funis e horário;
+  "Novo agente" mostra os materiais e funis que já existem; o agente legado
+  conclui a configuração no editor, com as instruções dele; gestor vê por que não
+  pode editar; a lista de agentes muda logo depois de pausar, renomear, duplicar
+  ou arquivar, e o diálogo aberto pelo menu da lista não deixa mais a página sem
+  clique; Execuções sem aviso duplo, com a situação em português e "Ver mais"; e
+  a tela do agente não baixa mais o texto inteiro de todas as versões.
+
+- **Sessão, entrada e casca do app — sair só deste aparelho, faixa do WhatsApp ao vivo e barra de cima escondida** Correções da auditoria de 17/11 (lotes 4 e 5) e a barra de cima escondida:
+
+  - Quando a sessão termina no meio do uso, a tela leva ao login e, depois de entrar, volta para onde a pessoa estava. Antes cada ação mostrava "Auth required." em inglês.
+  - "Sair" encerra só este aparelho. "Sair de todos os dispositivos" continua em Configurações › Segurança.
+  - Com o EvaLink ligado, o login por senha fica como porta da administração (sem cursor no e-mail, botão secundário) e a recusa lembra o botão do EvaLink. "Criar conta" some quando o cadastro é só por convite ou o EvaLink está ligado. Quem entra pelo EvaLink volta à tela de onde veio.
+  - E-mail não confirmado e servidor de login fora do ar têm mensagem própria e não gastam tentativa.
+  - O link de troca de senha só troca a senha da conta do link e mostra o e-mail dela; link vencido num navegador com outra pessoa logada é recusado.
+  - Código de 6 dígitos preenchido automaticamente (Senhas do iPhone/Mac) entra inteiro. "Baixar .txt" dos códigos de recuperação funciona no Safari.
+  - Conta suspensa, primeiro acesso e a janela obrigatória de duas etapas ganharam "Sair"; a conta suspensa oferece as outras organizações.
+  - A faixa "WhatsApp desconectado" aparece e some sozinha (a cada 30 s), ocupa uma linha, e não aparece mais para número que nunca foi pareado.
+  - "Tentar de novo" nas telas de erro busca de novo. Trocar de organização numa aba recarrega as outras. Ícone neutro no seletor de organização, barrinha de carregamento não trava em links de baixar arquivo, e lupa de busca no topo do celular.
+  - A barra de cima (organização, avisos, idioma e tema) fica escondida e aparece ao levar o mouse ao alto da tela, pelo Tab, ou pela alça no celular e no iPad. A faixa de WhatsApp desconectado continua sempre visível.
+
+- **Campanhas mantêm o público ao editar e explicam o envio** Salvar a edição de um rascunho apagava do público o critério "com negócio no funil / na etapa", e a
+  campanha podia sair para muito mais gente. A edição agora mostra esses campos e o servidor só troca
+  o que foi enviado.
+
+  Também nas campanhas:
+
+  - "Voltar para rascunho" depois de preparar a lista, para corrigir o texto ou o público.
+  - Duplicar abre a cópia, com funil, etapa, agente e números do rodízio, e a cópia não fala de novo
+    com quem já recebeu a original ("N pessoas que já receberam a original ficam de fora").
+  - O envio de teste só lista contatos depois da busca e pede confirmação com o nome.
+  - A campanha nova já vem com o ritmo padrão da organização; hora de envio sem a de parada é avisada
+    na tela.
+  - Enviadas, entregues e respostas certas acima de 1.000 pessoas; a lista anda durante o envio.
+  - Fora do horário aparece "Aguardando o horário de envio" com a hora de volta.
+  - Etiquetas escolhidas das que os contatos têm, textos salvos na hora de escrever e prévia da
+    mensagem com nome de exemplo.
+
+- **Inbox — mensagem certa para o paciente certo, e cara de WhatsApp** O texto digitado, o áudio em gravação e o modelo da janela de 24 h não passam mais para a próxima
+  conversa aberta: cada conversa guarda o seu rascunho. Ao abrir uma conversa o cursor vai para o
+  campo; os atalhos de uma letra (a, e, r, j, k) só valem com o cursor na lista, e a confirmação de
+  fechar começa no "Cancelar". Também: a conversa que sai da aba não pisca, só vira lida com a aba à
+  vista, o lote limpa a seleção e pergunta antes de fechar ou arquivar, encaminhar mostra o telefone e
+  pede confirmação, agendar limpa o campo, o áudio mostra o envio e guarda a gravação se falhar, sem
+  internet aparece um aviso só, a lista não pula sob o mouse, e "Nota interna" fica sempre à vista.
+
+  O cabeçalho da conversa e a linha da lista ficaram como no WhatsApp: foto, nome, número (e, na
+  lista, hora, prévia e não lidas). Nenhuma ação sumiu: Assumir, Transferir, Lembrar, Fechar e as
+  demais moram no menu "⋯" da conversa, com a situação (quem responde, estado, janela) no alto dele.
+
 ## [5.20.1] — 2026-11-18
 
 ### Corrigido
@@ -9341,7 +9419,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.20.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.21.0...HEAD
+[5.21.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.20.1...v5.21.0
 [5.20.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.20.0...v5.20.1
 [5.20.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.2...v5.20.0
 [5.19.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.1...v5.19.2

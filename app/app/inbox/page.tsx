@@ -40,8 +40,12 @@ export default async function InboxPage({
   }
   const { id } = await searchParams;
   // Lida AQUI, no servidor, pelo mesmo motivo do `sidebar_collapsed`
-  // (`app/app/layout.tsx`): sem isto o painel do contato nasce aberto e só
-  // recolhe depois da hidratação.
-  const painelRecolhido = (await cookies()).get("inbox_painel_recolhido")?.value === "1";
+  // (`app/app/layout.tsx`): sem isto o painel nasceria num estado e pularia
+  // para o outro na hidratação.
+  //
+  // RECOLHIDO POR PADRÃO (pedido do André, 18/11/2026): a conversa ganha a
+  // largura, e a ficha fica a um clique no trilho. Só quem abriu pelo botão
+  // (cookie "0") volta a ver o painel aberto.
+  const painelRecolhido = (await cookies()).get("inbox_painel_recolhido")?.value !== "0";
   return <InboxLayout initialSelectedId={id ?? null} painelRecolhidoInicial={painelRecolhido} />;
 }

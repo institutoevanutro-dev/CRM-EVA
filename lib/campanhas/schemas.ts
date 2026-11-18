@@ -7,21 +7,99 @@ import { z } from "zod";
 
 import { filtroDeAudienciaSchema } from "./audiencia";
 
+const INTEIRO = { error: "Use um número inteiro." };
+
 /**
  * O ritmo próprio. Todos opcionais e anuláveis: `null` devolve a decisão ao
  * canal, que é o default de quem nunca abriu esta seção.
  *
  * As faixas são as do CHECK da migration 0374 — validação de entrada do
  * operador, não default de comportamento (os números de pacing são fonte única
- * em `lib/agent-engine/pacing/defaults.ts`).
+ * em `lib/agent-engine/pacing/defaults.ts`). As frases são as que a TELA mostra
+ * embaixo do campo (`CamposDeRitmo`): uma regra, dois lugares.
  */
 export const ritmoSchema = z.object({
-  intervalo_segundos: z.number().int().min(1).max(86_400).nullable().optional(),
-  janela_inicio_hora: z.number().int().min(0).max(23).nullable().optional(),
-  janela_fim_hora: z.number().int().min(1).max(24).nullable().optional(),
-  teto_diario: z.number().int().min(1).max(10_000).nullable().optional(),
-  teto_horario: z.number().int().min(1).max(10_000).nullable().optional(),
+  intervalo_segundos: z
+    .number(INTEIRO)
+    .int(INTEIRO)
+    .min(1, { error: "Use pelo menos 1 segundo." })
+    .max(86_400, { error: "No máximo 86400 segundos (um dia)." })
+    .nullable()
+    .optional(),
+  janela_inicio_hora: z
+    .number(INTEIRO)
+    .int(INTEIRO)
+    .min(0, { error: "Use uma hora de 0 a 23." })
+    .max(23, { error: "Use uma hora de 0 a 23." })
+    .nullable()
+    .optional(),
+  janela_fim_hora: z
+    .number(INTEIRO)
+    .int(INTEIRO)
+    .min(1, { error: "Use uma hora de 1 a 24." })
+    .max(24, { error: "Use uma hora de 1 a 24." })
+    .nullable()
+    .optional(),
+  teto_diario: z
+    .number(INTEIRO)
+    .int(INTEIRO)
+    .min(1, { error: "Use pelo menos 1." })
+    .max(10_000, { error: "No máximo 10000." })
+    .nullable()
+    .optional(),
+  teto_horario: z
+    .number(INTEIRO)
+    .int(INTEIRO)
+    .min(1, { error: "Use pelo menos 1." })
+    .max(10_000, { error: "No máximo 10000." })
+    .nullable()
+    .optional(),
 });
+
+/**
+ * A janela é as duas horas ou nenhuma — é o CHECK `campaigns_janela_check`.
+ *
+ * Sem esta conferência, "Enviar a partir das 9" sem "Parar às" chegava ao
+ * banco e voltava como "Erro interno" (auditoria de 17/11/2026, item 18). E o
+ * motor de ritmo só aplica janela com as duas pontas: meia janela gravada nos
+ * padrões seria ignorada em silêncio.
+ */
+export function erroDaJanela(
+  inicio: number | null | undefined,
+  fim: number | null | undefined,
+): string | null {
+  const temInicio = inicio !== null && inicio !== undefined;
+  const temFim = fim !== null && fim !== undefined;
+  if (temInicio !== temFim) return "Preencha as duas horas, ou deixe as duas em branco.";
+  if (temInicio && temFim && fim <= inicio) return "A janela precisa terminar depois de começar.";
+  return null;
+}
+
+function conferirJanela(
+  r: { janela_inicio_hora?: number | null; janela_fim_hora?: number | null },
+  ctx: z.RefinementCtx,
+): void {
+  const erro = erroDaJanela(r.janela_inicio_hora, r.janela_fim_hora);
+  if (!erro) return;
+  // O erro fica no campo que falta (ou no fim, se a ordem está trocada): é ali
+  // que a pessoa olha.
+  const faltaInicio = r.janela_inicio_hora == null && r.janela_fim_hora != null;
+  ctx.addIssue({ code: "custom", message: erro, path: [faltaInicio ? "janela_inicio_hora" : "janela_fim_hora"] });
+}
+
+/** O ritmo inteiro, com a janela conferida — o que a tela valida antes de mandar. */
+export const ritmoCompletoSchema = ritmoSchema.superRefine(conferirJanela);
+
+const CAMPOS_DO_RITMO = new Set(Object.keys(ritmoSchema.shape));
+
+/**
+ * A frase da recusa: a do ritmo, que é escrita para gente ("Use pelo menos 1
+ * segundo."); o resto continua "Dados inválidos." com o detalhe por campo. Só
+ * "Dados inválidos." para um intervalo 0 mandava a pessoa adivinhar o campo.
+ */
+export function mensagemDaRecusa(erro: z.ZodError): string {
+  return erro.issues.find((i) => CAMPOS_DO_RITMO.has(String(i.path[0])))?.message ?? "Dados inválidos.";
+}
 
 const baseDaCampanha = {
   name: z.string().trim().min(1).max(160),
@@ -62,15 +140,17 @@ export const criarCampanhaSchema = z
     message: "Escolha o funil antes da etapa — etapa sem funil seria um card sem coluna.",
     path: ["stage_id"],
   })
-  .refine(
-    (c) =>
-      c.janela_inicio_hora == null ||
-      c.janela_fim_hora == null ||
-      c.janela_fim_hora > c.janela_inicio_hora,
-    { message: "A janela precisa terminar depois de começar.", path: ["janela_fim_hora"] },
-  );
+  .superRefine(conferirJanela);
 
-/** Edição de rascunho: tudo opcional, e a mesma checagem de base legal na rota. */
+/**
+ * Edição: tudo opcional. A base legal e a janela são conferidas NA ROTA, contra
+ * o que está gravado — o valor que vale é o mesclado.
+ *
+ * O filtro entra como objeto solto, sem `default` nem `refine`, de propósito:
+ * aqui ele é um PEDAÇO a mesclar (`mesclarFiltroDeAudiencia`), e o schema
+ * inteiro roda sobre o resultado. Validado inteiro aqui, uma chave ausente
+ * viraria `[]` e apagaria o critério gravado.
+ */
 export const editarCampanhaSchema = z
   .object({
     name: baseDaCampanha.name.optional(),
@@ -79,7 +159,7 @@ export const editarCampanhaSchema = z
     message_body: baseDaCampanha.message_body,
     base_legal: baseDaCampanha.base_legal.optional(),
     lia_ref: baseDaCampanha.lia_ref,
-    audience_filter: filtroDeAudienciaSchema.optional(),
+    audience_filter: z.record(z.string(), z.unknown()).optional(),
     channel_session_ids: baseDaCampanha.channel_session_ids,
     pipeline_id: baseDaCampanha.pipeline_id,
     stage_id: baseDaCampanha.stage_id,

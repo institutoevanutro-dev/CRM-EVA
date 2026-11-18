@@ -65,8 +65,15 @@ interface Slot {
   valueKey: string;
 }
 
-/** Rótulo do campo: diz ONDE o valor entra e O QUE ele é. */
+/**
+ * Rótulo do campo: diz ONDE o valor entra e O QUE ele é. Campo de texto do corpo
+ * é "Campo 1 do texto" — o mesmo nome que a prévia mostra no lugar dele (item 42
+ * da auditoria de 17/11: "corpo — {{1}}" era o nome técnico da plataforma).
+ */
 function rotuloDoSlot(slot: Slot, t: (s: string) => string): string {
+  if (slot.expects === "text" && slot.onde === "corpo") {
+    return t("Campo {n} do texto").replace("{n}", slot.key);
+  }
   const oQue =
     slot.expects === "image"
       ? t("link da imagem")
@@ -108,6 +115,43 @@ interface ModeloAprovado {
  */
 function textoDoModelo(modelo: ModeloAprovado): string {
   return lerConteudo(modelo.components ?? []).body?.trim() || modelo.name;
+}
+
+/** O começo do texto, para a opção do seletor: é por ele que a recepção reconhece o modelo. */
+function resumoDoModelo(modelo: ModeloAprovado): string {
+  const texto = textoDoModelo(modelo).replace(/\s+/g, " ");
+  return texto.length > 70 ? `${texto.slice(0, 69)}…` : texto;
+}
+
+/**
+ * O TEXTO QUE O PACIENTE VAI LER, com os campos no lugar (item 42). Campo
+ * preenchido entra com o valor; vazio aparece marcado como "campo N", no mesmo
+ * nome do rótulo do formulário.
+ */
+function PreviaDoModelo({ modelo, valores }: { modelo: ModeloAprovado; valores: Record<string, string> }) {
+  const t = useT();
+  const doCorpo = new Map(
+    (modelo.slots ?? []).filter((s) => s.onde === "corpo").map((s) => [s.key, s.valueKey]),
+  );
+  const partes = textoDoModelo(modelo).split(/\{\{\s*([^}]+?)\s*\}\}/);
+  return (
+    <p
+      data-testid="previa-do-modelo"
+      className="mt-2 whitespace-pre-wrap rounded-md bg-surface px-3 py-2 text-sm text-text"
+    >
+      {partes.map((parte, i) => {
+        if (i % 2 === 0) return parte;
+        const valor = (valores[doCorpo.get(parte) ?? ""] ?? "").trim();
+        return valor ? (
+          <strong key={i} className="font-semibold">{valor}</strong>
+        ) : (
+          <mark key={i} className="rounded-sm bg-warning-bg px-1 text-warning-fg">
+            {t("campo {n}").replace("{n}", parte)}
+          </mark>
+        );
+      })}
+    </p>
+  );
 }
 
 export function JanelaFechadaAviso({
@@ -233,8 +277,8 @@ export function JanelaFechadaAviso({
   }
 
   return (
-    <div className="border-t border-amber-300 bg-amber-50/60 px-4 py-3 dark:border-amber-800/60 dark:bg-amber-950/30">
-      <p className="mb-2 text-xs text-amber-900 dark:text-amber-200">{motivo}</p>
+    <div className="border-t border-warning/40 bg-warning-bg px-4 py-3">
+      <p className="mb-2 text-xs text-warning-fg">{motivo}</p>
 
       {fonte === null ? null : aprovados.length === 0 ? (
         // Sem modelo aprovado não há saída por aqui, e dizer isso é melhor que
@@ -247,7 +291,7 @@ export function JanelaFechadaAviso({
         // canal que não tem essa tela, e o operador procuraria uma porta que
         // não existe. O texto dos 7 dias (`motivo`, acima) já é a saída certa:
         // sair do CRM e responder pelo app quando a pessoa escrever de novo.
-        <p className="text-xs text-amber-900/80 dark:text-amber-200/80">
+        <p className="text-xs text-warning-fg">
           {t("Nenhum modelo aprovado ainda. Crie um em")} <strong>{t("Conexões → Templates")}</strong>{" "}
           {t("e envie quando a plataforma aprovar.")}
         </p>
@@ -268,8 +312,7 @@ export function JanelaFechadaAviso({
             <option value="">{t("Escolha um modelo aprovado…")}</option>
             {aprovados.map((tpl) => (
               <option key={`${tpl.name}|${tpl.language}`} value={`${tpl.name}|${tpl.language}`}>
-                {tpl.name} ({tpl.language})
-                {(tpl.slots?.length ?? 0) > 0 ? ` · ${tpl.slots!.length} ${t("parâmetro(s)")}` : ""}
+                {resumoDoModelo(tpl)}
               </option>
             ))}
           </select>
@@ -286,11 +329,13 @@ export function JanelaFechadaAviso({
         </div>
       )}
 
+      {atual && <PreviaDoModelo modelo={atual} valores={valores} />}
+
       {slots.length > 0 && (
         <div className="mt-2 flex flex-col gap-2">
           {slots.map((slot) => (
             <label key={slot.valueKey} className="flex flex-col gap-1">
-              <span className="text-[11px] text-amber-900/80 dark:text-amber-200/80">
+              <span className="text-[11px] text-warning-fg">
                 {rotuloDoSlot(slot, t)}
               </span>
               <input
@@ -307,7 +352,7 @@ export function JanelaFechadaAviso({
                 )}
               />
               {ehMidia(slot) && atual?.savedValues !== undefined && (
-                <span className="flex items-center gap-1.5 text-[11px] text-amber-900/80 dark:text-amber-200/80">
+                <span className="flex items-center gap-1.5 text-[11px] text-warning-fg">
                   <input
                     type="checkbox"
                     checked={salvar[slot.valueKey] ?? false}
@@ -328,7 +373,7 @@ export function JanelaFechadaAviso({
               parâmetro de novo, sempre — sem ele vem `132012 Format mismatch,
               expected IMAGE, received UNKNOWN`. */}
           {slots.some(ehMidia) && (
-            <p className="text-[11px] text-amber-900/70 dark:text-amber-200/70">
+            <p className="text-[11px] text-warning-fg">
               {t("A mídia do modelo entra por link público — a plataforma baixa o arquivo na hora do envio.")}
             </p>
           )}

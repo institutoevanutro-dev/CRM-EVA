@@ -41,7 +41,7 @@ describe("encaminhar: a busca não sobrevive ao fechar", () => {
     rerender(dialogo(true));
 
     expect(screen.getByRole("textbox", { name: "Buscar conversa" })).toHaveValue("");
-    expect(screen.getByRole("button", { name: "João Fictício" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^João Fictício/ })).toBeTruthy();
   });
 
   it("Cancelar pede ao pai para fechar", () => {

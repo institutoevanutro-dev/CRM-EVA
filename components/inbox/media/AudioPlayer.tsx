@@ -201,8 +201,11 @@ export function AudioPlayer({ messageId, isOutbound, src, mime }: Props) {
         onClick={toggle}
         className={cn(
           "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors lg:h-9 lg:w-9",
+          // Item 41 da auditoria de 17/11: no balão enviado o botão segue a COR
+          // DO TEXTO do balão (`currentColor`). O branco fixo de antes sumia no
+          // balão da equipe (verde-claro da marca) e no do automático (superfície).
           isOutbound
-            ? "bg-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/30"
+            ? "bg-current/10 text-current hover:bg-current/20"
             : "bg-primary/10 text-primary hover:bg-primary/20",
         )}
       >
@@ -240,9 +243,7 @@ export function AudioPlayer({ messageId, isOutbound, src, mime }: Props) {
         <span
           className={cn(
             "rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums transition-colors",
-            isOutbound
-              ? "bg-primary-foreground/20 text-primary-foreground"
-              : "bg-primary/10 text-primary",
+            isOutbound ? "bg-current/10 text-current" : "bg-primary/10 text-primary",
           )}
         >
           {RATES[rateIdx]}x

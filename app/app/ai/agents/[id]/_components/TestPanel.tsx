@@ -31,7 +31,16 @@ interface Props {
   draft: AgentVersionRow | null;
   published: AgentVersionRow | null;
   readOnly?: boolean;
+  /**
+   * Há texto na Configuração que ainda não foi salvo. O teste roda a versão
+   * SALVA: rodar agora mostraria a resposta do texto velho como se fosse do
+   * novo, e quem testa publicaria achando que conferiu.
+   */
+  alteracoesNaoSalvas?: boolean;
+  onIrParaConfiguracao?: () => void;
 }
+
+const ID_DO_AVISO_NAO_SALVO = "teste-alteracoes-nao-salvas";
 
 interface TestResponse {
   data: {
@@ -131,7 +140,14 @@ function Verificacoes({ g }: { g: NonNullable<TestResponse["data"]["guardrails"]
   );
 }
 
-export function TestPanel({ agent, draft, published, readOnly }: Props) {
+export function TestPanel({
+  agent,
+  draft,
+  published,
+  readOnly,
+  alteracoesNaoSalvas = false,
+  onIrParaConfiguracao,
+}: Props) {
   const t = useT();
   const target = draft ?? published;
   const qc = useQueryClient();
@@ -203,6 +219,27 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="flex flex-col gap-4">
+        {alteracoesNaoSalvas ? (
+          <div
+            id={ID_DO_AVISO_NAO_SALVO}
+            role="status"
+            data-testid={ID_DO_AVISO_NAO_SALVO}
+            className="space-y-2 rounded-md border border-warning/40 bg-warning-bg p-3 text-xs"
+          >
+            <p className="font-medium text-warning-fg">
+              {t("Há mudanças não salvas na Configuração.")}
+            </p>
+            <p className="text-muted-foreground">
+              {t("O teste usa a versão salva. Salve o rascunho para testar o que você escreveu.")}
+            </p>
+            {onIrParaConfiguracao ? (
+              <Button variant="outline" size="sm" onClick={onIrParaConfiguracao}>
+                {t("Ir para a Configuração")}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
         <div>
           <p className="rotulo-secao text-muted-foreground">
             {t("Versão alvo")}
@@ -216,7 +253,7 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
         </div>
 
         <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs">
-          <p className="font-medium text-amber-700 dark:text-amber-400">
+          <p className="font-medium text-warning-fg">
             {t("⚠ Modo teste consome créditos do provider.")}
           </p>
           <p className="mt-1 text-muted-foreground">
@@ -259,7 +296,12 @@ export function TestPanel({ agent, draft, published, readOnly }: Props) {
           </div>
         </div>
 
-        <Button onClick={handleRun} disabled={pending || readOnly} className="self-start">
+        <Button
+          onClick={handleRun}
+          disabled={pending || readOnly || alteracoesNaoSalvas}
+          aria-describedby={alteracoesNaoSalvas ? ID_DO_AVISO_NAO_SALVO : undefined}
+          className="self-start"
+        >
           {pending ? t("Executando…") : t("Executar teste")}
         </Button>
       </div>

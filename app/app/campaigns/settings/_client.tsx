@@ -39,6 +39,14 @@ import {
 import { useT } from "@/hooks/i18n/useT";
 import { ArrowBendUpLeft } from "@/lib/ui/icons";
 
+import {
+  CamposDeRitmo,
+  RITMO_EM_BRANCO,
+  errosDoRitmo,
+  ritmoNosCampos,
+  ritmoParaEnviar,
+} from "../_components/CamposDeRitmo";
+
 export function ConfiguracaoDeCampanhas() {
   const t = useT();
   return (
@@ -71,26 +79,23 @@ function Padroes() {
   const q = useConfiguracaoDeCampanhas();
   const salvar = useSalvarConfiguracao();
   const [atribuicao, setAtribuicao] = useState("");
-  const [intervalo, setIntervalo] = useState("");
-  const [tetoDia, setTetoDia] = useState("");
-  const [tetoHora, setTetoHora] = useState("");
-  const [inicio, setInicio] = useState("");
-  const [fim, setFim] = useState("");
+  const [ritmo, setRitmo] = useState(RITMO_EM_BRANCO);
   const [carregado, setCarregado] = useState(false);
 
   useEffect(() => {
     const c = q.data?.configuracao;
     if (!c || carregado) return;
     setAtribuicao(String(c.atribuicao_horas));
-    setIntervalo(txt(c.intervalo_segundos));
-    setTetoDia(txt(c.teto_diario));
-    setTetoHora(txt(c.teto_horario));
-    setInicio(txt(c.janela_inicio_hora));
-    setFim(txt(c.janela_fim_hora));
+    setRitmo(ritmoNosCampos(c));
     setCarregado(true);
   }, [q.data, carregado]);
 
+  // Falha ANTES de "carregando": sem isto, um erro deixava o cartão no cinza
+  // para sempre, sem "Tentar novamente" (auditoria de 17/11/2026, item 27).
+  if (q.isError) return <FalhaAoCarregar onTentar={() => void q.refetch()} />;
   if (q.isLoading || !carregado) return <Skeleton className="h-64 w-full" />;
+
+  const temErro = Object.keys(errosDoRitmo(ritmo)).length > 0;
 
   return (
     <Card className="space-y-4 p-4">
@@ -116,14 +121,7 @@ function Padroes() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Campo id="p-intervalo" rotulo={t("Intervalo mínimo entre mensagens (segundos)")} valor={intervalo} onChange={setIntervalo} />
-        <Campo id="p-dia" rotulo={t("Máximo por dia")} valor={tetoDia} onChange={setTetoDia} />
-        <Campo id="p-hora" rotulo={t("Máximo por hora")} valor={tetoHora} onChange={setTetoHora} />
-        <div />
-        <Campo id="p-inicio" rotulo={t("Enviar só a partir das (hora)")} valor={inicio} onChange={setInicio} />
-        <Campo id="p-fim" rotulo={t("Parar de enviar às (hora)")} valor={fim} onChange={setFim} />
-      </div>
+      <CamposDeRitmo prefixo="p" valores={ritmo} onChange={setRitmo} />
 
       <p className="text-sm text-muted-foreground">
         {t("A proteção do número — ritmo, janela e aquecimento que valem para tudo que sai por ele — fica em")}{" "}
@@ -136,15 +134,11 @@ function Padroes() {
       <div className="flex items-center gap-3">
         <Button
           size="sm"
-          disabled={salvar.isPending}
+          disabled={salvar.isPending || temErro}
           onClick={() =>
             salvar.mutate({
               atribuicao_horas: Number(atribuicao) || 72,
-              intervalo_segundos: num(intervalo),
-              teto_diario: num(tetoDia),
-              teto_horario: num(tetoHora),
-              janela_inicio_hora: num(inicio),
-              janela_fim_hora: num(fim),
+              ...ritmoParaEnviar(ritmo),
             })
           }
         >
@@ -171,13 +165,13 @@ function TextosSalvos() {
       <div>
         <h2 className="font-medium">{t("Textos salvos")}</h2>
         <p className="text-sm text-muted-foreground">
-          {t("Copy que você reusa entre campanhas. Mudar um texto aqui não muda mensagem que já foi preparada nem que já foi enviada.")}
+          {t("Textos que você reusa entre campanhas: aparecem em Usar texto salvo, na hora de escrever. Mudar um texto aqui não muda mensagem já preparada nem enviada.")}
         </p>
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="t-nome">{t("Nome")}</Label>
-        <Input id="t-nome" value={nome} onChange={(e) => setNome(e.target.value)} placeholder={t("Ex.: Primeiro contato — produtor")} />
+        <Input id="t-nome" value={nome} onChange={(e) => setNome(e.target.value)} placeholder={t("Ex.: Retorno de consulta")} />
         <Label htmlFor="t-corpo">{t("Texto")}</Label>
         <Textarea id="t-corpo" rows={4} value={corpo} onChange={(e) => setCorpo(e.target.value)} />
         <Button
@@ -193,19 +187,21 @@ function TextosSalvos() {
         </Button>
       </div>
 
+      {q.isError && <FalhaAoCarregar onTentar={() => void q.refetch()} />}
       <div className="divide-y divide-border">
         {(q.data ?? []).map((texto) => (
           <div key={texto.id} className="flex items-start justify-between gap-3 py-2">
             <div className="min-w-0">
               <p className="font-medium">{texto.name}</p>
-              <p className="truncate text-sm text-muted-foreground">{texto.body}</p>
+              {/* Inteiro: cortado numa linha, ninguém sabia qual texto era qual (item 20). */}
+              <p className="text-sm whitespace-pre-wrap break-words text-muted-foreground">{texto.body}</p>
             </div>
             <Button size="sm" variant="outline" disabled={apagar.isPending} onClick={() => apagar.mutate(texto.id)}>
               {t("Apagar")}
             </Button>
           </div>
         ))}
-        {(q.data ?? []).length === 0 && !q.isLoading && (
+        {(q.data ?? []).length === 0 && !q.isLoading && !q.isError && (
           <p className="py-2 text-sm text-muted-foreground">{t("Nenhum texto salvo ainda.")}</p>
         )}
       </div>
@@ -252,6 +248,7 @@ function ListaDeExclusao() {
         {excluir.isPending ? t("Salvando…") : t("Excluir das campanhas")}
       </Button>
 
+      {q.isError && <FalhaAoCarregar onTentar={() => void q.refetch()} />}
       <div className="divide-y divide-border">
         {(q.data ?? []).map((e) => (
           <div key={e.id} className="flex items-center justify-between gap-3 py-2 text-sm">
@@ -265,7 +262,7 @@ function ListaDeExclusao() {
             </Button>
           </div>
         ))}
-        {(q.data ?? []).length === 0 && !q.isLoading && (
+        {(q.data ?? []).length === 0 && !q.isLoading && !q.isError && (
           <p className="py-2 text-sm text-muted-foreground">{t("Nenhum número excluído.")}</p>
         )}
       </div>
@@ -273,32 +270,15 @@ function ListaDeExclusao() {
   );
 }
 
-function Campo({
-  id,
-  rotulo,
-  valor,
-  onChange,
-}: {
-  id: string;
-  rotulo: string;
-  valor: string;
-  onChange: (v: string) => void;
-}) {
+/** Erro de carga com saída: "vazio" e "não carregou" não podem ter a mesma cara. */
+function FalhaAoCarregar({ onTentar }: { onTentar: () => void }) {
+  const t = useT();
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{rotulo}</Label>
-      <Input id={id} type="number" min={0} value={valor} onChange={(e) => onChange(e.target.value)} />
-    </div>
+    <Card className="p-6 text-center">
+      <p className="text-sm text-error-fg">{t("Não foi possível carregar.")}</p>
+      <Button size="sm" variant="outline" className="mt-2" onClick={onTentar}>
+        {t("Tentar novamente")}
+      </Button>
+    </Card>
   );
-}
-
-function txt(valor: number | null): string {
-  return valor === null || valor === undefined ? "" : String(valor);
-}
-
-function num(valor: string): number | null {
-  const limpo = valor.trim();
-  if (limpo === "") return null;
-  const n = Number(limpo);
-  return Number.isFinite(n) ? n : null;
 }

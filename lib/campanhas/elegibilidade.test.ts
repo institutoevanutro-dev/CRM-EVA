@@ -111,6 +111,14 @@ describe("classificação da lista", () => {
     expect(linhas[0]!.motivo).toBe("excluido_manualmente");
   });
 
+  it("cópia de campanha: quem já recebeu a original fica de fora, com o motivo", () => {
+    const linhas = classificarAudiencia(
+      [candidato({ contactId: "a" }), candidato({ contactId: "b", telefone: "+5527990000002" })],
+      ctx({ jaReceberamAOriginal: new Set(["a"]) }),
+    );
+    expect(linhas.map((l) => l.motivo)).toEqual(["ja_recebeu_a_original", null]);
+  });
+
   it("variável sem valor exclui em vez de mandar texto com buraco", () => {
     const linhas = classificarAudiencia(
       [candidato({ contactId: "a", nome: null })],

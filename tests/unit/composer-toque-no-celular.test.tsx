@@ -112,10 +112,11 @@ describe("campo e alvos pensados para o toque (porte do #3191)", () => {
     expect(c).toContain("min-w-0");
   });
 
-  it("Enviar, Anexar, Sugerir resposta e a porta da faixa herdam os 44px do size=icon", () => {
+  // A "porta da faixa" (⋯) saiu no item 44: Responder/Nota interna ficam à vista.
+  it("Enviar, Anexar e Sugerir resposta herdam os 44px do size=icon", () => {
     renderComposer();
     fireEvent.change(campo(), { target: { value: "oi" } });
-    for (const nome of ["Enviar", "Anexar", "Sugerir resposta", "Opções de resposta"]) {
+    for (const nome of ["Enviar", "Anexar", "Sugerir resposta"]) {
       const botao = screen.getByRole("button", { name: nome });
       expect(classes(botao), nome).toContain("h-11");
       expect(classes(botao), nome).not.toContain("h-9");
@@ -131,7 +132,7 @@ describe("campo e alvos pensados para o toque (porte do #3191)", () => {
   it("Responder e Nota interna têm 44px de altura até o lg", () => {
     renderComposer();
     for (const nome of ["Responder", "Nota interna"]) {
-      const botao = screen.getByRole("button", { name: nome, hidden: true });
+      const botao = screen.getByRole("button", { name: nome });
       expect(classes(botao), nome).toContain("min-h-11");
       expect(classes(botao), nome).toContain("lg:min-h-0");
     }

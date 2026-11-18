@@ -188,14 +188,14 @@ describe("a sétima cópia não nasce", () => {
       motivo: "nome do CANAL conectado",
     },
     {
-      arquivo: "components/inbox/ConversationListItem.tsx",
-      trecho: "canal?.phone_number ?? canal?.display_name ?? null",
-      motivo: "número da EMPRESA por onde a conversa chegou, não o do cliente",
-    },
-    {
       arquivo: "lib/ai/classifier-models.ts",
       trecho: "display_name: m.display_name ?? m.model_id,",
       motivo: "nome de MODELO de IA",
+    },
+    {
+      arquivo: "lib/channels/health.ts",
+      trecho: 'apelido: s.display_name ?? s.phone_number ?? "sem nome",',
+      motivo: "apelido do CANAL na faixa de conexão caída (`conexoesCaidasDe`); `channel_sessions` não tem `name`",
     },
     {
       arquivo: "lib/channels/estado.ts",

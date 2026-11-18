@@ -28,6 +28,7 @@ import {
   transbordoDaPagina,
   type Creds,
 } from "./qa-l12-comum";
+import { abrirPainelDoContato } from "./helpers/acoes-da-conversa";
 
 const SUFIXO = `${Date.now()}`.slice(-7);
 
@@ -190,6 +191,8 @@ test.describe("Lote 12 — painel do contato no Inbox", () => {
     const respostaResumo = page.waitForResponse((r) => r.url().includes("/crm-summary"));
     await abreConversa(page, conversaId);
     await expect(page.getByText(`Cliente L12 ${SUFIXO}`).first()).toBeVisible({ timeout: 60_000 });
+    // O painel nasce recolhido (18/11/2026): abre pelo trilho, como quem usa.
+    await abrirPainelDoContato(page);
 
     const rr = await respostaResumo;
     registra(`#944 · GET /crm-summary = ${rr.status()}`);
@@ -248,6 +251,8 @@ test.describe("Lote 12 — painel do contato no Inbox", () => {
     const respostaTags = page.waitForResponse((r) => r.url().includes("/api/v1/contact-tags"));
     await abreConversa(page, conversaId);
     await expect(page.getByText(`Cliente L12 ${SUFIXO}`).first()).toBeVisible({ timeout: 60_000 });
+    // O painel nasce recolhido (18/11/2026): abre pelo trilho, como quem usa.
+    await abrirPainelDoContato(page);
 
     await page.getByRole("button", { name: "Etiquetas do contato", exact: true }).click();
     const rt = await respostaTags;

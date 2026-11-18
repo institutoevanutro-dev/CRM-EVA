@@ -3,13 +3,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
 /**
- * A FAIXA DE CIMA DO CAMPO (Responder / Nota interna, e o bloco da assistência
- * quando há sugestão; sem sugestão, "Sugerir resposta" é um ícone na linha de
- * ações, porte do original #3234) começa recolhida — pedido do dono, ela comia
- * a conversa o tempo todo — e
- * aparece pelo mouse, pelo foco ou pelo botão "Opções de resposta". O que este
- * arquivo prende é o lado que NÃO pode quebrar: o interruptor Responder/Nota
- * continua alcançável por teclado e toque, e o modo Nota nunca fica escondido.
+ * RESPONDER / NOTA INTERNA SEMPRE À VISTA (item 44 da auditoria de 17/11).
+ *
+ * A faixa nascia recolhida — aberta pelo "⋯ Opções de resposta" ou pelo mouse —
+ * e aí flutuava sobre a última mensagem. "Nota interna" ficava escondida
+ * justamente de quem precisa saber, antes de escrever, se o texto vai ao
+ * paciente ou fica com o time. Agora a faixa está sempre no fluxo, sem porta.
  */
 
 vi.mock("@/hooks/inbox/useSendMessage", () => ({
@@ -34,46 +33,27 @@ function renderComposer() {
       <Composer conversationId="conv-1" />
     </QueryClientProvider>,
   );
-  const faixa = screen.getByRole("group", { name: "Assistência do agente e nota interna" });
-  const alternador = screen.getByRole("button", { name: "Opções de resposta" });
-  return { faixa, alternador };
+  return screen.getByRole("group", { name: "Assistência do agente e nota interna" });
 }
 
-const escondida = (faixa: HTMLElement) =>
-  faixa.dataset.visivel === "false" && faixa.className.split(/\s+/).includes("invisible");
+const recolhida = (faixa: HTMLElement) => /\b(invisible|absolute)\b/.test(faixa.className);
 
-describe("composer — faixa de assistência recolhida", () => {
-  it("nasce recolhida, com o botão explícito ao lado do campo", () => {
-    const { faixa, alternador } = renderComposer();
-    expect(escondida(faixa)).toBe(true);
-    expect(alternador.getAttribute("aria-expanded")).toBe("false");
-    expect(alternador.getAttribute("aria-controls")).toBe(faixa.id);
+describe("composer — Responder / Nota interna sempre à vista", () => {
+  it("⭐ nasce à vista e no fluxo, sem o '⋯' para abrir", () => {
+    const faixa = renderComposer();
+    expect(recolhida(faixa)).toBe(false);
+    expect(screen.getByRole("button", { name: "Responder" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Nota interna" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Opções de resposta" })).toBeNull();
   });
 
-  it("o botão (toque/teclado) abre, e o interruptor Responder/Nota fica à mão", () => {
-    const { faixa, alternador } = renderComposer();
-    fireEvent.click(alternador);
-    expect(escondida(faixa)).toBe(false);
-    expect(screen.getByRole("button", { name: "Responder" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Nota interna" })).toBeTruthy();
-  });
-
-  it("em Nota interna a faixa fica PRESA aberta e no fluxo — o modo nunca some", () => {
-    const { faixa, alternador } = renderComposer();
-    fireEvent.click(alternador);
+  it("trocar para Nota interna e de volta, sem a faixa sumir", () => {
+    const faixa = renderComposer();
     fireEvent.click(screen.getByRole("button", { name: "Nota interna" }));
-    expect(escondida(faixa)).toBe(false);
-    expect(faixa.className).not.toContain("absolute");
-    expect((alternador as HTMLButtonElement).disabled, "fechar não é opção em nota").toBe(true);
-    // Escape não esconde o modo.
+    expect(screen.getByRole("textbox")).toHaveAttribute("placeholder", expect.stringMatching(/nota interna/i));
     fireEvent.keyDown(screen.getByRole("button", { name: "Nota interna" }), { key: "Escape" });
-    expect(escondida(faixa)).toBe(false);
-  });
-
-  it("digitar no campo NÃO abre a faixa por cima da última mensagem", () => {
-    const { faixa } = renderComposer();
-    const campo = screen.getByRole("textbox");
-    fireEvent.focus(campo);
-    expect(escondida(faixa)).toBe(true);
+    expect(recolhida(faixa)).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Responder" }));
+    expect(screen.getByRole("textbox")).toHaveAttribute("placeholder", "Escreva uma mensagem…");
   });
 });

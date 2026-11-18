@@ -20,7 +20,7 @@ import {
 import { useT } from "@/hooks/i18n/useT";
 
 import { RunTrace } from "./RunTrace";
-import type { AgentRunRow } from "@/hooks/ai/useAgentRuns";
+import { RUN_STATUS_LABEL_PT, type AgentRunRow } from "@/hooks/ai/useAgentRuns";
 
 interface Props {
   run: AgentRunRow | null;
@@ -58,7 +58,7 @@ export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
             <span>{t("Execução")}</span>
             {run ? (
               <Badge variant={STATUS_VARIANT[run.status] ?? "outline"} className="text-xs">
-                {run.status}
+                {RUN_STATUS_LABEL_PT[run.status] ? t(RUN_STATUS_LABEL_PT[run.status]!) : run.status}
               </Badge>
             ) : null}
             {run?.is_dry_run ? (

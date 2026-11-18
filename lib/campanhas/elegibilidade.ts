@@ -80,6 +80,8 @@ export interface ContextoDaClassificacao {
   excluidosAMao: ReadonlySet<string>;
   /** Contatos já comprometidos com outra campanha não concluída. */
   jaEmCampanha: ReadonlySet<string>;
+  /** Contatos que já receberam a campanha de onde esta foi duplicada. */
+  jaReceberamAOriginal?: ReadonlySet<string>;
   /**
    * Hashes da lista de exclusão da operação (migration 0375). Decisão de quem
    * opera, diferente do opt-out: aqui não se silencia o atendimento.
@@ -125,6 +127,11 @@ export function classificarAudiencia(
 
     if (ctx.excluidosAMao.has(candidato.contactId)) {
       excluir("excluido_manualmente");
+      continue;
+    }
+    // Decisão da campanha, como a exclusão à mão: vem antes dos vetos da pessoa.
+    if (ctx.jaReceberamAOriginal?.has(candidato.contactId)) {
+      excluir("ja_recebeu_a_original");
       continue;
     }
     const pessoal = motivoParaExcluir(candidato);

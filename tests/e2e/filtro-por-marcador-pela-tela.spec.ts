@@ -37,6 +37,7 @@ import {
   registra,
   type Creds,
 } from "./qa-l12-comum";
+import { abrirPainelDoContato } from "./helpers/acoes-da-conversa";
 
 const SUFIXO = `${Date.now()}`.slice(-7);
 
@@ -148,6 +149,8 @@ test.describe("filtro por marcador, pela tela", () => {
 
     await login(page, c.users.manager!.email, c.password);
     await abreConversa(page, a.conversa);
+    // O painel nasce recolhido (18/11/2026): abre pelo trilho, como quem usa.
+    await abrirPainelDoContato(page);
     await page.getByRole("tab", { name: /^Todas/ }).click();
 
     // 1. Caixa da CONVERSA, pelo editor da conversa.
@@ -232,6 +235,7 @@ test.describe("filtro por marcador, pela tela", () => {
     // Marca pelo Inbox: a PESSOA em "Etiquetas do contato", e a CONVERSA à parte.
     await login(page, c.users.manager!.email, c.password);
     await abreConversa(page, alvo.conversa);
+    await abrirPainelDoContato(page);
     await page.getByRole("button", { name: "Etiquetas do contato", exact: true }).click();
     await marcar(page, "Adicionar etiqueta ao contato", "/contacts/", tagDoContato);
     await marcar(page, "Adicionar etiqueta à conversa", `/conversations/${alvo.conversa}`, soNaConversa);

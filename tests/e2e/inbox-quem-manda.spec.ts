@@ -26,7 +26,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
-import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
+import { abrirAcoesDaConversa, abrirPainelDoContato } from "./helpers/acoes-da-conversa";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), ".superpowers/evidence/inbox-quem-manda");
@@ -229,7 +229,10 @@ test.describe("Inbox — quem manda nesta conversa", () => {
     // (1) Estado de partida: quem manda é o automático — e a tela diz.
     // -----------------------------------------------------------------
     await page.goto(`/app/inbox/${conversaId}`);
-    const comando = page.getByTestId("comando-da-conversa");
+    // Desde 18/11 quem manda, o porquê e as ações moram no ⋯ do cabeçalho de
+    // app de mensagem. As asserções de AUSÊNCIA abaixo valem com o menu ABERTO.
+    await abrirAcoesDaConversa(page);
+    const comando = page.getByTestId("menu-da-conversa").getByTestId("comando-da-conversa");
     await expect(comando).toBeVisible({ timeout: 30_000 });
     await expect(comando).toContainText(/autom/i);
     // O CONTROLE: sem silêncio no banco, nada de selo de pausa na tela. Sem esta
@@ -285,8 +288,9 @@ test.describe("Inbox — quem manda nesta conversa", () => {
       if (error) throw new Error(`conferir comando: ${error.message}`);
       return data;
     }
-    // "Assumir" é o botão principal, à vista sem passar o mouse (I3).
-    await page.getByRole("button", { name: /^Assumir$/i }).click();
+    // "Assumir" é a primeira ação do ⋯ (o menu já está aberto).
+    await page.getByTestId("menu-da-conversa").getByRole("button", { name: /^Assumir$/i }).click();
+    await abrirAcoesDaConversa(page);
 
     // -----------------------------------------------------------------
     // (3) A tela passa a dizer QUEM manda, e o selo explica o porquê.
@@ -304,6 +308,7 @@ test.describe("Inbox — quem manda nesta conversa", () => {
     await expect(comando).not.toContainText(/^Atendente$/);
     await expect(page.getByTestId("badge-atendimento-humano")).toContainText(/assumiu/i);
     await captura(page, "2-pessoa-no-comando");
+    await page.keyboard.press("Escape");
 
     // -----------------------------------------------------------------
     // (4) A PROVA QUE IMPORTA: o automático parou de verdade.
@@ -321,6 +326,8 @@ test.describe("Inbox — quem manda nesta conversa", () => {
     // Sem `if`: com o negócio semeado a linha TEM de aparecer. Uma asserção
     // condicional aqui passaria calada justamente no caso em que a feature não
     // funciona — que é o modo de falha que esta entrega existe para acabar.
+    // O painel nasce recolhido (18/11/2026): abre pelo trilho, como quem usa.
+    await abrirPainelDoContato(page);
     await expect(page.getByText("Atividade", { exact: true }).first()).toBeVisible({
       timeout: 30_000,
     });
@@ -340,9 +347,11 @@ test.describe("Inbox — quem manda nesta conversa", () => {
     await voltar.click();
 
     await expect.poll(async () => silencioNoBanco(), { timeout: 30_000 }).toBe("(null)");
+    await abrirAcoesDaConversa(page);
     await expect(comando).toContainText(/autom/i, { timeout: 30_000 });
     await expect(page.getByTestId("badge-atendimento-humano")).toHaveCount(0);
     await captura(page, "3-devolvido-ao-automatico");
+    await page.keyboard.press("Escape");
     // Devolver ao automático autoriza o PRÓXIMO turno; não revive o antigo.
     expect(await comandoDosTurnos()).toEqual(turnosRevogados);
     const { error: erroLimpeza } = await admin
@@ -391,6 +400,7 @@ test.describe("Inbox — quem manda nesta conversa", () => {
 
     // Abrindo, a tela diz que ninguém está no comando — nem pessoa, nem automático.
     await naFila.click();
+    await abrirAcoesDaConversa(page);
     await expect(page.getByTestId("comando-da-conversa")).toContainText(/sem respons/i, {
       timeout: 30_000,
     });

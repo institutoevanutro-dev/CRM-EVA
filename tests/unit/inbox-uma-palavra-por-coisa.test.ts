@@ -34,8 +34,11 @@ describe("I11 — uma palavra por coisa no Inbox", () => {
     expect(culpados).toEqual([]);
   });
 
-  it("'Automático' no selo da lista e na bolha, nunca 'IA'", () => {
-    expect(readFileSync(`${DIR}/ConversationListItem.tsx`, "utf8")).toContain('automatico: { rotulo: "Automático"');
+  it("'Automático' na lista e na bolha, nunca 'IA'", () => {
+    // O selo escrito saiu da linha em 18/11 (linha de app de mensagem); o ícone
+    // de robô da prévia continua, com o nome "Automático".
+    expect(readFileSync(`${DIR}/ConversationListItem.tsx`, "utf8")).toContain('aria-label={t("Automático")}');
+    expect(readFileSync(`${DIR}/ConversationListItem.tsx`, "utf8")).not.toMatch(/"IA"/);
     expect(readFileSync(`${DIR}/MessageBubble.tsx`, "utf8")).not.toMatch(/:\s*"IA"/);
   });
 

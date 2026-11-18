@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import { cn } from "@/lib/utils";
 import { filtrarDestinos } from "@/lib/inbox/filtrar-destinos";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,10 +54,17 @@ export function EncaminharDialog({
   // Fechar zera a busca por QUALQUER caminho (Cancelar, o X, o encaminhamento
   // que deu certo e o pai que fecha): reabrir noutra mensagem sem a lupa antiga.
   // Ajuste durante o render, o padrão do React para estado que segue uma prop.
+  // ESCOLHER E ENVIAR SÃO DOIS GESTOS (item 33 da auditoria de 17/11): um toque
+  // no nome encaminhava na hora, e duas "Maria" eram iguais. Agora o toque
+  // marca, a linha mostra o telefone, e quem envia é o botão que diz para quem.
+  const [escolhido, setEscolhido] = useState<string | null>(null);
   const [abertoAntes, setAbertoAntes] = useState(open);
   if (abertoAntes !== open) {
     setAbertoAntes(open);
-    if (!open) setBusca("");
+    if (!open) {
+      setBusca("");
+      setEscolhido(null);
+    }
   }
 
   const destinos = useMemo(() => {
@@ -67,10 +76,17 @@ export function EncaminharDialog({
         // depois telefone, depois "Sem nome". É a MESMA régua da lista; uma
         // cadeia montada à mão aqui viraria a sétima cópia.
         rotulo: rotuloDoContato(c.contacts, t),
+        telefone: c.contacts?.phone_number ? phoneForDisplay(c.contacts.phone_number) : null,
       }));
     // A busca ignora caixa E acento: `joao` acha "João".
     return filtrarDestinos(todos, busca);
   }, [conversas, conversationIdAtual, busca, t]);
+
+  // O escolhido que a busca escondeu não some: ele continua sendo o destino.
+  const conversaEscolhida = escolhido ? conversas.find((c) => c.id === escolhido) : undefined;
+  const alvo = conversaEscolhida
+    ? { id: conversaEscolhida.id, rotulo: rotuloDoContato(conversaEscolhida.contacts, t) }
+    : null;
 
   return (
     <Dialog
@@ -102,10 +118,17 @@ export function EncaminharDialog({
                 type="button"
                 variant="ghost"
                 disabled={enviando}
-                onClick={() => onEscolher(destino.id)}
-                className="w-full justify-start truncate font-normal"
+                aria-pressed={escolhido === destino.id}
+                onClick={() => setEscolhido(destino.id)}
+                className={cn(
+                  "h-auto min-h-11 w-full flex-col items-start gap-0 py-1.5 font-normal",
+                  escolhido === destino.id && "bg-accent-soft hover:bg-accent-soft",
+                )}
               >
-                {destino.rotulo}
+                <span className="w-full truncate text-left">{destino.rotulo}</span>
+                {destino.telefone && destino.telefone !== destino.rotulo && (
+                  <span className="text-xs text-muted-foreground tabular-nums">{destino.telefone}</span>
+                )}
               </Button>
             ))
           )}
@@ -114,6 +137,20 @@ export function EncaminharDialog({
         <DialogFooter>
           <Button type="button" variant="ghost" disabled={enviando} onClick={() => onOpenChange(false)}>
             {t("Cancelar")}
+          </Button>
+          <Button
+            type="button"
+            disabled={enviando || !alvo}
+            onClick={() => alvo && onEscolher(alvo.id)}
+            className="max-w-full"
+          >
+            <span className="truncate">
+              {enviando
+                ? t("Encaminhando…")
+                : alvo
+                  ? t("Encaminhar para {nome}").replace("{nome}", () => alvo.rotulo)
+                  : t("Encaminhar")}
+            </span>
           </Button>
         </DialogFooter>
       </DialogContent>

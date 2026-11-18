@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 /**
  * O estado da seleção múltipla na lista de conversas (porte do upstream #2909).
  *
- * `selecionarTodos` SOMA as visíveis às já marcadas: quem marcou três linhas à
+ * `alternarTodos` SOMA as visíveis às já marcadas: quem marcou três linhas à
  * mão e depois clicou em "selecionar todas" não perde as três.
  */
 export function useSelecaoEmLote() {
@@ -19,14 +19,25 @@ export function useSelecaoEmLote() {
     });
   }, []);
 
-  const selecionarTodos = useCallback((ids: string[]) => {
-    setSelecionados((prev) => new Set([...prev, ...ids]));
+  /**
+   * O "selecionar todas" é um interruptor (item 32 da auditoria de 17/11): com
+   * todas as visíveis já marcadas, o segundo clique as desmarca — e só elas.
+   */
+  const alternarTodos = useCallback((ids: string[]) => {
+    setSelecionados((prev) => {
+      if (ids.length > 0 && ids.every((id) => prev.has(id))) {
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      }
+      return new Set([...prev, ...ids]);
+    });
   }, []);
 
   const limpar = useCallback(() => setSelecionados(new Set()), []);
 
   return useMemo(
-    () => ({ selecionados, quantidade: selecionados.size, alternar, selecionarTodos, limpar }),
-    [selecionados, alternar, selecionarTodos, limpar],
+    () => ({ selecionados, quantidade: selecionados.size, alternar, alternarTodos, limpar }),
+    [selecionados, alternar, alternarTodos, limpar],
   );
 }

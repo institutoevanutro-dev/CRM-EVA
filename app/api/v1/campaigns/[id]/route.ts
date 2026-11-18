@@ -10,13 +10,18 @@
 import { randomUUID } from "node:crypto";
 
 import type { NextRequest } from "next/server";
+import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { carregarCampanha } from "@/lib/campanhas/acoes";
+import { mesclarFiltroDeAudiencia } from "@/lib/campanhas/audiencia";
+import { contatosQueReceberam } from "@/lib/campanhas/consulta-de-audiencia";
 import { ehEditavel, ehTerminal } from "@/lib/campanhas/maquina-de-estados";
 import { gravarPool, lerPoolExtra } from "@/lib/campanhas/pool-de-numeros";
-import { editarCampanhaSchema } from "@/lib/campanhas/schemas";
+import { janelaDeEnvio } from "@/lib/campanhas/ritmo";
+import { editarCampanhaSchema, erroDaJanela, mensagemDaRecusa } from "@/lib/campanhas/schemas";
+import { knobsDoCanal } from "@/lib/automation/janela-do-canal";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -52,8 +57,35 @@ export async function GET(
 
   // O pool vem junto: a tela precisa dele para mostrar por quantos números a
   // campanha fala, e uma segunda chamada para isso seria round-trip à toa.
-  const extras = await lerPoolExtra(createAdminClient(), authz.org.orgId, id);
-  return ok({ ...(data as object), channel_session_ids: extras }, { requestId });
+  const admin = createAdminClient();
+  const extras = await lerPoolExtra(admin, authz.org.orgId, id);
+  // A janela que vale AGORA (número × campanha), para a tela dizer "aguardando
+  // o horário" em vez de "Enviando 0%" a noite toda.
+  const linha = data as unknown as {
+    channel_session_id: string;
+    janela_inicio_hora: number | null;
+    janela_fim_hora: number | null;
+  };
+  const knobs = await knobsDoCanal(admin, authz.org.orgId, linha.channel_session_id);
+  // Cópia de campanha: quantas pessoas já receberam a original e ficam de fora
+  // (a tela diz o número antes de preparar). Só lê quando há origem.
+  const origens = origensDaCopia((data as { audience_filter?: unknown }).audience_filter);
+  const jaReceberam = origens.length > 0 ? (await contatosQueReceberam(admin, authz.org.orgId, origens)).size : null;
+  return ok(
+    {
+      ...(data as object),
+      channel_session_ids: extras,
+      janela_de_envio: janelaDeEnvio(knobs, linha, new Date()),
+      ja_receberam_a_original: jaReceberam,
+    },
+    { requestId },
+  );
+}
+
+/** As campanhas de origem gravadas no filtro, sem exigir o filtro inteiro válido. */
+function origensDaCopia(filtro: unknown): string[] {
+  const lista = (filtro as { sem_quem_recebeu_campanhas?: unknown } | null)?.sem_quem_recebeu_campanhas;
+  return Array.isArray(lista) ? lista.filter((v): v is string => z.string().uuid().safeParse(v).success) : [];
 }
 
 export async function PATCH(
@@ -71,7 +103,7 @@ export async function PATCH(
 
   const parsed = editarCampanhaSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return fail("validation_failed", t("Dados inválidos."), 422, {
+    return fail("validation_failed", t(mensagemDaRecusa(parsed.error)), 422, {
       requestId,
       details: parsed.error.flatten().fieldErrors as Record<string, unknown>,
     });
@@ -139,12 +171,35 @@ export async function PATCH(
     );
   }
 
+  // A janela que vale é a MESCLADA: mandar só o início contra um fim gravado é
+  // legítimo, e mandar só o início sem fim nenhum bateria no CHECK do banco e
+  // voltaria como "Erro interno".
+  const erroNaJanela = erroDaJanela(
+    entrada.janela_inicio_hora === undefined ? campanha.janela_inicio_hora : entrada.janela_inicio_hora,
+    entrada.janela_fim_hora === undefined ? campanha.janela_fim_hora : entrada.janela_fim_hora,
+  );
+  if (erroNaJanela) return fail("validation_failed", t(erroNaJanela), 422, { requestId });
+
   const mudanca: Record<string, unknown> = { updated_by: authz.user.id };
+  // O filtro MESCLA com o gravado (ver `mesclarFiltroDeAudiencia`): quem não
+  // mandou `funis` não apagou o funil do público.
+  if (entrada.audience_filter !== undefined) {
+    const filtro = mesclarFiltroDeAudiencia(campanha.audience_filter, entrada.audience_filter);
+    if (!filtro.success) {
+      const semCriterio = filtro.error.issues.some((i) => i.code === "custom");
+      return fail(
+        "validation_failed",
+        t(semCriterio ? "Escolha pelo menos um critério de público." : "Dados inválidos."),
+        422,
+        { requestId, details: filtro.error.flatten().fieldErrors as Record<string, unknown> },
+      );
+    }
+    mudanca.audience_filter = filtro.data;
+  }
   for (const campo of [
     "name",
     "description",
     "message_body",
-    "audience_filter",
     "intervalo_segundos",
     "janela_inicio_hora",
     "janela_fim_hora",

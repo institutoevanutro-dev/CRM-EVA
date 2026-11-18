@@ -67,7 +67,10 @@ export function BarraDeProgressoNavegacao() {
       if (!href) return;
 
       // Ignora links externos, novas abas, modificadores de tecla ou hash local
+      // `download` baixa um arquivo e a página não muda: a barra acendia e
+      // travava em 85% (auditoria 17/11, item 63).
       if (
+        target.hasAttribute("download") ||
         target.target === "_blank" ||
         e.ctrlKey ||
         e.metaKey ||

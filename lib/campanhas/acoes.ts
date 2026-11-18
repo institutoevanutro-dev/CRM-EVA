@@ -20,9 +20,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ApiErrorCode } from "@/lib/api/errors";
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { beginServiceAtOrigin } from "@/lib/atendimento/origem";
+import { logger } from "@/lib/logger";
 
 import { baseLegalValida, motivoParaExcluir, recusouMarketing } from "./elegibilidade";
 import { ehStatusDaCampanha, podeTransitar } from "./maquina-de-estados";
+import { gravarPool, lerPoolExtra } from "./pool-de-numeros";
 import { prepararCampanha } from "./preparacao";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { renderizar } from "./renderizador";
@@ -47,6 +49,9 @@ export interface CampanhaCarregada {
   teto_diario: number | null;
   teto_horario: number | null;
   description: string | null;
+  pipeline_id: string | null;
+  stage_id: string | null;
+  agent_id: string | null;
 }
 
 export type Recusa = { ok: false; codigo: ApiErrorCode; mensagem: string; status: number };
@@ -55,7 +60,8 @@ export type Desfecho<T = unknown> = ({ ok: true } & T) | Recusa;
 const COLUNAS =
   "id, organization_id, name, status, channel_session_id, message_body, base_legal, lia_ref, " +
   "audience_filter, audience_version, content_version, scheduled_at, description, " +
-  "intervalo_segundos, janela_inicio_hora, janela_fim_hora, teto_diario, teto_horario";
+  "intervalo_segundos, janela_inicio_hora, janela_fim_hora, teto_diario, teto_horario, " +
+  "pipeline_id, stage_id, agent_id";
 
 export async function carregarCampanha(
   admin: SupabaseClient,
@@ -196,6 +202,9 @@ export async function prepararAcao(
         snapshot_eligible: resumo.elegiveis,
         snapshot_excluded: resumo.excluidos,
         audience_version: c.audience_version + 1,
+        // A preparação deu certo: o aviso da tentativa anterior ("o recorte não
+        // achou ninguém") deixa de ser verdade e não pode ficar na tela.
+        failure_code: null,
       })
       .eq("id", c.id)
       .eq("status", "preparing");
@@ -331,6 +340,14 @@ export async function cancelarAcao(
   return { ok: true, cancelados: (cancelados ?? []).length };
 }
 
+/**
+ * A cópia leva TUDO o que a campanha decidiu: texto, público, ritmo, para onde
+ * vai quem responde, quem atende e por quais números ela fala.
+ *
+ * Auditoria de 17/11/2026 (item 17): a cópia nascia sem funil, etapa, agente e
+ * sem os números do rodízio — o operador conferia a original, duplicava, e a
+ * cópia falava por um número só e jogava as respostas no funil padrão.
+ */
 export async function duplicarAcao(
   admin: SupabaseClient,
   c: CampanhaCarregada,
@@ -346,12 +363,15 @@ export async function duplicarAcao(
       message_body: c.message_body,
       base_legal: c.base_legal,
       lia_ref: c.lia_ref,
-      audience_filter: c.audience_filter,
+      audience_filter: filtroDaCopia(c),
       intervalo_segundos: c.intervalo_segundos,
       janela_inicio_hora: c.janela_inicio_hora,
       janela_fim_hora: c.janela_fim_hora,
       teto_diario: c.teto_diario,
       teto_horario: c.teto_horario,
+      pipeline_id: c.pipeline_id,
+      stage_id: c.stage_id,
+      agent_id: c.agent_id,
       created_by: autorId,
       // Nada de destinatário, resultado, agenda ou carimbo de execução: a cópia
       // é uma INTENÇÃO nova, e herdar números faria a tela mostrar entrega de
@@ -367,7 +387,102 @@ export async function duplicarAcao(
       status: 422,
     };
   }
-  return { ok: true, id: (data as { id: string }).id };
+  const id = (data as { id: string }).id;
+
+  // O rodízio vem junto. Falhar aqui NÃO desfaz a cópia (como na criação): ela
+  // existe e fala pelo número principal, e a tela dela mostra o pool real.
+  try {
+    const extras = await lerPoolExtra(admin, c.organization_id, c.id);
+    if (extras.length > 0) {
+      await gravarPool(admin, {
+        organizationId: c.organization_id,
+        campanhaId: id,
+        principal: c.channel_session_id,
+        extras,
+      });
+    }
+  } catch (err) {
+    logger.warn("[campanhas.duplicar] a cópia nasceu sem os números extras", {
+      campanhaId: c.id,
+      copiaId: id,
+      causa: err instanceof Error ? err.message : String(err),
+    });
+  }
+  return { ok: true, id };
+}
+
+/**
+ * O público da cópia: o mesmo da original, MAIS "sem quem recebeu a original".
+ *
+ * Decisão do André (18/11/2026, pergunta 25 da auditoria): a cópia de uma
+ * campanha enviada não fala de novo com quem já recebeu. Vale sempre, inclusive
+ * para cópia de rascunho — se a original nunca enviar, ninguém fica de fora; se
+ * enviar, quem recebeu fica fora da cópia quando ela for preparada. Teto de 20
+ * origens (cópia de cópia de cópia…): ficam as mais recentes.
+ */
+function filtroDaCopia(c: CampanhaCarregada): Record<string, unknown> {
+  const filtro =
+    c.audience_filter && typeof c.audience_filter === "object" && !Array.isArray(c.audience_filter)
+      ? (c.audience_filter as Record<string, unknown>)
+      : {};
+  const anteriores = Array.isArray(filtro.sem_quem_recebeu_campanhas)
+    ? filtro.sem_quem_recebeu_campanhas.filter((v): v is string => typeof v === "string")
+    : [];
+  return { ...filtro, sem_quem_recebeu_campanhas: [...new Set([...anteriores, c.id])].slice(-20) };
+}
+
+/**
+ * Voltar para rascunho — o único caminho para corrigir texto ou público de uma
+ * campanha já preparada (auditoria de 17/11/2026, item 15: a tela de edição
+ * mandava "volte para rascunho" e o botão não existia).
+ *
+ * Descarta a lista montada: cada destinatário guarda o texto congelado, e
+ * editar com a lista em pé faria a tela mostrar um texto e a fila enviar outro.
+ * Só vale enquanto NADA saiu (o guarda é daqui, que vê os envios).
+ *
+ * A ordem importa: primeiro o compare-and-set do estado, depois a limpeza. Ao
+ * contrário, um "Iniciar" simultâneo poderia ver a campanha rodando sem lista.
+ */
+export async function voltarParaRascunhoAcao(
+  admin: SupabaseClient,
+  c: CampanhaCarregada,
+): Promise<Desfecho<{ descartados: number }>> {
+  const recusa = recusaDeTransicao(c.status, "draft");
+  if (recusa) return recusa;
+  if (await jaEnviou(admin, c.id)) {
+    return {
+      ok: false,
+      codigo: "campanha_nao_editavel",
+      mensagem: "Esta campanha já enviou mensagens; refazer a lista mudaria o que já foi dito.",
+      status: 409,
+    };
+  }
+
+  const { data } = await admin
+    .from("campaigns")
+    .update({
+      status: "draft",
+      prepared_at: null,
+      snapshot_total: 0,
+      snapshot_eligible: 0,
+      snapshot_excluded: 0,
+      failure_code: null,
+    })
+    .eq("organization_id", c.organization_id)
+    .eq("id", c.id)
+    .eq("status", c.status)
+    .select("id");
+  if ((data ?? []).length === 0) return conflitoDeCorrida();
+
+  // Rascunho com destinatário gravado seguiria "comprometendo" essas pessoas
+  // (`contatosJaEmCampanha` conta rascunho como campanha viva).
+  const { data: descartados } = await admin
+    .from("campaign_recipients")
+    .delete()
+    .eq("organization_id", c.organization_id)
+    .eq("campaign_id", c.id)
+    .select("id");
+  return { ok: true, descartados: (descartados ?? []).length };
 }
 
 /**

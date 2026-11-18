@@ -275,11 +275,13 @@ function janelaEm(largura: number): void {
   Object.defineProperty(window, "innerWidth", { value: largura, configurable: true, writable: true });
 }
 
-function montar(props: { painelRecolhidoInicial?: boolean } = {}) {
+// Aberto, salvo quando o caso pede o trilho: as divisórias medem a ficha
+// ocupando espaço, e o padrão da tela passou a ser recolhido (18/11/2026).
+function montar({ painelRecolhidoInicial = false }: { painelRecolhidoInicial?: boolean } = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <InboxLayout {...props} />
+      <InboxLayout painelRecolhidoInicial={painelRecolhidoInicial} />
     </QueryClientProvider>,
   );
 }

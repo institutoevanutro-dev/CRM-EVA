@@ -705,6 +705,7 @@ jobs:
         cor-da-etapa.spec.ts
         funil-visao-calendario.spec.ts
         inbox-aparencia-e-acoes-sob-demanda.spec.ts
+        inbox-campo-da-conversa.spec.ts
         inbox-conversa-em-pdf.spec.ts
         inbox-divisorias-e-troca-de-funil.spec.ts
         inbox-em-lote-e-iniciar-conversa.spec.ts
@@ -814,6 +815,7 @@ jobs:
       SPECS_PARTE_6: >-
         bonus-consultas-banco-real.spec.ts
         bonus-da-equipe.spec.ts
+        inbox-painel-do-contato-fechado.spec.ts
         marca-conta.spec.ts
         pipelines-gestao.spec.ts
         prova-painel-provedores.spec.ts

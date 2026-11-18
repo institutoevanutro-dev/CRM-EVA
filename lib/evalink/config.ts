@@ -3,6 +3,13 @@ import { logger } from "@/lib/logger";
 /** Cookie do state/nonce/verificador entre /evalink/entrar e /evalink/volta (route.ts só exporta GET/POST/config). */
 export const COOKIE_LOGIN = "evalink_login";
 
+/**
+ * A tela para onde voltar depois do login pela Conta (auditoria 17/11, item 53).
+ * Cookie irmão do `COOKIE_LOGIN`, com o mesmo caminho e prazo: o do login tem
+ * formato fixo (`state.nonce.verificador`) e é conferido parte a parte.
+ */
+export const COOKIE_VOLTA = "evalink_volta";
+
 export type ConfigEvalink = {
   contaUrl: string;
   clientId: string;

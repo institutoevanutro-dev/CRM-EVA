@@ -6,6 +6,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
+import { preferirPainelAberto } from "./helpers/acoes-da-conversa";
 
 /**
  * Duas coisas que só um navegador de verdade mede, portadas do DeskcommCRM:
@@ -136,6 +137,9 @@ test.describe("Inbox: divisórias arrastáveis", () => {
     page,
   }) => {
     await loginComoAdmin(page, lerCreds());
+    // A alça da ficha só existe com o painel aberto, e ele nasce recolhido
+    // (18/11/2026). Esta spec mede as divisórias, não o painel.
+    await preferirPainelAberto(page);
     await page.goto("/app/inbox");
     const alcaLista = page.locator('[data-divisoria="lista"]');
     const alcaFicha = page.locator('[data-divisoria="ficha"]');

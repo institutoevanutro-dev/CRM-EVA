@@ -111,7 +111,13 @@ test.describe("Inbox: lote e Iniciar conversa", () => {
     await expect(page.getByTestId("barra-de-acoes-em-lote")).toContainText("2 conversas selecionadas");
     await page.screenshot({ path: path.join(EVIDENCE, "inbox-em-lote-selecao.png") });
 
+    // Fechar em lote pergunta antes, com a contagem (item 32 da auditoria de
+    // 17/11), e o foco nasce no "Cancelar": nada fecha sem o clique na ação.
     await page.getByTestId("lote-fechar").click();
+    const pergunta = page.getByRole("alertdialog");
+    await expect(pergunta).toContainText("Fechar 2 conversas?");
+    await expect(pergunta.getByRole("button", { name: "Cancelar" })).toBeFocused();
+    await pergunta.getByRole("button", { name: "Fechar conversas" }).click();
     await expect(page.getByText("2 conversas fechadas.")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("barra-de-acoes-em-lote")).toHaveCount(0);
 

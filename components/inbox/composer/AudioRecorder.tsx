@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 
 import { Button } from "@/components/ui/button";
-import { Microphone, PaperPlaneTilt, Trash } from "@/lib/ui/icons";
+import { CircleNotch, Microphone, PaperPlaneTilt, Trash } from "@/lib/ui/icons";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
 import { useUploadMedia } from "@/hooks/inbox/useUploadMedia";
 
@@ -30,10 +30,25 @@ interface Props {
   disabled?: boolean;
 }
 
-/** Gravação de voz estilo WhatsApp: mic → timer + cancelar/enviar → PTT. */
+/** Uma gravação pronta, à espera de subir. */
+interface Gravacao {
+  blob: Blob;
+  filename: string;
+}
+
+/**
+ * Gravação de voz estilo WhatsApp: mic → timer + cancelar/enviar → PTT.
+ *
+ * O ENVIO SE MOSTRA, E A FALHA NÃO PERDE A GRAVAÇÃO (item 35 da auditoria de
+ * 17/11). Nada mostrava que o áudio estava subindo, e se a subida falhava a
+ * gravação sumia. Agora: "Enviando áudio…" enquanto sobe; se falhar, a
+ * gravação fica guardada aqui, com "Tentar de novo" e a lixeira para descartar.
+ */
 export function AudioRecorder({ conversationId, disabled }: Props) {
   const t = useT();
   const [recording, setRecording] = useState(false);
+  const [pendente, setPendente] = useState<Gravacao | null>(null);
+  const [falhou, setFalhou] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -83,31 +98,7 @@ export function AudioRecorder({ conversationId, disabled }: Props) {
         setElapsed(0);
         if (discardRef.current || chunksRef.current.length === 0) return;
         const type = rec.mimeType || "audio/webm";
-        const blob = new Blob(chunksRef.current, { type });
-        void upload
-          .mutateAsync({
-            conversationId,
-            file: blob,
-            filename: `ptt.${extensaoDaGravacao(type)}`,
-            // "É nota de voz": só com esta marca o servidor converte o AAC do
-            // iPhone em opus, o único formato de nota de voz dos canais oficiais.
-            notaDeVoz: true,
-          })
-          .then((uploaded) =>
-            send.mutate(
-              {
-                conversation_id: conversationId,
-                type: "audio",
-                media_storage_path: uploaded.storage_path,
-                media_mime: uploaded.media_mime,
-                media_size_bytes: uploaded.media_size_bytes,
-              },
-              {},
-            ),
-          )
-          .catch(() => {
-            // toast já disparado pelo onError de useUploadMedia
-          });
+        enviar({ blob: new Blob(chunksRef.current, { type }), filename: `ptt.${extensaoDaGravacao(type)}` });
       };
       recorderRef.current = rec;
       rec.start();
@@ -122,11 +113,69 @@ export function AudioRecorder({ conversationId, disabled }: Props) {
     }
   }
 
+  function enviar(gravacao: Gravacao) {
+    setPendente(gravacao);
+    setFalhou(false);
+    void upload
+      .mutateAsync({
+        conversationId,
+        file: gravacao.blob,
+        filename: gravacao.filename,
+        // "É nota de voz": só com esta marca o servidor converte o AAC do
+        // iPhone em opus, o único formato de nota de voz dos canais oficiais.
+        notaDeVoz: true,
+      })
+      .then((uploaded) =>
+        send.mutate(
+          {
+            conversation_id: conversationId,
+            type: "audio",
+            media_storage_path: uploaded.storage_path,
+            media_mime: uploaded.media_mime,
+            media_size_bytes: uploaded.media_size_bytes,
+          },
+          { onSuccess: () => setPendente(null), onError: () => setFalhou(true) },
+        ),
+      )
+      // O aviso do motivo já saiu pelo onError de useUploadMedia.
+      .catch(() => setFalhou(true));
+  }
+
   function stopIfRecording() {
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
   }
 
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  if (pendente && !recording) {
+    return falhou ? (
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="text-xs text-error-fg">{t("Áudio não enviado.")}</span>
+        <Button type="button" size="sm" variant="outline" onClick={() => enviar(pendente)}>
+          {t("Tentar de novo")}
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="shrink-0"
+          aria-label={t("Descartar áudio")}
+          title={t("Descartar áudio")}
+          onClick={() => {
+            setPendente(null);
+            setFalhou(false);
+          }}
+        >
+          <Trash size={16} weight="regular" aria-hidden />
+        </Button>
+      </div>
+    ) : (
+      <span role="status" className="flex shrink-0 items-center gap-1.5 px-1 text-xs text-muted-foreground">
+        <CircleNotch size={14} weight="bold" className="motion-safe:animate-spin" aria-hidden />
+        {t("Enviando áudio…")}
+      </span>
+    );
+  }
 
   if (!recording) {
     return (

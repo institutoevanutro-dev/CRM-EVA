@@ -40,6 +40,10 @@ export function ComentariosPainel() {
   // A regra do RQE é só do administrador: a rota e a função do banco recusam
   // os outros papéis, e a tela não oferece o que vai ser recusado.
   const ehAdmin = roleAtLeast(activeOrg?.role, "admin");
+  // Palavras da IA, Frases do Direct e regras só se GRAVAM com papel de gestor
+  // (item 37 da auditoria de 17/11): para atendente os botões abriam editores
+  // que voltavam "sem permissão".
+  const ehGestor = roleAtLeast(activeOrg?.role, "manager");
   // CRÍTICO 2: qual mídia abriu o formulário — `undefined` quando é "Nova
   // regra" solto (sem partir de um comentário da lista); string vazia é um
   // valor válido de mediaId, então null/undefined marcam "não veio de lá".
@@ -65,19 +69,23 @@ export function ComentariosPainel() {
               {mostrarRegraDoRqe ? t("Fechar") : t("Médico sem RQE")}
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={() => setMostrarPalavras((v) => !v)}>
-            {mostrarPalavras ? t("Fechar") : t("Palavras da IA")}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setMostrarFrases((v) => !v)}>
-            {mostrarFrases ? t("Fechar") : t("Frases do Direct")}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => (mostrarFormulario ? fecharFormulario() : abrirFormulario())}
-          >
-            {mostrarFormulario ? t("Fechar") : t("Nova regra")}
-          </Button>
+          {ehGestor && (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => setMostrarPalavras((v) => !v)}>
+                {mostrarPalavras ? t("Fechar") : t("Palavras da IA")}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setMostrarFrases((v) => !v)}>
+                {mostrarFrases ? t("Fechar") : t("Frases do Direct")}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => (mostrarFormulario ? fecharFormulario() : abrirFormulario())}
+              >
+                {mostrarFormulario ? t("Fechar") : t("Nova regra")}
+              </Button>
+            </>
+          )}
         </div>
       </div>
       {ehAdmin && mostrarRegraDoRqe && (
@@ -85,17 +93,17 @@ export function ComentariosPainel() {
           <RegraDoRqe />
         </div>
       )}
-      {mostrarFrases && (
+      {ehGestor && mostrarFrases && (
         <div className="border-b border-border">
           <FrasesDeAbertura />
         </div>
       )}
-      {mostrarPalavras && (
+      {ehGestor && mostrarPalavras && (
         <div className="border-b border-border">
           <PalavrasDaIa />
         </div>
       )}
-      {mostrarFormulario && (
+      {ehGestor && mostrarFormulario && (
         <div className="border-b border-border">
           <FormularioDeRegra
             key={mediaIdDoFormulario ?? "novo"}
@@ -115,7 +123,7 @@ export function ComentariosPainel() {
           publicando={publicar.isPending ? (publicar.variables?.id ?? null) : null}
           onDescartar={(id) => descartar.mutate(id)}
           descartando={descartar.isPending ? (descartar.variables ?? null) : null}
-          onNovaRegraParaMidia={abrirFormulario}
+          onNovaRegraParaMidia={ehGestor ? abrirFormulario : undefined}
           publicacoes={publicacoes}
         />
       )}
