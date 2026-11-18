@@ -3,18 +3,18 @@ import { notFound, redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { listSelectableChannels } from "@/lib/channels/selectable";
+import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
+import { Info } from "@/lib/ui/icons";
 import type { AgentRow } from "@/hooks/ai/useAgent";
-import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
+import type { AgentVersionRow, AgentVersionSummary } from "@/hooks/ai/useAgentVersions";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
 
 import { LegacyRecovery } from "./_components/LegacyRecovery";
 import { AgentOperation } from "./_components/AgentOperation";
 import type { MaterialDoAcervo } from "./_components/BasesDoAgente";
 import { AgentTabs } from "./_components/AgentTabs";
-import type { FunilDaResposta } from "@/hooks/pipelines/usePipelines";
-import { coberturaDoFunil, type EtapaDoMapa } from "@/lib/leads/agent-mapping";
-import type { CoberturaPorFunil } from "./_components/FunisDoAgente";
+import { lerFunisEMateriais } from "../_escopo-da-tela";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
 
@@ -25,6 +25,15 @@ const AGENT_COLUMNS =
 
 const VERSION_COLUMNS =
   "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,provisioning_origin,reply_min_interval_ms";
+
+/**
+ * A lista de TODAS as versões vai sem o texto das instruções: o Histórico só
+ * desenha número, situação e data, e o prompt de cada versão (até 20 mil
+ * caracteres) pesava na abertura da tela pelo 4G. O texto completo vem só das
+ * versões que o editor abre — logo abaixo — e o Histórico busca o resto quando
+ * alguém compara ou abre uma versão.
+ */
+const VERSION_COLUMNS_DA_LISTA = VERSION_COLUMNS.replace("system_prompt, ", "");
 
 const CREDENTIAL_COLUMNS =
   "id, organization_id, provider, label, api_key_last4, validated_at, validation_error, models_available, is_active, created_by, created_at, updated_at";
@@ -68,11 +77,11 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
   const readOnly = ROLE_RANK[activeOrg.role] < ROLE_RANK.admin;
 
   // mcp_agent: busca versions + lookups.
-  const [versionsRes, credentialsRes, channelSessions, routerMemberRes, funisRes, acervoRes] =
+  const [versionsRes, credentialsRes, channelSessions, routerMemberRes, escopo] =
     await Promise.all([
       supabase
         .from("ai_agent_versions")
-        .select(VERSION_COLUMNS)
+        .select(VERSION_COLUMNS_DA_LISTA)
         .eq("organization_id", activeOrg.orgId)
         .eq("agent_id", id)
         .order("version_number", { ascending: false }),
@@ -88,48 +97,11 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
         .eq("agent_id", id)
         .limit(1)
         .maybeSingle(),
-      // Os funis vêm com a página, não por fetch no cliente: a marcação usa
-      // "nenhum funil" para dizer algo importante, e uma lista que chega vazia no
-      // primeiro render diria isso por engano.
-      supabase
-        .from("crm_pipelines")
-        .select("id, name, slug, description, position, is_default")
-        .eq("organization_id", activeOrg.orgId)
-        .eq("is_archived", false)
-        .order("position"),
-      // O acervo vem com a página pelo mesmo motivo dos funis: a seção usa
-      // "nenhum material" para dizer algo importante, e uma lista que chega vazia
-      // no primeiro render diria isso por engano.
-      supabase
-        .from("ai_knowledge_sources")
-        .select("id, name, source_type, chunks_count, last_index_status, is_active")
-        .eq("organization_id", activeOrg.orgId)
-        .eq("is_active", true)
-        .order("created_at", { ascending: true }),
+      lerFunisEMateriais(supabase, activeOrg.orgId),
     ]);
 
-  const versions = (versionsRes.data ?? []) as unknown as AgentVersionRow[];
-  const funis = (funisRes.data ?? []) as unknown as FunilDaResposta[];
-  const materiaisVivos = (acervoRes.data ?? []) as unknown as MaterialDoAcervo[];
-
-  // Quanto de cada funil o assistente sabe percorrer (spec 17 passo 4). Vem
-  // junto com a página porque a lacuna precisa aparecer no MESMO lugar em que o
-  // dono marca o funil — descobrir isso entrando funil por funil na tela de
-  // tradução é o que fez 3 dos 4 funis da produção ficarem mudos sem ninguém ver.
-  const { data: etapasRes } = await supabase
-    .from("crm_stages")
-    .select("id, name, is_won, is_lost, agent_stage_hint, pipeline_id")
-    .eq("organization_id", activeOrg.orgId)
-    .eq("is_archived", false);
-  const etapasPorFunil = new Map<string, EtapaDoMapa[]>();
-  for (const e of (etapasRes ?? []) as Array<EtapaDoMapa & { pipeline_id: string }>) {
-    etapasPorFunil.set(e.pipeline_id, [...(etapasPorFunil.get(e.pipeline_id) ?? []), e]);
-  }
-  const cobertura: CoberturaPorFunil = {};
-  for (const f of funis) {
-    const c = coberturaDoFunil(etapasPorFunil.get(f.id) ?? []);
-    cobertura[f.id] = { traduzidos: c.traduzidos, total: c.total, mudo: c.mudo };
-  }
+  const versions = (versionsRes.data ?? []) as unknown as AgentVersionSummary[];
+  const { funis, cobertura, materiais: materiaisVivos } = escopo;
   const credentials = (credentialsRes.data ?? []) as unknown as CredentialRow[];
   const routerMemberRow = routerMemberRes.data as {
     router_id: string;
@@ -147,10 +119,30 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
   // sempre — inclusive quando era mais antigo que a publicada — e um agente
   // pausado (sem rascunho e sem publicada) abria no texto padrão, que é como o
   // prompt "sumia".
-  const { draft, published, base, draftObsoleto } = escolherVersoesDaTela(
-    versions,
-    agent.published_version_id ?? null,
-  );
+  const escolha = escolherVersoesDaTela(versions, agent.published_version_id ?? null);
+  // O texto completo só das versões que a tela abre (no máximo quatro linhas).
+  const idsAbertos = [
+    ...new Set(
+      [escolha.draft, escolha.published, escolha.base, escolha.draftObsoleto].flatMap((v) =>
+        v ? [v.id] : [],
+      ),
+    ),
+  ];
+  const abertasRes = idsAbertos.length
+    ? await supabase
+        .from("ai_agent_versions")
+        .select(VERSION_COLUMNS)
+        .eq("organization_id", activeOrg.orgId)
+        .eq("agent_id", id)
+        .in("id", idsAbertos)
+    : null;
+  const abertas = (abertasRes?.data ?? []) as unknown as AgentVersionRow[];
+  const completa = (v: AgentVersionSummary | null) =>
+    v ? (abertas.find((a) => a.id === v.id) ?? null) : null;
+  const draft = completa(escolha.draft);
+  const published = completa(escolha.published);
+  const base = completa(escolha.base);
+  const draftObsoleto = completa(escolha.draftObsoleto);
 
   // Material ARQUIVADO que ficou MARCADO (issue #774). O acervo vem filtrado por
   // `is_active = true`, então o id marcado e arquivado não voltava para a tela: o
@@ -177,14 +169,25 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
 
   return (
     <div className="flex h-full flex-col gap-6">
+      {/* Gestor abre a tela, mas só administrador edita e testa: sem esta faixa,
+          ele via tudo cinza e não sabia por quê. */}
+      {readOnly ? (
+        <p
+          role="status"
+          data-testid="agente-somente-leitura"
+          className="flex items-start gap-2 rounded-md bg-accent-soft p-3 text-sm text-text-muted"
+        >
+          <Info className="mt-0.5 shrink-0" aria-hidden />
+          {traduzir(
+            "Só administradores editam e testam agentes. Aqui você pode ver a configuração, as execuções e o histórico.",
+            user.idioma,
+          )}
+        </p>
+      ) : null}
       <AgentOperation agent={agent} readOnly={readOnly} />
       {(agent.kind ?? "rag_bot") !== "mcp_agent" && !agent.published_version_id && (
         <LegacyRecovery
-          agent={agent}
-          channels={channelSessions}
-          credentials={credentials}
-          hasVersion={versions.length > 0 && !(versions.length===1 && (versions[0] as AgentVersionRow & {provisioning_origin?:string}).provisioning_origin==="legacy_reconciliation")}
-          readOnly={readOnly}
+          hasVersion={versions.length > 0 && !(versions.length===1 && (versions[0] as AgentVersionSummary & {provisioning_origin?:string}).provisioning_origin==="legacy_reconciliation")}
         />
       )}
       <AgentTabs
