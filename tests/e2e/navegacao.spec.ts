@@ -16,6 +16,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
 import { afirmarAdminDeTenantPuro } from "./utils/precondicao";
 import { abrirMenuLateral } from "./utils/menu-lateral";
+import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
 
 let creds = lerCreds();
 const EVIDENCE = path.join(process.cwd(), ".superpowers", "evidence");
@@ -217,6 +218,7 @@ test.describe("navegação por área (spec 2026-10-07-cores-e-menu)", () => {
       await expect(sidebar(page), "o sidebar desktop fica fora da árvore acessível no mobile").toHaveCount(0);
       await expectSemOverflowHorizontal(page, "shell mobile após login");
 
+      await mostrarBarraDeCima(page);
       await page.getByRole("button", { name: "Abrir navegação" }).click();
       await expect(sidebar(page)).toBeVisible();
       await expectSemOverflowHorizontal(page, "shell mobile com drawer aberto");

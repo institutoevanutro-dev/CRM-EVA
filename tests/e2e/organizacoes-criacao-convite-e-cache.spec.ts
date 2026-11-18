@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page } from "@playwright/test";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
+import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
 
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, { auth: { persistSession: false } });
@@ -52,6 +53,7 @@ test("org única oferece criação, responsável aceita e A→B→A não mistura
     orgs.push(forgedTarget);
     await conversation(orgA, `Cliente A ${suffix}`);
     await login(page, ownerEmail);
+    await mostrarBarraDeCima(page);
     await page.getByTestId("tenant-switcher").click();
     await page.getByRole("menuitem", { name: "Gerenciar organizações" }).click();
     await page.getByRole("link", { name: /Novo tenant/i }).click();
@@ -143,6 +145,7 @@ test("org única oferece criação, responsável aceita e A→B→A não mistura
       if (route.request().method() === "POST" && route.request().headers()["next-action"]) return route.abort("failed");
       return route.continue();
     });
+    await mostrarBarraDeCima(page);
     await page.getByTestId("tenant-switcher").click();
     await page.getByTestId(`tenant-switcher-item-${orgB}`).click({ noWaitAfter: true });
     await expect(page.getByText("Não foi possível trocar de organização. Seu acesso pode ter mudado. Tente novamente.")).toBeVisible();
@@ -160,6 +163,7 @@ test("org única oferece criação, responsável aceita e A→B→A não mistura
         if (route.request().method() === "POST" && route.request().headers()["next-action"]) await held;
         await route.continue();
       });
+      await mostrarBarraDeCima(page);
       await page.getByTestId("tenant-switcher").click();
       const navigation = page.waitForNavigation({ waitUntil: "load" });
       await page.getByTestId(`tenant-switcher-item-${target}`).click({ noWaitAfter: true });

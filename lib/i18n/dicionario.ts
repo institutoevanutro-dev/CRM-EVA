@@ -5577,6 +5577,8 @@ export const DICIONARIO: Traducoes = {
   "A organização foi trocada em outra aba. Abrindo a mesma aqui…": {
     es: "La organización se cambió en otra pestaña. Abriendo la misma aquí…",
   },
+  "Mostrar a barra de cima": { es: "Mostrar la barra superior" },
+  "Esconder a barra de cima": { es: "Ocultar la barra superior" },
   // ─── fim do bloco da auditoria 17/11 ───
   "A verificação em duas etapas da sua conta, os códigos de recuperação e as sessões abertas.": {
     es: "La verificación en dos pasos de tu cuenta, los códigos de recuperación y las sesiones abiertas.",

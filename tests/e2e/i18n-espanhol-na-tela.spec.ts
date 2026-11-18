@@ -47,6 +47,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { DICIONARIO } from "../../lib/i18n/dicionario";
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
+import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
 
 const creds = lerCreds();
 const EVIDENCIA = path.join(process.cwd(), "evidence", "i18n-es");
@@ -161,6 +162,7 @@ async function porIdiomaEm(page: Page, codigo: "pt-BR" | "es"): Promise<void> {
   await page.evaluate(() => {
     (window as unknown as { __antesDaTroca?: boolean }).__antesDaTroca = true;
   });
+  await mostrarBarraDeCima(page);
   await botao.click();
   await page.getByTestId(`idioma-${codigo}`).click();
   await page.waitForFunction(
