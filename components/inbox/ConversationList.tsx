@@ -1,11 +1,12 @@
 "use client";
 import { ehAFila } from "@/lib/inbox/comando-da-conversa";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import type { InfiniteData, UseInfiniteQueryResult } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Check } from "@/lib/ui/icons";
+import { CaretUp, Check } from "@/lib/ui/icons";
+import { ordemSegurada } from "@/lib/inbox/ordem-segurada";
 import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
@@ -80,10 +81,22 @@ export function ConversationList({
   // Sem filtro de cliente: TODO filtro é parâmetro do schema e roda no banco.
   // `clientFilter` era o mecanismo que permitia um filtro existir fora do contrato
   // — e foi por ele que "Não lidos" virou ilha, fora da cerca que vigia os demais.
-  const items = useMemo(
+  const doServidor = useMemo(
     () => (q.data?.pages.flatMap((p) => p.data) ?? []) as ConversationWithContact[],
     [q.data],
   );
+  // Item 40: com o mouse sobre a lista, a ordem fica a de quando ele entrou —
+  // mensagem nova não faz a conversa sob o cursor pular (`ordemSegurada`).
+  const [congelada, setCongelada] = useState<string[] | null>(null);
+  const { exibidos: items, novidades } = useMemo(
+    () => ordemSegurada(doServidor, congelada),
+    [doServidor, congelada],
+  );
+  const rolagemRef = useRef<HTMLDivElement | null>(null);
+  const soltarOrdem = () => {
+    setCongelada(null);
+    if (rolagemRef.current) rolagemRef.current.scrollTop = 0;
+  };
 
   // Notify parent of currently-visible IDs (for j/k nav). Must use effect
   // (not render-time call) — invoking onVisibleChange during render triggers
@@ -179,7 +192,30 @@ export function ConversationList({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto">
+      <div
+        ref={rolagemRef}
+        className="flex-1 overflow-y-auto"
+        onPointerEnter={(e) => {
+          if (e.pointerType === "mouse") setCongelada(doServidor.map((c) => c.id));
+        }}
+        onPointerLeave={(e) => {
+          if (e.pointerType === "mouse") setCongelada(null);
+        }}
+      >
+        {novidades > 0 && (
+          <div className="sticky top-0 z-10 flex justify-center py-1.5">
+            <button
+              type="button"
+              onClick={soltarOrdem}
+              className="inline-flex min-h-8 items-center gap-1 rounded-full bg-accent px-3 text-xs font-medium text-accent-foreground shadow-sm hover:bg-accent-hover focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <CaretUp size={12} weight="bold" aria-hidden />
+              {novidades === 1
+                ? t("1 conversa com novidade")
+                : t("{n} conversas com novidade").replace("{n}", String(novidades))}
+            </button>
+          </div>
+        )}
         {/* Vazio por FILTRO: fica DENTRO do return, nunca como `return` precoce —
             e por isso o bloco do `hasNextPage` abaixo continua sendo alcancado. */}
         {items.length === 0 && filtrosAtivos.length > 0 && (
