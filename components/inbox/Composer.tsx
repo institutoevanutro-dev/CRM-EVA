@@ -32,7 +32,7 @@ import {
   resolverMencao,
   type OpcaoDeMencao,
 } from "@/components/inbox/composer/MentionMenu";
-import { resolveSlash, TemplateMenu } from "@/components/inbox/composer/TemplateMenu";
+import { filtrarRespostas, resolveSlash, TemplateMenu } from "@/components/inbox/composer/TemplateMenu";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useCreateNote } from "@/hooks/inbox/useCreateNote";
 import { useMessageTemplates, type MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
@@ -250,6 +250,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const templates = useMessageTemplates();
   const slash = resolveSlash(text);
   const menuOpen = mode === "reply" && slash.open && !menuDismissed;
+  // A opção destacada do menu do "/" (item 43). Volta ao topo a cada letra.
+  const [menuIndice, setMenuIndice] = useState(0);
+  const opcoesDoMenu = menuOpen ? filtrarRespostas(templates.data ?? [], slash.query) : [];
 
   // SÓ em nota: menção no campo de resposta sairia para o cliente.
   const gatilho = mode === "note" && !mencaoDispensada ? resolverMencao(text, caret) : null;
@@ -562,6 +565,21 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       setMenuDismissed(true);
       return;
     }
+    // Setas e Enter escolhem a resposta rápida, como no menu de menção (item 43).
+    if (menuOpen && opcoesDoMenu.length > 0) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const passo = e.key === "ArrowDown" ? 1 : -1;
+        setMenuIndice((i) => (i + passo + opcoesDoMenu.length) % opcoesDoMenu.length);
+        return;
+      }
+      if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+        e.preventDefault();
+        const escolhida = opcoesDoMenu[menuIndice] ?? opcoesDoMenu[0];
+        if (escolhida) applyTemplate(escolhida);
+        return;
+      }
+    }
     // Com a lista de menções aberta, Enter escolhe — não envia.
     if (mencaoAberta) {
       if (e.key === "Escape") {
@@ -643,6 +661,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           templates={templates.data ?? []}
           onPick={applyTemplate}
           onClose={() => setMenuDismissed(true)}
+          indice={menuIndice}
         />
         <MentionMenu
           open={mencaoAberta}
@@ -834,6 +853,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               const pos = e.target.selectionStart ?? e.target.value.length;
               setCaret(pos);
               setMencaoIndice(0);
+              setMenuIndice(0);
               // A escolha que sumiu do texto sai da lista agora: senão roubava
               // o `@Nome` de um homônimo e notificava a pessoa errada.
               setMencoes((atual) => podarMencoes(e.target.value, atual));
