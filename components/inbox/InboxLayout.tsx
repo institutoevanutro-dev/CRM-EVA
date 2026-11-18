@@ -23,7 +23,7 @@ import { ConversationList } from "./ConversationList";
 import { BarraDeAcoesEmLote } from "./BarraDeAcoesEmLote";
 import { InboxFilters, type InboxFiltersValue, type InboxTab } from "./InboxFilters";
 import { ChatThread } from "./ChatThread";
-import { Composer, type ComposerHandle } from "./Composer";
+import { Composer, type ComposerHandle, type RascunhoDoCampo } from "./Composer";
 import { ConversationHeader } from "./ConversationHeader";
 import { BarraDeConversaFechada } from "./BarraDeConversaFechada";
 import { BotaoIniciarConversa } from "./PainelIniciarConversa";
@@ -427,6 +427,9 @@ export function InboxLayout({
    */
   const { data: automaticoDaOrg } = useAutomaticoAtivo();
   const composerRef = useRef<ComposerHandle | null>(null);
+  // O que ficou escrito em cada conversa (item 28). O campo nasce de novo a cada
+  // conversa (`key`) e lê daqui o rascunho DELA: nada de uma passa para outra.
+  const [rascunhos] = useState(() => new Map<string, RascunhoDoCampo>());
 
   const filters: ConversationsFilters = useMemo(
     () => ({
@@ -1112,6 +1115,7 @@ export function InboxLayout({
             <RetentionNotice conversationId={selectedConversation.id} />
             {motivoDaJanela && (
               <JanelaFechadaAviso
+                key={`janela-${selectedConversation.id}`}
                 conversationId={selectedConversation.id}
                 provider={selectedConversation.channel_sessions?.provider ?? null}
                 motivo={motivoDaJanela}
@@ -1128,8 +1132,12 @@ export function InboxLayout({
               />
             ) : (
               <Composer
+                // Um campo por conversa: texto, modo, anexo, áudio em gravação e
+                // diálogos abertos não atravessam a troca (item 28).
+                key={`campo-${selectedConversation.id}`}
                 ref={composerRef}
                 conversationId={selectedConversation.id}
+                rascunhos={rascunhos}
                 agendamentoLigado={
                   Boolean(selectedConversation.contacts?.id && selectedConversation.channel_session_id) && !supportReadonly
                 }

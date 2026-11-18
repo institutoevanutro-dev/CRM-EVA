@@ -59,8 +59,26 @@ export interface ComposerHandle {
   focus: () => void;
 }
 
+/**
+ * O que ficou escrito numa conversa e não saiu (item 28 da auditoria de 17/11).
+ * Leva o MODO junto: um rascunho de nota que voltasse como resposta sairia para
+ * o paciente no primeiro Enter.
+ */
+export interface RascunhoDoCampo {
+  texto: string;
+  modo: "reply" | "note";
+  mencoes: MencaoEscolhida[];
+}
+
 interface Props {
   conversationId: string;
+  /**
+   * Rascunhos por conversa, guardados por quem troca a conversa (o Inbox). O
+   * campo é montado de novo a cada conversa (`key`), lê o rascunho DELA ao
+   * nascer e o grava a cada mudança. Sem isto, nada de uma conversa sobrevive à
+   * troca — que é o certo: texto de uma conversa nunca aparece noutra.
+   */
+  rascunhos?: Map<string, RascunhoDoCampo>;
   /** Liga as mensagens agendadas (a conversa tem contato e número). Porte do DeskcommCRM #4131. */
   agendamentoLigado?: boolean;
   disabled?: boolean;
@@ -119,6 +137,7 @@ interface Props {
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   {
     conversationId,
+    rascunhos,
     agendamentoLigado = false,
     disabled,
     blockedReason,
@@ -134,7 +153,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   ref,
 ) {
   const t = useT();
-  const [text, setText] = useState("");
+  const [inicial] = useState(() => rascunhos?.get(conversationId));
+  const [text, setText] = useState(inicial?.texto ?? "");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   // O realce do arquivo arrastado (porte do original #3713). `dragenter` e
   // `dragleave` disparam também nos filhos, e um booleano solto faria o realce
@@ -169,7 +189,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [agendaAberta, setAgendaAberta] = useState(false);
   const [menuDismissed, setMenuDismissed] = useState(false);
-  const [mode, setMode] = useState<"reply" | "note">("reply");
+  const [mode, setMode] = useState<"reply" | "note">(inicial?.modo ?? "reply");
   /**
    * Menção de atendente em nota interna (portado do DeskcommCRM, PRs #2461,
    * #2489 e #2586 de @webtecnica e @Tong-bit-art). `caret` porque o `@` é
@@ -177,7 +197,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
    * mostra o nome, e o id entra só quando o corpo sai (`embutirMencoes`).
    */
   const [caret, setCaret] = useState(0);
-  const [mencoes, setMencoes] = useState<MencaoEscolhida[]>([]);
+  const [mencoes, setMencoes] = useState<MencaoEscolhida[]>(inicial?.mencoes ?? []);
+  useEffect(() => {
+    if (!rascunhos) return;
+    if (text) rascunhos.set(conversationId, { texto: text, modo: mode, mencoes });
+    else rascunhos.delete(conversationId);
+  }, [rascunhos, conversationId, text, mode, mencoes]);
   const [mencaoDispensada, setMencaoDispensada] = useState(false);
   const [mencaoIndice, setMencaoIndice] = useState(0);
   /**
@@ -266,6 +291,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
   }
+  // O rascunho que voltou com a conversa ganha a altura dele já na montagem.
+  useEffect(() => {
+    if (inicial?.texto) autoresize();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Escolhe da lista e escreve o NOME no campo; o id entra só ao salvar. */
   function escolherMencao(opcao: OpcaoDeMencao): void {
@@ -295,6 +325,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
     // Se a pessoa já começou a próxima resposta, preserve os dois textos.
     const restaurar = (current: string) => (current ? `${body}\n${current}` : body);
+    // ponytail: com o campo montado por conversa (`key`), o `onError` do mutate
+    // não roda se a pessoa já trocou de conversa — o texto não volta para o
+    // campo de OUTRA conversa, mas também não volta ao rascunho desta. Guardar no
+    // rascunho pede `mutateAsync`; trocar se a recepção perder texto assim.
     const restoreOnError = () => {
       setText(restaurar);
       requestAnimationFrame(() => autoresize());
