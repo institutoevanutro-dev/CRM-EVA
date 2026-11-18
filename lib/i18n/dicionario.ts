@@ -1114,6 +1114,17 @@ export const DICIONARIO: Traducoes = {
   "Nenhum atendente disponível para transferir.": { es: "Ningún agente disponible para transferir." },
   "Selecionar conversa": { es: "Seleccionar conversación" },
   "Selecionar todas": { es: "Seleccionar todas" },
+  "Arquivar 1 conversa?": { es: "¿Archivar 1 conversación?" },
+  "Fechar 1 conversa?": { es: "¿Cerrar 1 conversación?" },
+  "Arquivar {n} conversas?": { es: "¿Archivar {n} conversaciones?" },
+  "Fechar {n} conversas?": { es: "¿Cerrar {n} conversaciones?" },
+  "Fechar conversas": { es: "Cerrar conversaciones" },
+  "Os atendimentos terminam e as conversas vão para o histórico. Se o paciente escrever de novo, a conversa volta.": {
+    es: "Las atenciones terminan y las conversaciones van al historial. Si el paciente vuelve a escribir, la conversación regresa.",
+  },
+  "Os atendimentos terminam. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.": {
+    es: "Las atenciones terminan. Si el paciente vuelve a escribir, la conversación vuelve a la cola y el automático puede responder.",
+  },
   "As letras valem com o cursor na lista de conversas.": {
     es: "Las letras funcionan con el cursor en la lista de conversaciones.",
   },

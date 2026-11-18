@@ -59,7 +59,13 @@ describe("BarraDeAcoesEmLote", () => {
     expect(screen.getByTestId("barra-de-acoes-em-lote")).toBeInTheDocument();
     expect(screen.getByText("3 conversas selecionadas")).toBeInTheDocument();
 
+    // Fechar pergunta antes, com a contagem (item 32), e só então delega.
     await user.click(screen.getByTestId("lote-fechar"));
+    expect(h.onFechar).not.toHaveBeenCalled();
+    const pergunta = screen.getByRole("alertdialog");
+    expect(pergunta).toHaveTextContent("Fechar 3 conversas?");
+    expect(screen.getByRole("button", { name: "Cancelar" })).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "Fechar conversas" }));
     expect(h.onFechar).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByTestId("lote-marcar-como-lida"));
@@ -81,6 +87,10 @@ describe("BarraDeAcoesEmLote", () => {
 
     await user.click(screen.getByRole("button", { name: "Mais ações" }));
     await user.click(screen.getByTestId("lote-arquivar"));
+    // Arquivar também pergunta, com a contagem (item 32).
+    expect(h.onArquivar).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("Arquivar 2 conversas?");
+    await user.click(screen.getByRole("button", { name: "Arquivar" }));
     expect(h.onArquivar).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole("button", { name: "Mais ações" }));

@@ -565,6 +565,13 @@ export function InboxLayout({
   // portão de tela é `inbox.reply`; a regra mora na API, que revalida.
   const podeAgirEmLote = usePermission("inbox.reply");
   const selecao = useSelecaoEmLote();
+  // A seleção é da lista que estava na tela (item 32): trocar de aba ou de
+  // filtro a limpa, para "Fechar" não alcançar conversa que ninguém está vendo.
+  const [filtrosDaSelecao, setFiltrosDaSelecao] = useState(filters);
+  if (filtrosDaSelecao !== filters) {
+    setFiltrosDaSelecao(filters);
+    if (selecao.quantidade > 0) selecao.limpar();
+  }
   const lote = useBulkConversations();
   const rodarLote = useCallback(
     (action: AcaoEmLote, toUserId?: string, reason?: string) => {
@@ -1015,7 +1022,7 @@ export function InboxLayout({
             onSelecionarTodosVisiveis={
               podeAgirEmLote
                 ? () =>
-                    selecao.selecionarTodos(
+                    selecao.alternarTodos(
                       (listQ.data?.pages.flatMap((p) => p.data) ?? []).map((c) => c.id),
                     )
                 : undefined
