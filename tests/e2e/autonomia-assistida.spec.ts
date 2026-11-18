@@ -311,6 +311,11 @@ test("testa sem enviar, pausa preserva publicação e duas aprovações entregam
     expect(channel.bodies).toHaveLength(0);
     await capture(page, page.getByRole("tabpanel"), info, "sandbox-desktop");
     await page.getByRole("button", { name: "Pausar automático", exact: true }).click();
+    // Pausar pergunta antes, dizendo a consequência (auditoria de 17/11, lote 1,
+    // item 10). O que este trecho mede não muda: pausar preserva a publicação.
+    const pausa = page.getByRole("alertdialog");
+    await expect(pausa).toContainText("A IA para de responder sozinha aos pacientes");
+    await pausa.getByRole("button", { name: "Pausar", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "Retomar automático", exact: true }),
     ).toBeVisible();
@@ -425,6 +430,10 @@ test("testa sem enviar, pausa preserva publicação e duas aprovações entregam
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(`/app/ai/agents/${f.agent}`);
     await page.getByLabel("Modo de operação").selectOption("automatic");
+    // Trocar o modo também pergunta antes (mesmo item 10): nada muda até confirmar.
+    const troca = page.getByRole("alertdialog");
+    await expect(troca).toContainText("Passar para Automático?");
+    await troca.getByRole("button", { name: "Passar para Automático", exact: true }).click();
     await expect(page.getByLabel("Modo de operação")).toHaveValue("automatic");
     await page.getByRole("button", { name: "Retomar automático", exact: true }).click();
     await expect(

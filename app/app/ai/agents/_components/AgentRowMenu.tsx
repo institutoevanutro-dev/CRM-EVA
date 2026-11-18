@@ -1,7 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DotsThree, PencilSimple, Copy, Pause, Play, Archive } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import { agentsListQueryKey } from "@/hooks/ai/useAgents";
 import { deriveAgentStatus } from "./AgentStatusBadge";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import {
@@ -40,10 +41,11 @@ interface Props {
 
 export function AgentRowMenu({ agent }: Props) {
   const t = useT();
-  const router = useRouter();
+  const qc = useQueryClient();
   const [isPending, startTransition] = useTransition();
   const [renameOpen, setRenameOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [pauseOpen, setPauseOpen] = useState(false);
 
   const status = deriveAgentStatus(agent);
   const isPaused = status === "paused" || status === "draft";
@@ -56,7 +58,11 @@ export function AgentRowMenu({ agent }: Props) {
         const res = await action();
         if (res.ok) {
           toast.success(label);
-          router.refresh();
+          // A lista vem do cache do React Query (`useAgentsList`), e o
+          // `router.refresh()` que estava aqui só trocava o `initialData` — que o
+          // cache ignora depois do primeiro render. O aviso verde aparecia, o
+          // cartão não mudava, e quem clicava de novo duplicava de novo.
+          await qc.invalidateQueries({ queryKey: agentsListQueryKey });
         } else {
           const message =
             res.error === "cannot_archive_default"
@@ -115,7 +121,10 @@ export function AgentRowMenu({ agent }: Props) {
           ) : (
             <DropdownMenuItem
               disabled={isArchived}
-              onSelect={() => run(t("Agent pausado."), () => pauseAgentAction(agent.id))}
+              onSelect={(e) => {
+                e.preventDefault();
+                setPauseOpen(true);
+              }}
             >
               <Pause size={14} aria-hidden className="mr-2" /> {t("Pausar")}
             </DropdownMenuItem>
@@ -147,6 +156,31 @@ export function AgentRowMenu({ agent }: Props) {
         open={renameOpen}
         onOpenChange={setRenameOpen}
       />
+
+      {/* Pausar tira a IA do atendimento com um clique — o que ela deixa de
+          fazer precisa estar escrito antes, não descoberto pelos pacientes. */}
+      <AlertDialog open={pauseOpen} onOpenChange={setPauseOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("Pausar")} &ldquo;{agent.name}&rdquo;?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t(
+                "A IA para de responder sozinha aos pacientes até alguém despausar. As mensagens novas ficam esperando a equipe.",
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => run(t("Agent pausado."), () => pauseAgentAction(agent.id))}
+            >
+              {t("Pausar")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
         <AlertDialogContent>

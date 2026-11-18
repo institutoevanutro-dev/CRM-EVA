@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/hooks/i18n/useT";
+import { agentsListQueryKey } from "@/hooks/ai/useAgents";
 import { renameAgentAction } from "../_actions";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 
@@ -26,7 +27,7 @@ interface Props {
 
 export function RenameAgentDialog({ agent, open, onOpenChange }: Props) {
   const t = useT();
-  const router = useRouter();
+  const qc = useQueryClient();
   const [name, setName] = useState(agent.name);
   const [isPending, startTransition] = useTransition();
 
@@ -41,7 +42,8 @@ export function RenameAgentDialog({ agent, open, onOpenChange }: Props) {
       if (res.ok) {
         toast.success(t("Renomeado."));
         onOpenChange(false);
-        router.refresh();
+        // Mesmo motivo do menu: a lista lê do cache, não do `initialData`.
+        await qc.invalidateQueries({ queryKey: agentsListQueryKey });
       } else {
         toast.error(res.message ?? `${t("Falha")}: ${res.error}`);
       }
