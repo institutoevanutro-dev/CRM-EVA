@@ -258,7 +258,9 @@ describe("os elos que somem sem barulho", () => {
     const fonte = readFileSync("components/inbox/InboxLayout.tsx", "utf8");
     // A GUARDA junto com a tag: `{false && (` deixava a tag na linha seguinte e
     // o caso passava verde com a saída removida da tela.
-    expect(fonte).toMatch(/\{motivoDaJanela && \(\s*\n\s*<JanelaFechadaAviso/);
+    // `podeEncaminhar` (item 37 da auditoria de 17/11): quem só visualiza não
+    // recebe o seletor de envio; para quem responde, a saída segue ali.
+    expect(fonte).toMatch(/\{motivoDaJanela && podeEncaminhar && \(\s*\n\s*<JanelaFechadaAviso/);
     const aviso = readFileSync("components/inbox/JanelaFechadaAviso.tsx", "utf8");
     expect(aviso).toMatch(/type: "template"/);
     expect(aviso).toMatch(/template_name/);
