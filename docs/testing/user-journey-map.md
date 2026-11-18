@@ -123,6 +123,11 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 | J3.13 | A escolha sobrevive ao salvar e recarregar | o servidor aceita a lista (o mesmo teto da tela, `TETO_TOOLS_POR_AGENTE`, fonte única) e o estado volta igual · **PASS** |
 | J3.14 | Ver se o que está ligado está funcionando (aba Capacidades) | usos, falhas, quantos vieram de teste, última vez — e o que fazer com cada número · **PASS** (números escritos pelo emissor real de audit) |
 | J3.15 | O teto recusa a passagem, explicando em português | **PASS** — exercitável desde que o catálogo cresceu (57 capacidades). `capacidades-do-agente.spec.ts` liga "Atender" sobre as 8 do seed e prova a recusa por 1 vaga. A afirmação "não exercitável hoje, com 16 capacidades no catálogo" VENCEU |
+| J3.16 | Escrever o prompt, abrir o Teste e voltar (auditoria 17/11, lote 1, P0) | o texto não salvo continua; o Teste avisa "Há mudanças não salvas" e não roda a versão velha · **PASS** pela tela (Chromium e WebKit, `.superpowers/evidence/a1/`) + `tests/unit/editor-do-agente-nao-perde-o-que-foi-escrito.test.tsx` |
+| J3.17 | Sair da tela com mudança não salva | link do menu e recarregar perguntam "Sair sem salvar?"; o "voltar" do navegador NÃO é interceptado (App Router não deixa cancelar `popstate`) · **PASS** |
+| J3.18 | Aplicar proposta, reverter, pausar, trocar Automático/Assistido | cada um pergunta antes e diz o que muda para o paciente; aplicar e reverter esperam quem tem texto por salvar; o rascunho que o reverter tira do editor reabre pelo Histórico · **PASS** |
+| J3.19 | Ações do menu "⋯" da lista de agentes | o cartão muda sem F5, e fechar Renomear/Pausar/Arquivar não deixa a página sem clique (era `pointer-events: none` no body com o menu modal) · **PASS** |
+| J3.20 | Gestor abre o agente; "Novo agente" com acervo; agente legado | faixa "Só administradores editam e testam agentes"; materiais e funis aparecem na criação; o legado conclui no editor, com o prompt dele · **PASS** |
 
 ## Chaves de acesso à IA `[P0]`
 
