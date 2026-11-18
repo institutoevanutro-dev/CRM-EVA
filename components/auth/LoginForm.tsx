@@ -130,10 +130,12 @@ export function LoginForm({ next, evalink = false }: { next?: string; evalink?: 
   if (!evalink) return formulario;
 
   return (
-    <section aria-labelledby="entrar-com-senha" className="space-y-4">
+    // Sem `aria-labelledby` na seção, de propósito: um rótulo com "senha" faria
+    // `getByLabel(/senha/i)` (e o leitor de tela) achar dois campos de senha.
+    <section className="space-y-4">
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
         <span aria-hidden className="h-px flex-1 bg-border" />
-        <h2 id="entrar-com-senha" className="font-normal">
+        <h2 className="font-normal">
           {t("Entrar com senha (administração)")}
         </h2>
         <span aria-hidden className="h-px flex-1 bg-border" />

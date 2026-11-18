@@ -150,7 +150,9 @@ describe("LoginForm — com o EvaLink ligado", () => {
 
   it("a senha vira porta da administração: rótulo, sem cursor no e-mail e sem segundo botão principal", () => {
     render(<LoginForm evalink />);
-    expect(screen.getByRole("region", { name: "Entrar com senha (administração)" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Entrar com senha (administração)" })).toBeInTheDocument();
+    // Um só campo responde por "senha" (o rótulo da seção não é rótulo de campo).
+    expect(screen.getAllByLabelText(/senha/i)).toHaveLength(1);
     expect(screen.getByLabelText("Email")).not.toHaveFocus();
     expect(screen.getByRole("button", { name: "Entrar" }).className).not.toMatch(/\bbg-primary\b/);
   });
