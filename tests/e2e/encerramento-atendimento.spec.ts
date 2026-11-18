@@ -5,7 +5,7 @@ import { mkdirSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page } from "@playwright/test";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
-import { abrirAcoesDaConversa, clicarNoMenuDaConversa } from "./helpers/acoes-da-conversa";
+import { abrirAcoesDaConversa, abrirPainelDoContato, clicarNoMenuDaConversa } from "./helpers/acoes-da-conversa";
 
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
@@ -167,6 +167,9 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     await page.getByRole("button", { name: /entrar/i }).click();
     await page.waitForURL(/\/app(?:\/|$)/);
     await abrirConversa(page, conversation);
+    // O painel nasce recolhido (18/11/2026): abre pelo trilho, como quem usa. A
+    // preferência fica gravada, e as próximas visitas ao Inbox já nascem abertas.
+    await abrirPainelDoContato(page);
     const panel = page.getByTestId("inbox-demandas");
     // A seção nasce recolhida (22/10); o clique no título a fixa aberta.
     await panel.getByRole("button", { name: /Demandas abertas/ }).click();

@@ -37,6 +37,7 @@ import { expect, test, type JSHandle, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+import { abrirPainelDoContato } from "./helpers/acoes-da-conversa";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), ".superpowers/evidence/etiquetas-e-composer");
@@ -267,6 +268,8 @@ test.describe("Etiquetas e compositor (portes de 15/10)", () => {
     await login(page, creds.users.manager!.email);
     await page.goto(`/app/inbox/${conversaId}`);
     await expect(page.getByText("MENSAGEM DO PACIENTE 1510").first()).toBeVisible({ timeout: 60_000 });
+    // O painel nasce recolhido (18/11/2026): abre pelo trilho, como quem usa.
+    await abrirPainelDoContato(page);
 
     await page.getByRole("button", { name: /Etiquetas do contato/ }).click();
     const gatilho = page.getByRole("button", { name: `Cor da etiqueta ${FICA}` }).first();

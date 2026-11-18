@@ -15,6 +15,7 @@ import { randomInt, randomUUID } from "node:crypto";
 
 import { test } from "@playwright/test";
 import { abreConversa, admin, captura, creds, expect, insere, login, registra, type Creds } from "./qa-l12-comum";
+import { abrirPainelDoContato } from "./helpers/acoes-da-conversa";
 
 const SUFIXO = `${Date.now()}`.slice(-7);
 
@@ -113,6 +114,8 @@ test.describe("Etapa do negócio pela conversa", () => {
     await login(page, c.users.manager!.email, c.password);
     await abreConversa(page, conversaId);
     await expect(page.getByText(`Cliente Etapa ${SUFIXO}`).first()).toBeVisible({ timeout: 60_000 });
+    // O painel nasce recolhido (18/11/2026): abre pelo trilho, como quem usa.
+    await abrirPainelDoContato(page);
 
     const bloco = page.locator('[data-testid="inbox-etapa-do-negocio"]');
     await expect(bloco).toBeVisible({ timeout: 30_000 });

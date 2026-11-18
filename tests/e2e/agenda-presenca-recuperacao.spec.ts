@@ -14,6 +14,8 @@ import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-se
 import { escolherProfissionalEProcedimento } from "./helpers/marcacao-simples";
 import { enviarTextoFixoPendente } from "../../lib/followup/enviar-texto-fixo";
 import { abrirMenuLateral } from "./utils/menu-lateral";
+import { abrirPainelDoContato } from "./helpers/acoes-da-conversa";
+import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
   auth: { persistSession: false },
@@ -294,6 +296,9 @@ test("Inbox marca cliente/conversa; detalhe antigo confirma presença com evidê
   await inbound(f, p, "Preciso marcar uma consulta");
   await login(page, f.email);
   await page.goto(`/app/inbox/${p.conversation}`);
+  // "Marcar compromisso" mora no painel do contato, que nasce recolhido
+  // (18/11/2026): abre pelo trilho, como quem usa.
+  await abrirPainelDoContato(page);
   await page.getByRole("link", { name: "Marcar compromisso", exact: true }).click();
   const panel = page.getByTestId("painel-de-marcacao");
   await expect(panel).toBeVisible();
@@ -444,6 +449,8 @@ test.describe("datas do compromisso seguem idioma e fuso próprios", () => {
     for (const locale of ["pt-BR", "es"] as const) {
       if (locale === "es") {
         await page.keyboard.press("Escape");
+        // O idioma mora na barra de cima, escondida desde 18/11.
+        await mostrarBarraDeCima(page);
         await page.getByTestId("seletor-de-idioma").click();
         const reload = page.waitForEvent("load");
         await page.getByTestId("idioma-es").click();
@@ -499,6 +506,9 @@ test("ir para a Agenda pelo menu apaga o cliente da conversa — \"Novo agendame
   await inbound(f, p, "Preciso marcar uma consulta");
   await login(page, f.email);
   await page.goto(`/app/inbox/${p.conversation}`);
+  // "Marcar compromisso" mora no painel do contato, que nasce recolhido
+  // (18/11/2026): abre pelo trilho, como quem usa.
+  await abrirPainelDoContato(page);
   await page.getByRole("link", { name: "Marcar compromisso", exact: true }).click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible();
   await expect(page.getByTestId("paciente-escolhido")).toHaveAttribute("data-contact-id", p.contact);
