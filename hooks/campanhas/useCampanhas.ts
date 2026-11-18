@@ -176,7 +176,10 @@ export function useAcaoDeCampanha(id: string) {
         `/api/v1/campaigns/${id}/${entrada.acao}`,
         entrada.corpo ?? {},
       ),
-    onSuccess: () => {
+    // `onSettled`, não `onSuccess`: a ação que FALHA também muda a campanha —
+    // preparar sem ninguém no recorte a devolve a rascunho com o motivo
+    // gravado, e a tela seguia mostrando o estado de antes até um F5.
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["campanha", id] });
       void qc.invalidateQueries({ queryKey: ["campanha-metricas", id] });
       void qc.invalidateQueries({ queryKey: ["campanha-destinatarios", id] });

@@ -150,7 +150,7 @@ export function DetalheDaCampanha({ id }: { id: string }) {
             <p className="mt-1 text-sm text-warning-fg">{t(FRASE_DO_PROBLEMA[c.failure_code] ?? PROBLEMA_DESCONHECIDO)}</p>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 sm:justify-end">
           {c.status === "draft" && (
             <Button variant="outline" asChild>
               <Link href={`/app/campaigns/${c.id}/edit`}>{t("Editar")}</Link>
