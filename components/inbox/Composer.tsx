@@ -12,7 +12,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { toast } from "sonner";
-import { DotsThree, PaperPlaneTilt } from "@/lib/ui/icons";
+import { PaperPlaneTilt } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
 import { MensagensAgendadasBotao } from "@/components/inbox/MensagensAgendadas";
@@ -52,7 +52,6 @@ import {
 import { ApiError } from "@/lib/api/types";
 import { embutirMencoes, podarMencoes, type MencaoEscolhida } from "@/lib/notifications/mentions";
 import { cn } from "@/lib/utils";
-import { classeDaFaixa, useRevelacao } from "@/hooks/inbox/useRevelacao";
 import { resolveSharedContact } from "@/lib/messaging/contact-card";
 
 export interface ComposerHandle {
@@ -213,14 +212,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [mencaoDispensada, setMencaoDispensada] = useState(false);
   const [mencaoIndice, setMencaoIndice] = useState(0);
   /**
-   * A FAIXA DE CIMA DO CAMPO (assistência do agente + Responder/Nota interna)
-   * fica recolhida até ser pedida — pelo mouse, pelo foco ou pelo botão de
-   * faísca ao lado do emoji. Ela comia ~70px da conversa o tempo todo, e no
-   * celular empurrava o campo para baixo da dobra.
-   *
-   * Recolher NUNCA esconde estado: em "Nota interna" ou com sugestão para
-   * revisar ela fica aberta e no fluxo (`forcado`), porque escrever achando que
-   * é nota quando é resposta ao cliente é o erro que não tem volta.
+   * A FAIXA DE CIMA DO CAMPO (Responder / Nota interna, e a sugestão do agente
+   * quando há) fica SEMPRE À VISTA e no fluxo (item 44 da auditoria de 17/11).
+   * Ela nasceu recolhida, aberta pelo "⋯" ou pelo mouse — e aí flutuava sobre a
+   * última mensagem, e "Nota interna" ficava escondida justo de quem precisa
+   * saber, antes de escrever, se o texto vai ao paciente ou fica com o time.
    */
   // "Há sugestão" é a MESMA consulta que o `ReplyReviewPanel` lê (porte do
   // original #3234): uma chave, um cache, sem um segundo estado para divergir.
@@ -230,11 +226,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     conversationId,
     mode === "reply" && !blockedReason,
   );
-  const temSugestao = !!sugestao;
-  const ferramentas = useRevelacao({
-    forcado: mode === "note" || temSugestao,
-    chave: conversationId,
-  });
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   // A citação ATUAL, para o `onSuccess` de um envio que já saiu comparar com a
   // que foi junto com ele (ver `handleSubmit`).
@@ -634,7 +625,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   return (
     <>
       <div
-        {...ferramentas.zonaProps}
         data-testid="composer"
         onDragEnter={onDragEnter}
         onDragOver={onDragOver}
@@ -670,15 +660,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           onPick={escolherMencao}
         />
         <div
-          {...ferramentas.painelProps}
           role="group"
           aria-label={t("Assistência do agente e nota interna")}
-          className={cn(
-            ferramentas.noFluxo
-              ? "mb-1.5"
-              : "absolute inset-x-0 bottom-full z-20 border-t border-border bg-bg px-3 pt-2 pb-1.5 shadow-md",
-            classeDaFaixa(ferramentas.visivel),
-          )}
+          className="mb-1.5"
         >
         {/* O bloco só existe COM sugestão (#3234): sem ela, quem oferece o gesto
             é o ícone "Sugerir resposta" da linha de ações, lá embaixo. Com o
@@ -826,25 +810,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               onDraft={() => void invalidar()}
             />
           )}
-          {/* A porta explícita da faixa de cima (toque e teclado). Três
-              pontos, e não faísca: a faísca é do "Sugerir resposta" ao lado,
-              e sem sugestão o que mora na faixa é o Responder/Nota interna.
-              Desabilitada enquanto a faixa está presa aberta por estado
-              (nota, sugestão): ali fechar não é opção, e o botão continua no
-              lugar para o campo não mudar de largura. */}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn("shrink-0", ferramentas.visivel && "bg-muted")}
-            aria-label={t("Opções de resposta")}
-            title={t("Assistência do agente e nota interna")}
-            disabled={mode === "note" || temSugestao}
-            {...ferramentas.alternadorProps}
-            onClick={ferramentas.alternar}
-          >
-            <DotsThree size={16} weight="bold" aria-hidden />
-          </Button>
           <textarea
             ref={taRef}
             value={text}

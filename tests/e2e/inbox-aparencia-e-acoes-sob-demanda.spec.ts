@@ -9,9 +9,9 @@
  *   2. Cabeçalho da conversa (I3 do pacote de design 2): o botão principal e
  *      Transferir/Lembrar/Fechar sempre à vista, sem depender do mouse; o resto
  *      num menu ⋯ ("Ações da conversa") aberto por clique.
- *   3. A faixa de cima do composer (Responder / Nota interna) recolhida, com o
- *      interruptor alcançável pelo TECLADO; "Sugerir resposta" fica à vista,
- *      como ícone na linha de ações (porte do original #3234).
+ *   3. Responder / Nota interna SEMPRE À VISTA acima do campo (item 44 da
+ *      auditoria de 17/11), alcançáveis pelo TECLADO; "Sugerir resposta" fica à
+ *      vista, como ícone na linha de ações (porte do original #3234).
  *   4. "Janela 23h 59m" numa linha só, dentro da pílula, em 1280, 1440 e 390.
  *   5. Nenhum transbordo horizontal da página nessas três larguras.
  *
@@ -348,22 +348,21 @@ test.describe("Inbox — aparência, ações sob demanda e selo da janela", () =
     await page.context().close();
   });
 
-  test("composer: faixa recolhida, e o teclado chega em Nota interna", async ({ browser }) => {
+  test("composer: Responder / Nota interna à vista, e o teclado chega em Nota interna", async ({ browser }) => {
     const page = await novaPagina(browser, "light", 1440);
     await login(page);
     await abrirConversa(page);
-    const opcoes = page.getByRole("button", { name: "Opções de resposta" });
     const nota = page.getByRole("button", { name: "Nota interna", exact: true });
     // Sem rascunho, "Sugerir resposta" é o ícone da linha de ações: à vista e
     // único, sem abrir faixa nenhuma (#3234).
     await expect(page.getByRole("button", { name: "Sugerir resposta" })).toHaveCount(1);
     await expect(page.getByRole("button", { name: "Sugerir resposta" })).toBeVisible();
-    await expect(nota).toBeHidden();
-    await foto(page, "composer-recolhido");
-
-    await opcoes.focus();
-    await page.keyboard.press("Enter");
+    // Item 44: nada a abrir — o "⋯ Opções de resposta" saiu.
+    await expect(page.getByRole("button", { name: "Opções de resposta" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Responder", exact: true })).toBeVisible();
     await expect(nota).toBeVisible();
+    await foto(page, "composer-modo-a-vista");
+
     await nota.focus();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("textbox", { name: "Mensagem", exact: true })).toHaveAttribute("placeholder", /nota/i);
