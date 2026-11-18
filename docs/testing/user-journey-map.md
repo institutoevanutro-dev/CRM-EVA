@@ -2992,5 +2992,6 @@ Lote 2 da auditoria de 17/11/2026 (itens 13 a 27). A gerente cria, edita, prepar
 | J44.11 `[P2]` | Prepara com recorte vazio e depois com recorte certo | Frase "A última preparação não achou ninguém…" aparece sem F5 e some depois | PROVADO NA TELA |
 | J44.12 `[P2]` | Olha a campanha | Rascunho sem os quatro zeros, um botão cheio, cancelar em cor de perigo; sem rolagem lateral a 390 px; alvos de 44 px no celular | PROVADO NA TELA + medidas |
 | J44.13 `[P2]` | Escolhe etiquetas do público | Menu com as etiquetas dos contatos, sem campo "separe por vírgula" | PROVADO NA TELA |
+| J44.14 `[P1]` | Duplica uma campanha que já enviou (envio simulado no banco fictício) | A cópia diz "2 pessoas que já receberam a original ficam de fora"; a contagem mostra "Já recebeu a campanha original" | PROVADO NA TELA (Chromium 1440 e WebKit 390) |
 
 **O que esta jornada NÃO tem:** envio real (sem WAHA), lista de destinatários andando durante um envio de verdade (o recarregar e o filtro por carimbo têm teste) e Safari de verdade (só o WebKit do Playwright).
