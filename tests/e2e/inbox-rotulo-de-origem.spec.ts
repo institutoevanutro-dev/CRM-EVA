@@ -46,6 +46,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+import { abrirPainelDoContato } from "./helpers/acoes-da-conversa";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), ".superpowers/evidence/inbox-rotulo-de-origem");
@@ -371,6 +372,8 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
       await expect(linha.getByText(etiqueta, { exact: true })).toHaveCount(0);
     }
     await linha.click();
+    // O painel nasce recolhido (18/11/2026): abre pelo trilho, como quem usa.
+    await abrirPainelDoContato(page);
     const painel = page.getByRole("complementary");
     for (const etiqueta of ["e2e-vip", "e2e-quente", "e2e-retorno", "e2e-boleto"]) {
       await expect(painel.getByText(etiqueta, { exact: true }).first()).toBeVisible({ timeout: 30_000 });

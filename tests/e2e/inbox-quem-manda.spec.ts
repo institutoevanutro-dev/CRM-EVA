@@ -26,7 +26,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
-import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
+import { abrirAcoesDaConversa, abrirPainelDoContato } from "./helpers/acoes-da-conversa";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), ".superpowers/evidence/inbox-quem-manda");
@@ -326,6 +326,8 @@ test.describe("Inbox — quem manda nesta conversa", () => {
     // Sem `if`: com o negócio semeado a linha TEM de aparecer. Uma asserção
     // condicional aqui passaria calada justamente no caso em que a feature não
     // funciona — que é o modo de falha que esta entrega existe para acabar.
+    // O painel nasce recolhido (18/11/2026): abre pelo trilho, como quem usa.
+    await abrirPainelDoContato(page);
     await expect(page.getByText("Atividade", { exact: true }).first()).toBeVisible({
       timeout: 30_000,
     });

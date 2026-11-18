@@ -33,6 +33,18 @@ async function captura(page: Page, nome: string): Promise<void> {
   await page.screenshot({ path: path.join(EVIDENCIA, `${nome}.png`) });
 }
 
+/**
+ * O tema mora no `localStorage` (`deskcomm-theme`, lido antes da primeira
+ * pintura em `app/layout.tsx`), não no `prefers-color-scheme`: sem escolha, é
+ * claro. Gravar e recarregar é o que o seletor de tema faz.
+ */
+async function noTema(page: Page, tema: "light" | "dark"): Promise<void> {
+  await page.evaluate((t) => window.localStorage.setItem("deskcomm-theme", t), tema);
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", tema);
+  await expect(page.getByText("Oi, queria saber o horário de amanhã.").first()).toBeVisible({ timeout: 60_000 });
+}
+
 test.describe("Inbox: o painel do contato nasce fechado", () => {
   test.describe.configure({ timeout: 180_000 });
   test.use({ viewport: { width: 1440, height: 900 } });
@@ -107,9 +119,10 @@ test.describe("Inbox: o painel do contato nasce fechado", () => {
     expect(caixa.altura).toBeGreaterThanOrEqual(44);
     expect(leuAFicha, "fechado, o painel não lê nem audita a ficha").toEqual([]);
     await captura(page, "01-fechado-claro");
-    await page.emulateMedia({ colorScheme: "dark" });
+    await noTema(page, "dark");
+    await expect(trilho).toBeVisible();
     await captura(page, "02-fechado-escuro");
-    await page.emulateMedia({ colorScheme: "light" });
+    await noTema(page, "light");
 
     // ── Abre pelo teclado; a escolha vale depois de recarregar ───────────
     await expandir.focus();
@@ -122,9 +135,10 @@ test.describe("Inbox: o painel do contato nasce fechado", () => {
     await expect(page.getByTestId("inbox-demandas")).toBeVisible({ timeout: 60_000 });
     await expect(trilho).toHaveCount(0);
     await captura(page, "03-aberto-claro");
-    await page.emulateMedia({ colorScheme: "dark" });
+    await noTema(page, "dark");
+    await expect(page.getByTestId("inbox-demandas")).toBeVisible();
     await captura(page, "04-aberto-escuro");
-    await page.emulateMedia({ colorScheme: "light" });
+    await noTema(page, "light");
 
     // ── Quem fecha volta a ver fechado ───────────────────────────────────
     const fechou = page.waitForResponse((r) => r.request().method() === "POST" && "next-action" in r.request().headers());
