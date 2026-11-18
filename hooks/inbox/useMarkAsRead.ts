@@ -1,5 +1,5 @@
 "use client";
-import { useAuth } from "@/hooks/auth/AuthProvider";
+import { useAuth, usePermission } from "@/hooks/auth/AuthProvider";
 import { useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
@@ -9,10 +9,17 @@ const DEBOUNCE_MS = 1500;
 /**
  * Marca a conversa como lida após permanecer em foco (EPIC-03 S-03.10).
  * Só chama a API quando unread > 0 para evitar writes desnecessários.
+ *
+ * SÓ CONTA COM A ABA À VISTA (item 31 da auditoria de 17/11). A conversa aberta
+ * virava "lida" em 1,5 s mesmo com a aba escondida — o inbox aberto numa aba de
+ * fundo comia o sinal de mensagem nova da recepção. Com a aba escondida o
+ * relógio espera ela voltar. Quem não pode responder (visualizador) não marca:
+ * a rota recusa, e a tentativa só gerava erro.
  */
 export function useMarkAsRead(conversationId: string | null, unread: number) {
   const { user } = useAuth();
-  const readonly = user.support?.access_mode === "support_readonly";
+  const podeMarcar = usePermission("inbox.reply");
+  const readonly = user.support?.access_mode === "support_readonly" || !podeMarcar;
   const qc = useQueryClient();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -26,19 +33,23 @@ export function useMarkAsRead(conversationId: string | null, unread: number) {
   });
 
   useEffect(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-
     if (readonly || !conversationId || unread <= 0) return;
 
-    timerRef.current = setTimeout(() => {
-      mutate(conversationId);
-    }, DEBOUNCE_MS);
-
-    return () => {
+    const parar = () => {
       if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = null;
+    };
+    const armar = () => {
+      parar();
+      if (document.visibilityState !== "visible") return;
+      timerRef.current = setTimeout(() => mutate(conversationId), DEBOUNCE_MS);
+    };
+
+    armar();
+    document.addEventListener("visibilitychange", armar);
+    return () => {
+      document.removeEventListener("visibilitychange", armar);
+      parar();
     };
   }, [conversationId, unread, mutate, readonly]);
 }
