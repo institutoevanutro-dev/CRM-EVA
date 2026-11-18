@@ -13,7 +13,22 @@ import { Label } from "@/components/ui/label";
 import { signInWithPassword } from "@/app/actions/auth/signInWithPassword";
 import { AvisoSemResposta, useEnvioComTeto } from "@/components/auth/teto-da-espera";
 
-export function LoginForm({ next }: { next?: string }) {
+/**
+ * `evalink`: com o login pela Conta ligado, a senha é a porta de reserva da
+ * administração (`reservaBloqueia`). Aberta como a principal, ela parecia o
+ * caminho da equipe: dois botões verdes "Entrar", o cursor no e-mail, a senha
+ * certa recusada e as cinco tentativas gastas (auditoria 17/11, item 47).
+ * Fica recolhida atrás de "Entrar com senha (administração)".
+ */
+export function LoginForm({
+  next,
+  evalink = false,
+  senhaAberta = false,
+}: {
+  next?: string;
+  evalink?: boolean;
+  senhaAberta?: boolean;
+}) {
   const t = useT();
   const router = useRouter();
   const { pendente: isPending, semResposta, enviar } = useEnvioComTeto();
@@ -22,6 +37,7 @@ export function LoginForm({ next }: { next?: string }) {
   const {
     register,
     handleSubmit,
+    setFocus,
     formState: { errors },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -46,7 +62,17 @@ export function LoginForm({ next }: { next?: string }) {
         return;
       }
       if (res.error === "invalid_credentials") {
-        setServerError(t("Email ou senha incorretos."));
+        // Mesma resposta para senha errada e para quem só entra pelo EvaLink
+        // (não revela que a senha estava certa); a segunda frase aponta a porta.
+        setServerError(
+          evalink
+            ? `${t("Email ou senha incorretos.")} ${t("Se você entra pelo EvaLink, use o botão acima.")}`
+            : t("Email ou senha incorretos."),
+        );
+      } else if (res.error === "email_not_confirmed") {
+        setServerError(t("Confirme seu e-mail pelo link que enviamos antes de entrar."));
+      } else if (res.error === "unavailable") {
+        setServerError(t("O servidor de login não respondeu. Tente de novo em instantes."));
       } else if (res.error === "rate_limited") {
         setServerError(t("Muitas tentativas. Aguarde alguns minutos."));
       } else if (res.error === "validation_error") {
@@ -57,7 +83,7 @@ export function LoginForm({ next }: { next?: string }) {
     });
   };
 
-  return (
+  const formulario = (
     <form method="post" onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
       <div className="space-y-1.5">
         <Label htmlFor="email">Email</Label>
@@ -65,7 +91,7 @@ export function LoginForm({ next }: { next?: string }) {
           id="email"
           type="email"
           autoComplete="email"
-          autoFocus
+          autoFocus={!evalink}
           aria-invalid={errors.email ? true : undefined}
           {...register("email")}
         />
@@ -95,9 +121,31 @@ export function LoginForm({ next }: { next?: string }) {
         </div>
       )}
       {semResposta && <AvisoSemResposta />}
-      <Button type="submit" className="w-full" disabled={isPending}>
+      <Button
+        type="submit"
+        variant={evalink ? "outline" : "default"}
+        className="w-full"
+        disabled={isPending}
+      >
         {isPending ? t("Entrando...") : t("Entrar")}
       </Button>
     </form>
+  );
+
+  if (!evalink) return formulario;
+
+  return (
+    <details
+      open={senhaAberta}
+      onToggle={(e) => {
+        if (e.currentTarget.open) setFocus("email");
+      }}
+      className="space-y-4"
+    >
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center rounded-md text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground [&::-webkit-details-marker]:hidden">
+        {t("Entrar com senha (administração)")}
+      </summary>
+      {formulario}
+    </details>
   );
 }

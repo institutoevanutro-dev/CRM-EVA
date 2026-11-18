@@ -5557,6 +5557,14 @@ export const DICIONARIO: Traducoes = {
   "Sua sessão terminou. Entre de novo para voltar à tela onde estava.": {
     es: "Tu sesión terminó. Inicia sesión de nuevo para volver a la pantalla donde estabas.",
   },
+  "Entrar com senha (administração)": { es: "Entrar con contraseña (administración)" },
+  "Se você entra pelo EvaLink, use o botão acima.": { es: "Si entras con EvaLink, usa el botón de arriba." },
+  "Confirme seu e-mail pelo link que enviamos antes de entrar.": {
+    es: "Confirma tu correo con el enlace que te enviamos antes de entrar.",
+  },
+  "O servidor de login não respondeu. Tente de novo em instantes.": {
+    es: "El servidor de inicio de sesión no respondió. Inténtalo de nuevo en unos instantes.",
+  },
   // ─── fim do bloco da auditoria 17/11 ───
   "A verificação em duas etapas da sua conta, os códigos de recuperação e as sessões abertas.": {
     es: "La verificación en dos pasos de tu cuenta, los códigos de recuperación y las sesiones abiertas.",

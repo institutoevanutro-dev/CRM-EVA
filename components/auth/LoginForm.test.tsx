@@ -139,3 +139,47 @@ describe("LoginForm — a espera tem teto", () => {
     expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
   });
 });
+
+/**
+ * Auditoria de 17/11, itens 47 e 50. Com o EvaLink ligado a senha é reserva da
+ * administração: dois botões verdes "Entrar" e o cursor no e-mail levavam a
+ * equipe a gastar as tentativas com a senha certa.
+ */
+describe("LoginForm — com o EvaLink ligado", () => {
+  beforeEach(() => vi.mocked(signInWithPassword).mockReset());
+
+  it("a senha fica recolhida, sem cursor no e-mail e sem segundo botão principal", () => {
+    render(<LoginForm evalink />);
+    const resumo = screen.getByText("Entrar com senha (administração)");
+    const detalhes = resumo.closest("details");
+    expect(detalhes).not.toBeNull();
+    expect(detalhes).not.toHaveAttribute("open");
+    expect(screen.getByLabelText("Email")).not.toHaveFocus();
+    expect(screen.getByRole("button", { name: "Entrar", hidden: true }).className).not.toMatch(/\bbg-primary\b/);
+  });
+
+  it("senha recusada lembra o botão do EvaLink", async () => {
+    vi.mocked(signInWithPassword).mockResolvedValue({ ok: false, error: "invalid_credentials" });
+    render(<LoginForm evalink senhaAberta />);
+    await act(async () => preencherEEnviar());
+    expect(
+      await screen.findByText("Email ou senha incorretos. Se você entra pelo EvaLink, use o botão acima."),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    ["email_not_confirmed", "Confirme seu e-mail pelo link que enviamos antes de entrar."],
+    ["unavailable", "O servidor de login não respondeu. Tente de novo em instantes."],
+  ] as const)("%s tem mensagem própria (não é senha errada)", async (erro, frase) => {
+    vi.mocked(signInWithPassword).mockResolvedValue({ ok: false, error: erro });
+    render(<LoginForm />);
+    await act(async () => preencherEEnviar());
+    expect(await screen.findByText(frase)).toBeInTheDocument();
+  });
+
+  it("CONTROLE — sem EvaLink, o formulário aparece aberto e o cursor começa no e-mail", () => {
+    render(<LoginForm />);
+    expect(screen.queryByText("Entrar com senha (administração)")).toBeNull();
+    expect(screen.getByLabelText("Email")).toHaveFocus();
+  });
+});
