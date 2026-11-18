@@ -37,9 +37,12 @@ const COPY: Record<string, { variant: Variant; msg?: string }> = {
     variant: "error",
     msg: "Dados inválidos. Confira os campos destacados.",
   },
-  auth_required: {
+  // `unauthenticated` é o código que o `proxy.ts` e o `requireRole` mandam no
+  // 401. A entrada era `auth_required`, que nenhuma rota manda: a tela mostrava
+  // o texto cru da rota, "Auth required.", em inglês (auditoria 17/11, item 45).
+  unauthenticated: {
     variant: "warning",
-    msg: "Sessão expirada. Faça login novamente.",
+    msg: "Sua sessão terminou. Entre de novo.",
   },
   forbidden_role: {
     variant: "warning",

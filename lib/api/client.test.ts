@@ -368,3 +368,65 @@ describe("apiClient — quando a organização some debaixo da tela", () => {
     expect(reload).toHaveBeenCalledTimes(2);
   });
 });
+
+/**
+ * Auditoria de 17/11/2026, item 45: a sessão terminou no meio do uso ("Sair" em
+ * outro aparelho) e a tela ficava parada, com "Auth required." em inglês a cada
+ * clique. O 401 `unauthenticated` agora leva ao login, com a volta em `next`.
+ */
+describe("apiClient — quando a sessão termina com a tela aberta", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let assign: ReturnType<typeof vi.fn>;
+
+  const semSessao = () =>
+    jsonResponse(401, { error: { code: "unauthenticated", message: "Auth required." } });
+
+  beforeEach(() => {
+    vi.resetModules();
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    assign = vi.fn();
+    vi.stubGlobal("window", {
+      location: { assign, reload: vi.fn(), pathname: "/app/contacts", search: "?q=ana" },
+      sessionStorage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("leva ao login e guarda a tela atual para voltar depois de entrar", async () => {
+    fetchMock.mockResolvedValue(semSessao());
+    const { apiClient: cliente } = await import("@/lib/api/client");
+
+    await expect(cliente.post("/api/v1/contacts", { name: "Ana" })).rejects.toThrow();
+    expect(assign).toHaveBeenCalledTimes(1);
+    const url = new URL(assign.mock.calls[0]![0] as string, "http://crm.test");
+    expect(url.pathname).toBe("/login");
+    expect(url.searchParams.get("next")).toBe("/app/contacts?q=ana");
+    expect(url.searchParams.get("motivo")).toBe("sessao");
+  });
+
+  it("várias listas recusando juntas fazem UMA navegação", async () => {
+    fetchMock.mockImplementation(async () => semSessao());
+    const { apiClient: cliente } = await import("@/lib/api/client");
+
+    await Promise.allSettled([
+      cliente.get("/api/v1/conversations"),
+      cliente.get("/api/v1/contacts"),
+      cliente.get("/api/v1/tasks"),
+    ]);
+    expect(assign).toHaveBeenCalledTimes(1);
+  });
+
+  it("CONTROLE — 401 de outro código (segredo interno) não tira ninguém da tela", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(401, { error: { code: "unauthorized", message: "segredo inválido" } }),
+    );
+    const { apiClient: cliente } = await import("@/lib/api/client");
+
+    await expect(cliente.get("/api/v1/system/agent")).rejects.toThrow();
+    expect(assign).not.toHaveBeenCalled();
+  });
+});

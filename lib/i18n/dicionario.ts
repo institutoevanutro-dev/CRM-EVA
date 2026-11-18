@@ -5553,6 +5553,11 @@ export const DICIONARIO: Traducoes = {
   },
   "Saindo…": { es: "Saliendo…" },
   "Sair de todos os dispositivos": { es: "Salir de todos los dispositivos" },
+  // ─── Entrada, sessão e casca do app (auditoria 17/11, lotes 4 e 5) ───
+  "Sua sessão terminou. Entre de novo para voltar à tela onde estava.": {
+    es: "Tu sesión terminó. Inicia sesión de nuevo para volver a la pantalla donde estabas.",
+  },
+  // ─── fim do bloco da auditoria 17/11 ───
   "A verificação em duas etapas da sua conta, os códigos de recuperação e as sessões abertas.": {
     es: "La verificación en dos pasos de tu cuenta, los códigos de recuperación y las sesiones abiertas.",
   },
@@ -8535,7 +8540,7 @@ export const DICIONARIO: Traducoes = {
   "Dados inválidos. Confira os campos destacados.": {
     es: "Datos inválidos. Revisa los campos destacados.",
   },
-  "Sessão expirada. Faça login novamente.": { es: "Sesión vencida. Inicia sesión de nuevo." },
+  "Sua sessão terminou. Entre de novo.": { es: "Tu sesión terminó. Inicia sesión de nuevo." },
   "Você não tem permissão para esta ação.": { es: "No tienes permiso para esta acción." },
   "Recurso não encontrado ou já removido.": { es: "Recurso no encontrado o ya eliminado." },
   "Organização não encontrada.": { es: "Organización no encontrada." },

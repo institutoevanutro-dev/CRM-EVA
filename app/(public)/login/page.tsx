@@ -20,9 +20,10 @@ export default async function LoginPage({
     error?: string;
     evalink?: string;
     recovery_used?: string;
+    motivo?: string;
   }>;
 }) {
-  const { next, reset, error, evalink, recovery_used } = await searchParams;
+  const { next, reset, error, evalink, recovery_used, motivo } = await searchParams;
   const evalinkLigado = configEvalink() !== null;
   const mensagemEvalink = mensagemDoEvalink(evalink);
   // Fora da árvore de `app/app/layout.tsx` — sem `IdiomaProvider` do lado do
@@ -61,6 +62,16 @@ export default async function LoginPage({
               {t(mensagemEvalink)}
             </div>
           )}
+        </div>
+      )}
+      {/* A sessão terminou com a tela aberta (`lib/api/client.ts`, `levarAoLogin`):
+          sem esta linha, cair no login no meio do trabalho parece defeito. */}
+      {motivo === "sessao" && (
+        <div
+          className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm"
+          role="status"
+        >
+          {t("Sua sessão terminou. Entre de novo para voltar à tela onde estava.")}
         </div>
       )}
       {reset === "success" && (
