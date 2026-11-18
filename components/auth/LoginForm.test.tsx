@@ -148,19 +148,16 @@ describe("LoginForm — a espera tem teto", () => {
 describe("LoginForm — com o EvaLink ligado", () => {
   beforeEach(() => vi.mocked(signInWithPassword).mockReset());
 
-  it("a senha fica recolhida, sem cursor no e-mail e sem segundo botão principal", () => {
+  it("a senha vira porta da administração: rótulo, sem cursor no e-mail e sem segundo botão principal", () => {
     render(<LoginForm evalink />);
-    const resumo = screen.getByText("Entrar com senha (administração)");
-    const detalhes = resumo.closest("details");
-    expect(detalhes).not.toBeNull();
-    expect(detalhes).not.toHaveAttribute("open");
+    expect(screen.getByRole("region", { name: "Entrar com senha (administração)" })).toBeInTheDocument();
     expect(screen.getByLabelText("Email")).not.toHaveFocus();
-    expect(screen.getByRole("button", { name: "Entrar", hidden: true }).className).not.toMatch(/\bbg-primary\b/);
+    expect(screen.getByRole("button", { name: "Entrar" }).className).not.toMatch(/\bbg-primary\b/);
   });
 
   it("senha recusada lembra o botão do EvaLink", async () => {
     vi.mocked(signInWithPassword).mockResolvedValue({ ok: false, error: "invalid_credentials" });
-    render(<LoginForm evalink senhaAberta />);
+    render(<LoginForm evalink />);
     await act(async () => preencherEEnviar());
     expect(
       await screen.findByText("Email ou senha incorretos. Se você entra pelo EvaLink, use o botão acima."),

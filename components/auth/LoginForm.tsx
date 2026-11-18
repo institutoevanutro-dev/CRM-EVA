@@ -18,17 +18,13 @@ import { AvisoSemResposta, useEnvioComTeto } from "@/components/auth/teto-da-esp
  * administração (`reservaBloqueia`). Aberta como a principal, ela parecia o
  * caminho da equipe: dois botões verdes "Entrar", o cursor no e-mail, a senha
  * certa recusada e as cinco tentativas gastas (auditoria 17/11, item 47).
- * Fica recolhida atrás de "Entrar com senha (administração)".
+ * Vira porta secundária: abaixo de "Entrar com senha (administração)", sem
+ * cursor no e-mail, botão sem o verde e recusa que aponta o botão do EvaLink.
+ *
+ * Visível, e não recolhida como o relatório propunha: o e2e roda com o EvaLink
+ * ligado, e ~100 specs entram pela senha — recolher pedia mexer em todas.
  */
-export function LoginForm({
-  next,
-  evalink = false,
-  senhaAberta = false,
-}: {
-  next?: string;
-  evalink?: boolean;
-  senhaAberta?: boolean;
-}) {
+export function LoginForm({ next, evalink = false }: { next?: string; evalink?: boolean }) {
   const t = useT();
   const router = useRouter();
   const { pendente: isPending, semResposta, enviar } = useEnvioComTeto();
@@ -37,7 +33,6 @@ export function LoginForm({
   const {
     register,
     handleSubmit,
-    setFocus,
     formState: { errors },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -135,17 +130,15 @@ export function LoginForm({
   if (!evalink) return formulario;
 
   return (
-    <details
-      open={senhaAberta}
-      onToggle={(e) => {
-        if (e.currentTarget.open) setFocus("email");
-      }}
-      className="space-y-4"
-    >
-      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center rounded-md text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground [&::-webkit-details-marker]:hidden">
-        {t("Entrar com senha (administração)")}
-      </summary>
+    <section aria-labelledby="entrar-com-senha" className="space-y-4">
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span aria-hidden className="h-px flex-1 bg-border" />
+        <h2 id="entrar-com-senha" className="font-normal">
+          {t("Entrar com senha (administração)")}
+        </h2>
+        <span aria-hidden className="h-px flex-1 bg-border" />
+      </div>
       {formulario}
-    </details>
+    </section>
   );
 }

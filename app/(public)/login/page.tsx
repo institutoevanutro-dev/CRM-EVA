@@ -170,7 +170,7 @@ export default async function LoginPage({
           )}
         </div>
       )}
-      <LoginForm next={next} evalink={evalinkLigado} senhaAberta={reset === "success"} />
+      <LoginForm next={next} evalink={evalinkLigado} />
       <div className="space-y-2 text-center text-sm">
         <p>
           <Link
