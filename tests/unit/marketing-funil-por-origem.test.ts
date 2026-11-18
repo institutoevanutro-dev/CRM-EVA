@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { montarFunil, origemDe, somarVendasPorOrigem } from "@/lib/integrations/marketing/funil-por-origem";
 
 describe("origemDe", () => {
@@ -66,5 +66,37 @@ describe("somarVendasPorOrigem", () => {
     expect(s.get("meta")).toEqual({ vendido: 350000n, compradores: 2 });
     expect(s.get("google")).toEqual({ vendido: 0n, compradores: 0 });
     expect(s.get("organico")).toEqual({ vendido: 70000n, compradores: 1 });
+  });
+});
+
+describe("consultaFunilPorOrigem com vendas", () => {
+  it("id de contato fora do formato UUID RFC fica fora da consulta ao Financeiro, sem derrubar as vendas dos outros", async () => {
+    const { consultaFunilPorOrigem } = await import("@/lib/integrations/marketing/funil-por-origem");
+    const bom = "10000000-0000-4000-8000-000000000001";
+    const legado = "10000000-0000-0000-0000-000000000002"; // versão 0: o Financeiro recusa
+    const vazio = { data: [], error: null };
+    const tabela = (nome: string) => {
+      const q: Record<string, unknown> = {};
+      const fim = () => Promise.resolve(nome === "contacts" ? { data: [{ id: bom, ad_platform: "meta_ads" }, { id: legado, ad_platform: null }], error: null } : vazio);
+      for (const k of ["select", "eq", "in", "gte", "lte", "lt", "gt", "is", "not", "order", "range", "limit", "neq", "or", "filter"]) q[k] = () => q;
+      q.then = (ok: (v: unknown) => unknown, nao: (e: unknown) => unknown) => fim().then(ok, nao);
+      return q;
+    };
+    vi.doMock("@/lib/integrations/marketing/eventos-do-periodo", () => ({
+      emLotes: (xs: string[]) => [xs],
+      lerEventosDoPeriodo: async () => ({ leads: [{ contactId: bom }, { contactId: legado }], agendamentos: [], sinais: [], ganhos: [] }),
+      lerComparecimentos: async () => [],
+    }));
+    vi.resetModules();
+    const m = await import("@/lib/integrations/marketing/funil-por-origem");
+    const pedidos: string[][] = [];
+    const f = await m.consultaFunilPorOrigem({ from: tabela } as never, "org", "2026-10-01", "2026-10-30", async (lote) => {
+      pedidos.push(lote);
+      return [{ contato_id: bom, vendas: 1, valor_cents: "100000", recebido_cents: "0" }];
+    });
+    vi.doUnmock("@/lib/integrations/marketing/eventos-do-periodo");
+    expect(pedidos).toEqual([[bom]]);
+    expect(f.origens.find((o) => o.origem === "meta")?.vendido_cents).toBe("100000");
+    void consultaFunilPorOrigem;
   });
 });

@@ -36,6 +36,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { emLotes, lerComparecimentos, lerEventosDoPeriodo, type Contato } from "@/lib/integrations/marketing/eventos-do-periodo";
 import type { VendaPorContato } from "@/lib/integrations/financeiro/cliente";
 import { logger } from "@/lib/logger";
+import { z } from "zod";
+
+const UUID_RFC = z.string().uuid();
 
 /** Pede as vendas por contato em lotes de 500 (o limite da rota do Financeiro). */
 export type ConsultaVendas = (contatos: string[]) => Promise<VendaPorContato[]>;
@@ -130,11 +133,15 @@ export async function consultaFunilPorOrigem(admin: SupabaseClient, org: string,
   const origens = new Map(contatos.map((id) => [id, origemDe({ adPlatform: plataforma.get(id) ?? null, tags: etiquetas.get(id) ?? [] })]));
 
   const funil = montarFunil({ leads, agendamentos, comparecimentos, sinais, ganhos }, origens);
-  if (!vendas || !contatos.length) return funil;
+  // Só ids no formato que a rota do Financeiro aceita (UUID RFC). Contato antigo com id fora do formato
+  // derrubava a consulta inteira (17/11: 2 de ~600 contatos, e o funil de 30 dias saía sem vendas).
+  // Esses poucos ficam fora da soma; nenhum outro se perde.
+  const aceitos = contatos.filter((id) => UUID_RFC.safeParse(id).success);
+  if (!vendas || !aceitos.length) return funil;
   let s: ReturnType<typeof somarVendasPorOrigem>;
   try {
     const todas: VendaPorContato[] = [];
-    for (let i = 0; i < contatos.length; i += 500) todas.push(...(await vendas(contatos.slice(i, i + 500))));
+    for (let i = 0; i < aceitos.length; i += 500) todas.push(...(await vendas(aceitos.slice(i, i + 500))));
     // A soma fica DENTRO do try: um valor_cents fora do formato (BigInt lança) não derruba o funil inteiro.
     s = somarVendasPorOrigem(todas, origens);
   } catch (err) {
