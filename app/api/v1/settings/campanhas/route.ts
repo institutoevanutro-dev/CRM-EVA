@@ -19,6 +19,7 @@ import {
   configuracaoDeCampanhasSchema,
   lerConfiguracao,
 } from "@/lib/campanhas/configuracao";
+import { erroDaJanela } from "@/lib/campanhas/schemas";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -61,15 +62,10 @@ export async function PATCH(req: NextRequest): Promise<Response> {
     });
   }
   const nova = parsed.data;
-  if (
-    nova.janela_inicio_hora !== null &&
-    nova.janela_fim_hora !== null &&
-    nova.janela_fim_hora <= nova.janela_inicio_hora
-  ) {
-    return fail("validation_failed", t("A janela precisa terminar depois de começar."), 422, {
-      requestId,
-    });
-  }
+  // A mesma régua da campanha: o padrão vira o ritmo de toda campanha NOVA, e
+  // meia janela aqui nasceria campanha que o banco recusa.
+  const erroNaJanela = erroDaJanela(nova.janela_inicio_hora, nova.janela_fim_hora);
+  if (erroNaJanela) return fail("validation_failed", t(erroNaJanela), 422, { requestId });
 
   const admin = createAdminClient();
   const { data: atual, error: erroLeitura } = await admin

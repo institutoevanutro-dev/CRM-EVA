@@ -150,4 +150,36 @@ describe("AudioRecorder", () => {
     await waitFor(() => expect(uploadMock).toHaveBeenCalled());
     expect(uploadMock.mock.calls[0]![0]).toMatchObject({ filename: "ptt.webm", notaDeVoz: true });
   });
+
+  /**
+   * Item 35 da auditoria de 17/11: o envio se mostra ("Enviando áudio…") e a
+   * falha não perde a gravação — "Tentar de novo" sobe o MESMO arquivo.
+   */
+  it("⭐ subida que falha guarda a gravação; 'Tentar de novo' sobe o mesmo arquivo", async () => {
+    let falhar: (e: Error) => void = () => {};
+    uploadMock.mockImplementationOnce(
+      () => new Promise((_ok, erro) => (falhar = erro)) as ReturnType<typeof uploadMock>,
+    );
+    render(<AudioRecorder conversationId="conv-1" />);
+    fireEvent.click(screen.getByRole("button", { name: /gravar áudio/i }));
+    const enviarBtn = await screen.findByRole("button", { name: /enviar áudio/i });
+    await act(async () => {
+      fireEvent.click(enviarBtn);
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent("Enviando áudio…");
+
+    await act(async () => falhar(new Error("rede caiu")));
+    expect(await screen.findByText("Áudio não enviado.")).toBeInTheDocument();
+    expect(sendMock).not.toHaveBeenCalled();
+    const primeiro = uploadMock.mock.calls[0]![0].file;
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    });
+    await waitFor(() => expect(uploadMock).toHaveBeenCalledTimes(2));
+    expect(uploadMock.mock.calls[1]![0].file).toBe(primeiro);
+    await waitFor(() =>
+      expect(sendMock).toHaveBeenCalledWith(expect.objectContaining({ type: "audio" }), expect.anything()),
+    );
+  });
 });

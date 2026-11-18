@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { horaLocal, podeMandarAgora, proximaTentativa, type RitmoDaCampanha } from "./ritmo";
+import { PACING_DEFAULTS } from "@/lib/agent-engine/pacing/defaults";
+
+import { horaLocal, janelaDeEnvio, podeMandarAgora, proximaTentativa, type RitmoDaCampanha } from "./ritmo";
 
 const FUSO = "America/Sao_Paulo";
 /** 10h em São Paulo (UTC-3). */
@@ -105,5 +107,40 @@ describe("ritmo próprio da campanha", () => {
     expect(intervalo.getTime()).toBeGreaterThan(agora.getTime());
     // Quem espera a janela não precisa ser reconsultado de minuto em minuto.
     expect(janela.getTime()).toBeGreaterThan(intervalo.getTime());
+  });
+});
+
+/**
+ * A janela que a TELA mostra (auditoria de 17/11/2026, item 23): iniciada às
+ * 22h30, a campanha ficava "Enviando 0%" a noite toda sem dizer que espera as 7h.
+ */
+describe("janelaDeEnvio", () => {
+  const CANAL = { ...PACING_DEFAULTS, windowStartHour: 7, windowEndHour: 22, timezone: FUSO, allowSunday: true };
+  const SEM_JANELA = { janela_inicio_hora: null, janela_fim_hora: null };
+
+  it("às 23h, fora da janela do número: fechada, volta às 7h", () => {
+    expect(janelaDeEnvio(CANAL, SEM_JANELA, ONZE_DA_NOITE)).toEqual({ inicio: 7, fim: 22, aberta: false });
+  });
+
+  it("às 10h, dentro: aberta", () => {
+    expect(janelaDeEnvio(CANAL, SEM_JANELA, DEZ_DA_MANHA).aberta).toBe(true);
+  });
+
+  it("a janela da campanha só aperta a do número", () => {
+    expect(janelaDeEnvio(CANAL, { janela_inicio_hora: 11, janela_fim_hora: 23 }, DEZ_DA_MANHA)).toEqual({
+      inicio: 11,
+      fim: 22,
+      aberta: false,
+    });
+  });
+
+  it("janelas que não se cruzam nunca abrem", () => {
+    const r = janelaDeEnvio(CANAL, { janela_inicio_hora: 22, janela_fim_hora: 24 }, DEZ_DA_MANHA);
+    expect(r.aberta).toBe(false);
+    expect(r.inicio).toBeGreaterThanOrEqual(r.fim);
+  });
+
+  it("meia janela gravada (legado) é ignorada, como na rodada", () => {
+    expect(janelaDeEnvio(CANAL, { janela_inicio_hora: 11, janela_fim_hora: null }, DEZ_DA_MANHA).aberta).toBe(true);
   });
 });

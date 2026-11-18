@@ -263,11 +263,12 @@ test.describe("J20.18 — resposta manual pelo celular pausa a IA (sem apagar a 
       // ---------------------------------------------------------------------
       await login(page, creds.users.agent!.email);
       await page.goto(`${APP_URL}/app/inbox/${conversationId}`);
+      // Desde 18/11 a situação e a volta moram no ⋯ do cabeçalho.
+      await abrirAcoesDaConversa(page);
       await expect(
         page.getByTestId("badge-atendimento-humano"),
         "conversa com a IA pausada não pode ter a mesma cara de uma normal",
       ).toBeVisible({ timeout: 30_000 });
-      await abrirAcoesDaConversa(page);
       const devolver = page.getByTestId("devolver-ao-automatico");
       await expect(devolver).toBeVisible();
       await captura(page, "18-ia-pausada-por-resposta-manual");
@@ -284,8 +285,12 @@ test.describe("J20.18 — resposta manual pelo celular pausa a IA (sem apagar a 
           { timeout: 20_000 },
         )
         .toBeNull();
+      // Com o menu ABERTO (a situação à vista), o selo do porquê some.
+      await abrirAcoesDaConversa(page);
+      await expect(page.getByTestId("menu-da-conversa").getByTestId("comando-da-conversa")).toBeVisible();
       await expect(page.getByTestId("badge-atendimento-humano")).toHaveCount(0, { timeout: 20_000 });
       await captura(page, "18-devolvido-ao-automatico");
+      await page.keyboard.press("Escape");
 
       expect(
         helper<{ ai_authorized_at: string | null }>("contact-authorization", contactId).ai_authorized_at,

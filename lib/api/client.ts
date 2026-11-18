@@ -150,6 +150,32 @@ function pedirDecisaoAoServidor(): void {
   window.location.reload();
 }
 
+/**
+ * A SESSÃO ACABOU COM A TELA ABERTA (auditoria de 17/11/2026, item 45).
+ *
+ * "Sair" em outro aparelho, senha trocada, sessão revogada: a próxima chamada
+ * volta 401 `unauthenticated` (o código que o `proxy.ts` e o `requireRole`
+ * mandam). A tela ficava onde estava, cada ação mostrava um aviso em inglês e
+ * as listas viravam "Erro ao carregar" — a pessoa não sabia que tinha saído.
+ *
+ * Vai para o login levando o caminho atual em `next` (validado por `safeNext`
+ * na volta), o mesmo destino que o `proxy.ts` monta para quem carrega uma
+ * página sem sessão. `assign`, e não `replace`: quem tinha texto não salvo e um
+ * aviso de "sair da página" ainda é perguntado antes. Uma vez por
+ * carregamento — dez listas recusando juntas não fazem dez navegações. Não há
+ * laço: a tela de login não redireciona sozinha.
+ */
+let jaLevouAoLogin = false;
+
+function levarAoLogin(): void {
+  if (typeof window === "undefined" || jaLevouAoLogin) return;
+  const { pathname, search } = window.location;
+  if (pathname.startsWith("/login")) return;
+  jaLevouAoLogin = true;
+  const destino = new URLSearchParams({ next: pathname + search, motivo: "sessao" });
+  window.location.assign(`/login?${destino.toString()}`);
+}
+
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -312,6 +338,9 @@ async function request<T>(
         // com erro em vez de ficar pendurado esperando uma resposta que não vem.
         if (res.status === 403 && e.code === "no_active_org") {
           pedirDecisaoAoServidor();
+        }
+        if (res.status === 401 && e.code === "unauthenticated") {
+          levarAoLogin();
         }
         throw new ApiError(
           res.status,

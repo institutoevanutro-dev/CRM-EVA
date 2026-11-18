@@ -4,6 +4,7 @@ import * as path from "node:path";
 
 import { esquecerOrganizacaoAtiva } from "./helpers/esquecer-organizacao-ativa";
 import { test, expect, type Page } from "@playwright/test";
+import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
 
 /**
  * TROCAR DE ORGANIZAÇÃO TEM VOLTA — mesmo quando a organização de destino
@@ -90,6 +91,7 @@ test("trocar para uma organização não configurada leva ao wizard — e dá pa
   // Ancora na org A e guarda o nome dela — é para cá que a volta tem de trazer.
   const seletor = page.getByTestId("tenant-switcher");
   await expect(seletor).toBeVisible({ timeout: 20_000 });
+  await mostrarBarraDeCima(page);
   await seletor.click();
   await page.getByTestId(`tenant-switcher-item-${orgA}`).click();
   await expect(seletor).toBeEnabled({ timeout: 60_000 });
@@ -97,6 +99,7 @@ test("trocar para uma organização não configurada leva ao wizard — e dá pa
   expect(nomeDaOrgA.length, "o seletor não anuncia o nome da organização ativa").toBeGreaterThan(0);
 
   // ── a troca que prendia ────────────────────────────────────────────────
+  await mostrarBarraDeCima(page);
   await seletor.click();
   await page.getByTestId(`tenant-switcher-item-${semOnboarding}`).click();
 

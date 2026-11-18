@@ -28,6 +28,8 @@ export interface ChannelSession {
    * dublê de teste) não o traz, e aí vale o comportamento de antes.
    */
   can_send?: boolean;
+  /** Conexão por QR que nunca esteve no ar (ver `nuncaPareou`): fora da faixa de caída. */
+  nunca_pareou?: boolean;
 }
 
 /** Só os canais que ENVIAM — as listas de "número de WhatsApp". */

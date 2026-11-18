@@ -19,6 +19,7 @@ import {
   transbordoDaPagina,
   type Creds,
 } from "./qa-l12-comum";
+import { abrirPainelDoContato } from "./helpers/acoes-da-conversa";
 
 const S = `${Date.now()}`.slice(-6);
 const TEM_GOOGLE = (process.env.GOOGLE_CALENDAR_CLIENT_ID ?? "").length > 0;
@@ -316,6 +317,9 @@ test.describe("Lote 12 — #907 o nome editado vence o nome do perfil do WhatsAp
     // ── O Inbox: lista, cabeçalho e painel ────────────────────────────────
     await abreConversa(page, conversaId);
     await expect(page.getByText(`Maria Silva ${S}`).first()).toBeVisible({ timeout: 60_000 });
+    // O painel nasce recolhido (18/11/2026); sem abrir, "nenhum canto do Inbox"
+    // deixaria de incluir o painel e a medição ficaria menor sem avisar.
+    await abrirPainelDoContato(page);
     await page.waitForLoadState("networkidle").catch(() => {});
     const inbox = await page.locator("body").innerText();
     registra(`#907 inbox · "Maria Silva" = ${inbox.includes(`Maria Silva ${S}`)} · "Ze do Pix" = ${inbox.includes(`Ze do Pix ${S}`)}`);

@@ -268,8 +268,9 @@ describe("a listagem sai na ordem do operador, não na de edição", () => {
     const menu = render(
       <TemplateMenu open query="" templates={templates} onPick={() => {}} onClose={() => {}} />,
     );
+    // As linhas do menu são opções da lista (item 43: setas e Enter escolhem).
     const titulos = screen
-      .getAllByRole("button")
+      .getAllByRole("option")
       .map((botao) => botao.querySelector("span")?.textContent ?? "")
       .filter((texto) => texto.startsWith("Título "));
     expect(titulos).toEqual(["Título c", "Título a", "Título b"]);

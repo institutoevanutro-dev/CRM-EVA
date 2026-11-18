@@ -14,6 +14,8 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getUser: async () => ({ data: { user: null } }) } }),
 }));
 vi.mock("@/components/auth/LoginForm", () => ({ LoginForm: () => null }));
+// A página consulta a política de cadastro (some "Criar conta" no modo só convite); sem banco aqui.
+vi.mock("@/lib/auth/politica-de-cadastro", () => ({ modoDeCadastro: async () => "aberto" }));
 vi.mock("@/lib/evalink/config", () => ({ configEvalink: () => null }));
 const linha = vi.hoisted(() => ({ atual: null as Record<string, unknown> | null }));
 vi.mock("@/lib/branding/instalacao", () => ({ marcaDaInstalacao: async () => linha.atual }));

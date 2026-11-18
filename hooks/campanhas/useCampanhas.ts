@@ -11,6 +11,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { apiClient } from "@/lib/api/client";
 import type { ContagemDaCampanha, TaxasDaCampanha } from "@/lib/campanhas/metricas";
+import type { JanelaDeEnvio } from "@/lib/campanhas/ritmo";
 import type { StatusDaCampanha } from "@/lib/campanhas/tipos";
 
 export interface CampanhaDaLista {
@@ -50,6 +51,10 @@ export interface CampanhaDetalhada extends CampanhaDaLista {
   janela_fim_hora: number | null;
   teto_diario: number | null;
   teto_horario: number | null;
+  /** A janela que vale agora (número × campanha). Ver `janelaDeEnvio` em `lib/campanhas/ritmo.ts`. */
+  janela_de_envio?: JanelaDeEnvio;
+  /** Cópia: quantas pessoas já receberam a original e ficam de fora. `null` = não é cópia. */
+  ja_receberam_a_original?: number | null;
 }
 
 export interface Destinatario {
@@ -130,9 +135,15 @@ export function useMetricasDaCampanha(id: string, status?: StatusDaCampanha) {
   });
 }
 
-export function useDestinatarios(id: string, filtros: { status?: string }) {
+/**
+ * Quem está na lista. Enquanto a campanha anda, a lista anda junto: sem o
+ * `refetchInterval`, os quadros subiam e "Quem está na lista" seguia mostrando
+ * "Na fila" para quem já tinha recebido (auditoria de 17/11/2026, item 22).
+ */
+export function useDestinatarios(id: string, filtros: { status?: string }, statusDaCampanha?: StatusDaCampanha) {
   return useInfiniteQuery({
     queryKey: ["campanha-destinatarios", id, filtros],
+    refetchInterval: statusDaCampanha && EM_MOVIMENTO.has(statusDaCampanha) ? 10_000 : false,
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
       const qs = new URLSearchParams();
@@ -156,7 +167,8 @@ export type AcaoDeCampanha =
   | "retomar"
   | "cancelar"
   | "duplicar"
-  | "testar";
+  | "testar"
+  | "rascunho";
 
 export function useAcaoDeCampanha(id: string) {
   const qc = useQueryClient();
@@ -166,7 +178,10 @@ export function useAcaoDeCampanha(id: string) {
         `/api/v1/campaigns/${id}/${entrada.acao}`,
         entrada.corpo ?? {},
       ),
-    onSuccess: () => {
+    // `onSettled`, não `onSuccess`: a ação que FALHA também muda a campanha —
+    // preparar sem ninguém no recorte a devolve a rascunho com o motivo
+    // gravado, e a tela seguia mostrando o estado de antes até um F5.
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["campanha", id] });
       void qc.invalidateQueries({ queryKey: ["campanha-metricas", id] });
       void qc.invalidateQueries({ queryKey: ["campanha-destinatarios", id] });

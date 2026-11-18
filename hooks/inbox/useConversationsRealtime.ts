@@ -6,7 +6,7 @@ import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
 import { useRefetchDeSeguranca } from "@/hooks/realtime/useRefetchDeSeguranca";
 import { aplicarAtualizacaoNaLista } from "@/lib/inbox/atualizacao-da-lista";
 import { apiClient } from "@/lib/api/client";
-import { showApiError } from "@/components/feedback/ApiErrorToast";
+import { avisarFalhaDeLeitura, conexaoVoltou } from "@/hooks/inbox/avisoSemConexao";
 import {
   type ModoDeEtiqueta,
   marcadoresEscolhidos,
@@ -189,9 +189,11 @@ export function useConversationsRealtime(
       if (pageParam) qs.set("cursor", pageParam);
       qs.set("limit", "50");
       try {
-        return await apiClient.get<ListResponse>(`/api/v1/conversations?${qs.toString()}`);
+        const resposta = await apiClient.get<ListResponse>(`/api/v1/conversations?${qs.toString()}`);
+        conexaoVoltou();
+        return resposta;
       } catch (err) {
-        showApiError(err);
+        avisarFalhaDeLeitura(err);
         throw err;
       }
     },

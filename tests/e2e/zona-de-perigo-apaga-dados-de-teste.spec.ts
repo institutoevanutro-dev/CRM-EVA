@@ -33,6 +33,7 @@ import * as path from "node:path";
 
 import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page } from "@playwright/test";
+import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
 
 const RAIZ = path.resolve(__dirname, "../..");
 const CREDS_PATH = path.join(RAIZ, ".e2e-creds.json");
@@ -114,6 +115,7 @@ async function entrar(page: Page, email: string, senha: string) {
 async function trocarPara(page: Page, orgId: string) {
   const seletor = page.getByTestId("tenant-switcher");
   await expect(seletor).toBeVisible({ timeout: 20_000 });
+  await mostrarBarraDeCima(page);
   await seletor.click();
   await page.getByTestId(`tenant-switcher-item-${orgId}`).click();
   await expect(seletor).toBeEnabled({ timeout: 60_000 });

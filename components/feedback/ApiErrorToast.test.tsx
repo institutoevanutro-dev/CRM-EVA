@@ -25,7 +25,7 @@ describe("ApiErrorToast", () => {
       "body_malformed",
       "cursor_malformed",
       "validation_error",
-      "auth_required",
+      "unauthenticated",
       "forbidden_role",
       "resource_not_found",
       "tenant_not_found",
@@ -108,6 +108,18 @@ describe("ApiErrorToast", () => {
     expect(toast.error).toHaveBeenCalledWith(
       "I'm a teapot",
       expect.objectContaining({ description: "ID: req-2" }),
+    );
+  });
+
+  // Auditoria de 17/11/2026, item 45: a rota manda `unauthenticated` e a tabela
+  // procurava `auth_required` — o texto cru "Auth required." chegava em inglês,
+  // vermelho, a cada ação de quem teve a sessão encerrada.
+  it("401 unauthenticated vira aviso em português, não o texto cru da rota", () => {
+    showApiError(new ApiError(401, "unauthenticated", undefined, "req-401", "Auth required."));
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.warning).toHaveBeenCalledWith(
+      "Sua sessão terminou. Entre de novo.",
+      expect.objectContaining({ description: "ID: req-401" }),
     );
   });
 

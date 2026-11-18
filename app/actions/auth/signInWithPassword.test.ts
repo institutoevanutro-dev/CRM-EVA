@@ -171,3 +171,46 @@ describe("signInWithPassword: senha é reserva para quem está ligado ao EvaLink
     expect(reservaBloqueia).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Auditoria de 17/11, item 50: todo erro virava "Email ou senha incorretos" e
+ * gastava tentativa — e-mail não confirmado e servidor de login fora do ar
+ * inclusive.
+ */
+describe("signInWithPassword: recusa que não é senha errada", () => {
+  const recusa = (error: Record<string, unknown>) =>
+    vi.mocked(createClient).mockResolvedValue({
+      auth: {
+        signInWithPassword: vi.fn(async () => ({ data: { user: null, session: null }, error })),
+        signOut: vi.fn(),
+        mfa: { listFactors: vi.fn() },
+      },
+    } as never);
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.mocked(configEvalink).mockReturnValue(null);
+    vi.mocked(registrarFalhaDeLogin).mockClear();
+    vi.mocked(headers).mockResolvedValue({ get: () => null } as never);
+  });
+
+  it.each([
+    ["e-mail não confirmado", { code: "email_not_confirmed", message: "Email not confirmed", status: 400 }, "email_not_confirmed"],
+    ["servidor inalcançável (status 0)", { name: "AuthRetryableFetchError", message: "fetch failed", status: 0 }, "unavailable"],
+    ["servidor de login com 503", { message: "Service Unavailable", status: 503 }, "unavailable"],
+  ] as const)("%s: mensagem própria, sem gastar tentativa", async (_n, error, esperado) => {
+    recusa(error);
+    const { signInWithPassword } = await import("./signInWithPassword");
+    const res = await signInWithPassword({ email: "ana@exemplo.test", password: "senha-teste-123" });
+    expect(res.error).toBe(esperado);
+    expect(registrarFalhaDeLogin).not.toHaveBeenCalled();
+  });
+
+  it("CONTROLE — senha errada continua contando", async () => {
+    recusa({ code: "invalid_credentials", message: "Invalid login credentials", status: 400 });
+    const { signInWithPassword } = await import("./signInWithPassword");
+    const res = await signInWithPassword({ email: "ana@exemplo.test", password: "senha-teste-123" });
+    expect(res.error).toBe("invalid_credentials");
+    expect(registrarFalhaDeLogin).toHaveBeenCalledTimes(1);
+  });
+});

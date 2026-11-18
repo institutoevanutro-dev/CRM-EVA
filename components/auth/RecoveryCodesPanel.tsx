@@ -69,7 +69,10 @@ export function RecoveryCodesPanel({ codes, onAcknowledge }: RecoveryCodesPanelP
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // O Safari cancela o download se a URL some no mesmo tick do clique, e a
+    // tela dizia "Arquivo baixado" sem arquivo (auditoria 17/11, item 49).
+    // Mesmo prazo de `ExportarConversaEmPdf.tsx`.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
     toast.success(t("Arquivo baixado."));
   };
 

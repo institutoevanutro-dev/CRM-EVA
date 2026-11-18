@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { COOKIE_LOGIN, configEvalink } from "@/lib/evalink/config";
+import { COOKIE_LOGIN, COOKIE_VOLTA, configEvalink } from "@/lib/evalink/config";
+import { safeNext } from "@/lib/auth/safe-next";
 import { conferirVolta } from "@/lib/evalink/oidc";
 import { decidirEntrada } from "@/lib/evalink/entrada";
 import { abrirSessao, origemDaRequisicao, temMfaVerificado } from "@/lib/evalink/sessao";
@@ -10,20 +11,25 @@ import { audit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
-const PAGINA_ENTROU =
-  '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/app"><title>Entrando</title><p><a href="/app">Continuar</a></p>';
-// Quem tem TOTP verificado prova o fator antes, como no login por senha.
-const PAGINA_MFA =
-  '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=/login/mfa?next=/app"><title>Entrando</title><p><a href="/login/mfa?next=/app">Continuar</a></p>';
+const atributo = (v: string) =>
+  v.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** A página que navega a partir do próprio CRM (ver o comentário do GET). */
+const paginaQueSegue = (destino: string) => {
+  const d = atributo(destino);
+  return `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${d}"><title>Entrando</title><p><a href="${d}">Continuar</a></p>`;
+};
 
 const limparLogin = (res: NextResponse) => {
-  res.cookies.set(COOKIE_LOGIN, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: cookieSecure(),
-    path: "/evalink",
-    maxAge: 0,
-  });
+  for (const nome of [COOKIE_LOGIN, COOKIE_VOLTA]) {
+    res.cookies.set(nome, "", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: cookieSecure(),
+      path: "/evalink",
+      maxAge: 0,
+    });
+  }
   return res;
 };
 
@@ -82,10 +88,16 @@ export async function GET(req: NextRequest) {
   }
 
   await audit({ action: "auth.evalink_login", actorUserId: d.userId, metadata: { papel: quem.papel, mfa }, ...origem });
+  // A tela de onde a pessoa veio (auditoria 17/11, item 53), validada de novo na volta: o
+  // cookie é nosso, mas `safeNext` é a regra única de destino interno.
+  const voltaPara = safeNext(req.cookies.get(COOKIE_VOLTA)?.value, "/app");
+  // Quem tem TOTP verificado prova o fator antes, como no login por senha.
+  // Só o que quebraria o valor do parâmetro é escapado; `/app` segue legível.
+  const destino = mfa ? `/login/mfa?next=${voltaPara.replace(/[%&#+]/g, encodeURIComponent)}` : voltaPara;
   // Os cookies de sessão gravados por abrirSessao (cookies() do next/headers) o Next anexa a
   // ESTA resposta, como faz com o redirect do /auth/confirm.
   return limparLogin(
-    new NextResponse(mfa ? PAGINA_MFA : PAGINA_ENTROU, {
+    new NextResponse(paginaQueSegue(destino), {
       status: 200,
       headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
     }),

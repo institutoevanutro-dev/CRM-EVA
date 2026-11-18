@@ -225,11 +225,13 @@ test.describe("IA 360 W3 — o agente para, a pessoa continua, o agente retoma s
     // (3) Na conversa, a tela DIZ que o automático está pausado e oferece a volta.
     // ---------------------------------------------------------------------
     await page.goto(`/app/inbox/${e.conversation_id}`);
+    // Desde 18/11 a situação (o selo do porquê) e a volta moram no ⋯ do
+    // cabeçalho de app de mensagem: abre o menu e procura lá.
+    await abrirAcoesDaConversa(page);
     await expect(
       page.getByTestId("badge-atendimento-humano"),
       "conversa com o robô calado não pode ter a mesma cara de uma conversa normal",
     ).toBeVisible({ timeout: 30_000 });
-    await abrirAcoesDaConversa(page);
     const botaoDevolver = page.getByTestId("devolver-ao-automatico");
     await expect(
       botaoDevolver,
@@ -270,8 +272,12 @@ test.describe("IA 360 W3 — o agente para, a pessoa continua, o agente retoma s
       )
       .toEqual({ silenciada: null, dono: null, kind: "ai", forcado: false });
 
+    // Com o menu ABERTO (a situação à vista), o selo do porquê some.
+    await abrirAcoesDaConversa(page);
+    await expect(page.getByTestId("menu-da-conversa").getByTestId("comando-da-conversa")).toBeVisible();
     await expect(page.getByTestId("badge-atendimento-humano")).toHaveCount(0, { timeout: 20_000 });
     await captura(page, "04-devolvido-ao-automatico");
+    await page.keyboard.press("Escape");
 
     // ---------------------------------------------------------------------
     // (5) A VOLTA na linha do tempo do negócio — a ida aparecia, a volta não.

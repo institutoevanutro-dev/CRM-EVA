@@ -14,6 +14,8 @@ interface Props {
   conversationId: string;
   snoozeUntil: string | null;
   disabled?: boolean;
+  /** `item`: linha do menu ⋯ do cabeçalho, com o nome sempre à vista. */
+  variante?: "botao" | "item";
 }
 
 const DURATIONS: Array<{ hours: 1 | 3 | 24; label: string }> = [
@@ -26,7 +28,7 @@ function isSnoozeActive(snoozeUntil: string | null): boolean {
   return snoozeUntil != null && new Date(snoozeUntil).getTime() > Date.now();
 }
 
-export function SnoozeButton({ conversationId, snoozeUntil, disabled }: Props) {
+export function SnoozeButton({ conversationId, snoozeUntil, disabled, variante = "botao" }: Props) {
   const t = useT();
   const { snooze, cancel } = useSnoozeConversation();
   const isActive = isSnoozeActive(snoozeUntil);
@@ -36,6 +38,18 @@ export function SnoozeButton({ conversationId, snoozeUntil, disabled }: Props) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
+        {variante === "item" ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={disabled || isPending}
+            className="w-full justify-start gap-2 px-2"
+            title={rotulo}
+          >
+            <Clock size={16} weight="regular" aria-hidden />
+            {rotulo}
+          </Button>
+        ) : (
         <Button
           size="sm"
           variant="outline"
@@ -50,6 +64,7 @@ export function SnoozeButton({ conversationId, snoozeUntil, disabled }: Props) {
           <Clock size={16} weight="regular" aria-hidden />
           <span className="hidden @[40rem]:inline">{rotulo}</span>
         </Button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {isActive ? (

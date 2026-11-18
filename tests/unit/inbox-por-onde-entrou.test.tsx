@@ -4,20 +4,22 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 /**
- * POR ONDE a conversa entrou, na lista do inbox.
+ * A LINHA DA LISTA É A DE APP DE MENSAGEM (pedido do André, 18/11/2026).
  *
- * O número mostrado é o DA EMPRESA, não o do cliente. Com um canal só a
- * distinção não existe; com dois — que é o caso desde que o canal intermediado
- * entrou — saber por qual linha a pessoa escreveu decide o tom da resposta e
- * qual número ela vai ver respondendo.
+ * Foto (com o selo do canal no canto: WhatsApp ou Instagram), nome ou número,
+ * hora à direita, prévia com o tique quando a última mensagem foi nossa, e a
+ * bolinha de não lidas. Os selos de etapa, etiqueta, situação e NÚMERO DA
+ * EMPRESA por onde a conversa entrou saíram da linha: moram no painel do
+ * contato, no menu ⋯ da conversa e nos filtros (o filtro por número continua).
  *
- * Metade dos casos prova quando o rótulo NÃO aparece. Um badge repetido em toda
- * linha da lista é ruído, e ruído na mesma área dos avisos que importam
- * (bloqueado, tags) ensina o olho a ignorar aquela faixa inteira.
+ * Este arquivo substitui o "por onde entrou", que provava o selo do número na
+ * linha. O que continua valendo dele: o canal se anuncia (o selo da foto) e o
+ * SELECT da lista traz a sessão — o filtro por número e o menu dependem dela.
  */
 import { ConversationListItem } from "@/components/inbox/ConversationListItem";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 
+const agora = Date.now();
 const base = {
   id: "c1",
   organization_id: "org",
@@ -25,135 +27,75 @@ const base = {
   channel_session_id: "s1",
   channel: "whatsapp",
   status: "open",
-  last_message_at: new Date().toISOString(),
+  assigned_to_user_id: "u-2",
+  assigned_to_user_name: "Bruna Fictícia",
+  assignee_kind: "user",
+  etapa_atual: "Avaliação marcada",
+  last_message_at: new Date(agora).toISOString(),
+  last_inbound_at: new Date(agora - 60_000).toISOString(),
+  last_outbound_at: null,
   last_message_preview: "olá",
   unread_count_for_assignee: 0,
-  created_at: new Date().toISOString(),
-  contacts: { id: "ct1", display_name: "Cliente", name: null, phone_number: "+595999", tags: [], is_blocked: false, is_anonymized: false },
+  created_at: new Date(agora).toISOString(),
+  channel_sessions: { phone_number: "+5527999990000", display_name: "Recepção", provider: "waha" },
+  contacts: {
+    id: "ct1", display_name: "Paciente Fictícia", name: null, phone_number: "+5527988887777",
+    tags: ["vip", "retorno"], is_blocked: false, is_anonymized: false,
+  },
 } as unknown as ConversationWithContact;
 
-const comCanal = (canal: { phone_number: string | null; display_name: string | null } | null) =>
-  ({ ...base, channel_sessions: canal }) as ConversationWithContact;
-
-const pintar = (conv: ConversationWithContact, mostrarCanal: boolean) =>
+const pintar = (extra: Record<string, unknown> = {}) =>
   render(
     <ConversationListItem
-      conversation={conv}
+      conversation={{ ...base, ...extra } as ConversationWithContact}
       isSelected={false}
       onSelect={() => {}}
-      mostrarCanal={mostrarCanal}
     />,
   );
 
-describe("mostra o número da empresa quando há mais de um canal", () => {
-  it("pinta o número por onde a conversa entrou", () => {
-    pintar(comCanal({ phone_number: "+19392301037", display_name: "MP wp" }), true);
-    expect(screen.getByText("+19392301037")).toBeInTheDocument();
+describe("linha de app de mensagem", () => {
+  it("⭐ foto, nome, hora e prévia — sem selo de etapa, etiqueta, situação ou número do canal", () => {
+    const { container } = pintar();
+    expect(screen.getByText("Paciente Fictícia")).toBeTruthy();
+    expect(screen.getByText("olá")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "WhatsApp" })).toBeTruthy();
+    for (const fora of ["Avaliação marcada", "vip", "retorno", "Recepção", "Bruna Fictícia", "Equipe"]) {
+      expect(screen.queryByText(fora), fora).toBeNull();
+    }
+    expect(container.textContent).not.toContain("+5527999990000");
+    expect(container.querySelector("[data-etapa-da-conversa], [data-selo-do-comando]")).toBeNull();
   });
 
-  it("cai no NOME do canal quando ainda não há número", () => {
-    // Canal recém-conectado pode não ter número resolvido; mostrar nada seria
-    // pior que mostrar como ele se chama.
-    pintar(comCanal({ phone_number: null, display_name: "Canal novo" }), true);
-    expect(screen.getByText("Canal novo")).toBeInTheDocument();
+  it("Instagram: o selo da foto diz o canal", () => {
+    pintar({ channel: "instagram" });
+    expect(screen.getByRole("img", { name: "Instagram" })).toBeTruthy();
   });
 
-  it("explica o rótulo no title — o número solto não diz o que é", () => {
-    pintar(comCanal({ phone_number: "+19392301037", display_name: null }), true);
-    expect(screen.getByTitle("Entrou por +19392301037")).toBeInTheDocument();
+  it("o tique aparece quando a última mensagem foi nossa — e só então", () => {
+    const { unmount } = pintar({ last_outbound_at: new Date(agora).toISOString() });
+    expect(screen.getByLabelText("Sua mensagem")).toBeTruthy();
+    unmount();
+    pintar();
+    expect(screen.queryByLabelText("Sua mensagem")).toBeNull();
   });
 
-  it("não confunde com o número do CLIENTE", () => {
-    // O contato tem +595999; o canal tem +1939. O que aparece no badge é o da
-    // EMPRESA — trocar os dois faria o atendente ligar para si mesmo.
-    pintar(comCanal({ phone_number: "+19392301037", display_name: null }), true);
-    expect(screen.getByTitle("Entrou por +19392301037")).toBeInTheDocument();
-    expect(screen.queryByTitle("Entrou por +595999")).not.toBeInTheDocument();
-  });
-});
-
-describe("NÃO mostra quando não ajuda", () => {
-  it("com um canal só — seria a mesma palavra em toda linha", () => {
-    pintar(comCanal({ phone_number: "+19392301037", display_name: "MP wp" }), false);
-    expect(screen.queryByText("+19392301037")).not.toBeInTheDocument();
+  it("a bolinha de não lidas diz quantas, também para o leitor de tela", () => {
+    pintar({ unread_count_for_assignee: 3 });
+    expect(screen.getByLabelText("3 não lidas").textContent).toBe("3");
   });
 
-  it("sem canal no payload não quebra a linha", () => {
-    // Conversa em cache de antes do campo existir, ou sessão apagada.
-    expect(() => pintar(comCanal(null), true)).not.toThrow();
-    expect(screen.getByText("Cliente")).toBeInTheDocument();
-  });
-
-  it("canal sem número E sem nome não vira badge vazio", () => {
-    pintar(comCanal({ phone_number: null, display_name: null }), true);
-    expect(screen.getByText("Cliente")).toBeInTheDocument();
-    expect(screen.queryByTitle(/Entrou por/)).not.toBeInTheDocument();
-  });
-});
-
-describe("selo de canal no avatar", () => {
-  it("Instagram: selo com rótulo Instagram", () => {
-    render(
-      <ConversationListItem
-        conversation={{ ...base, channel: "instagram" } as ConversationWithContact}
-        isSelected={false}
-        onSelect={() => {}}
-      />,
-    );
-    expect(screen.getByLabelText("Instagram")).toBeInTheDocument();
-  });
-
-  it("WhatsApp: selo com rótulo WhatsApp", () => {
-    render(
-      <ConversationListItem
-        conversation={base}
-        isSelected={false}
-        onSelect={() => {}}
-      />,
-    );
-    expect(screen.getByLabelText("WhatsApp")).toBeInTheDocument();
-  });
-
-  it("quem atende é dito por ESCRITO, não por uma bolinha de cor sem legenda", () => {
-    // A bolinha (azul/roxa/laranja) no canto do avatar não tinha legenda em
-    // lugar nenhum da tela: a equipe não sabia o que cada cor queria dizer
-    // (print de 07/10/2026). O selo escrito ocupa o lugar dela.
-    const { container } = render(
-      <ConversationListItem conversation={base} isSelected={false} onSelect={() => {}} automaticoDaOrg />,
-    );
-    expect(container.querySelector('[aria-hidden][class*="-right-0.5"][class*="rounded-full"]')).toBeNull();
-    expect(container.querySelector("[data-selo-do-comando]")?.textContent).toMatch(/Automático|Aguardando|Equipe|Encerrada/);
-  });
-
-  it("o selo some quando a lista pede para não repetir", () => {
-    const { container } = render(
-      <ConversationListItem conversation={base} isSelected={false} onSelect={() => {}} automaticoDaOrg mostrarComando={false} />,
-    );
-    expect(container.querySelector("[data-selo-do-comando]")).toBeNull();
-  });
-
-  it("a etapa do funil aparece quando o servidor a manda", () => {
-    render(
-      <ConversationListItem conversation={{ ...base, etapa_atual: "Avaliação" }} isSelected={false} onSelect={() => {}} />,
-    );
-    expect(screen.getByText("Avaliação")).toBeInTheDocument();
+  it("na Fila a posição e a espera continuam: é a régua por que ela é ordenada", () => {
+    render(<ConversationListItem conversation={base} isSelected={false} onSelect={() => {}} queuePosition={1} />);
+    expect(screen.getByText("1º")).toBeTruthy();
+    expect(screen.getByText(/^Aguardando/)).toBeTruthy();
   });
 });
 
 describe("o elo que some sem barulho", () => {
-  it("o SELECT do listado traz a sessão — sem isso o badge nunca tem o que mostrar", () => {
-    // O componente pode estar perfeito e o rótulo não aparecer nunca, porque o
-    // dado não chega. É a mesma classe do filtro por `tag`, que o hook serializa
-    // e a rota nunca lê: três arquivos, e o defeito mora no que ninguém testou.
+  it("o SELECT do listado traz a sessão — o filtro por número e o menu dependem dela", () => {
     const fonte = readFileSync("app/api/v1/conversations/_handler.ts", "utf8");
     expect(fonte, "falta o embed da sessão no SELECT_COLS").toMatch(
       /channel_sessions:channel_session_id\s*\([^)]*phone_number/,
     );
-  });
-
-  it("a lista decide pelo NÚMERO de canais, não por um literal", () => {
-    const fonte = readFileSync("components/inbox/ConversationList.tsx", "utf8");
-    expect(fonte).toContain("useChannelSessions");
-    expect(fonte).toMatch(/length > 1/);
   });
 });

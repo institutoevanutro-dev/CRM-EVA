@@ -93,4 +93,19 @@ describe("BarraDeProgressoNavegacao", () => {
       "a barra acendeu para a rota em que o usuário já está",
     ).toBeNull();
   });
+
+  // Auditoria de 17/11, item 63: o modelo da importação de leads é um link com
+  // `download`; a página não muda, e a barra acendia e travava em 85%.
+  it("não ativa em link de baixar arquivo", () => {
+    const { container } = render(
+      <div>
+        <BarraDeProgressoNavegacao />
+        <a href="/api/v1/leads/import/template" download="modelo-leads.csv">
+          Baixar modelo
+        </a>
+      </div>,
+    );
+    fireEvent.click(screen.getByText("Baixar modelo"));
+    expect(container.querySelector("[aria-hidden='true']")).toBeNull();
+  });
 });

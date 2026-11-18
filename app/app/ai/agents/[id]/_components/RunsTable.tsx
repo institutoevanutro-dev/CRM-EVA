@@ -2,7 +2,8 @@
 /**
  * RunsTable — tabela de execuções com Realtime (S-13.12).
  *
- * Mostra a página mais recente (limit 25). Click numa row → drawer com trace.
+ * Mostra as 25 mais recentes e carrega mais 25 a cada "Ver mais". Click numa
+ * row → drawer com trace.
  */
 import * as React from "react";
 
@@ -17,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-import { useAgentRuns, type AgentRunRow } from "@/hooks/ai/useAgentRuns";
+import { RUN_STATUS_LABEL_PT, useAgentRuns, type AgentRunRow } from "@/hooks/ai/useAgentRuns";
 import { useT } from "@/hooks/i18n/useT";
 import { RunDetailDrawer } from "./RunDetailDrawer";
 
@@ -48,14 +49,15 @@ function fmtCost(cents: number | null): string {
 
 export function RunsTable({ agentId, active }: Props) {
   const t = useT();
-  const { data, isLoading, error, refetch, isFetching } = useAgentRuns(agentId, {
-    enabled: active,
-    realtime: active,
-  });
+  const { data, isLoading, error, refetch, isFetching, hasNextPage, fetchNextPage, isFetchingNextPage } =
+    useAgentRuns(agentId, {
+      enabled: active,
+      realtime: active,
+    });
   const [selected, setSelected] = React.useState<AgentRunRow | null>(null);
   const [open, setOpen] = React.useState(false);
 
-  const rows = data?.data ?? [];
+  const rows = data?.pages.flatMap((p) => p.data) ?? [];
 
   return (
     <div className="flex flex-col gap-3">
@@ -116,7 +118,7 @@ export function RunsTable({ agentId, active }: Props) {
                 </TableCell>
                 <TableCell>
                   <Badge variant={STATUS_VARIANT[r.status] ?? "outline"} className="text-xs">
-                    {r.status}
+                    {RUN_STATUS_LABEL_PT[r.status] ? t(RUN_STATUS_LABEL_PT[r.status]!) : r.status}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-xs">
@@ -153,6 +155,18 @@ export function RunsTable({ agentId, active }: Props) {
           </TableBody>
         </Table>
       </div>
+
+      {hasNextPage ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="self-center"
+          onClick={() => void fetchNextPage()}
+          disabled={isFetchingNextPage}
+        >
+          {isFetchingNextPage ? t("Carregando…") : t("Ver mais")}
+        </Button>
+      ) : null}
 
       <RunDetailDrawer run={selected} open={open} onOpenChange={setOpen} />
     </div>

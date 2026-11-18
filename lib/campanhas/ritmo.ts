@@ -21,7 +21,8 @@
  * silêncio, e a mais cara quando erra.
  */
 
-import { CAMPAIGN_MIN_GAP_MS } from "@/lib/agent-engine/pacing/defaults";
+import { CAMPAIGN_MIN_GAP_MS, type PacingKnobs } from "@/lib/agent-engine/pacing/defaults";
+import { janelaDeEnvioAberta } from "@/lib/agent-engine/pacing/engine";
 
 import { horaNoFuso } from "./relogio";
 
@@ -127,6 +128,39 @@ export function proximaTentativa(veto: VetoDeRitmo, agora: Date): Date | null {
     case "teto_diario":
       return new Date(ms + 30 * 60_000);
   }
+}
+
+export interface JanelaDeEnvio {
+  /** Hora local (no fuso do número) em que a campanha começa a enviar. */
+  inicio: number;
+  /** Hora local em que para. `inicio >= fim` = as duas janelas não se cruzam. */
+  fim: number;
+  /** Dá para enviar agora? */
+  aberta: boolean;
+}
+
+/**
+ * A janela em que a campanha REALMENTE envia: a do número cruzada com a dela.
+ *
+ * Existe para a tela dizer "aguardando o horário (volta às 7h)" em vez de
+ * "Enviando 0%" a noite inteira (auditoria de 17/11/2026, item 23). As regras
+ * são as da rodada: a do número vale sempre (`decidePacing`, com domingo e
+ * fuso), e a da campanha só com as duas pontas (`podeMandarAgora`).
+ */
+export function janelaDeEnvio(
+  canal: PacingKnobs,
+  campanha: { janela_inicio_hora: number | null; janela_fim_hora: number | null },
+  agora: Date,
+): JanelaDeEnvio {
+  const daCampanha = campanha.janela_inicio_hora !== null && campanha.janela_fim_hora !== null;
+  const inicio = Math.max(canal.windowStartHour, daCampanha ? (campanha.janela_inicio_hora ?? 0) : 0);
+  const fim = Math.min(canal.windowEndHour, daCampanha ? (campanha.janela_fim_hora ?? 24) : 24);
+  if (inicio >= fim) return { inicio, fim, aberta: false };
+  return {
+    inicio,
+    fim,
+    aberta: janelaDeEnvioAberta(agora, { ...canal, windowStartHour: inicio, windowEndHour: fim }),
+  };
 }
 
 /**

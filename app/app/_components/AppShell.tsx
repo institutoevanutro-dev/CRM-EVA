@@ -23,12 +23,15 @@ export function AppShell({ children }: AppShellProps) {
     // documento media a tela mais a faixa, rolável justo quando o WhatsApp está
     // desconectado. `dvh` acompanha a barra do navegador do celular.
     //
-    // As duas medidas da casca moram AQUI, como variável, e não em cada tela:
-    // `--altura-do-topo` (a TopBar; mais baixa a partir de md) e
-    // `--margem-do-conteudo` (o padding do <main>, a ÚNICA margem das telas).
-    // O Inbox e o quadro do funil descontam as duas da altura da tela; com a
-    // conta lendo a mesma variável, mudar uma não deixa a outra para trás.
-    <div className="flex min-h-[calc(100dvh-var(--faixas-de-cima,0px))] w-full bg-background [--altura-do-topo:3.5rem] [--margem-do-conteudo:var(--space-4)] md:[--altura-do-topo:3rem] md:[--margem-do-conteudo:var(--space-6)]">
+    // As medidas da casca moram AQUI, como variável, e não em cada tela:
+    // `--altura-do-topo` (o lugar que a barra de cima OCUPA na linha: zero desde
+    // que ela fica escondida e aparece por cima, pedido do André de 18/11),
+    // `--altura-da-barra` (a altura da própria barra quando aparece; mais baixa
+    // a partir de md) e `--margem-do-conteudo` (o padding do <main>, a ÚNICA
+    // margem das telas). O Inbox e o quadro do funil descontam o topo e a
+    // margem da altura da tela; com a conta lendo a mesma variável, mudar uma
+    // não deixa a outra para trás.
+    <div className="flex min-h-[calc(100dvh-var(--faixas-de-cima,0px))] w-full bg-background [--altura-do-topo:0px] [--altura-da-barra:3.5rem] [--margem-do-conteudo:var(--space-4)] md:[--altura-da-barra:3rem] md:[--margem-do-conteudo:var(--space-6)]">
       <a
         href="#conteudo"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:rounded-md focus:border focus:border-border focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-text"

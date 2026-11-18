@@ -85,7 +85,7 @@ export function JanelaSelo({
       return (
         <Badge
           variant="outline"
-          className={cn(SELO, "border-amber-400 text-amber-700 dark:border-amber-700 dark:text-amber-300")}
+          className={cn(SELO, "border-warning text-warning-fg")}
           title={t(
             "A Meta só deixa responder até 7 dias depois da última mensagem dessa pessoa. Responda pelo app do Instagram se ela escrever de novo.",
           )}
@@ -104,7 +104,7 @@ export function JanelaSelo({
     return (
       <Badge
         variant="outline"
-        className={cn(SELO, "border-amber-400 text-amber-700 dark:border-amber-700 dark:text-amber-300")}
+        className={cn(SELO, "border-warning text-warning-fg")}
         title={t(
           "Passaram 24h desde a última mensagem do cliente. Só um modelo aprovado sai daqui — texto livre é recusado pela plataforma.",
         )}
@@ -120,7 +120,7 @@ export function JanelaSelo({
       variant="outline"
       className={cn(
         SELO,
-        urgente && "border-amber-400 text-amber-700 dark:border-amber-700 dark:text-amber-300",
+        urgente && "border-warning text-warning-fg",
       )}
       title={t("Tempo restante para escrever texto livre. Depois disso, só modelo aprovado.")}
     >

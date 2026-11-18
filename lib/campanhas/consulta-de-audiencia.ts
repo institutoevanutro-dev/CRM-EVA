@@ -163,6 +163,37 @@ export async function contatosJaEmCampanha(
   return new Set((data ?? []).map((r) => (r as { contact_id: string }).contact_id));
 }
 
+const PAGINA = 1000;
+
+/**
+ * Quem JÁ RECEBEU alguma destas campanhas (`sent_at` carimbado).
+ *
+ * Paginado: uma campanha tem até 5.000 destinatários e o PostgREST corta toda
+ * resposta em `max_rows` (1.000) sem avisar — sem as páginas, a cópia voltaria
+ * a falar com quem recebeu a original depois do milésimo.
+ */
+export async function contatosQueReceberam(
+  admin: SupabaseClient,
+  organizationId: string,
+  campanhaIds: readonly string[],
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  if (campanhaIds.length === 0) return ids;
+  for (let de = 0; ; de += PAGINA) {
+    const { data, error } = await admin
+      .from("campaign_recipients")
+      .select("contact_id")
+      .eq("organization_id", organizationId)
+      .in("campaign_id", [...campanhaIds])
+      .not("sent_at", "is", null)
+      .order("id")
+      .range(de, de + PAGINA - 1);
+    if (error) throw new Error(`audiência: já receberam — ${error.message}`);
+    for (const linha of (data ?? []) as { contact_id: string }[]) ids.add(linha.contact_id);
+    if (!data || data.length < PAGINA) return ids;
+  }
+}
+
 /** Aspas para o literal de array do Postgres — etiqueta com vírgula quebraria o `{a,b}`. */
 function citar(valor: string): string {
   return `"${valor.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;

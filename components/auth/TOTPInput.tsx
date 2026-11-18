@@ -53,9 +53,24 @@ export function TOTPInput({
     }
   };
 
+  /** Preenche a partir do 1º quadradinho, como o colar sempre fez. */
+  const espalhar = (digitos: string) => {
+    const texto = digitos.slice(0, LENGTH);
+    commit(Array.from({ length: LENGTH }, (_, i) => texto[i] ?? ""));
+    inputs.current[Math.min(texto.length, LENGTH - 1)]?.focus();
+  };
+
   const handleChange = (i: number, raw: string) => {
+    // O preenchimento automático do código (Senhas do iPhone/Mac, SMS) põe o
+    // código INTEIRO no 1º quadradinho; pegar só o último dígito perdia os
+    // outros cinco (auditoria 17/11, item 51).
+    const todos = raw.replace(/\D/g, "");
+    if (todos.length >= LENGTH) {
+      espalhar(todos);
+      return;
+    }
     // Strip non-digits, take last char.
-    const digit = raw.replace(/\D/g, "").slice(-1);
+    const digit = todos.slice(-1);
     if (!digit && raw.length > 0) return;
     const next = [...chars];
     next[i] = digit;
@@ -87,13 +102,10 @@ export function TOTPInput({
   };
 
   const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
-    const text = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, LENGTH);
+    const text = e.clipboardData.getData("text").replace(/\D/g, "");
     if (!text) return;
     e.preventDefault();
-    const next = Array.from({ length: LENGTH }, (_, i) => text[i] ?? "");
-    commit(next);
-    const lastIdx = Math.min(text.length, LENGTH - 1);
-    inputs.current[lastIdx]?.focus();
+    espalhar(text);
   };
 
   return (
@@ -111,7 +123,9 @@ export function TOTPInput({
           type="text"
           inputMode="numeric"
           autoComplete={i === 0 ? "one-time-code" : "off"}
-          maxLength={1}
+          // O 1º aceita o código inteiro: com `maxLength={1}` o navegador pode
+          // cortar o preenchimento automático no primeiro dígito.
+          maxLength={i === 0 ? LENGTH : 1}
           value={c}
           disabled={disabled}
           aria-invalid={hasError ? true : undefined}

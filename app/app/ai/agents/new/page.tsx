@@ -9,6 +9,7 @@ import type { CredentialRow } from "@/hooks/ai/useCredentials";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 
 import { AgentForm } from "../[id]/_components/AgentForm";
+import { lerFunisEMateriais } from "../_escopo-da-tela";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,7 @@ export default async function NewAgentPage() {
   }
 
   const supabase = await createClient();
-  const [orgRes, credentialsRes, channelSessions] = await Promise.all([
+  const [orgRes, credentialsRes, channelSessions, escopo] = await Promise.all([
     // O provedor que a organização JÁ usa: sem ele, o agente novo nascia
     // `anthropic` e o formulário pedia "Cadastrar credencial anthropic" para
     // quem só tem chave da OpenAI.
@@ -49,6 +50,9 @@ export default async function NewAgentPage() {
       .select(CREDENTIAL_COLUMNS)
       .eq("organization_id", activeOrg.orgId),
     listSelectableChannels(supabase, activeOrg.orgId),
+    // Sem isto, "O que ele consulta" e "Em que negócios ele pode mexer" diziam
+    // "você ainda não cadastrou nenhum" para quem já tinha materiais e funis.
+    lerFunisEMateriais(supabase, activeOrg.orgId),
   ]);
 
   const credentials = (credentialsRes.data ?? []) as unknown as CredentialRow[];
@@ -64,6 +68,9 @@ export default async function NewAgentPage() {
         provedoresDaInstalacao={provedoresDaInstalacao()}
         provedorPadrao={llmDaOrg?.provider}
         channelSessions={channelSessions}
+        funis={escopo.funis}
+        cobertura={escopo.cobertura}
+        materiais={escopo.materiais}
       />
     </div>
   );

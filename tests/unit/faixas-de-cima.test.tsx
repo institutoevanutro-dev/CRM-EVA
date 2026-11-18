@@ -93,7 +93,8 @@ describe("quem desconta as faixas", () => {
     // (Sair) abaixo da borda da tela no computador.
     const topo = readFileSync("components/shell/TopBar.tsx", "utf8");
     const lateral = readFileSync("components/shell/Sidebar.tsx", "utf8");
-    expect(topo).toMatch(/<header className="sticky top-\[var\(--faixas-de-cima,0px\)\] /);
+    // A barra de cima fica escondida desde 18/11; quem gruda é o invólucro dela.
+    expect(topo).toMatch(/className="sticky top-\[var\(--faixas-de-cima,0px\)\] z-30 h-0"/);
     expect(lateral).toMatch(
       /"sticky top-\[var\(--faixas-de-cima,0px\)\] z-40 h-\[calc\(100dvh-var\(--faixas-de-cima,0px\)\)\] /,
     );

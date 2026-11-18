@@ -7,6 +7,7 @@
  * motivo no title, alcançável por hover), e quando a recusa chega mesmo assim
  * (a lista estava velha e outro admin promoveu o agente) ela vira frase.
  */
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -50,7 +51,12 @@ function agente(isDefault: boolean): AgentRow {
 
 async function abreMenu(isDefault: boolean) {
   const user = userEvent.setup({ delay: null });
-  render(<AgentRowMenu agent={agente(isDefault)} />);
+  // O menu recarrega a lista pelo cache do React Query depois de cada ação.
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <AgentRowMenu agent={agente(isDefault)} />
+    </QueryClientProvider>,
+  );
   await user.click(screen.getByRole("button", { name: "Menu de ações" }));
   return { user, arquivar: await screen.findByRole("menuitem", { name: "Arquivar" }) };
 }

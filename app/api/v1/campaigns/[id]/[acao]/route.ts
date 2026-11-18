@@ -1,6 +1,6 @@
 /**
  * POST /api/v1/campaigns/:id/:acao — preparar, iniciar, agendar, pausar,
- * retomar, cancelar, duplicar e testar.
+ * retomar, cancelar, duplicar, testar e voltar para rascunho.
  *
  * ═══ Por que UMA rota e não oito ═══
  *
@@ -31,6 +31,7 @@ import {
   pausarAcao,
   prepararAcao,
   testarAcao,
+  voltarParaRascunhoAcao,
   type Desfecho,
 } from "@/lib/campanhas/acoes";
 import { agendarSchema, testarSchema } from "@/lib/campanhas/schemas";
@@ -50,6 +51,7 @@ const ACOES = [
   "cancelar",
   "duplicar",
   "testar",
+  "rascunho",
 ] as const;
 
 type Acao = (typeof ACOES)[number];
@@ -126,6 +128,11 @@ export async function POST(
     case "duplicar": {
       desfecho = await duplicarAcao(admin, campanha, authz.user.id);
       acaoAuditada = "campaign.duplicated";
+      break;
+    }
+    case "rascunho": {
+      desfecho = await voltarParaRascunhoAcao(admin, campanha);
+      acaoAuditada = "campaign.reverted_to_draft";
       break;
     }
     case "testar": {

@@ -60,7 +60,7 @@
       "lane": "api",
       "col": 0,
       "type": "service",
-      "label": "GET/POST /api/v1/campaigns + PATCH /[id] (só rascunho edita)"
+      "label": "GET/POST /api/v1/campaigns + PATCH /[id] (só rascunho edita; o público mescla por chave)"
     },
     {
       "id": "rota-previa",
@@ -74,14 +74,14 @@
       "lane": "api",
       "col": 2,
       "type": "service",
-      "label": "POST /api/v1/campaigns/[id]/[acao] — preparar, iniciar, pausar, cancelar, testar"
+      "label": "POST /api/v1/campaigns/[id]/[acao] — preparar, iniciar, pausar, cancelar, testar, duplicar, voltar para rascunho"
     },
     {
       "id": "rota-metricas",
       "lane": "api",
       "col": 3,
       "type": "service",
-      "label": "GET /[id]/metrics e /[id]/recipients — funil por carimbo, paginado"
+      "label": "GET /[id]/metrics e /[id]/recipients — funil por carimbo, contado no banco, paginado"
     },
     {
       "id": "maquina",
@@ -204,6 +204,7 @@
     { "id": "detalhe-aciona", "from": "detalhe", "to": "rota-acao", "label": "preparar, testar, iniciar, pausar, cancelar" },
     { "id": "acao-consulta-maquina", "from": "rota-acao", "to": "maquina", "label": "a transição cabe neste estado?" },
     { "id": "acao-prepara", "from": "rota-acao", "to": "preparacao", "label": "materializa o snapshot" },
+    { "id": "acao-volta-ao-rascunho", "from": "rota-acao", "to": "campaign-recipients", "label": "voltar para rascunho descarta a lista (só antes de qualquer envio)" },
     { "id": "preparacao-grava", "from": "preparacao", "to": "campaign-recipients", "label": "INSERT com texto congelado e motivo da exclusão" },
     { "id": "preparacao-classifica", "from": "preparacao", "to": "elegibilidade", "label": "quem pode receber" },
     { "id": "rota-criar-grava", "from": "rota-criar", "to": "campaigns", "label": "INSERT/UPDATE (só rascunho)" },

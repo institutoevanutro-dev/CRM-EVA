@@ -1,11 +1,11 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
 import { useOrganizationTransition } from "./OrganizationTransitionProvider";
-import { CaretDown, Check, Storefront } from "@/lib/ui/icons";
+import { Buildings, CaretDown, Check } from "@/lib/ui/icons";
 import { useUser, useActiveOrg } from "@/hooks/auth/AuthProvider";
 import {
   DropdownMenu,
@@ -18,18 +18,56 @@ import {
 import { Button } from "@/components/ui/button";
 import { setActiveOrg } from "@/app/actions/shell/setActiveOrg";
 
+/**
+ * A ORGANIZAÇÃO ATIVA É DO NAVEGADOR, NÃO DA ABA (auditoria 17/11, item 61).
+ *
+ * O cookie `active_org` vale para todas as abas. Trocar de clínica numa aba
+ * deixava a outra mostrando a antiga e GRAVANDO na nova — o servidor resolve a
+ * organização pelo cookie, não pelo que a tela mostra. A aba que troca avisa as
+ * outras por este canal, e elas recarregam no início.
+ */
+const CANAL_DA_ORGANIZACAO = "organizacao-ativa";
+
+// O ouvinte desta mesma aba também recebe a mensagem (é outro objeto do canal):
+// quem trocou já está navegando e não deve ler "trocada em outra aba".
+let trocandoNestaAba = false;
+
+export function avisarOutrasAbas(orgId: string): void {
+  trocandoNestaAba = true;
+  if (typeof BroadcastChannel === "undefined") return;
+  const canal = new BroadcastChannel(CANAL_DA_ORGANIZACAO);
+  canal.postMessage({ orgId });
+  canal.close();
+}
+
+function useOrganizacaoTrocadaEmOutraAba(orgAtual: string | undefined): void {
+  const aviso = useT()("A organização foi trocada em outra aba. Abrindo a mesma aqui…");
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined" || !orgAtual) return;
+    const canal = new BroadcastChannel(CANAL_DA_ORGANIZACAO);
+    canal.onmessage = (e: MessageEvent<{ orgId?: string }>) => {
+      if (trocandoNestaAba || !e.data?.orgId || e.data.orgId === orgAtual) return;
+      toast.info(aviso);
+      window.location.assign("/app/inbox");
+    };
+    return () => canal.close();
+  }, [orgAtual, aviso]);
+}
+
 export function TenantSwitcher() {
   const t = useT();
   const user = useUser();
   const active = useActiveOrg();
   const transition = useOrganizationTransition();
   const [isPending, setPending] = useState(false);
+  useOrganizacaoTrocadaEmOutraAba(active?.orgId);
   const switchTo = async (orgId: string) => {
     if (orgId === active?.orgId) return;
     flushSync(() => { setPending(true); transition.begin(t("Carregando organização…")); });
     try {
       const result = await setActiveOrg(orgId);
       if (!result.ok) throw new Error(result.error);
+      avisarOutrasAbas(orgId);
       // Novo documento elimina QueryClient, subscriptions e respostas em voo.
       window.location.assign("/app/inbox");
     } catch {
@@ -47,7 +85,7 @@ export function TenantSwitcher() {
     if (!active?.name) return null;
     return (
       <p className="hidden min-w-0 items-center gap-2 px-1 text-sm font-medium text-text md:flex">
-        <Storefront size={16} weight="duotone" aria-hidden className="shrink-0 text-text-muted" />
+        <Buildings size={16} weight="duotone" aria-hidden className="shrink-0 text-text-muted" />
         <span className="max-w-[220px] truncate">{active.name}</span>
       </p>
     );
@@ -89,7 +127,8 @@ export function TenantSwitcher() {
           title={user.support ? "Saia do acompanhamento para trocar de organização" : undefined}
           data-testid="tenant-switcher"
         >
-          <Storefront size={16} weight="duotone" aria-hidden />
+          {/* Prédio, não lojinha: clínica, imobiliária ou loja (auditoria 17/11, item 62). */}
+          <Buildings size={16} weight="duotone" aria-hidden />
           <span className="hidden max-w-[200px] truncate text-sm font-medium md:inline">
             {active?.name ?? "Selecionar org"}
           </span>

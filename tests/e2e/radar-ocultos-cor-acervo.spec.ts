@@ -269,7 +269,10 @@ test.describe("radar, ocultos, cor do funil e acervo", () => {
     await ocultos.click();
     await expect(itemDaLista).toBeVisible({ timeout: 15_000 });
     await itemDaLista.click();
-    const selo = tela().getByTestId("selo-oculto-do-inbox");
+    // O selo mora na situação, no alto do ⋯ do cabeçalho (app de mensagem,
+    // 18/11/2026): abre o menu e procura lá.
+    await abrirAcoesDaConversa(page);
+    const selo = page.getByTestId("menu-da-conversa").getByTestId("selo-oculto-do-inbox");
     await expect(selo).toBeVisible();
     // Uma linha só. No cabeçalho apertado o selo virava uma pílula de três
     // linhas ("Oculto / do / Inbox"), medido no Chrome e no Safari em 1280px.

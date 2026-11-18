@@ -5,7 +5,7 @@ import { mkdirSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page } from "@playwright/test";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
-import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
+import { abrirAcoesDaConversa, abrirPainelDoContato, clicarNoMenuDaConversa } from "./helpers/acoes-da-conversa";
 
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
@@ -167,6 +167,9 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     await page.getByRole("button", { name: /entrar/i }).click();
     await page.waitForURL(/\/app(?:\/|$)/);
     await abrirConversa(page, conversation);
+    // O painel nasce recolhido (18/11/2026): abre pelo trilho, como quem usa. A
+    // preferência fica gravada, e as próximas visitas ao Inbox já nascem abertas.
+    await abrirPainelDoContato(page);
     const panel = page.getByTestId("inbox-demandas");
     // A seção nasce recolhida (22/10); o clique no título a fixa aberta.
     await panel.getByRole("button", { name: /Demandas abertas/ }).click();
@@ -178,8 +181,8 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     // spec, e não numa nova, porque o painel já está montado neste ponto: spec
     // nova custaria mais um login e mais um seed ao relógio do CI.
     await expect(page.getByRole("button", { name: "Novo negócio", exact: true })).toBeVisible();
-    // "Fechar" é fixo no cabeçalho desde a I3 — sem menu.
-    await page.getByRole("button", { name: "Fechar", exact: true }).click();
+    // Desde 18/11 as ações moram no ⋯ do cabeçalho (app de mensagem).
+    await clicarNoMenuDaConversa(page, "Fechar conversa");
     // I6: a confirmação é o AlertDialog do sistema, não o confirm() do navegador.
     await page.getByRole("alertdialog").getByRole("button", { name: "Fechar conversa", exact: true }).click();
     await expect
@@ -223,17 +226,21 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
       .single();
     expect(current.data?.current_demanda_id).not.toBe(demand);
     expect(current.data?.status).toBe("open");
-    // I3: "Assumir" é o botão principal, à vista; "Liberar" mora no ⋯.
-    await page.getByRole("button", { name: "Assumir", exact: true }).click();
-    // Espera o "Assumir" sair ANTES de abrir o ⋯: a conversa assumida deixa a
-    // aba Fila, a tela relê a conversa sozinha e o cabeçalho remonta — com o
-    // menu aberto antes disso, ele fecha junto (medido localmente: o menu abria,
-    // fechava sozinho, e "Liberar" nunca aparecia).
-    await expect(page.getByRole("button", { name: "Assumir", exact: true })).toHaveCount(0);
+    // "Assumir" é a primeira ação do ⋯ (cabeçalho de app de mensagem, 18/11);
+    // "Liberar" mora no mesmo menu.
+    await clicarNoMenuDaConversa(page, "Assumir");
+    await expect
+      .poll(async () => (await db.from("conversations").select("assigned_to_user_id").eq("id", conversation).single()).data?.assigned_to_user_id)
+      .toBeTruthy();
+    // Reaberto, o menu fala da conversa assumida: com "Liberar", sem "Assumir"
+    // e com a situação sem "Sem responsável" (ela mora no alto do menu).
     await abrirAcoesDaConversa(page);
-    await expect(page.getByRole("button", { name: "Liberar", exact: true })).toBeVisible();
+    const menu = page.getByTestId("menu-da-conversa");
+    await expect(menu.getByRole("button", { name: "Liberar", exact: true })).toBeVisible();
+    await expect(menu.getByRole("button", { name: "Assumir", exact: true })).toHaveCount(0);
+    await expect(menu.getByTestId("comando-da-conversa")).toBeVisible();
+    await expect(menu.getByText("Sem responsável", { exact: true })).toHaveCount(0);
     await page.keyboard.press("Escape");
-    await expect(page.getByText("Sem responsável", { exact: true })).toHaveCount(0);
     await page
       .getByRole("textbox", { name: "Mensagem", exact: true })
       .fill("Olá, vamos cuidar deste novo atendimento.");
@@ -245,8 +252,7 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     const box = await page.getByTestId("inbox-demandas").boundingBox();
     expect(box?.width).toBeGreaterThan(150);
     await page.screenshot({ path: `${evidence}/task4-reaberto-respondido.png`, fullPage: true });
-    // "Fechar" é fixo no cabeçalho desde a I3 — sem menu.
-    await page.getByRole("button", { name: "Fechar", exact: true }).click();
+    await clicarNoMenuDaConversa(page, "Fechar conversa");
     await page.getByRole("alertdialog").getByRole("button", { name: "Fechar conversa", exact: true }).click();
     await expect
       .poll(
@@ -277,10 +283,10 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     await expect(page.getByTestId("inbox-memoria")).toContainText("Historial cerrado — sin tareas pendientes");
     await expect(page.getByTestId("inbox-memoria")).toContainText("Resuelta");
     await page.screenshot({ path: `${evidence}/task4-historico-es.png`, fullPage: true });
-    // "Reabrir" é o botão principal da conversa encerrada (I3) — sem menu.
-    await page.getByRole("button", { name: "Reabrir", exact: true }).click();
+    // "Reabrir" é a primeira ação do ⋯ na conversa encerrada (18/11).
+    await clicarNoMenuDaConversa(page, "Reabrir");
     await expect.poll(async () => (await db.from("conversations").select("status").eq("organization_id",org).eq("id",conversation).single()).data?.status).toBe("open");
-    await page.getByRole("button", { name: "Cerrar", exact: true }).click();
+    await clicarNoMenuDaConversa(page, "Cerrar conversación");
     await page.getByRole("alertdialog").getByRole("button", { name: "Cerrar conversación", exact: true }).click();
     await expect.poll(async () => (await db.from("conversations").select("status").eq("organization_id",org).eq("id",conversation).single()).data?.status).toBe("closed");
     expect(hits.filter((url) => url.includes("sendText"))).toHaveLength(1);

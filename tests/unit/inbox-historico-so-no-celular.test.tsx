@@ -161,8 +161,8 @@ describe("o voltar do Inbox no celular", () => {
   });
 });
 
-describe("no computador nada muda", () => {
-  it("clicar na lista e voltar não tocam o histórico nem a URL", () => {
+describe("no computador o endereço acompanha, sem entrar no histórico (item 38)", () => {
+  it("clicar na lista troca `?id=` NO LUGAR; voltar não anda pela pilha", () => {
     larguraDeCelular(false);
     const empilhar = vi.spyOn(window.history, "pushState");
     const trocar = vi.spyOn(window.history, "replaceState");
@@ -171,12 +171,23 @@ describe("no computador nada muda", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Abrir A" }));
     expect(screen.getByTestId("fio")).toHaveAttribute("data-conversa", CONV_A);
+    expect(trocar).toHaveBeenLastCalledWith(null, "", `/app/inbox?id=${CONV_A}`);
     fireEvent.click(voltar());
     expect(screen.queryByTestId("fio")).toBeNull();
+    expect(trocar).toHaveBeenLastCalledWith(null, "", "/app/inbox");
 
     expect(empilhar).not.toHaveBeenCalled();
-    expect(trocar).not.toHaveBeenCalled();
     expect(go).not.toHaveBeenCalled();
     expect(window.location.search).toBe("");
+  });
+
+  it("⭐ aberta por link e trocada pela lista: recarregar abre a escolhida, não a antiga", () => {
+    larguraDeCelular(false);
+    window.history.replaceState(null, "", "/app/inbox?id=conversa-antiga&filter=all");
+    montar("conversa-antiga");
+    fireEvent.click(screen.getByRole("button", { name: "Abrir A" }));
+    const url = new URLSearchParams(window.location.search);
+    expect(url.get("id")).toBe(CONV_A);
+    expect(url.get("filter"), "o resto do endereço fica").toBe("all");
   });
 });

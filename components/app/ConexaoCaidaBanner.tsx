@@ -30,19 +30,35 @@
 import Link from "next/link";
 
 import { useAuth } from "@/hooks/auth/AuthProvider";
+import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useT } from "@/hooks/i18n/useT";
 import { ROLE_RANK } from "@/lib/auth/types";
-import type { ConexaoCaida } from "@/lib/channels/health";
+import { conexoesCaidasDe, type ConexaoCaida } from "@/lib/channels/health";
+import { WifiSlash } from "@/lib/ui/icons";
 
 /**
+ * `caidas` é a PRIMEIRA PINTURA, calculada pelo layout no servidor. Depois a
+ * faixa segue a lista de conexões a cada 30 s — a MESMA consulta da bolinha do
+ * menu (`ConnectionHealthDot`, mesma chave de cache, uma ida à rede para as
+ * duas). Antes ela só era calculada ao carregar a página: o número caía no meio
+ * do dia e ninguém via; voltava, e a faixa ficava até o F5, mesmo depois de
+ * "WhatsApp conectado!" (auditoria 17/11, item 57). Falha da consulta não apaga
+ * a faixa: sem lista nova, vale a última que se tem.
+ *
  * `precisaEscanear` muda o texto do botão, não só a cor: reconectar por QR é uma
  * ação concreta ("Escanear"), enquanto um canal em FAILED exige olhar o que
  * aconteceu antes de agir. Mandar "Escanear" para quem precisa investigar faria
  * a pessoa perder tempo numa tela que não resolve o problema dela.
+ *
+ * Uma linha (auditoria 17/11, item 59): no celular ela quebrava em 3 a 4 linhas
+ * e tomava 1/5 da tela. O "nenhuma mensagem entra nem sai" fica na linha a
+ * partir de `sm`, e quem não administra lê a orientação em "Detalhes".
  */
-export function ConexaoCaidaBanner({ caidas }: { caidas: ConexaoCaida[] }) {
+export function ConexaoCaidaBanner({ caidas: inicial }: { caidas: ConexaoCaida[] }) {
   const t = useT();
   const { user, activeOrg } = useAuth();
+  const { data } = useChannelSessions({ refetchInterval: 30_000 });
+  const caidas = data ? conexoesCaidasDe(data) : inicial;
   if (caidas.length === 0) return null;
 
   const podeAbrirConexoes = (user.is_platform_admin && !user.support)
@@ -51,36 +67,45 @@ export function ConexaoCaidaBanner({ caidas }: { caidas: ConexaoCaida[] }) {
   const precisaEscanear = caidas.some((c) => c.status === "SCAN_QR_CODE");
 
   return (
-    <div
-      role="alert"
-      aria-live="assertive"
-      className="sticky top-0 z-50 flex flex-wrap items-center justify-between gap-3 border-b border-red-300 bg-red-100/95 px-4 py-2 text-sm text-red-950 backdrop-blur dark:border-red-800/60 dark:bg-red-950/70 dark:text-red-50"
-    >
-      <div className="flex items-center gap-2">
-        <span aria-hidden>🔌</span>
-        <span>
+    // Fundo sólido por baixo do tom de erro (que é translúcido): a faixa gruda
+    // por cima do conteúdo que rola.
+    <div role="alert" aria-live="assertive" className="border-b border-error/30 bg-background text-error-fg">
+      <div className="flex min-h-10 items-center gap-2 bg-error-bg px-4 py-1.5 text-sm">
+        <WifiSlash size={16} weight="bold" aria-hidden className="shrink-0" />
+        <p className="min-w-0 flex-1 truncate">
           {uma ? (
             <>
-              WhatsApp <strong className="font-semibold">{uma.apelido}</strong>{" "}
-              {t("está desconectado")}
+              WhatsApp <strong className="font-semibold">{uma.apelido}</strong> {t("desconectado")}
             </>
           ) : (
             <>
               <strong className="font-semibold">
                 {caidas.length} {t("conexões")}
               </strong>{" "}
-              {t("de WhatsApp estão desconectadas")}
+              {t("de WhatsApp desconectadas")}
             </>
           )}
-          {` — ${t("nenhuma mensagem entra nem sai.")}`}
-        </span>
+          <span className="hidden sm:inline">{` — ${t("nenhuma mensagem entra nem sai.")}`}</span>
+        </p>
+        {podeAbrirConexoes ? (
+          <Link
+            href="/app/connections"
+            className="inline-flex min-h-8 shrink-0 items-center rounded-md border border-error/40 bg-background px-3 font-medium text-error-fg hover:bg-error-bg"
+          >
+            {precisaEscanear ? t("Escanear o QR") : t("Ver conexões")}
+          </Link>
+        ) : (
+          <details className="relative shrink-0">
+            <summary className="inline-flex min-h-8 cursor-pointer list-none items-center rounded-md px-2 font-medium underline underline-offset-4 [&::-webkit-details-marker]:hidden">
+              {t("Detalhes")}
+            </summary>
+            <div className="absolute top-full right-0 z-10 mt-2 w-72 max-w-[calc(100vw-2rem)] space-y-1 rounded-md border border-border bg-background p-3 text-sm text-text shadow-lg">
+              <p>{t("Nenhuma mensagem entra nem sai.")}</p>
+              <p>{t("Peça a quem administra para revisar a conexão do WhatsApp.")}</p>
+            </div>
+          </details>
+        )}
       </div>
-      {podeAbrirConexoes ? <Link
-        href="/app/connections"
-        className="rounded-md border border-red-400 bg-white/70 px-3 py-1 font-medium text-red-950 hover:bg-white dark:border-red-700 dark:bg-red-900/40 dark:text-red-50 dark:hover:bg-red-900/70"
-      >
-        {precisaEscanear ? t("Escanear o QR") : t("Ver conexões")}
-      </Link> : <span>{t("Peça a quem administra para revisar a conexão do WhatsApp.")}</span>}
     </div>
   );
 }

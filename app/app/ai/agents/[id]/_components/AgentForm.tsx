@@ -33,6 +33,7 @@ import {
 import { TokenCounter } from "@/lib/ui/TokenCounter";
 import { Info } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import { useAvisoAoSairSemSalvar } from "@/hooks/ui/useAvisoAoSairSemSalvar";
 import Link from "next/link";
 
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
@@ -153,6 +154,19 @@ type Props = (EditProps | CreateProps) & {
    * algo importante.
    */
   materiais?: MaterialDoAcervo[];
+  /**
+   * Avisa a tela de cima quando há (ou deixa de haver) alteração não salva. As
+   * outras abas usam isto para não rodar nem publicar por cima do que está
+   * escrito aqui — o Teste roda a versão SALVA, não o texto da tela.
+   */
+  onDirtyChange?: (dirty: boolean) => void;
+  /**
+   * Pedido para abrir uma versão do Histórico no formulário (o rascunho que o
+   * "Reverter" deixou para trás). `n` muda a cada pedido, para o mesmo pedido
+   * não ser aplicado duas vezes. Entra como alteração não salva: quem decide
+   * gravar é o "Salvar rascunho" de sempre.
+   */
+  pedidoDeAbrir?: { versao: AgentVersionRow; n: number } | null;
 };
 
 interface FormState {
@@ -251,6 +265,11 @@ export function buildState(args: {
     // a responder em espanhol, não em pt-BR.
     system_prompt:
       version?.system_prompt ??
+      // Agente legado que nunca teve versão: as instruções dele moram em
+      // `ai_agents.system_prompt`. Sem esta linha o editor abria no texto
+      // padrão, e concluir a configuração por aqui trocava o prompt da clínica
+      // pelo genérico.
+      (agent?.system_prompt?.trim() ? agent.system_prompt : null) ??
       t("Você é um atendente. Responda de forma educada e clara, em pt-BR."),
     tool_ids: version?.tool_ids ?? [],
     trigger_config: (version?.trigger_config as unknown as TriggerValue) ?? DEFAULT_TRIGGER,
@@ -337,6 +356,41 @@ function toVersionPayload(s: FormState) {
   };
 }
 
+/** "Salvar mudaria alguma coisa?" — a régua de `lib/ai/agents/mesmo-rascunho.ts`. */
+function mesmoConteudo(a: FormState, b: FormState): boolean {
+  return mesmoRascunho(
+    { cadastro: toCadastroPayload(a), versao: toVersionPayload(a) },
+    { cadastro: toCadastroPayload(b), versao: toVersionPayload(b) },
+  );
+}
+
+/**
+ * As faixas dos campos numéricos — as MESMAS de `versionShapeSchema` — com a
+ * frase que aparece embaixo do campo.
+ *
+ * Antes, um "30" em "Ações por atendimento" só reprovava no `safeParse` do fim
+ * da validação: a mensagem saía em inglês, numa chave que a tela não desenha, e
+ * o "Salvar rascunho" ficava cinza sem dizer qual campo estava errado.
+ */
+const FAIXAS_NUMERICAS = [
+  ["max_steps", 1, 25, "Use um número de 1 a 25."],
+  ["token_budget", 1000, 500_000, "Use um número de 1.000 a 500.000."],
+  ["cost_budget_cents", 1, 10_000, "Use um número de 1 a 10.000."],
+  ["history_message_window", 0, 200, "Use um número de 0 a 200."],
+  ["history_token_window", 0, 50_000, "Use um número de 0 a 50.000."],
+  ["split_max_chars", 80, 4000, "Use um número de 80 a 4.000."],
+] as const satisfies ReadonlyArray<readonly [keyof FormState, number, number, string]>;
+
+/** A frase embaixo do campo, ligada a ele por `aria-describedby`. */
+function ErroDoCampo({ campo, erro }: { campo: string; erro?: string }) {
+  if (!erro) return null;
+  return (
+    <p id={`${campo}-erro`} className="text-xs text-destructive">
+      {erro}
+    </p>
+  );
+}
+
 export function AgentForm(props: Props) {
   const t = useT();
   const funis = props.funis ?? [];
@@ -357,6 +411,40 @@ export function AgentForm(props: Props) {
   }, [isEdit, props, t]);
 
   const [form, setForm] = React.useState<FormState>(baseline);
+
+  /**
+   * A versão do servidor mudou por FORA deste formulário — "Aplicar proposta" e
+   * "Reverter" moram em outras abas, e o formulário agora fica montado enquanto
+   * elas trabalham. Sem alteração local, ele acompanha a versão nova; com
+   * alteração local, ela fica onde está (essas ações recusam enquanto houver o
+   * que salvar). Sem isto, a tela seguia na versão velha e o próximo "Salvar
+   * rascunho" desfazia a melhoria que acabara de entrar no ar.
+   */
+  const [baselineVisto, setBaselineVisto] = React.useState<FormState>(baseline);
+  if (!mesmoConteudo(baseline, baselineVisto)) {
+    setBaselineVisto(baseline);
+    if (mesmoConteudo(form, baselineVisto)) setForm(baseline);
+  }
+
+  // Abrir no formulário uma versão do Histórico. Nome, descrição e ordem são do
+  // cadastro, não da versão: ficam como estão.
+  const pedidoDeAbrir = props.pedidoDeAbrir ?? null;
+  const [pedidoAtendido, setPedidoAtendido] = React.useState(pedidoDeAbrir?.n ?? 0);
+  if (pedidoDeAbrir && pedidoDeAbrir.n !== pedidoAtendido) {
+    setPedidoAtendido(pedidoDeAbrir.n);
+    const daVersao = buildState({
+      agent: isEdit ? props.agent : undefined,
+      version: pedidoDeAbrir.versao,
+      t,
+    });
+    setForm((atual) => ({
+      ...daVersao,
+      name: atual.name,
+      description: atual.description,
+      priority: atual.priority,
+    }));
+  }
+
   const [saving, setSaving] = React.useState(false);
   const [publishing, setPublishing] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -376,9 +464,17 @@ export function AgentForm(props: Props) {
    * publicar" — medido numa instalação em produção, com o agente preso na versão
    * anterior até alguém publicar por fora da tela.
    */
-  const dirty = !mesmoRascunho(
-    { cadastro: toCadastroPayload(form), versao: toVersionPayload(form) },
-    { cadastro: toCadastroPayload(baseline), versao: toVersionPayload(baseline) },
+  const dirty = !mesmoConteudo(form, baseline);
+
+  const onDirtyChange = props.onDirtyChange;
+  React.useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  // Sair da tela (menu, link, fechar ou recarregar a aba) perdia tudo sem aviso.
+  useAvisoAoSairSemSalvar(
+    dirty,
+    t("Sair sem salvar? O que você mudou neste agente será perdido."),
   );
 
   function patch(p: Partial<FormState>) {
@@ -445,6 +541,10 @@ export function AgentForm(props: Props) {
     // agente não vai ao ar, e o botão "Publicar" explica o que falta.
     if (form.tool_ids.length > TETO_TOOLS_POR_AGENTE)
       errors.tool_ids = `${t("Máximo de")} ${TETO_TOOLS_POR_AGENTE} ${t("capacidades por agente.")}`;
+    for (const [campo, min, max, frase] of FAIXAS_NUMERICAS) {
+      const valor = form[campo];
+      if (!Number.isInteger(valor) || valor < min || valor > max) errors[campo] = t(frase);
+    }
 
     // Tenta o schema completo:
     if (Object.keys(errors).length === 0) {
@@ -888,7 +988,7 @@ export function AgentForm(props: Props) {
               {t("Cadastrar ou trocar credencial")}
             </Link>
             {cred && credSt && credSt !== "validated" ? (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
+              <p className="text-xs text-warning-fg">
                 {t("Credencial selecionada está com status")} {t(STATUS_LABEL[credSt])}
                 {t(". Publish bloqueado até validar.")}
               </p>
@@ -993,7 +1093,10 @@ export function AgentForm(props: Props) {
                   value={form.max_steps}
                   onChange={(e) => patch({ max_steps: Number(e.target.value) })}
                   disabled={disabled}
+                  aria-invalid={!!validation.max_steps}
+                  aria-describedby={validation.max_steps ? "max_steps-erro" : undefined}
                 />
+                <ErroDoCampo campo="max_steps" erro={validation.max_steps} />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="token_budget">{t("Volume de texto por atendimento")}</Label>
@@ -1006,7 +1109,10 @@ export function AgentForm(props: Props) {
                   value={form.token_budget}
                   onChange={(e) => patch({ token_budget: Number(e.target.value) })}
                   disabled={disabled}
+                  aria-invalid={!!validation.token_budget}
+                  aria-describedby={validation.token_budget ? "token_budget-erro" : undefined}
                 />
+                <ErroDoCampo campo="token_budget" erro={validation.token_budget} />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="cost_budget_cents">{t("Custo máximo por atendimento (centavos)")}</Label>
@@ -1018,7 +1124,10 @@ export function AgentForm(props: Props) {
                   value={form.cost_budget_cents}
                   onChange={(e) => patch({ cost_budget_cents: Number(e.target.value) })}
                   disabled={disabled}
+                  aria-invalid={!!validation.cost_budget_cents}
+                  aria-describedby={validation.cost_budget_cents ? "cost_budget_cents-erro" : undefined}
                 />
+                <ErroDoCampo campo="cost_budget_cents" erro={validation.cost_budget_cents} />
               </div>
               <div className="space-y-1">
                 <Label htmlFor="history_message_window">{t("Mensagens anteriores que ele lê")}</Label>
@@ -1032,7 +1141,12 @@ export function AgentForm(props: Props) {
                     patch({ history_message_window: Number(e.target.value) })
                   }
                   disabled={disabled}
+                  aria-invalid={!!validation.history_message_window}
+                  aria-describedby={
+                    validation.history_message_window ? "history_message_window-erro" : undefined
+                  }
                 />
+                <ErroDoCampo campo="history_message_window" erro={validation.history_message_window} />
               </div>
               <div className="col-span-2 space-y-1">
                 <Label htmlFor="history_token_window">{t("Tamanho máximo desse histórico")}</Label>
@@ -1047,7 +1161,12 @@ export function AgentForm(props: Props) {
                     patch({ history_token_window: Number(e.target.value) })
                   }
                   disabled={disabled}
+                  aria-invalid={!!validation.history_token_window}
+                  aria-describedby={
+                    validation.history_token_window ? "history_token_window-erro" : undefined
+                  }
                 />
+                <ErroDoCampo campo="history_token_window" erro={validation.history_token_window} />
               </div>
               <div className="col-span-2 space-y-1">
                 <Label htmlFor="reply_min_interval_ms">
@@ -1134,6 +1253,7 @@ export function AgentForm(props: Props) {
                */
               spellCheck={false}
               className="font-mono text-xs"
+              aria-label={t("As instruções dele")}
               aria-invalid={!!validation.system_prompt}
             />
             {validation.system_prompt ? (
@@ -1173,10 +1293,9 @@ export function AgentForm(props: Props) {
                   onChange={(e) => patch({ split_max_chars: Number(e.target.value) })}
                   disabled={disabled}
                   aria-invalid={!!validation.split_max_chars}
+                  aria-describedby={validation.split_max_chars ? "split_max_chars-erro" : undefined}
                 />
-                {validation.split_max_chars ? (
-                  <p className="text-xs text-destructive">{validation.split_max_chars}</p>
-                ) : null}
+                <ErroDoCampo campo="split_max_chars" erro={validation.split_max_chars} />
               </div>
             ) : null}
           </Card>
@@ -1303,6 +1422,8 @@ export function AgentForm(props: Props) {
           onOpenChange={setConfirmOpen}
           draft={props.draft}
           published={props.published}
+          materiais={materiais}
+          funis={funis}
           onConfirm={handlePublish}
           isPending={publishing}
         />

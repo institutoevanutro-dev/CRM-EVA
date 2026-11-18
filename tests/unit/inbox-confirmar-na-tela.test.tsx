@@ -1,7 +1,7 @@
 /**
  * I6 (passo 1): o que não tem volta limpa pergunta NA TELA, nunca por
- * `window.confirm`. Fechar nasce com o foco em "Fechar conversa" (`e` + Enter
- * continua fechando); excluir nota interna pergunta antes.
+ * `window.confirm`. Fechar nasce com o foco em "Cancelar" (item 29 da auditoria
+ * de 17/11); excluir nota interna pergunta antes.
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
@@ -23,15 +23,18 @@ describe("I6 — confirmar na tela", () => {
     }
   });
 
-  it("com focoNaAcao, o foco nasce na ação e Enter confirma", () => {
+  it("o foco nasce no Cancelar: um Enter ou espaço a mais não confirma (item 29)", () => {
     const onConfirmar = vi.fn();
+    const onAbertoChange = vi.fn();
     render(
-      <ConfirmarNaTela aberto onAbertoChange={() => {}} titulo="Fechar esta conversa?"
-        descricao="O atendimento termina." acao="Fechar conversa" focoNaAcao onConfirmar={onConfirmar} />,
+      <ConfirmarNaTela aberto onAbertoChange={onAbertoChange} titulo="Fechar esta conversa?"
+        descricao="O atendimento termina." acao="Fechar conversa" onConfirmar={onConfirmar} />,
     );
-    const acao = screen.getByRole("button", { name: "Fechar conversa" });
-    expect(document.activeElement).toBe(acao);
-    fireEvent.click(acao);
+    const cancelar = screen.getByRole("button", { name: "Cancelar" });
+    expect(document.activeElement).toBe(cancelar);
+    fireEvent.click(cancelar);
+    expect(onConfirmar).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Fechar conversa" }));
     expect(onConfirmar).toHaveBeenCalledTimes(1);
   });
 

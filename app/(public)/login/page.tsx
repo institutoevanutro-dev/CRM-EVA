@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { configEvalink } from "@/lib/evalink/config";
+import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
+import { safeNext } from "@/lib/auth/safe-next";
 import { mensagemDoEvalink } from "@/lib/evalink/mensagens";
 
 export const metadata = { title: "Entrar" };
@@ -20,9 +22,10 @@ export default async function LoginPage({
     error?: string;
     evalink?: string;
     recovery_used?: string;
+    motivo?: string;
   }>;
 }) {
-  const { next, reset, error, evalink, recovery_used } = await searchParams;
+  const { next, reset, error, evalink, recovery_used, motivo } = await searchParams;
   const evalinkLigado = configEvalink() !== null;
   const mensagemEvalink = mensagemDoEvalink(evalink);
   // Fora da árvore de `app/app/layout.tsx` — sem `IdiomaProvider` do lado do
@@ -39,6 +42,15 @@ export default async function LoginPage({
   const t = (texto: string) => traduzir(texto, idioma);
   // O MESMO nome do título da aba (`app/layout.tsx`): pilha Conta → banco → `.env`.
   const { nome } = await marcaDaSaida(null);
+  // "Criar conta" abre uma clínica NOVA. Com o cadastro só por convite ele leva
+  // a uma recusa, e com o EvaLink ligado quem é da equipe clicava e criava uma
+  // clínica vazia (auditoria 17/11, item 52). Nos dois casos, some.
+  const mostrarCriarConta = !evalinkLigado && (await modoDeCadastro()) !== "so_convite";
+  // A volta do login pela Conta (auditoria 17/11, item 53): só caminho interno.
+  const destino = safeNext(next, "");
+  const entrarPeloEvalink = destino
+    ? `/evalink/entrar?${new URLSearchParams({ next: destino }).toString()}`
+    : "/evalink/entrar";
 
   return (
     <div className="space-y-6">
@@ -46,12 +58,22 @@ export default async function LoginPage({
         <h1 className="titulo-tela">{t("Entrar")}</h1>
         <p className="text-sm text-muted-foreground">{nome}</p>
       </div>
+      {/* A sessão terminou com a tela aberta (`lib/api/client.ts`, `levarAoLogin`):
+          sem esta linha, cair no login no meio do trabalho parece defeito. */}
+      {motivo === "sessao" && (
+        <div
+          className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm"
+          role="status"
+        >
+          {t("Sua sessão terminou. Entre de novo para voltar à tela onde estava.")}
+        </div>
+      )}
       {evalinkLigado && (
         <div className="space-y-3">
           <Button asChild className="w-full">
             {/* <a> puro, não <Link>: prefetch dispararia a rota que já inicia o
                 redirect OAuth, gastando o state/nonce de um fluxo que ninguém pediu. */}
-            <a href="/evalink/entrar">{t("Entrar com o EvaLink")}</a>
+            <a href={entrarPeloEvalink}>{t("Entrar com o EvaLink")}</a>
           </Button>
           {mensagemEvalink && (
             <div
@@ -148,7 +170,7 @@ export default async function LoginPage({
           )}
         </div>
       )}
-      <LoginForm next={next} />
+      <LoginForm next={next} evalink={evalinkLigado} />
       <div className="space-y-2 text-center text-sm">
         <p>
           <Link
@@ -158,15 +180,17 @@ export default async function LoginPage({
             {t("Esqueci minha senha")}
           </Link>
         </p>
-        <p className="text-muted-foreground">
-          {t("Não tem conta?")}{" "}
-          <Link
-            href="/signup"
-            className="font-medium text-foreground underline underline-offset-4"
-          >
-            {t("Criar conta")}
-          </Link>
-        </p>
+        {mostrarCriarConta && (
+          <p className="text-muted-foreground">
+            {t("Não tem conta?")}{" "}
+            <Link
+              href="/signup"
+              className="font-medium text-foreground underline underline-offset-4"
+            >
+              {t("Criar conta")}
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );

@@ -12,7 +12,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { toast } from "sonner";
-import { DotsThree, PaperPlaneTilt } from "@/lib/ui/icons";
+import { PaperPlaneTilt } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
 import { MensagensAgendadasBotao } from "@/components/inbox/MensagensAgendadas";
@@ -32,7 +32,7 @@ import {
   resolverMencao,
   type OpcaoDeMencao,
 } from "@/components/inbox/composer/MentionMenu";
-import { resolveSlash, TemplateMenu } from "@/components/inbox/composer/TemplateMenu";
+import { filtrarRespostas, resolveSlash, TemplateMenu } from "@/components/inbox/composer/TemplateMenu";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useCreateNote } from "@/hooks/inbox/useCreateNote";
 import { useMessageTemplates, type MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
@@ -52,15 +52,38 @@ import {
 import { ApiError } from "@/lib/api/types";
 import { embutirMencoes, podarMencoes, type MencaoEscolhida } from "@/lib/notifications/mentions";
 import { cn } from "@/lib/utils";
-import { classeDaFaixa, useRevelacao } from "@/hooks/inbox/useRevelacao";
 import { resolveSharedContact } from "@/lib/messaging/contact-card";
 
 export interface ComposerHandle {
   focus: () => void;
 }
 
+/**
+ * O que ficou escrito numa conversa e não saiu (item 28 da auditoria de 17/11).
+ * Leva o MODO junto: um rascunho de nota que voltasse como resposta sairia para
+ * o paciente no primeiro Enter.
+ */
+export interface RascunhoDoCampo {
+  texto: string;
+  modo: "reply" | "note";
+  mencoes: MencaoEscolhida[];
+}
+
 interface Props {
   conversationId: string;
+  /**
+   * Rascunhos por conversa, guardados por quem troca a conversa (o Inbox). O
+   * campo é montado de novo a cada conversa (`key`), lê o rascunho DELA ao
+   * nascer e o grava a cada mudança. Sem isto, nada de uma conversa sobrevive à
+   * troca — que é o certo: texto de uma conversa nunca aparece noutra.
+   */
+  rascunhos?: Map<string, RascunhoDoCampo>;
+  /**
+   * Abre a conversa com o cursor no campo (item 29): quem já sai digitando
+   * escreve a mensagem, em vez de disparar atalho. Só no computador — no toque o
+   * teclado virtual cobriria a conversa que a pessoa acabou de abrir.
+   */
+  focarAoAbrir?: boolean;
   /** Liga as mensagens agendadas (a conversa tem contato e número). Porte do DeskcommCRM #4131. */
   agendamentoLigado?: boolean;
   disabled?: boolean;
@@ -119,6 +142,8 @@ interface Props {
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   {
     conversationId,
+    rascunhos,
+    focarAoAbrir = false,
     agendamentoLigado = false,
     disabled,
     blockedReason,
@@ -134,7 +159,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   ref,
 ) {
   const t = useT();
-  const [text, setText] = useState("");
+  const [inicial] = useState(() => rascunhos?.get(conversationId));
+  const [text, setText] = useState(inicial?.texto ?? "");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   // O realce do arquivo arrastado (porte do original #3713). `dragenter` e
   // `dragleave` disparam também nos filhos, e um booleano solto faria o realce
@@ -169,7 +195,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [agendaAberta, setAgendaAberta] = useState(false);
   const [menuDismissed, setMenuDismissed] = useState(false);
-  const [mode, setMode] = useState<"reply" | "note">("reply");
+  const [mode, setMode] = useState<"reply" | "note">(inicial?.modo ?? "reply");
   /**
    * Menção de atendente em nota interna (portado do DeskcommCRM, PRs #2461,
    * #2489 e #2586 de @webtecnica e @Tong-bit-art). `caret` porque o `@` é
@@ -177,18 +203,20 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
    * mostra o nome, e o id entra só quando o corpo sai (`embutirMencoes`).
    */
   const [caret, setCaret] = useState(0);
-  const [mencoes, setMencoes] = useState<MencaoEscolhida[]>([]);
+  const [mencoes, setMencoes] = useState<MencaoEscolhida[]>(inicial?.mencoes ?? []);
+  useEffect(() => {
+    if (!rascunhos) return;
+    if (text) rascunhos.set(conversationId, { texto: text, modo: mode, mencoes });
+    else rascunhos.delete(conversationId);
+  }, [rascunhos, conversationId, text, mode, mencoes]);
   const [mencaoDispensada, setMencaoDispensada] = useState(false);
   const [mencaoIndice, setMencaoIndice] = useState(0);
   /**
-   * A FAIXA DE CIMA DO CAMPO (assistência do agente + Responder/Nota interna)
-   * fica recolhida até ser pedida — pelo mouse, pelo foco ou pelo botão de
-   * faísca ao lado do emoji. Ela comia ~70px da conversa o tempo todo, e no
-   * celular empurrava o campo para baixo da dobra.
-   *
-   * Recolher NUNCA esconde estado: em "Nota interna" ou com sugestão para
-   * revisar ela fica aberta e no fluxo (`forcado`), porque escrever achando que
-   * é nota quando é resposta ao cliente é o erro que não tem volta.
+   * A FAIXA DE CIMA DO CAMPO (Responder / Nota interna, e a sugestão do agente
+   * quando há) fica SEMPRE À VISTA e no fluxo (item 44 da auditoria de 17/11).
+   * Ela nasceu recolhida, aberta pelo "⋯" ou pelo mouse — e aí flutuava sobre a
+   * última mensagem, e "Nota interna" ficava escondida justo de quem precisa
+   * saber, antes de escrever, se o texto vai ao paciente ou fica com o time.
    */
   // "Há sugestão" é a MESMA consulta que o `ReplyReviewPanel` lê (porte do
   // original #3234): uma chave, um cache, sem um segundo estado para divergir.
@@ -198,11 +226,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     conversationId,
     mode === "reply" && !blockedReason,
   );
-  const temSugestao = !!sugestao;
-  const ferramentas = useRevelacao({
-    forcado: mode === "note" || temSugestao,
-    chave: conversationId,
-  });
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   // A citação ATUAL, para o `onSuccess` de um envio que já saiu comparar com a
   // que foi junto com ele (ver `handleSubmit`).
@@ -218,6 +241,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const templates = useMessageTemplates();
   const slash = resolveSlash(text);
   const menuOpen = mode === "reply" && slash.open && !menuDismissed;
+  // A opção destacada do menu do "/" (item 43). Volta ao topo a cada letra.
+  const [menuIndice, setMenuIndice] = useState(0);
+  const opcoesDoMenu = menuOpen ? filtrarRespostas(templates.data ?? [], slash.query) : [];
 
   // SÓ em nota: menção no campo de resposta sairia para o cliente.
   const gatilho = mode === "note" && !mencaoDispensada ? resolverMencao(text, caret) : null;
@@ -266,6 +292,17 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     ta.style.height = "auto";
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
   }
+  // Na montagem (o campo nasce a cada conversa): o rascunho que voltou ganha a
+  // altura dele, e o cursor vai ao campo no computador.
+  useEffect(() => {
+    if (inicial?.texto) autoresize();
+    if (focarAoAbrir && window.matchMedia?.("(hover: hover) and (pointer: fine)").matches) {
+      const ta = taRef.current;
+      ta?.focus({ preventScroll: true });
+      ta?.setSelectionRange(ta.value.length, ta.value.length);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Escolhe da lista e escreve o NOME no campo; o id entra só ao salvar. */
   function escolherMencao(opcao: OpcaoDeMencao): void {
@@ -295,6 +332,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
     // Se a pessoa já começou a próxima resposta, preserve os dois textos.
     const restaurar = (current: string) => (current ? `${body}\n${current}` : body);
+    // ponytail: com o campo montado por conversa (`key`), o `onError` do mutate
+    // não roda se a pessoa já trocou de conversa — o texto não volta para o
+    // campo de OUTRA conversa, mas também não volta ao rascunho desta. Guardar no
+    // rascunho pede `mutateAsync`; trocar se a recepção perder texto assim.
     const restoreOnError = () => {
       setText(restaurar);
       requestAnimationFrame(() => autoresize());
@@ -515,6 +556,21 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       setMenuDismissed(true);
       return;
     }
+    // Setas e Enter escolhem a resposta rápida, como no menu de menção (item 43).
+    if (menuOpen && opcoesDoMenu.length > 0) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const passo = e.key === "ArrowDown" ? 1 : -1;
+        setMenuIndice((i) => (i + passo + opcoesDoMenu.length) % opcoesDoMenu.length);
+        return;
+      }
+      if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+        e.preventDefault();
+        const escolhida = opcoesDoMenu[menuIndice] ?? opcoesDoMenu[0];
+        if (escolhida) applyTemplate(escolhida);
+        return;
+      }
+    }
     // Com a lista de menções aberta, Enter escolhe — não envia.
     if (mencaoAberta) {
       if (e.key === "Escape") {
@@ -569,7 +625,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   return (
     <>
       <div
-        {...ferramentas.zonaProps}
         data-testid="composer"
         onDragEnter={onDragEnter}
         onDragOver={onDragOver}
@@ -596,6 +651,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           templates={templates.data ?? []}
           onPick={applyTemplate}
           onClose={() => setMenuDismissed(true)}
+          indice={menuIndice}
         />
         <MentionMenu
           open={mencaoAberta}
@@ -604,15 +660,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           onPick={escolherMencao}
         />
         <div
-          {...ferramentas.painelProps}
           role="group"
           aria-label={t("Assistência do agente e nota interna")}
-          className={cn(
-            ferramentas.noFluxo
-              ? "mb-1.5"
-              : "absolute inset-x-0 bottom-full z-20 border-t border-border bg-bg px-3 pt-2 pb-1.5 shadow-md",
-            classeDaFaixa(ferramentas.visivel),
-          )}
+          className="mb-1.5"
         >
         {/* O bloco só existe COM sugestão (#3234): sem ela, quem oferece o gesto
             é o ícone "Sugerir resposta" da linha de ações, lá embaixo. Com o
@@ -760,25 +810,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               onDraft={() => void invalidar()}
             />
           )}
-          {/* A porta explícita da faixa de cima (toque e teclado). Três
-              pontos, e não faísca: a faísca é do "Sugerir resposta" ao lado,
-              e sem sugestão o que mora na faixa é o Responder/Nota interna.
-              Desabilitada enquanto a faixa está presa aberta por estado
-              (nota, sugestão): ali fechar não é opção, e o botão continua no
-              lugar para o campo não mudar de largura. */}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn("shrink-0", ferramentas.visivel && "bg-muted")}
-            aria-label={t("Opções de resposta")}
-            title={t("Assistência do agente e nota interna")}
-            disabled={mode === "note" || temSugestao}
-            {...ferramentas.alternadorProps}
-            onClick={ferramentas.alternar}
-          >
-            <DotsThree size={16} weight="bold" aria-hidden />
-          </Button>
           <textarea
             ref={taRef}
             value={text}
@@ -787,6 +818,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               const pos = e.target.selectionStart ?? e.target.value.length;
               setCaret(pos);
               setMencaoIndice(0);
+              setMenuIndice(0);
               // A escolha que sumiu do texto sai da lista agora: senão roubava
               // o `@Nome` de um homônimo e notificava a pessoa errada.
               setMencoes((atual) => podarMencoes(e.target.value, atual));
@@ -844,6 +876,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               textoInicial={text}
               aberto={agendaAberta}
               onAbertoChange={setAgendaAberta}
+              onAgendouOTexto={() => setText("")}
             />
           ) : null}
           {text.trim() || mode === "note" ? (
