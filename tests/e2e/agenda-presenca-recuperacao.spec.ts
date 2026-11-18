@@ -167,6 +167,13 @@ async function detail(page: Page, id: string, title: string) {
 async function evidence(page: Page, info: TestInfo, name: string) {
   const directory = info.outputPath(name);
   mkdirSync(directory, { recursive: true });
+  // Mede a gaveta PARADA. Ela entra deslizando (`eva-gaveta-entra`, 300 ms), e
+  // medida no meio do caminho ela "passa da tela": no caminho em espanhol, que
+  // mede logo depois de abrir, deu right 1283,9 com a animação em 250 ms e
+  // `translate: 1.03%`; terminada, 1280 e 384 px, igual ao português.
+  await page
+    .getByRole("dialog")
+    .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished.catch(() => undefined))));
   const measured = await page.getByRole("dialog").evaluate((el) => {
     const r = el.getBoundingClientRect();
     return {
