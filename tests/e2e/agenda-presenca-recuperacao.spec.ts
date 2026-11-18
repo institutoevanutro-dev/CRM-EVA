@@ -449,12 +449,13 @@ test.describe("datas do compromisso seguem idioma e fuso próprios", () => {
     for (const locale of ["pt-BR", "es"] as const) {
       if (locale === "es") {
         await page.keyboard.press("Escape");
-        // O idioma mora na barra de cima, escondida desde 18/11.
+        // A barra de cima fica escondida desde 18/11: abre como a pessoa abre.
         await mostrarBarraDeCima(page);
         await page.getByTestId("seletor-de-idioma").click();
         const reload = page.waitForEvent("load");
         await page.getByTestId("idioma-es").click();
         await reload;
+        await mostrarBarraDeCima(page);
         await expect(page.getByTestId("seletor-de-idioma")).toHaveText("ES");
         await detail(page, id, "Consulta atravessa meia-noite");
         await expect(page.getByTestId("compromisso-horario")).toHaveText(
