@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.22.1] — 2026-11-18
+
+### Alterado
+
+- **Mensagem enviada fora do CRM agora diz "WhatsApp (fora do CRM)"** No Inbox, a resposta digitada direto no WhatsApp (celular ou WhatsApp Web) aparecia com o rótulo
+  "Celular", que confundia quem respondia pelo computador e parecia mensagem da IA. O rótulo passa a
+  ser "WhatsApp (fora do CRM)". Nada muda no comportamento: a IA continua pausando nessa conversa.
+
 ## [5.22.0] — 2026-11-18
 
 ### Adicionado
@@ -9427,7 +9435,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.22.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.22.1...HEAD
+[5.22.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.22.0...v5.22.1
 [5.22.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.21.0...v5.22.0
 [5.21.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.20.1...v5.21.0
 [5.20.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.20.0...v5.20.1
