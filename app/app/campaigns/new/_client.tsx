@@ -16,14 +16,14 @@
  * operador precisa ver antes de apertar é "quantas pessoas isto pega".
  */
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { useCriarCampanha, usePreviaDaAudiencia } from "@/hooks/campanhas/useCampanhas";
+import { useCriarCampanha } from "@/hooks/campanhas/useCampanhas";
+import { useConfiguracaoDeCampanhas } from "@/hooks/campanhas/useConfiguracao";
 import { channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useT } from "@/hooks/i18n/useT";
 import {
@@ -31,86 +31,83 @@ import {
   useEtapas,
   useFunis,
 } from "@/hooks/campanhas/useDestinoDaCampanha";
-import { VARIAVEIS_DA_CAMPANHA, DESCRICAO_DA_VARIAVEL } from "@/lib/campanhas/renderizador";
+
+import {
+  CamposDeRitmo,
+  RITMO_EM_BRANCO,
+  errosDoRitmo,
+  ritmoNosCampos,
+  ritmoParaEnviar,
+} from "../_components/CamposDeRitmo";
+import { MensagemDaCampanha } from "../_components/MensagemDaCampanha";
+import {
+  PUBLICO_EM_BRANCO,
+  PublicoDaCampanha,
+  conferirPublico,
+  filtroDoPublico,
+} from "../_components/PublicoDaCampanha";
 
 export function NovaCampanha() {
   const t = useT();
   const router = useRouter();
   const canais = useChannelSessions();
   const criar = useCriarCampanha();
-  const previa = usePreviaDaAudiencia();
 
   const [nome, setNome] = useState("");
   const [canal, setCanal] = useState("");
   const [baseLegal, setBaseLegal] = useState<"consent" | "legitimate_interest">("consent");
   const [liaRef, setLiaRef] = useState("");
-  const [comAlgumaTag, setComAlgumaTag] = useState("");
-  const [semTags, setSemTags] = useState("");
-  const [semInteracao, setSemInteracao] = useState("");
-  const [limite, setLimite] = useState("100");
+  const [publico, setPublico] = useState(PUBLICO_EM_BRANCO);
   const [texto, setTexto] = useState("");
-  const [intervalo, setIntervalo] = useState("");
-  const [janelaInicio, setJanelaInicio] = useState("");
-  const [janelaFim, setJanelaFim] = useState("");
-  const [tetoDiario, setTetoDiario] = useState("");
-  const [tetoHorario, setTetoHorario] = useState("");
+  const [ritmo, setRitmo] = useState(RITMO_EM_BRANCO);
   const [extras, setExtras] = useState<string[]>([]);
   const [funil, setFunil] = useState("");
   const [etapa, setEtapa] = useState("");
   const [agente, setAgente] = useState("");
-  const [funilDoPublico, setFunilDoPublico] = useState("");
-  const [etapaDoPublico, setEtapaDoPublico] = useState("");
 
   const funis = useFunis();
   const etapas = useEtapas(funil || null);
-  const etapasDoPublico = useEtapas(funilDoPublico || null);
   const agentes = useAgentesPublicados();
 
-  const filtro = useMemo(
-    () => ({
-      com_alguma_tag: listar(comAlgumaTag),
-      sem_tags: listar(semTags),
-      sem_interacao_ha_dias: semInteracao ? Number(semInteracao) : null,
-      funis: funilDoPublico ? [funilDoPublico] : [],
-      etapas: etapaDoPublico ? [etapaDoPublico] : [],
-      limite: Number(limite) || 100,
-    }),
-    [comAlgumaTag, semTags, semInteracao, funilDoPublico, etapaDoPublico, limite],
-  );
+  // Os PADRÕES da organização (Campanhas › Ritmo de envio) entram uma vez, ao
+  // carregar: a tela de padrões promete que "toda campanha nova nasce com estes
+  // valores", e nada os usava (auditoria de 17/11/2026, item 16). Uma vez só —
+  // depois quem manda é o que a pessoa digita, inclusive apagar.
+  // Ajuste durante o render (e não num efeito): é estado derivado de uma carga
+  // que chega depois, e o React recomenda este padrão para não pintar duas vezes.
+  const padroes = useConfiguracaoDeCampanhas().data?.configuracao;
+  const [padroesAplicados, setPadroesAplicados] = useState(false);
+  if (padroes && !padroesAplicados) {
+    setPadroesAplicados(true);
+    setRitmo((atual) => (Object.values(atual).every((v) => v === "") ? ritmoNosCampos(padroes) : atual));
+  }
 
-  const temCriterio =
-    filtro.com_alguma_tag.length > 0 ||
-    filtro.sem_tags.length > 0 ||
-    filtro.funis.length > 0 ||
-    filtro.etapas.length > 0 ||
-    filtro.sem_interacao_ha_dias !== null;
+  const filtro = filtroDoPublico(publico);
+  const errosDeRitmo = errosDoRitmo(ritmo);
 
   const podeSalvar =
     nome.trim() !== "" &&
     canal !== "" &&
     texto.trim() !== "" &&
-    temCriterio &&
+    conferirPublico(filtro).valido &&
+    Object.keys(errosDeRitmo).length === 0 &&
     (baseLegal !== "legitimate_interest" || liaRef.trim() !== "");
 
-  async function salvar() {
-    const criada = await criar.mutateAsync({
+  function salvar() {
+    // Falhou: o toast diz por quê e a tela fica com o que foi digitado.
+    criar.mutate({
       name: nome.trim(),
       channel_session_id: canal,
       message_body: texto.trim(),
       base_legal: baseLegal,
       lia_ref: liaRef.trim() || null,
       audience_filter: filtro,
-      intervalo_segundos: intervalo ? Number(intervalo) : null,
-      janela_inicio_hora: janelaInicio ? Number(janelaInicio) : null,
-      janela_fim_hora: janelaFim ? Number(janelaFim) : null,
-      teto_diario: tetoDiario ? Number(tetoDiario) : null,
-      teto_horario: tetoHorario ? Number(tetoHorario) : null,
+      ...ritmoParaEnviar(ritmo),
       channel_session_ids: extras,
       pipeline_id: funil || null,
       stage_id: etapa || null,
       agent_id: agente || null,
-    });
-    router.push(`/app/campaigns/${criada.id}`);
+    }, { onSuccess: (criada) => router.push(`/app/campaigns/${criada.id}`) });
   }
 
   return (
@@ -130,7 +127,7 @@ export function NovaCampanha() {
             id="nome"
             value={nome}
             onChange={(e) => setNome(e.target.value)}
-            placeholder={t("Ex.: Reativação de clientes parados")}
+            placeholder={t("Ex.: Retorno de pacientes parados")}
           />
         </div>
         <div className="space-y-2">
@@ -231,149 +228,11 @@ export function NovaCampanha() {
 
       <Card className="space-y-4 p-4">
         <h2 className="font-medium">{t("Público")}</h2>
-        <p className="text-sm text-muted-foreground">
-          {t("Escolha pelo menos um critério — uma lista sem recorte ninguém confere antes de apertar.")}
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="com-tags">{t("Com alguma destas etiquetas")}</Label>
-            <Input
-              id="com-tags"
-              value={comAlgumaTag}
-              onChange={(e) => setComAlgumaTag(e.target.value)}
-              placeholder={t("separe por vírgula")}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="sem-tags">{t("Sem nenhuma destas etiquetas")}</Label>
-            <Input
-              id="sem-tags"
-              value={semTags}
-              onChange={(e) => setSemTags(e.target.value)}
-              placeholder={t("separe por vírgula")}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="silencio">{t("Sem falar com a gente há (dias)")}</Label>
-            <Input
-              id="silencio"
-              type="number"
-              min={1}
-              value={semInteracao}
-              onChange={(e) => setSemInteracao(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="pub-funil">{t("Com negócio no funil")}</Label>
-            <select
-              id="pub-funil"
-              className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
-              value={funilDoPublico}
-              onChange={(e) => {
-                setFunilDoPublico(e.target.value);
-                setEtapaDoPublico("");
-              }}
-            >
-              <option value="">{t("Qualquer um")}</option>
-              {(funis.data ?? []).map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="pub-etapa">{t("Na etapa")}</Label>
-            <select
-              id="pub-etapa"
-              className="h-9 w-full rounded-md border border-border bg-surface px-2 text-sm"
-              value={etapaDoPublico}
-              onChange={(e) => setEtapaDoPublico(e.target.value)}
-              disabled={!funilDoPublico}
-            >
-              <option value="">{t("Qualquer etapa")}</option>
-              {(etapasDoPublico.data ?? []).map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="limite">{t("Máximo de contatos nesta campanha")}</Label>
-            <Input
-              id="limite"
-              type="number"
-              min={1}
-              max={5000}
-              value={limite}
-              onChange={(e) => setLimite(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!temCriterio || previa.isPending}
-            onClick={() =>
-              previa.mutate({ audience_filter: filtro, message_body: texto })
-            }
-          >
-            {previa.isPending ? t("Contando…") : t("Ver quantas pessoas")}
-          </Button>
-          {previa.data && (
-            <p className="text-sm">
-              <strong>{previa.data.elegiveis}</strong> {t("podem receber")}
-              {previa.data.excluidos > 0
-                ? ` · ${previa.data.excluidos} ${t("ficam de fora")}`
-                : ""}
-            </p>
-          )}
-        </div>
-        {previa.data && previa.data.excluidos > 0 && (
-          <ul className="space-y-1 text-sm text-muted-foreground">
-            {Object.entries(previa.data.motivos).map(([motivo, quantos]) => (
-              <li key={motivo}>
-                {quantos} — {t(previa.data!.legenda[motivo] ?? motivo)}
-              </li>
-            ))}
-          </ul>
-        )}
+        <PublicoDaCampanha campos={publico} onChange={setPublico} texto={texto} />
       </Card>
 
-      <Card className="space-y-4 p-4">
-        <h2 className="font-medium">{t("Mensagem")}</h2>
-        <Textarea
-          rows={6}
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          placeholder={t("Escreva como você falaria com uma pessoa só.")}
-          aria-label={t("Texto da mensagem")}
-        />
-        <div className="space-y-1 text-sm text-muted-foreground">
-          <p>{t("Você pode usar:")}</p>
-          <ul className="space-y-1">
-            {VARIAVEIS_DA_CAMPANHA.map((v) => (
-              <li key={v}>
-                <button
-                  type="button"
-                  className="rounded-md bg-surface-elevated px-1 font-mono text-xs"
-                  onClick={() => setTexto((atual) => `${atual}{{${v}}}`)}
-                >
-                  {`{{${v}}}`}
-                </button>{" "}
-                — {t(DESCRICAO_DA_VARIAVEL[v])}
-              </li>
-            ))}
-          </ul>
-          <p>{t('Para não depender do dado, ponha um texto de reserva: {{primeiro_nome|"aluno"}}.')}</p>
-          <p>
-            {t(
-              "Quem não tiver o dado que a mensagem usa fica de fora, com o motivo na lista — mensagem com buraco não sai.",
-            )}
-          </p>
-        </div>
+      <Card className="p-4">
+        <MensagemDaCampanha texto={texto} onChange={setTexto} />
       </Card>
 
       <Card className="space-y-4 p-4">
@@ -449,77 +308,17 @@ export function NovaCampanha() {
             "Em branco, vale o ritmo do número (Conexões › Proteção de envio). O que você puser aqui só pode deixar mais devagar.",
           )}
         </p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="intervalo">{t("Intervalo mínimo entre mensagens (segundos)")}</Label>
-            <Input
-              id="intervalo"
-              type="number"
-              min={1}
-              value={intervalo}
-              onChange={(e) => setIntervalo(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="teto">{t("Máximo por dia")}</Label>
-            <Input
-              id="teto"
-              type="number"
-              min={1}
-              value={tetoDiario}
-              onChange={(e) => setTetoDiario(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="teto-hora">{t("Máximo por hora")}</Label>
-            <Input
-              id="teto-hora"
-              type="number"
-              min={1}
-              value={tetoHorario}
-              onChange={(e) => setTetoHorario(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="janela-inicio">{t("Enviar só a partir das (hora)")}</Label>
-            <Input
-              id="janela-inicio"
-              type="number"
-              min={0}
-              max={23}
-              value={janelaInicio}
-              onChange={(e) => setJanelaInicio(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="janela-fim">{t("Parar de enviar às (hora)")}</Label>
-            <Input
-              id="janela-fim"
-              type="number"
-              min={1}
-              max={24}
-              value={janelaFim}
-              onChange={(e) => setJanelaFim(e.target.value)}
-            />
-          </div>
-        </div>
+        <CamposDeRitmo prefixo="nova" valores={ritmo} onChange={setRitmo} />
       </Card>
 
       <div className="flex items-center justify-end gap-2">
         <Button variant="outline" onClick={() => router.push("/app/campaigns")}>
           {t("Cancelar")}
         </Button>
-        <Button disabled={!podeSalvar || criar.isPending} onClick={() => void salvar()}>
+        <Button disabled={!podeSalvar || criar.isPending} onClick={salvar}>
           {criar.isPending ? t("Salvando…") : t("Salvar rascunho")}
         </Button>
       </div>
     </div>
   );
-}
-
-function listar(bruto: string): string[] {
-  return bruto
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
 }

@@ -11331,6 +11331,63 @@ export const DICIONARIO: Traducoes = {
     es: "El ritmo se ajusta en la propia pantalla de la campaña, sin descartar nada.",
   },
   "Voltar para a campanha": { es: "Volver a la campaña" },
+  // Campanhas — auditoria de 17/11/2026, lote 2 (público e envio certos).
+  "Voltar para rascunho": { es: "Volver a borrador" },
+  "Voltando…": { es: "Volviendo…" },
+  "Só um rascunho aceita mudar o texto e o público. O ritmo você pode ajustar a qualquer momento.": {
+    es: "Solo un borrador acepta cambiar el texto y el público. El ritmo puede ajustarlo en cualquier momento.",
+  },
+  "Cópia criada. Confira antes de preparar.": { es: "Copia creada. Revísela antes de preparar." },
+  "O horário da campanha não cruza o do número: nada sai.": {
+    es: "El horario de la campaña no coincide con el del número: no sale nada.",
+  },
+  "Só sai entre": { es: "Solo sale entre" },
+  "Aguardando o horário de envio.": { es: "Esperando el horario de envío." },
+  "Volta às": { es: "Vuelve a las" },
+  "Teste enviado para": { es: "Prueba enviada a" },
+  "Enviar teste para": { es: "¿Enviar prueba a" },
+  "Digite pelo menos 2 letras do nome ou do telefone.": {
+    es: "Escriba al menos 2 letras del nombre o del teléfono.",
+  },
+  "Usar texto salvo": { es: "Usar texto guardado" },
+  'Para não depender do dado, ponha um texto de reserva: {{primeiro_nome|"paciente"}}.': {
+    es: 'Para no depender del dato, ponga un texto de reserva: {{primeiro_nome|"paciente"}}.',
+  },
+  "Como chega": { es: "Cómo llega" },
+  "Exemplo com o nome Ana Souza. A saudação segue a hora do envio.": {
+    es: "Ejemplo con el nombre Ana Souza. El saludo sigue la hora del envío.",
+  },
+  "Escolher etiquetas": { es: "Elegir etiquetas" },
+  "Com negócio na etapa": { es: "Con negocio en la etapa" },
+  "Nenhuma etiqueta nos contatos ainda.": { es: "Todavía no hay etiquetas en los contactos." },
+  "Ex.: Retorno de pacientes parados": { es: "Ej.: Regreso de pacientes inactivos" },
+  "Ex.: Retorno de consulta": { es: "Ej.: Regreso de consulta" },
+  "Textos que você reusa entre campanhas: aparecem em Usar texto salvo, na hora de escrever. Mudar um texto aqui não muda mensagem já preparada nem enviada.": {
+    es: "Textos que reutiliza entre campañas: aparecen en Usar texto guardado, al escribir. Cambiar un texto aquí no cambia mensajes ya preparados ni enviados.",
+  },
+  // As frases de validação vêm do schema (lib/campanhas/schemas.ts e
+  // audiencia.ts) e chegam à tela por variável — o guarda de i18n não as vê.
+  "Use um número inteiro.": { es: "Use un número entero." },
+  "Use pelo menos 1 segundo.": { es: "Use al menos 1 segundo." },
+  "No máximo 86400 segundos (um dia).": { es: "Como máximo 86400 segundos (un día)." },
+  "Use uma hora de 0 a 23.": { es: "Use una hora de 0 a 23." },
+  "Use uma hora de 1 a 24.": { es: "Use una hora de 1 a 24." },
+  "Use pelo menos 1.": { es: "Use al menos 1." },
+  "No máximo 10000.": { es: "Como máximo 10000." },
+  "Preencha as duas horas, ou deixe as duas em branco.": {
+    es: "Complete las dos horas, o deje las dos en blanco.",
+  },
+  "A janela precisa terminar depois de começar.": { es: "La franja debe terminar después de empezar." },
+  "Use de 1 a 3650 dias.": { es: "Use de 1 a 3650 días." },
+  "Use de 1 a 5000 pessoas.": { es: "Use de 1 a 5000 personas." },
+  "A última preparação não achou ninguém no público. Ajuste o filtro.": {
+    es: "La última preparación no encontró a nadie en el público. Ajuste el filtro.",
+  },
+  "A última preparação achou pessoas, mas nenhuma podia receber. Veja os motivos na edição.": {
+    es: "La última preparación encontró personas, pero ninguna podía recibir. Vea los motivos en la edición.",
+  },
+  "A última preparação falhou. Tente de novo.": { es: "La última preparación falló. Intente de nuevo." },
+  "A última preparação não deu certo.": { es: "La última preparación no salió bien." },
   "funil removido": { es: "embudo eliminado" },
   "agente indisponível": { es: "agente no disponible" },
   "Agente publicado no número (padrão)": { es: "Agente publicado en el número (predeterminado)" },
