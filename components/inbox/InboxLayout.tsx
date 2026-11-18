@@ -507,7 +507,18 @@ export function InboxLayout({
   // aí `inList` já a tem no primeiro render.
   const needsFetch = !!selectedId && !inList;
   const single = useConversation(selectedId, needsFetch);
-  const selectedConversation: ConversationWithContact | null = inList ?? single.data ?? null;
+  // A ÚLTIMA LINHA VISTA SEGURA A TELA (item 30 da auditoria de 17/11). Quando a
+  // conversa aberta sai da aba ("Não lidos", ou logo depois de "Assumir" na
+  // Fila), `inList` vira nulo e a busca única começa do zero: o lado direito
+  // piscava em carregamento e o campo era recriado — no iPhone, o teclado
+  // fechava no meio da frase. Enquanto a busca única não responde, vale a linha
+  // que a lista mostrou por último. Conversa que deixou de ser alcançável (404)
+  // não usa a reserva: aí a mensagem certa é "não encontrada".
+  const [linhaGuardada, setLinhaGuardada] = useState<ConversationWithContact | null>(null);
+  if (inList && inList !== linhaGuardada) setLinhaGuardada(inList);
+  const reserva =
+    linhaGuardada && linhaGuardada.id === selectedId && !isNotFound(single.error) ? linhaGuardada : null;
+  const selectedConversation: ConversationWithContact | null = inList ?? single.data ?? reserva;
   // "Reabrir e responder" (I3): o foco vai ao campo quando ele MONTAR — no
   // lugar da barra, depois que a conversa voltar aberta. O pedido é marcado no
   // CLIQUE, não na resposta: a releitura da conversa pode trocar a barra pelo

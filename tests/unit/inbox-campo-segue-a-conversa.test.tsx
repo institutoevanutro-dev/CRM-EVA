@@ -59,6 +59,8 @@ const get = vi.fn(async (url: string): Promise<unknown> => {
     };
   }
   if (url === "/api/v1/ai/automatico-ativo") return { data: { ativo: false } };
+  // A busca única de uma conversa que saiu da lista: ainda em voo.
+  if (url.startsWith("/api/v1/conversations/")) return new Promise(() => {});
   return { data: [] };
 });
 vi.mock("@/lib/api/client", () => ({
@@ -69,7 +71,9 @@ const LISTA = {
   realtimeStatus: "ok",
 };
 function comJanelaVencida(vencida: boolean) {
-  LISTA.data.pages[0]!.data = [linha(CONV_A, "Ana Fictícia", vencida), linha(CONV_B, "Bruno Fictício", vencida)];
+  LISTA.data = {
+    pages: [{ data: [linha(CONV_A, "Ana Fictícia", vencida), linha(CONV_B, "Bruno Fictício", vencida)] }],
+  };
 }
 vi.mock("@/hooks/inbox/useConversationsRealtime", () => ({ useConversationsRealtime: () => LISTA }));
 vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: vi.fn() }));
@@ -129,11 +133,13 @@ class GravadorDeMentira {
 
 function montar() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  const arvore = () => (
     <QueryClientProvider client={qc}>
       <InboxLayout initialSelectedId={CONV_A} />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const r = render(arvore());
+  return { renderDeNovo: () => r.rerender(arvore()) };
 }
 
 const campo = () => screen.getByRole("textbox", { name: "Mensagem" }) as HTMLTextAreaElement;
@@ -214,5 +220,26 @@ describe("item 28 — o campo é da conversa", () => {
     abrir("B");
     const daB = await screen.findByRole("combobox", { name: "Modelo aprovado" });
     expect((daB as HTMLSelectElement).value).toBe("");
+  });
+});
+
+describe("item 30 — a conversa aberta que sai da aba não pisca nem recria o campo", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/app/inbox");
+    comJanelaVencida(false);
+  });
+
+  it("⭐ some da lista (Não lidos, Assumir): o mesmo campo segue na tela, com o texto", () => {
+    const tela = montar();
+    const antes = campo();
+    fireEvent.change(antes, { target: { value: "Ana, confirmo sua avaliação" } });
+
+    // A aba deixou de devolver a A; a busca única dela ainda não respondeu.
+    LISTA.data = { pages: [{ data: [linha(CONV_B, "Bruno Fictício")] }] };
+    tela.renderDeNovo();
+
+    expect(screen.queryByTestId("conversa-carregando")).toBeNull();
+    expect(campo(), "o campo foi recriado").toBe(antes);
+    expect(campo().value).toBe("Ana, confirmo sua avaliação");
   });
 });
