@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { DDD_BR } from "@/lib/channels/phone-variants";
 import { normalizarTag, normalizarTags } from "@/lib/contacts/tag-normalizada";
+import { ORIGENS_INFORMADAS } from "@/lib/contacts/origem-informada";
 import {
   MAXIMO_DE_ETIQUETAS_NO_FILTRO,
   MODOS_DE_ETIQUETA,
@@ -141,6 +142,8 @@ export const contactPatchSchema = contactCreateSchema.partial().extend({
   email: contactCreateSchema.shape.email.unwrap().nullable().optional(),
   phone_number: contactCreateSchema.shape.phone_number.unwrap().nullable().optional(),
   birthdate: contactCreateSchema.shape.birthdate.unwrap().nullable().optional(),
+  // "Como chegou" da ficha; `null` apaga. Vai para `source_metadata` por MERGE.
+  origem_informada: z.enum(ORIGENS_INFORMADAS).nullable().optional(),
 });
 export type ContactPatch = z.infer<typeof contactPatchSchema>;
 

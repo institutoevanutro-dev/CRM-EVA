@@ -10773,6 +10773,12 @@ export const DICIONARIO: Traducoes = {
   "Data de nascimento": { es: "Fecha de nacimiento" },
   "CPF cadastrado — digite para substituir": { es: "CPF registrado — escriba para reemplazarlo" },
   "Somente números": { es: "Solo números" },
+  "Como chegou": { es: "Cómo llegó" },
+  "Não informado": { es: "No informado" },
+  "Anúncio Meta": { es: "Anuncio Meta" },
+  "Anúncio Google": { es: "Anuncio Google" },
+  "Indicação": { es: "Recomendación" },
+  "Orgânico": { es: "Orgánico" },
 
   // ─── lib/ai/pontos/resolver.ts (avisos do painel de Provedores de IA) ───
   "Este ponto usa o modelo definido na versão publicada do agente; a escolha do painel não se aplica.": {
