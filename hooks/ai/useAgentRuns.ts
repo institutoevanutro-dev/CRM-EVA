@@ -2,19 +2,20 @@
 /**
  * useAgentRuns — lista runs de um agent (S-13.12).
  *
- * Compõe TanStack Query (GET /api/v1/ai/agents/:id/runs) com Supabase Realtime
- * (`postgres_changes` em `ai_agent_runs` filtrando `agent_id=eq.<id>`). Cada
- * INSERT/UPDATE invalida a query e dispara um toast leve. Toggle `enabled`
+ * Compõe TanStack Query (GET /api/v1/ai/agents/:id/runs, paginado pelo cursor
+ * da rota) com Supabase Realtime (`postgres_changes` em `ai_agent_runs`
+ * filtrando `agent_id=eq.<id>`). Cada INSERT/UPDATE invalida a query — e só:
+ * os avisos "Nova execução iniciada." / "Execução concluída." saíram, porque
+ * cada mensagem de paciente gerava dois, e "Execução failed" chegava em inglês.
+ * A lista que se atualiza sozinha já diz o que aconteceu. Toggle `enabled`
  * controla subscribe/unsubscribe pra não vazar canais quando a tab Runs não
  * está ativa.
  */
 import { useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api/client";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
-import { useT } from "@/hooks/i18n/useT";
 
 export type RunStatus =
   | "pending"
@@ -50,6 +51,21 @@ export interface AgentRunRow {
   created_at: string;
 }
 
+/**
+ * A situação em português, para o selo da lista e do detalhe — eles mostravam o
+ * valor do banco ("completed", "failed"). Chave pt-BR, para passar por `t()`.
+ * Valor que a tela não conhece segue cru, em vez de sumir.
+ */
+export const RUN_STATUS_LABEL_PT: Record<string, string> = {
+  pending: "Na fila",
+  running: "Em andamento",
+  completed: "Concluída",
+  failed: "Falhou",
+  aborted: "Interrompida",
+  timeout: "Tempo esgotado",
+  handoff: "Passou para a equipe",
+};
+
 interface ListResponse {
   data: AgentRunRow[];
   meta?: { cursor: string | null; has_more: boolean };
@@ -66,38 +82,25 @@ export function useAgentRuns(
   const realtime = opts?.realtime ?? enabled;
   const limit = opts?.limit ?? 25;
   const qc = useQueryClient();
-  const t = useT();
 
-  const query = useQuery({
+  // Uma página por vez, pelo cursor que a rota devolve — a lista parava nas 25
+  // mais recentes sem "ver mais".
+  const query = useInfiniteQuery({
     queryKey: [...agentRunsKey(agentId), limit] as const,
-    queryFn: async () => {
-      const res = await apiClient.get<ListResponse>(
-        `/api/v1/ai/agents/${agentId}/runs?limit=${limit}`,
+    queryFn: async ({ pageParam }) => {
+      const cursor = pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : "";
+      return apiClient.get<ListResponse>(
+        `/api/v1/ai/agents/${agentId}/runs?limit=${limit}${cursor}`,
       );
-      return res;
     },
+    initialPageParam: null as string | null,
+    getNextPageParam: (ultima) => (ultima.meta?.has_more ? ultima.meta.cursor : null),
     enabled: !!agentId && enabled,
   });
 
-  const onChange = useCallback(
-    (raw: unknown) => {
-      const payload = raw as { eventType?: string; new?: AgentRunRow } | null;
-      qc.invalidateQueries({ queryKey: agentRunsKey(agentId) });
-      if (payload?.eventType === "INSERT" && !payload.new?.is_dry_run) {
-        toast.info(t("Nova execução iniciada."));
-      }
-      if (payload?.eventType === "UPDATE" && payload.new?.status === "completed") {
-        toast.success(t("Execução concluída."));
-      }
-      if (
-        payload?.eventType === "UPDATE" &&
-        (payload.new?.status === "failed" || payload.new?.status === "aborted")
-      ) {
-        toast.error(`${t("Execução")} ${payload.new?.status}.`);
-      }
-    },
-    [agentId, qc, t],
-  );
+  const onChange = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: agentRunsKey(agentId) });
+  }, [agentId, qc]);
 
   // Pelo hook compartilhado. Este canal foi o PROVADO MORTO pelo @QAVivo: A/B na
   // mesma página, mesma sessão, mesmo socket — o do board (curado) ia com token,
