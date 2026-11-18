@@ -37,15 +37,14 @@ export function DocumentCard({
       aria-label={`${t("Baixar")} ${label} (${formatBytes(sizeBytes)})`}
       className={cn(
         "flex w-60 items-center gap-3 rounded-lg p-2 transition-colors",
-        isOutbound
-          ? "bg-primary-foreground/10 hover:bg-primary-foreground/20"
-          : "bg-background/60 hover:bg-background",
+        // Item 41: no balão enviado, tons da cor do texto do balão (`currentColor`).
+        isOutbound ? "bg-current/10 hover:bg-current/15" : "bg-background/60 hover:bg-background",
       )}
     >
       <span
         className={cn(
           "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-          isOutbound ? "bg-primary-foreground/20" : "bg-primary/10 text-primary",
+          isOutbound ? "bg-current/15" : "bg-primary/10 text-primary",
         )}
       >
         <FileText size={20} weight="duotone" aria-hidden />
