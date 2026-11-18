@@ -41,6 +41,14 @@ export interface AgentVersionRow {
   created_by: string | null;
 }
 
+/**
+ * A versão sem o texto das instruções — o que a lista do Histórico precisa.
+ * A página carregava o prompt inteiro de TODAS as versões (até 20 mil caracteres
+ * cada) só para desenhar número, situação e data; o texto completo agora vem só
+ * das versões que o editor abre e, no Histórico, de quem se compara ou se abre.
+ */
+export type AgentVersionSummary = Omit<AgentVersionRow, "system_prompt">;
+
 interface ListResponse {
   data: AgentVersionRow[];
 }

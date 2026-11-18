@@ -15,7 +15,7 @@ import { UsoDasCapacidades } from "./UsoDasCapacidades";
 import { VersionHistory } from "./VersionHistory";
 import { ProposalsPanel } from "./ProposalsPanel";
 import type { AgentRow } from "@/hooks/ai/useAgent";
-import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
+import type { AgentVersionRow, AgentVersionSummary } from "@/hooks/ai/useAgentVersions";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
 
 interface Props {
@@ -31,7 +31,8 @@ interface Props {
   base?: AgentVersionRow | null;
   /** Rascunho anterior à publicada: existe, mas não abre nem publica. */
   draftObsoleto?: AgentVersionRow | null;
-  versions: AgentVersionRow[];
+  /** A lista do Histórico, sem o texto das instruções (ver `AgentVersionSummary`). */
+  versions: AgentVersionSummary[];
   credentials: CredentialRow[];
   /** Provedores cuja chave veio na instalação — ver `AgentForm`. */
   provedoresDaInstalacao?: string[];
@@ -46,6 +47,15 @@ export function AgentTabs(props: Props) {
     "configuration" | "test" | "capacidades" | "runs" | "history" | "proposals"
   >("configuration");
   const hasVersion = !!(props.draft || props.published);
+  // O que está escrito na Configuração e ainda não foi salvo. Teste, Propostas e
+  // Histórico agem sobre a versão SALVA; sabendo disto, eles avisam em vez de
+  // agir por cima do texto da tela.
+  const [alteracoesNaoSalvas, setAlteracoesNaoSalvas] = React.useState(false);
+  const [pedidoDeAbrir, setPedidoDeAbrir] = React.useState<{
+    versao: AgentVersionRow;
+    n: number;
+  } | null>(null);
+  const irParaConfiguracao = React.useCallback(() => setTab("configuration"), []);
 
   return (
     <Tabs
@@ -64,7 +74,17 @@ export function AgentTabs(props: Props) {
         <TabsTrigger value="proposals">{t("Propostas")}</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="configuration" className="m-0">
+      {/*
+        SEMPRE montada, só escondida. Era desmontada ao trocar de aba (o padrão
+        do Radix), e o prompt escrito e não salvo sumia sem aviso — bastava abrir
+        o Teste para conferir alguma coisa.
+      */}
+      <TabsContent
+        value="configuration"
+        className="m-0"
+        forceMount
+        hidden={tab !== "configuration"}
+      >
         <AgentForm
           mode="edit"
           agent={props.agent}
@@ -80,6 +100,8 @@ export function AgentTabs(props: Props) {
           materiais={props.materiais}
           routerMembership={props.routerMembership}
           readOnly={props.readOnly}
+          onDirtyChange={setAlteracoesNaoSalvas}
+          pedidoDeAbrir={pedidoDeAbrir}
         />
       </TabsContent>
 
@@ -89,6 +111,8 @@ export function AgentTabs(props: Props) {
           draft={props.draft}
           published={props.published}
           readOnly={props.readOnly}
+          alteracoesNaoSalvas={alteracoesNaoSalvas}
+          onIrParaConfiguracao={irParaConfiguracao}
         />
       </TabsContent>
 
@@ -105,6 +129,9 @@ export function AgentTabs(props: Props) {
           agentId={props.agent.id}
           active={tab === "proposals"}
           readOnly={props.readOnly}
+          rascunhoVigente={props.draft}
+          alteracoesNaoSalvas={alteracoesNaoSalvas}
+          onIrParaConfiguracao={irParaConfiguracao}
         />
       </TabsContent>
 
@@ -113,6 +140,13 @@ export function AgentTabs(props: Props) {
           agentId={props.agent.id}
           versions={props.versions}
           readOnly={props.readOnly}
+          rascunhoVigente={props.draft}
+          alteracoesNaoSalvas={alteracoesNaoSalvas}
+          onIrParaConfiguracao={irParaConfiguracao}
+          onAbrirNoEditor={(versao) => {
+            setPedidoDeAbrir((anterior) => ({ versao, n: (anterior?.n ?? 0) + 1 }));
+            setTab("configuration");
+          }}
         />
       </TabsContent>
     </Tabs>
