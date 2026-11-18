@@ -40,6 +40,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useT } from "@/hooks/i18n/useT";
+import { ConfirmarNaTela } from "@/components/inbox/ConfirmarNaTela";
 import { ArrowRight, Archive, Check, EyeSlash, Pause, X } from "@/lib/ui/icons";
 
 interface Props {
@@ -86,6 +87,9 @@ export function BarraDeAcoesEmLote({
   const t = useT();
   const [transferirAberto, setTransferirAberto] = useState(false);
   const [ocultarAberto, setOcultarAberto] = useState(false);
+  // Fechar e Arquivar em lote perguntam antes, com a contagem (item 32): um
+  // clique encerrava o atendimento de várias pessoas de uma vez.
+  const [confirmando, setConfirmando] = useState<"fechar" | "arquivar" | null>(null);
   const [destino, setDestino] = useState("");
   const [motivo, setMotivo] = useState("");
   const membros = useAssignableMembers(transferirAberto);
@@ -120,7 +124,7 @@ export function BarraDeAcoesEmLote({
         size="sm"
         variant="outline"
         disabled={pendente}
-        onClick={onFechar}
+        onClick={() => setConfirmando("fechar")}
         data-testid="lote-fechar"
       >
         {t("Fechar")}
@@ -143,7 +147,7 @@ export function BarraDeAcoesEmLote({
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>{t("Ações em lote")}</DropdownMenuLabel>
           <DropdownMenuItem
-            onSelect={onArquivar}
+            onSelect={() => setConfirmando("arquivar")}
             data-testid="lote-arquivar"
           >
             <Archive size={14} className="mr-2" aria-hidden />
@@ -177,6 +181,27 @@ export function BarraDeAcoesEmLote({
       >
         <X size={14} aria-hidden />
       </Button>
+
+      <ConfirmarNaTela
+        aberto={confirmando !== null}
+        onAbertoChange={(aberto) => !aberto && setConfirmando(null)}
+        titulo={
+          confirmando === "arquivar"
+            ? quantidade === 1
+              ? t("Arquivar 1 conversa?")
+              : t("Arquivar {n} conversas?").replace("{n}", String(quantidade))
+            : quantidade === 1
+              ? t("Fechar 1 conversa?")
+              : t("Fechar {n} conversas?").replace("{n}", String(quantidade))
+        }
+        descricao={
+          confirmando === "arquivar"
+            ? t("Os atendimentos terminam e as conversas vão para o histórico. Se o paciente escrever de novo, a conversa volta.")
+            : t("Os atendimentos terminam. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.")
+        }
+        acao={confirmando === "arquivar" ? t("Arquivar") : t("Fechar conversas")}
+        onConfirmar={() => (confirmando === "arquivar" ? onArquivar() : onFechar())}
+      />
 
       <AlertDialog open={ocultarAberto} onOpenChange={setOcultarAberto}>
         <AlertDialogContent className="sm:max-w-md" data-testid="lote-ocultar-dialogo">

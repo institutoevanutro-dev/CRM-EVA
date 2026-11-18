@@ -6,7 +6,7 @@ import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
 import { useRefetchDeSeguranca } from "@/hooks/realtime/useRefetchDeSeguranca";
 import { apiClient } from "@/lib/api/client";
 import { marcarReleitura } from "@/lib/audit/releitura";
-import { showApiError } from "@/components/feedback/ApiErrorToast";
+import { avisarFalhaDeLeitura, conexaoVoltou } from "@/hooks/inbox/avisoSemConexao";
 import type { Message } from "@/lib/types/messaging";
 
 interface MessagesResponse {
@@ -33,11 +33,13 @@ export function useMessagesRealtime(conversationId: string | null) {
       // é "abrir a conversa" e não vira linha de auditoria (lib/audit/releitura.ts).
       marcarReleitura(qs, qc.getQueryData(queryKey) !== undefined);
       try {
-        return await apiClient.get<MessagesResponse>(
+        const resposta = await apiClient.get<MessagesResponse>(
           `/api/v1/conversations/${conversationId}/messages?${qs.toString()}`,
         );
+        conexaoVoltou();
+        return resposta;
       } catch (err) {
-        showApiError(err);
+        avisarFalhaDeLeitura(err);
         throw err;
       }
     },

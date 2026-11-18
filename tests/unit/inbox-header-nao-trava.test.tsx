@@ -30,6 +30,11 @@ import { ConversationHeader } from "@/components/inbox/ConversationHeader";
  *
  * Se um dia o CI ganhar um passo de browser, este arquivo pode morrer em favor
  * da sonda. Enquanto isso, ele é a única coisa entre a regressão e a main.
+ *
+ * Desde 18/11/2026 o cabeçalho é o de app de mensagem (foto, nome, número e o
+ * ⋯): não há mais barra de ações para travar. A catraca passou a vigiar o que
+ * sobrou para travar — o nome que trunca em vez de empurrar, e o ⋯ que nunca
+ * encolhe —, e que as ações não sumiram: estão no menu.
  */
 
 vi.mock("@/hooks/inbox/useClaimConversation", () => ({
@@ -82,44 +87,33 @@ function renderHeader() {
 }
 
 describe("header do inbox — não trava a largura da tela", () => {
-  const acoes = () => screen.getByTestId("acoes-fixas-da-conversa");
-
-  it("o grupo de ações NÃO é shrink-0 — era isso que impunha o piso de 707px", () => {
+  it("o nome encolhe e trunca; o ⋯ não encolhe", () => {
     const { container } = renderHeader();
-    // Guarda de vacuidade: sem header renderizado, as asserções passariam por
-    // não haver o que verificar.
-    expect(container.firstElementChild, "o header não renderizou").toBeTruthy();
-    expect(
-      acoes().className.split(/\s+/),
-      "`shrink-0` de volta no grupo de ações: o header volta a travar em 707px e o painel de CRM sai da tela em 1280px",
-    ).not.toContain("shrink-0");
+    const header = container.querySelector("[data-cabecalho-da-conversa]") as HTMLElement;
+    // Guarda de vacuidade: sem header, as asserções passariam por não haver o que ver.
+    expect(header, "o header não renderizou").toBeTruthy();
+    expect(header.className).toContain("min-w-0");
+    const nome = screen.getByRole("heading", { name: "Fulana" });
+    expect(nome.className).toContain("truncate");
+    expect((nome.parentElement as HTMLElement).className).toContain("min-w-0");
+    const gatilho = screen.getByRole("button", { name: "Ações da conversa" });
+    expect(gatilho.className.split(/\s+/)).toContain("shrink-0");
   });
 
-  it("o header pode reorganizar em vez de esconder ação", () => {
-    const { container } = renderHeader();
-    const header = container.firstElementChild as HTMLElement;
-    // As duas pontas: a linha quebra (os botões descem para baixo do nome) E o
-    // grupo quebra por dentro. Só uma das duas não basta.
-    expect(header.className).toContain("flex-wrap");
-    expect((acoes().parentElement as HTMLElement).className).toContain("flex-wrap");
-    expect(acoes().className).toContain("flex-wrap");
-    expect(acoes().className).toContain("min-w-0");
-  });
-
-  it("Assumir, Transferir e Fechar continuam À VISTA — fora do menu ⋯ (I3)", () => {
+  it("Assumir, Transferir e Fechar não somem: estão no ⋯, com o rótulo de sempre", () => {
     renderHeader();
-    // O menu ⋯ fica fechado: o que se acha aqui está no grupo fixo.
-    for (const rotulo of ["Assumir", "Transferir", "Fechar"]) {
-      expect(within(acoes()).getByRole("button", { name: rotulo }), `a ação "${rotulo}" saiu da vista`).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Ações da conversa" }));
+    const menu = screen.getByTestId("menu-da-conversa");
+    for (const rotulo of ["Assumir", "Transferir", "Fechar conversa"]) {
+      expect(within(menu).getByRole("button", { name: rotulo }), `a ação "${rotulo}" sumiu`).toBeTruthy();
     }
     // O rótulo do principal não muda: o atalho `a` e o dicionário o citam.
-    expect(within(acoes()).getByRole("button", { name: "Assumir" }).textContent).toBe("Assumir");
+    expect(within(menu).getByRole("button", { name: "Assumir" }).textContent).toBe("Assumir");
   });
 
-  it("no celular o telefone sai do cabeçalho (continua na Ficha) e o ⋯ tem 44px (porte do #3190)", () => {
+  it("o número fica à vista (como no WhatsApp) e o ⋯ tem 44px no toque (porte do #3190)", () => {
     renderHeader();
-    const telefone = screen.getByText(/5511999|\+55/).closest("p") as HTMLElement;
-    expect(telefone.className.split(/\s+/)).toContain("max-md:hidden");
+    expect(screen.getByTestId("numero-do-contato").textContent).toMatch(/5511999|\+55/);
     // `size="sm"` dá `h-11` (44px) abaixo do `lg`; o `md:h-9` devolve os 36px
     // a partir do `md`. Um `h-9` sem prefixo voltaria a 36px no toque.
     const classes = screen.getByRole("button", { name: "Ações da conversa" }).className.split(/\s+/);

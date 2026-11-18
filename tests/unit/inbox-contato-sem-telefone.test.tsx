@@ -35,7 +35,9 @@ describe("contato sem telefone no Inbox", () => {
     pintar(conversa({ handle: "maria", display_name: null }));
     expect(screen.queryByText("??")).toBeNull();
     expect(screen.getByText("@maria")).toBeTruthy();
-    expect(screen.getByText(/via @dr\.exemplo/)).toBeTruthy();
+    // O canal: o selo da foto (a conta, "via @…", mora no cabeçalho da conversa
+    // desde a linha de app de mensagem, 18/11).
+    expect(screen.getByRole("img", { name: "Instagram" })).toBeTruthy();
   });
 
   it("o nome do perfil vence o @", () => {

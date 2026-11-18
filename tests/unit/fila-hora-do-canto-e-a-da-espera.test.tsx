@@ -62,7 +62,6 @@ const pintar = (conv: ConversationWithContact, queuePosition?: number) =>
       isSelected={false}
       onSelect={() => {}}
       queuePosition={queuePosition}
-      mostrarCanal={false}
     />,
   );
 

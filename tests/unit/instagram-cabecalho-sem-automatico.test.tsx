@@ -61,7 +61,7 @@ const emUmMinuto = () => new Date(Date.now() + 60_000).toISOString();
 describe("cabeçalho de conversa do Instagram", () => {
   it("silêncio durável (o que a ingestão grava): sem Devolver ao automático nem selo de automático", () => {
     renderHeader(CHANNEL_PROVIDER_INSTAGRAM, "instagram", "infinity");
-    abrirMenu(); // I3: Liberar e a volta (quando não é a principal) moram no ⋯
+    abrirMenu(); // Liberar e a volta moram no ⋯
     expect(screen.queryByTestId("devolver-ao-automatico")).toBeNull();
     expect(screen.queryByTestId("pausar-o-automatico")).toBeNull();
     expect(screen.queryByTestId("badge-atendimento-humano")).toBeNull();
@@ -69,15 +69,18 @@ describe("cabeçalho de conversa do Instagram", () => {
 
   it("silêncio curto: nunca diz 'Automático volta em instantes'", () => {
     renderHeader(CHANNEL_PROVIDER_INSTAGRAM, "instagram", emUmMinuto());
+    // Desde 18/11 o selo mora no alto do ⋯, com a situação: o menu ABRE antes
+    // de procurar, senão a ausência seria de graça.
+    abrirMenu();
+    expect(screen.getByTestId("comando-da-conversa")).toBeTruthy();
     expect(screen.queryByText("Automático volta em instantes")).toBeNull();
-    abrirMenu(); // I3: Liberar e a volta (quando não é a principal) moram no ⋯
     expect(screen.queryByTestId("devolver-ao-automatico")).toBeNull();
   });
 
   it("controle: no WhatsApp o silêncio curto segue com o selo e a volta", () => {
     renderHeader(CHANNEL_PROVIDER_WAHA, "whatsapp", emUmMinuto());
+    abrirMenu(); // o selo e a volta moram no ⋯ (cabeçalho de app de mensagem, 18/11)
     expect(screen.getByText("Automático volta em instantes")).toBeTruthy();
-    abrirMenu(); // I3: Liberar e a volta (quando não é a principal) moram no ⋯
     expect(screen.getByTestId("devolver-ao-automatico")).toBeTruthy();
   });
 });
@@ -91,13 +94,13 @@ describe("cabeçalho de conversa do Instagram", () => {
 describe("Liberar no cabeçalho", () => {
   it("Instagram: não oferece Liberar nem para o próprio dono", () => {
     renderHeader(CHANNEL_PROVIDER_INSTAGRAM, "instagram", "infinity", "u-1");
-    abrirMenu(); // I3: Liberar e a volta (quando não é a principal) moram no ⋯
+    abrirMenu(); // Liberar e a volta moram no ⋯
     expect(screen.queryByRole("button", { name: "Liberar" })).toBeNull();
   });
 
   it("controle: no WhatsApp o dono continua podendo liberar", () => {
     renderHeader(CHANNEL_PROVIDER_WAHA, "whatsapp", emUmMinuto(), "u-1");
-    abrirMenu(); // I3: Liberar e a volta (quando não é a principal) moram no ⋯
+    abrirMenu(); // Liberar e a volta moram no ⋯
     expect(screen.getByRole("button", { name: "Liberar" })).toBeTruthy();
   });
 });

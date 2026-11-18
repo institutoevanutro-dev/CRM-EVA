@@ -23,7 +23,7 @@ import { ConversationList } from "./ConversationList";
 import { BarraDeAcoesEmLote } from "./BarraDeAcoesEmLote";
 import { InboxFilters, type InboxFiltersValue, type InboxTab } from "./InboxFilters";
 import { ChatThread } from "./ChatThread";
-import { Composer, type ComposerHandle } from "./Composer";
+import { Composer, type ComposerHandle, type RascunhoDoCampo } from "./Composer";
 import { ConversationHeader } from "./ConversationHeader";
 import { BarraDeConversaFechada } from "./BarraDeConversaFechada";
 import { BotaoIniciarConversa } from "./PainelIniciarConversa";
@@ -427,6 +427,9 @@ export function InboxLayout({
    */
   const { data: automaticoDaOrg } = useAutomaticoAtivo();
   const composerRef = useRef<ComposerHandle | null>(null);
+  // O que ficou escrito em cada conversa (item 28). O campo nasce de novo a cada
+  // conversa (`key`) e lê daqui o rascunho DELA: nada de uma passa para outra.
+  const [rascunhos] = useState(() => new Map<string, RascunhoDoCampo>());
 
   const filters: ConversationsFilters = useMemo(
     () => ({
@@ -504,7 +507,18 @@ export function InboxLayout({
   // aí `inList` já a tem no primeiro render.
   const needsFetch = !!selectedId && !inList;
   const single = useConversation(selectedId, needsFetch);
-  const selectedConversation: ConversationWithContact | null = inList ?? single.data ?? null;
+  // A ÚLTIMA LINHA VISTA SEGURA A TELA (item 30 da auditoria de 17/11). Quando a
+  // conversa aberta sai da aba ("Não lidos", ou logo depois de "Assumir" na
+  // Fila), `inList` vira nulo e a busca única começa do zero: o lado direito
+  // piscava em carregamento e o campo era recriado — no iPhone, o teclado
+  // fechava no meio da frase. Enquanto a busca única não responde, vale a linha
+  // que a lista mostrou por último. Conversa que deixou de ser alcançável (404)
+  // não usa a reserva: aí a mensagem certa é "não encontrada".
+  const [linhaGuardada, setLinhaGuardada] = useState<ConversationWithContact | null>(null);
+  if (inList && inList !== linhaGuardada) setLinhaGuardada(inList);
+  const reserva =
+    linhaGuardada && linhaGuardada.id === selectedId && !isNotFound(single.error) ? linhaGuardada : null;
+  const selectedConversation: ConversationWithContact | null = inList ?? single.data ?? reserva;
   // "Reabrir e responder" (I3): o foco vai ao campo quando ele MONTAR — no
   // lugar da barra, depois que a conversa voltar aberta. O pedido é marcado no
   // CLIQUE, não na resposta: a releitura da conversa pode trocar a barra pelo
@@ -551,6 +565,13 @@ export function InboxLayout({
   // portão de tela é `inbox.reply`; a regra mora na API, que revalida.
   const podeAgirEmLote = usePermission("inbox.reply");
   const selecao = useSelecaoEmLote();
+  // A seleção é da lista que estava na tela (item 32): trocar de aba ou de
+  // filtro a limpa, para "Fechar" não alcançar conversa que ninguém está vendo.
+  const [filtrosDaSelecao, setFiltrosDaSelecao] = useState(filters);
+  if (filtrosDaSelecao !== filters) {
+    setFiltrosDaSelecao(filters);
+    if (selecao.quantidade > 0) selecao.limpar();
+  }
   const lote = useBulkConversations();
   const rodarLote = useCallback(
     (action: AcaoEmLote, toUserId?: string, reason?: string) => {
@@ -580,19 +601,33 @@ export function InboxLayout({
   // desfazem esse passo (`navegarNoInbox`), em vez de o gesto sair do Inbox. No
   // computador a seleção continua sendo estado da tela, como sempre foi aqui: o
   // voltar do navegador não passeia pelas conversas clicadas.
-  const handleSelect = useCallback((id: string | null) => {
+  // Quem abriu pelo j/k continua navegando pela lista: o foco não vai ao campo
+  // (o próximo j cairia lá como letra). Os outros caminhos abrem com o cursor no
+  // campo, no computador (item 29).
+  const [abertaPeloTeclado, setAbertaPeloTeclado] = useState(false);
+  const handleSelect = useCallback((id: string | null, origem?: "teclado") => {
+    setAbertaPeloTeclado(origem === "teclado");
     // Sem isto, escolher "responder" numa conversa e trocar para outra levaria
     // a citação junto — e a resposta sairia citando mensagem de outro cliente.
     setRespondendo(null);
     // O mesmo vale para o encaminhamento: a escolha não sobrevive à troca de conversa.
     setEncaminhando(null);
-    if (id !== selectedId && telaDeCelular()) {
+    if (id !== selectedId) {
       const params = new URLSearchParams(searchParams.toString());
       if (id) params.set("id", id);
       else params.delete("id");
       const query = params.toString();
-      // Voltar pela história deixa a troca para o `popstate` (ver `idNaUrl`).
-      if (navegarNoInbox(query ? `${pathname}?${query}` : pathname, selectedId, id) === "pelo-historico") return;
+      const url = query ? `${pathname}?${query}` : pathname;
+      if (telaDeCelular()) {
+        // Voltar pela história deixa a troca para o `popstate` (ver `idNaUrl`).
+        if (navegarNoInbox(url, selectedId, id) === "pelo-historico") return;
+      } else {
+        // NO COMPUTADOR O ENDEREÇO ACOMPANHA, SEM ENTRAR NO HISTÓRICO (item 38
+        // da auditoria de 17/11): aberto por link (`?id=`) e trocado pela lista,
+        // o endereço seguia na conversa antiga — recarregar a reabria. A troca é
+        // no lugar: o voltar do navegador continua sem passear pelas conversas.
+        window.history.replaceState(null, "", url);
+      }
     }
     setSelectedId(id);
   }, [selectedId, searchParams, pathname]);
@@ -605,7 +640,8 @@ export function InboxLayout({
       expected_assignee: selectedConversation.assigned_to_user_id,
     });
   }, [claim, selectedConversation]);
-  // O atalho `e` pede; a confirmação na tela decide (I6). O alvo é a conversa
+  // O atalho `e` pede; a confirmação na tela decide (I6), com o foco no
+  // "Cancelar" (item 29): um espaço ou Enter a mais não fecha nada. O alvo é a conversa
   // do MOMENTO do atalho — com o diálogo aberto a seleção não muda (os atalhos
   // ficam desligados), mas a foto não depende disso.
   const [fechandoPeloAtalho, setFechandoPeloAtalho] = useState<string | null>(null);
@@ -954,6 +990,8 @@ export function InboxLayout({
       */}
       <div
         ref={listaRef}
+        // Os atalhos de uma letra só valem com o foco aqui dentro (item 29).
+        data-coluna-da-lista=""
         className={cn(
           "h-full min-h-0 flex-col border-r border-border bg-surface md:flex",
           colunas.lista,
@@ -993,7 +1031,7 @@ export function InboxLayout({
             onSelecionarTodosVisiveis={
               podeAgirEmLote
                 ? () =>
-                    selecao.selecionarTodos(
+                    selecao.alternarTodos(
                       (listQ.data?.pages.flatMap((p) => p.data) ?? []).map((c) => c.id),
                     )
                 : undefined
@@ -1110,8 +1148,9 @@ export function InboxLayout({
               />
             </div>
             <RetentionNotice conversationId={selectedConversation.id} />
-            {motivoDaJanela && (
+            {motivoDaJanela && podeEncaminhar && (
               <JanelaFechadaAviso
+                key={`janela-${selectedConversation.id}`}
                 conversationId={selectedConversation.id}
                 provider={selectedConversation.channel_sessions?.provider ?? null}
                 motivo={motivoDaJanela}
@@ -1119,7 +1158,7 @@ export function InboxLayout({
             )}
             {/* Conversa fechada (I3): a barra toma o lugar do campo, com o gesto
                 que a pessoa veio fazer — reabrir já como dona e escrever. */}
-            {selectedConversation.status === "closed" && !supportReadonly ? (
+            {selectedConversation.status === "closed" && !supportReadonly && podeEncaminhar ? (
               <BarraDeConversaFechada
                 conversationId={selectedConversation.id}
                 onReabrir={() => {
@@ -1128,12 +1167,25 @@ export function InboxLayout({
               />
             ) : (
               <Composer
+                // Um campo por conversa: texto, modo, anexo, áudio em gravação e
+                // diálogos abertos não atravessam a troca (item 28).
+                key={`campo-${selectedConversation.id}`}
                 ref={composerRef}
                 conversationId={selectedConversation.id}
+                rascunhos={rascunhos}
+                focarAoAbrir={!abertaPeloTeclado}
                 agendamentoLigado={
                   Boolean(selectedConversation.contacts?.id && selectedConversation.channel_session_id) && !supportReadonly
                 }
-                blockedReason={supportReadonly ? "Acompanhamento somente leitura" : blockedReason}
+                blockedReason={
+                  supportReadonly
+                    ? "Acompanhamento somente leitura"
+                    : // Visualizador (item 37): o campo não aparece, em vez de
+                      // aceitar texto e voltar "sem permissão" no envio.
+                      !podeEncaminhar
+                      ? t("Seu acesso é só de leitura: você acompanha as conversas, mas não responde.")
+                      : blockedReason
+                }
                 janelaFechada={motivoDaJanela}
                 semEnvio={motivoSemEnvio}
                 limiteDeTexto={caps?.limiteDeTexto ?? null}
@@ -1186,11 +1238,17 @@ export function InboxLayout({
       </div>
 
       <div className="hidden h-full min-h-0 xl:block">
-        <CRMSidePanel
-          conversation={selectedConversation}
-          recolhido={painelRecolhido}
-          onAlternarRecolhido={alternarPainelDoContato}
-        />
+        {/* Só monta quando a coluna aparece (item 36): escondido pelo CSS abaixo
+            de 1280px, o painel seguia buscando ficha, tarefas e equipe a cada
+            conversa (4G no celular) e gravava na auditoria que a ficha foi
+            aberta. Abaixo do `xl` a ficha vem pelo botão "Ficha" (o Sheet). */}
+        {faixa?.temFicha && (
+          <CRMSidePanel
+            conversation={selectedConversation}
+            recolhido={painelRecolhido}
+            onAlternarRecolhido={alternarPainelDoContato}
+          />
+        )}
       </div>
 
       {/*
@@ -1250,10 +1308,10 @@ export function InboxLayout({
       <InboxKeyboardShortcuts
         visibleIds={visibleIds}
         selectedId={selectedId}
-        onSelect={handleSelect}
+        onSelect={(id) => handleSelect(id, "teclado")}
         onFocusReply={handleFocusReply}
-        onClaim={supportReadonly ? () => {} : handleClaim}
-        onClose={supportReadonly ? () => {} : handleClose}
+        onClaim={supportReadonly || !podeEncaminhar ? () => {} : handleClaim}
+        onClose={supportReadonly || !podeEncaminhar ? () => {} : handleClose}
         onToggleHelp={() => setHelpOpen((v) => !v)}
         enabled={fechandoPeloAtalho === null}
       />
@@ -1263,7 +1321,6 @@ export function InboxLayout({
         titulo={t("Fechar esta conversa?")}
         descricao={t("O atendimento termina. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.")}
         acao={t("Fechar conversa")}
-        focoNaAcao
         onConfirmar={() => {
           if (fechandoPeloAtalho) close.mutate({ conversation_id: fechandoPeloAtalho });
         }}

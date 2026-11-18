@@ -354,18 +354,27 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
     await captura(page, "conversa-375-nome-do-agente");
   });
 
-  test("o +N das etiquetas diz no title quais ficaram de fora", async ({ page }) => {
-    // Como GERENTE e na aba "Todas" pela URL: para `agent` a aba "Todas" some
-    // conforme a visibilidade da organização, e a aba padrão ("Fila") depende
-    // de haver agente no ar. O title é a dica nativa do navegador; ao toque
-    // ela não abre, e o contador continua à vista.
+  test("as etiquetas saem da linha (app de mensagem) e continuam no painel do contato", async ({ page }) => {
+    // Linha de app de mensagem (pedido do André, 18/11/2026): foto, nome, hora,
+    // prévia e não lidas. As etiquetas (e o "+N" do porte #3649) saíram da
+    // linha e moram no painel do contato — que é onde este caso agora prova
+    // que elas continuam, todas. Como GERENTE e na aba "Todas" pela URL; em
+    // 1440 px, onde o painel do contato é coluna.
+    await page.setViewportSize({ width: 1440, height: 900 });
     await login(page, creds.users.manager!.email, creds.password);
     await page.goto("/app/inbox?filter=all");
     await page.getByLabel("Buscar conversas", { exact: true }).fill(NOME_DO_CONTATO);
-    const contador = page
-      .locator(`button[data-conversation-id="${conversaId}"]`)
-      .getByText("+2", { exact: true });
-    await expect(contador).toHaveAttribute("title", "e2e-retorno, e2e-boleto", { timeout: 30_000 });
-    await captura(page, "lista-mais-n-com-title");
+    const linha = page.locator(`button[data-conversation-id="${conversaId}"]`);
+    await expect(linha).toBeVisible({ timeout: 30_000 });
+    await expect(linha.getByText("+2", { exact: true })).toHaveCount(0);
+    for (const etiqueta of ["e2e-vip", "e2e-boleto"]) {
+      await expect(linha.getByText(etiqueta, { exact: true })).toHaveCount(0);
+    }
+    await linha.click();
+    const painel = page.getByRole("complementary");
+    for (const etiqueta of ["e2e-vip", "e2e-quente", "e2e-retorno", "e2e-boleto"]) {
+      await expect(painel.getByText(etiqueta, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    }
+    await captura(page, "etiquetas-no-painel-do-contato");
   });
 });

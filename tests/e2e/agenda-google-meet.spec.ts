@@ -5,6 +5,7 @@ import { createServer, type Server } from "node:http";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page, type TestInfo } from "@playwright/test";
+import { clicarNoMenuDaConversa } from "./helpers/acoes-da-conversa";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { reconcileAppointment } from "../../lib/agenda/google/sync-executor";
 import { createMeetDeliveryHandler } from "../../lib/agent-engine/agent/meet-delivery";
@@ -490,8 +491,8 @@ test("marca Meet, copia link, autoriza em atendimento humano e entrega novamente
     expect(oldJob).toHaveLength(1);
     expect(oldJob[0]).toMatchObject({ id: firstJob, organization_id: f.org, contact_id: f.contact, kind: "transactional_delivery", status: "done" });
     await page.goto(`/app/inbox/${f.conversation}`);
-    // "Fechar" é fixo no cabeçalho desde a I3 — sem menu.
-    await page.getByRole("button", { name: "Fechar", exact: true }).click();
+    // Desde 18/11 as ações moram no ⋯ do cabeçalho (app de mensagem).
+    await clicarNoMenuDaConversa(page, "Fechar conversa");
     await page.getByRole("alertdialog").getByRole("button", { name: "Fechar conversa", exact: true }).click();
     await expect
       .poll(

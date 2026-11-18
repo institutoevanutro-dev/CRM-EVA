@@ -20,6 +20,8 @@ import * as path from "node:path";
 
 import { test, expect, type Page } from "@playwright/test";
 
+import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
+
 import {
   IG_ACCOUNT_ID,
   IGSID_RECENTE,
@@ -186,9 +188,14 @@ test("depois de 7 dias o compositor trava com o motivo, e o selo avisa", async (
 
   const antes = recebidos.length;
   await expect(page.getByText(TEXTO_DOS_7_DIAS, { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Fora do prazo do Instagram", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Mensagem", { exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Anexar" })).toBeDisabled();
+  // O selo da janela mora na situação, no alto do ⋯ do cabeçalho (app de
+  // mensagem, 18/11/2026).
+  await abrirAcoesDaConversa(page);
+  await expect(
+    page.getByTestId("menu-da-conversa").getByText("Fora do prazo do Instagram", { exact: true }),
+  ).toBeVisible();
   expect(recebidos.length).toBe(antes);
   await page.screenshot({ path: path.join(EVIDENCIA, "05-fora-do-prazo.png"), fullPage: true });
 });

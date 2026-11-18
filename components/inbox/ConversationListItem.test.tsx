@@ -1,4 +1,7 @@
-// Portado do projeto original (DeskcommCRM, PR #3665 de @webtecnica).
+// Etiquetas saíram da linha em 18/11/2026 (linha de app de mensagem, pedido do
+// André): elas moram no painel do contato e no filtro por etiqueta. Este arquivo
+// guardava o "+N" do porte #3649 (DeskcommCRM, de @webtecnica), que deixou de
+// existir junto com os chips.
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -13,9 +16,11 @@ const conversa = {
     tags: ["vip", "quente", "retorno", "boleto"], is_blocked: false, is_anonymized: false },
 } as unknown as ConversationWithContact;
 
-describe("ConversationListItem — etiquetas que não couberam (#3649)", () => {
-  it("o +N diz no title quais etiquetas ficaram de fora", () => {
+describe("ConversationListItem — etiquetas fora da linha", () => {
+  it("nenhum chip de etiqueta nem '+N' na linha", () => {
     render(<ConversationListItem conversation={conversa} isSelected={false} onSelect={() => {}} />);
-    expect(screen.getByText("+2")).toHaveAttribute("title", "retorno, boleto");
+    for (const etiqueta of ["vip", "quente", "+2"]) {
+      expect(screen.queryByText(etiqueta), etiqueta).toBeNull();
+    }
   });
 });

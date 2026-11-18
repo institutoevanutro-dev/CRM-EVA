@@ -95,8 +95,13 @@ test("um Direct novo aparece no Inbox com @, canal e origem", async ({ page, req
 
   const item = page.getByText(texto).first();
   await expect(item).toBeVisible();
-  await expect(page.getByText(new RegExp(`via @${IG_USERNAME}`)).first()).toBeVisible();
+  // A linha de app de mensagem (18/11) anuncia o canal pelo selo da foto; a
+  // conta por onde a pessoa escreveu ("via @conta") aparece no cabeçalho da
+  // conversa aberta, no lugar do número.
+  await expect(page.getByRole("img", { name: "Instagram", exact: true }).first()).toBeVisible();
   await expect(page.getByText("??")).toHaveCount(0);
+  await item.click();
+  await expect(page.getByTestId("numero-do-contato")).toHaveText(new RegExp(`via @${IG_USERNAME}`));
   await page.screenshot({ path: path.join(EVIDENCIA, "01-inbox.png"), fullPage: true });
 
   // O contato novo virou card no funil padrão e ganhou a Origem padrão da

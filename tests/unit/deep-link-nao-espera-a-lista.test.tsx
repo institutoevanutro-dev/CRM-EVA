@@ -159,8 +159,16 @@ describe("deep-link para conversa fora do filtro", () => {
   });
 
   it("entrega a conversa ao painel do contato com a lista ainda no ar", async () => {
-    montar();
-    await waitFor(() => expect(screen.getByTestId("painel")).toHaveTextContent(CONVERSA));
+    // O painel do contato é coluna a partir de 1280px — e só monta ali desde o
+    // item 36 da auditoria de 17/11 (escondido, ele buscava e auditava à toa).
+    const antes = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true, writable: true });
+    try {
+      montar();
+      await waitFor(() => expect(screen.getByTestId("painel")).toHaveTextContent(CONVERSA));
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: antes, configurable: true, writable: true });
+    }
   });
 
   // I12: no celular a conversa do link é a tela inteira — enquanto ela vem, a
