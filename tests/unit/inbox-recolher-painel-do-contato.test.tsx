@@ -257,6 +257,36 @@ describe("Inbox: recolher o painel do contato (porte do #3043)", () => {
     expect(togglePainelDoContato).toHaveBeenLastCalledWith(true);
   });
 
+  it("⭐ sem preferência nenhuma, a tela nasce recolhida (padrão desde 18/11/2026)", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <InboxLayout initialSelectedId={CONVERSA} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByTestId("inbox-painel-recolhido")).toBeInTheDocument();
+    expect(screen.queryByTestId("inbox-demandas")).toBeNull();
+    expect(grade().className).toContain(trilhaDoTrilho);
+  });
+
+  it("o trilho é uma porta clara: diz 'Contato', ocupa os 44px e abre pelo teclado", async () => {
+    const user = userEvent.setup();
+    montar(true);
+    const botao = await screen.findByRole("button", { name: "Expandir painel do contato" });
+    // A palavra à vista, e dentro do rótulo acessível (rótulo contém o visível).
+    expect(botao).toHaveTextContent("Contato");
+    // A largura inteira do trilho (2.75rem = 44px): alvo de dedo.
+    expect(botao.className).toContain("w-11");
+
+    botao.focus();
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByTestId("inbox-demandas")).toBeInTheDocument();
+    expect(togglePainelDoContato).toHaveBeenCalledWith(true);
+    // Aberto, o recolher é ícone de 32px no mouse e 44px no toque.
+    expect(botaoRecolher().className).toContain("pointer-coarse:size-11");
+  });
+
   it("a preferência do servidor vence na primeira pintura: nasce recolhido", async () => {
     montar(true);
     expect(await screen.findByTestId("inbox-painel-recolhido")).toBeInTheDocument();

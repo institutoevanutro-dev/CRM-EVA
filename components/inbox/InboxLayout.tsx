@@ -279,14 +279,15 @@ interface InboxLayoutProps {
   /**
    * O painel do contato começa recolhido? Vem do cookie lido no SERVIDOR
    * (`app/app/inbox/page.tsx`), como o `sidebar_collapsed` do menu da esquerda:
-   * é o que evita o painel nascer aberto e pular para trilho na hidratação.
+   * é o que evita o painel nascer num estado e pular para o outro na
+   * hidratação. Sem valor, recolhido: o mesmo padrão do servidor (18/11/2026).
    */
   painelRecolhidoInicial?: boolean;
 }
 
 export function InboxLayout({
   initialSelectedId = null,
-  painelRecolhidoInicial = false,
+  painelRecolhidoInicial = true,
 }: InboxLayoutProps = {}) {
   const t = useT();
   const { activeOrg, user } = useAuth();
