@@ -1221,11 +1221,17 @@ export function InboxLayout({
       </div>
 
       <div className="hidden h-full min-h-0 xl:block">
-        <CRMSidePanel
-          conversation={selectedConversation}
-          recolhido={painelRecolhido}
-          onAlternarRecolhido={alternarPainelDoContato}
-        />
+        {/* Só monta quando a coluna aparece (item 36): escondido pelo CSS abaixo
+            de 1280px, o painel seguia buscando ficha, tarefas e equipe a cada
+            conversa (4G no celular) e gravava na auditoria que a ficha foi
+            aberta. Abaixo do `xl` a ficha vem pelo botão "Ficha" (o Sheet). */}
+        {faixa?.temFicha && (
+          <CRMSidePanel
+            conversation={selectedConversation}
+            recolhido={painelRecolhido}
+            onAlternarRecolhido={alternarPainelDoContato}
+          />
+        )}
       </div>
 
       {/*
