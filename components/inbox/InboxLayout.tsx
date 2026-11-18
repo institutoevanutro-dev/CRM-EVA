@@ -612,13 +612,22 @@ export function InboxLayout({
     setRespondendo(null);
     // O mesmo vale para o encaminhamento: a escolha não sobrevive à troca de conversa.
     setEncaminhando(null);
-    if (id !== selectedId && telaDeCelular()) {
+    if (id !== selectedId) {
       const params = new URLSearchParams(searchParams.toString());
       if (id) params.set("id", id);
       else params.delete("id");
       const query = params.toString();
-      // Voltar pela história deixa a troca para o `popstate` (ver `idNaUrl`).
-      if (navegarNoInbox(query ? `${pathname}?${query}` : pathname, selectedId, id) === "pelo-historico") return;
+      const url = query ? `${pathname}?${query}` : pathname;
+      if (telaDeCelular()) {
+        // Voltar pela história deixa a troca para o `popstate` (ver `idNaUrl`).
+        if (navegarNoInbox(url, selectedId, id) === "pelo-historico") return;
+      } else {
+        // NO COMPUTADOR O ENDEREÇO ACOMPANHA, SEM ENTRAR NO HISTÓRICO (item 38
+        // da auditoria de 17/11): aberto por link (`?id=`) e trocado pela lista,
+        // o endereço seguia na conversa antiga — recarregar a reabria. A troca é
+        // no lugar: o voltar do navegador continua sem passear pelas conversas.
+        window.history.replaceState(null, "", url);
+      }
     }
     setSelectedId(id);
   }, [selectedId, searchParams, pathname]);
