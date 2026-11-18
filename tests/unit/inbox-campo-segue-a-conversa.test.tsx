@@ -82,9 +82,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(window.location.search),
 }));
+let podeResponder = true;
 vi.mock("@/hooks/auth/AuthProvider", () => ({
   useAuth: () => ({ user: { id: "u-1", role: "admin" }, activeOrg: { orgId: ORG, role: "admin" } }),
-  usePermission: () => true,
+  usePermission: () => podeResponder,
 }));
 vi.mock("@/hooks/inbox/useMarkAsRead", () => ({ useMarkAsRead: () => undefined }));
 vi.mock("@/hooks/inbox/useClaimConversation", () => ({
@@ -241,5 +242,24 @@ describe("item 30 — a conversa aberta que sai da aba não pisca nem recria o c
     expect(screen.queryByTestId("conversa-carregando")).toBeNull();
     expect(campo(), "o campo foi recriado").toBe(antes);
     expect(campo().value).toBe("Ana, confirmo sua avaliação");
+  });
+});
+
+describe("item 37 — o visualizador não vê o campo de digitar", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/app/inbox");
+    comJanelaVencida(true);
+  });
+
+  it("⭐ sem permissão de responder: texto de só leitura no lugar do campo e do modelo", () => {
+    podeResponder = false;
+    try {
+      montar();
+      expect(screen.queryByRole("textbox", { name: "Mensagem" })).toBeNull();
+      expect(screen.queryByRole("combobox", { name: "Modelo aprovado" })).toBeNull();
+      expect(screen.getByText(/só de leitura/)).toBeInTheDocument();
+    } finally {
+      podeResponder = true;
+    }
   });
 });

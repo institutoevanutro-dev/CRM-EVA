@@ -1139,7 +1139,7 @@ export function InboxLayout({
               />
             </div>
             <RetentionNotice conversationId={selectedConversation.id} />
-            {motivoDaJanela && (
+            {motivoDaJanela && podeEncaminhar && (
               <JanelaFechadaAviso
                 key={`janela-${selectedConversation.id}`}
                 conversationId={selectedConversation.id}
@@ -1149,7 +1149,7 @@ export function InboxLayout({
             )}
             {/* Conversa fechada (I3): a barra toma o lugar do campo, com o gesto
                 que a pessoa veio fazer — reabrir já como dona e escrever. */}
-            {selectedConversation.status === "closed" && !supportReadonly ? (
+            {selectedConversation.status === "closed" && !supportReadonly && podeEncaminhar ? (
               <BarraDeConversaFechada
                 conversationId={selectedConversation.id}
                 onReabrir={() => {
@@ -1168,7 +1168,15 @@ export function InboxLayout({
                 agendamentoLigado={
                   Boolean(selectedConversation.contacts?.id && selectedConversation.channel_session_id) && !supportReadonly
                 }
-                blockedReason={supportReadonly ? "Acompanhamento somente leitura" : blockedReason}
+                blockedReason={
+                  supportReadonly
+                    ? "Acompanhamento somente leitura"
+                    : // Visualizador (item 37): o campo não aparece, em vez de
+                      // aceitar texto e voltar "sem permissão" no envio.
+                      !podeEncaminhar
+                      ? t("Seu acesso é só de leitura: você acompanha as conversas, mas não responde.")
+                      : blockedReason
+                }
                 janelaFechada={motivoDaJanela}
                 semEnvio={motivoSemEnvio}
                 limiteDeTexto={caps?.limiteDeTexto ?? null}
@@ -1293,8 +1301,8 @@ export function InboxLayout({
         selectedId={selectedId}
         onSelect={(id) => handleSelect(id, "teclado")}
         onFocusReply={handleFocusReply}
-        onClaim={supportReadonly ? () => {} : handleClaim}
-        onClose={supportReadonly ? () => {} : handleClose}
+        onClaim={supportReadonly || !podeEncaminhar ? () => {} : handleClaim}
+        onClose={supportReadonly || !podeEncaminhar ? () => {} : handleClose}
         onToggleHelp={() => setHelpOpen((v) => !v)}
         enabled={fechandoPeloAtalho === null}
       />

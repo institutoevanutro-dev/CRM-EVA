@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 import { AparenciaDaConversa } from "@/components/inbox/AparenciaDaConversa";
 import type { AparenciaDaConversa as AparenciaDaConversaValor } from "@/lib/inbox/aparencia-da-conversa";
 import { AvatarDoContato } from "@/components/inbox/AvatarDoContato";
-import { useAuth } from "@/hooks/auth/AuthProvider";
+import { useAuth, usePermission } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useReleaseConversation } from "@/hooks/inbox/useReleaseConversation";
 import {
@@ -115,6 +115,9 @@ export function ConversationHeader({
   // "Existe automático nesta org?" — sem isto o selo afirmava que o robô estava
   // atendendo em instalação que nunca configurou agente nenhum.
   const automaticoDaOrg = useAutomaticoAtivo();
+  // Quem só visualiza não vê o que a rota recusaria (item 37 da auditoria de
+  // 17/11): Assumir, Transferir, Fechar e o resto voltavam "sem permissão".
+  const podeAgir = usePermission("inbox.reply");
   const [reassignOpen, setReassignOpen] = useState(false);
   // I6 (passo 1): a confirmação guarda a conversa e a revisão do MOMENTO do
   // clique. Com o diálogo aberto, `j`/`k` ainda trocam a conversa da tela; sem
@@ -209,7 +212,7 @@ export function ConversationHeader({
   if (user.support?.access_mode === "support_readonly") return <header className="flex items-center justify-between border-b p-4">
     <strong>{displayName}</strong><span className="text-sm text-muted-foreground">{STATUS_LABEL[status] ?? status} · Somente leitura</span>
   </header>;
-  const acaoPrincipal = acaoPrincipalDaConversa({
+  const acaoPrincipal = !podeAgir ? null : acaoPrincipalDaConversa({
     encerrada,
     minha: isMineAssigned,
     semDono: isOpen,
@@ -406,7 +409,7 @@ export function ConversationHeader({
               {t("Reabrir")}
             </Button>
           )}
-          {!encerrada && (
+          {podeAgir && !encerrada && (
             <Button
               size="sm"
               variant="outline"
@@ -420,13 +423,13 @@ export function ConversationHeader({
               <span className="hidden @[40rem]:inline">{t("Transferir")}</span>
             </Button>
           )}
-          {!encerrada && (
+          {podeAgir && !encerrada && (
             <SnoozeButton
               conversationId={conversation.id}
               snoozeUntil={conversation.snooze_until ?? null}
             />
           )}
-          {!encerrada && (
+          {podeAgir && !encerrada && (
             <Button
               size="sm"
               variant="outline"
@@ -484,7 +487,7 @@ export function ConversationHeader({
                   `bot_silenced_until` (RPC da 0173). Num canal onde a IA nunca
                   responde (o Instagram), isso tiraria a conversa da Fila sem pôr
                   ninguém no lugar. Quem pegou por engano ainda tem "Transferir". */}
-              {isMineAssigned && iaResponde && (
+              {podeAgir && isMineAssigned && iaResponde && (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -499,7 +502,7 @@ export function ConversationHeader({
                   conversa ENCERRADA, onde "Liberar" não alcança quem não é dono.
                   A condição é `travaVigente`, e não `!automaticoAtivo`: conversa
                   encerrada tem o automático inativo sem trava nenhuma. */}
-              {podeDevolver && acaoPrincipal !== "devolver" && (
+              {podeAgir && podeDevolver && acaoPrincipal !== "devolver" && (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -514,7 +517,7 @@ export function ConversationHeader({
               )}
               {/* PAUSAR só quando é um gesto diferente de assumir: com dono e o
                   automático de pé (o rodízio distribui sem calar). */}
-              {podePausar && (
+              {podeAgir && podePausar && (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -544,7 +547,7 @@ export function ConversationHeader({
                   {t("Buscar nesta conversa")}
                 </Button>
               )}
-              <ExportarConversaEmPdf conversationId={conversation.id} comNome />
+              {podeAgir && <ExportarConversaEmPdf conversationId={conversation.id} comNome />}
               {aparencia && onAparenciaChange && (
                 <AparenciaDaConversa valor={aparencia} onChange={onAparenciaChange} comNome />
               )}
@@ -566,7 +569,7 @@ export function ConversationHeader({
                 </Button>
               )}
               {/* Ocultar do Inbox (migration 0372). Grupo não tem contato. */}
-              {c?.id && (
+              {podeAgir && c?.id && (
                 <OcultarDoInbox
                   contactId={c.id}
                   conversationId={conversation.id}
@@ -577,7 +580,7 @@ export function ConversationHeader({
               )}
               {/* ARQUIVAR (#923): tira da frente sem destruir. A já arquivada não
                   mostra o botão. Pergunta antes, pelo `ConfirmarNaTela`. */}
-              {status !== "archived" && (
+              {podeAgir && status !== "archived" && (
                 <Button
                   size="sm"
                   variant="ghost"
