@@ -8,6 +8,12 @@
  *      published vigente. Fallback: a anterior na lista).
  *   - "Reverter": admin only, exclui draft da própria linha. Cria nova
  *     version-published clonada.
+ *   - "Abrir no editor": para o rascunho que ficou para trás (o "Reverter" e o
+ *     "Aplicar proposta" publicam por cima dele, e ele deixava de abrir — sem
+ *     caminho de volta pela tela).
+ *
+ * A lista chega SEM o texto das instruções (ver `AgentVersionSummary`): o texto
+ * de uma versão só é buscado quando alguém a compara ou a abre.
  */
 import * as React from "react";
 import { useRouter } from "next/navigation";
@@ -32,15 +38,22 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useT } from "@/hooks/i18n/useT";
+import { apiClient } from "@/lib/api/client";
 
-import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
+import type { AgentVersionRow, AgentVersionSummary } from "@/hooks/ai/useAgentVersions";
 import { revertToVersionAction } from "../_actions";
 import { VersionDiff } from "./VersionDiff";
 
 interface Props {
   agentId: string;
-  versions: AgentVersionRow[];
+  versions: AgentVersionSummary[];
   readOnly?: boolean;
+  /** O rascunho que está no editor — o "Reverter" o tira de lá. */
+  rascunhoVigente?: Pick<AgentVersionRow, "id" | "version_number"> | null;
+  /** Texto não salvo na Configuração: reverter ou abrir outra versão o perderia. */
+  alteracoesNaoSalvas?: boolean;
+  onIrParaConfiguracao?: () => void;
+  onAbrirNoEditor?: (versao: AgentVersionRow) => void;
 }
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -59,9 +72,9 @@ const STATUS_LABEL_PT: Record<string, string> = {
 };
 
 function pickCounterpart(
-  versions: AgentVersionRow[],
-  target: AgentVersionRow,
-): AgentVersionRow | null {
+  versions: AgentVersionSummary[],
+  target: AgentVersionSummary,
+): AgentVersionSummary | null {
   if (target.status === "published") {
     const latestDraft = versions
       .filter((v) => v.status === "draft")
@@ -77,7 +90,15 @@ function pickCounterpart(
   return null;
 }
 
-export function VersionHistory({ agentId, versions, readOnly }: Props) {
+export function VersionHistory({
+  agentId,
+  versions,
+  readOnly,
+  rascunhoVigente = null,
+  alteracoesNaoSalvas = false,
+  onIrParaConfiguracao,
+  onAbrirNoEditor,
+}: Props) {
   const t = useT();
   const router = useRouter();
   const [diffOpen, setDiffOpen] = React.useState(false);
@@ -85,8 +106,9 @@ export function VersionHistory({ agentId, versions, readOnly }: Props) {
     a: AgentVersionRow;
     b: AgentVersionRow;
   } | null>(null);
+  const [carregando, setCarregando] = React.useState<string | null>(null);
 
-  const [revertTarget, setRevertTarget] = React.useState<AgentVersionRow | null>(null);
+  const [revertTarget, setRevertTarget] = React.useState<AgentVersionSummary | null>(null);
   const [reverting, setReverting] = React.useState(false);
 
   const sorted = React.useMemo(
@@ -98,19 +120,47 @@ export function VersionHistory({ agentId, versions, readOnly }: Props) {
     return <p className="text-sm text-muted-foreground">{t("Nenhuma versão criada ainda.")}</p>;
   }
 
-  function openDiff(target: AgentVersionRow) {
+  async function versaoCompleta(id: string): Promise<AgentVersionRow> {
+    const res = await apiClient.get<{ data: AgentVersionRow }>(
+      `/api/v1/ai/agents/${agentId}/versions/${id}`,
+    );
+    return res.data;
+  }
+
+  async function openDiff(target: AgentVersionSummary) {
     const counterpart = pickCounterpart(sorted, target);
     if (!counterpart) {
       toast.info(t("Não há outra versão para comparar."));
       return;
     }
     // a = mais antiga, b = mais nova
-    const [a, b] =
+    const [antiga, nova] =
       target.version_number < counterpart.version_number
         ? [target, counterpart]
         : [counterpart, target];
-    setDiffPair({ a, b });
-    setDiffOpen(true);
+    setCarregando(target.id);
+    try {
+      const [a, b] = await Promise.all([versaoCompleta(antiga.id), versaoCompleta(nova.id)]);
+      setDiffPair({ a, b });
+      setDiffOpen(true);
+    } catch {
+      toast.error(t("Não foi possível carregar as versões. Tente de novo."));
+    } finally {
+      setCarregando(null);
+    }
+  }
+
+  async function abrirNoEditor(v: AgentVersionSummary) {
+    if (!onAbrirNoEditor) return;
+    setCarregando(v.id);
+    try {
+      onAbrirNoEditor(await versaoCompleta(v.id));
+      toast.success(t("Rascunho aberto no editor. Salve para guardar."));
+    } catch {
+      toast.error(t("Não foi possível carregar as versões. Tente de novo."));
+    } finally {
+      setCarregando(null);
+    }
   }
 
   async function handleRevert() {
@@ -135,17 +185,39 @@ export function VersionHistory({ agentId, versions, readOnly }: Props) {
 
   return (
     <>
+      {alteracoesNaoSalvas && !readOnly ? (
+        <div
+          role="status"
+          className="mb-3 space-y-2 rounded-md border border-warning/40 bg-warning-bg p-3 text-xs"
+        >
+          <p className="font-medium text-warning-fg">
+            {t("Há mudanças não salvas na Configuração.")}
+          </p>
+          <p className="text-muted-foreground">
+            {t("Salve ou descarte antes de reverter ou de abrir outra versão.")}
+          </p>
+          {onIrParaConfiguracao ? (
+            <Button variant="outline" size="sm" onClick={onIrParaConfiguracao}>
+              {t("Ir para a Configuração")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
       <ol className="flex flex-col gap-2">
         {sorted.map((v) => {
           const canRevert =
             !readOnly && v.status !== "draft" && v.status !== "archived";
+          // Rascunho que não é o do editor: o "Reverter" ou uma proposta
+          // publicaram por cima dele. Ele não abre sozinho — daqui, abre.
+          const rascunhoAntigo = v.status === "draft" && v.id !== rascunhoVigente?.id;
           return (
             <li
               key={v.id}
               className="flex flex-wrap items-center gap-3 rounded-md border border-border/60 p-3 text-sm"
             >
               <Badge variant={STATUS_VARIANT[v.status] ?? "outline"} className="text-xs">
-                {t(STATUS_LABEL_PT[v.status] ?? v.status)}
+                {rascunhoAntigo ? t("Rascunho antigo") : t(STATUS_LABEL_PT[v.status] ?? v.status)}
               </Badge>
               <span className="font-mono">v{v.version_number}</span>
               <span className="text-xs text-muted-foreground">
@@ -160,13 +232,29 @@ export function VersionHistory({ agentId, versions, readOnly }: Props) {
                 </span>
               ) : null}
               <div className="ml-auto flex gap-2">
-                <Button variant="ghost" size="sm" onClick={() => openDiff(v)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={carregando === v.id}
+                  onClick={() => void openDiff(v)}
+                >
                   {t("Diff")}
                 </Button>
+                {rascunhoAntigo && !readOnly && onAbrirNoEditor ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={alteracoesNaoSalvas || carregando === v.id}
+                    onClick={() => void abrirNoEditor(v)}
+                  >
+                    {t("Abrir no editor")}
+                  </Button>
+                ) : null}
                 {canRevert ? (
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={alteracoesNaoSalvas}
                     onClick={() => setRevertTarget(v)}
                   >
                     {t("Reverter")}
@@ -201,10 +289,18 @@ export function VersionHistory({ agentId, versions, readOnly }: Props) {
               {t("Reverter para v")}{revertTarget?.version_number}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {t("Uma nova versão idêntica a v")}{revertTarget?.version_number}
-              {t(" será criada e publicada imediatamente. A versão atualmente publicada vira superseded.")}
+              {t("Uma cópia da v")}
+              {revertTarget?.version_number}
+              {t(" vai ao ar agora, no lugar da versão publicada. A versão de agora continua no Histórico.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {rascunhoVigente ? (
+            <p data-testid="reverter-tira-o-rascunho" className="text-sm text-warning-fg">
+              {t("O rascunho v")}
+              {rascunhoVigente.version_number}
+              {t(", ainda não publicado, sai do editor. Ele fica no Histórico e pode ser aberto de novo.")}
+            </p>
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={reverting}>{t("Cancelar")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleRevert} disabled={reverting}>

@@ -14,6 +14,7 @@ import {
 import { useT } from "@/hooks/i18n/useT";
 
 import { PROVEDORES } from "@/lib/ai/pontos/provedores";
+import { textoEstavel } from "@/lib/ai/agents/mesmo-rascunho";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 
 interface Props {
@@ -21,6 +22,9 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   draft: AgentVersionRow;
   published: AgentVersionRow | null;
+  /** Para nomear os materiais e funis que entram ou saem, em vez do id. */
+  materiais?: ReadonlyArray<{ id: string; name: string }>;
+  funis?: ReadonlyArray<{ id: string; name: string }>;
   onConfirm: () => void;
   isPending: boolean;
 }
@@ -44,20 +48,104 @@ function rotuloDoProvedor(id: string): string {
   return PROVEDORES.find((p) => p.id === id)?.rotulo ?? id;
 }
 
+type Filtros = { business_hours?: unknown } & Record<string, unknown>;
+const filtrosDe = (v: AgentVersionRow) =>
+  ((v.trigger_config as { filters?: Filtros } | null)?.filters ?? null) as Filtros | null;
+
+/**
+ * Os grupos da tela que mudaram e não têm linha própria no diálogo — com o
+ * MESMO nome do cartão onde se mexe neles. A comparação é pelo conteúdo
+ * (`textoEstavel`), não por tamanho nem por referência.
+ */
+const OUTROS_GRUPOS: ReadonlyArray<[string, (v: AgentVersionRow) => unknown]> = [
+  ["Número do WhatsApp", (v) => v.channel_session_id],
+  ["Chave de acesso", (v) => v.credential_id],
+  [
+    "Quando ele entra em ação",
+    (v) => {
+      const filtros = filtrosDe(v);
+      const { business_hours: _horario, ...resto } = filtros ?? {};
+      return { ...(v.trigger_config ?? {}), filters: resto };
+    },
+  ],
+  [
+    "Freios de segurança",
+    (v) => [
+      v.max_steps,
+      v.token_budget,
+      v.cost_budget_cents,
+      v.history_message_window,
+      v.history_token_window,
+      v.reply_min_interval_ms,
+    ],
+  ],
+  ["Estilo de resposta", (v) => [v.split_messages, v.split_max_chars]],
+  ["Passar para uma pessoa", (v) => [v.handoff_tool_enabled, v.handoff_keywords]],
+  ["Pedir ajuda sem sair da conversa", (v) => v.cases_enabled],
+  ["Follow-up", (v) => v.followup],
+  ["Organiza o sistema", (v) => [v.operator_enabled, v.operator_model, v.operator_tool_ids]],
+];
+
+const mudou = (antes: AgentVersionRow, depois: AgentVersionRow, ler: (v: AgentVersionRow) => unknown) =>
+  textoEstavel(ler(antes)) !== textoEstavel(ler(depois));
+
 export function PublishConfirmDialog({
   open,
   onOpenChange,
   draft,
   published,
+  materiais = [],
+  funis = [],
   onConfirm,
   isPending,
 }: Props) {
   const t = useT();
-  const toolsDiff = diffArr(published?.tool_ids ?? [], draft.tool_ids);
+  const toolsDiff = diffArr(published?.tool_ids ?? [], draft.tool_ids ?? []);
+  // Pelo CONTEÚDO: trocar um preço mantendo o tamanho do texto é mudança, e a
+  // caixa dizia "sem alteração" — a pessoa publicava sem ver o que ia ao ar.
+  const promptMudou = !published || published.system_prompt !== draft.system_prompt;
   const promptDeltaChars =
-    draft.system_prompt.length - (published?.system_prompt.length ?? 0);
+    (draft.system_prompt ?? "").length - (published?.system_prompt ?? "").length;
   const modelChanged = !published || draft.model !== published.model;
   const providerChanged = !published || draft.provider !== published.provider;
+
+  const nomeDe = (lista: ReadonlyArray<{ id: string; name: string }>, id: string) =>
+    lista.find((x) => x.id === id)?.name ?? t("(fora da lista)");
+  const materiaisDiff = diffArr(published?.knowledge_source_ids ?? [], draft.knowledge_source_ids ?? []);
+  const funisDiff = diffArr(published?.pipeline_ids ?? [], draft.pipeline_ids ?? []);
+  const horarioMudou =
+    !!published &&
+    textoEstavel(filtrosDe(published)?.business_hours ?? null) !==
+      textoEstavel(filtrosDe(draft)?.business_hours ?? null);
+  const outros = published
+    ? OUTROS_GRUPOS.filter(([, ler]) => mudou(published, draft, ler)).map(([rotulo]) => rotulo)
+    : [];
+
+  const linhaDeNomes = (
+    rotulo: string,
+    d: { added: string[]; removed: string[] },
+    lista: ReadonlyArray<{ id: string; name: string }>,
+  ) =>
+    d.added.length + d.removed.length > 0 ? (
+      <p>
+        <strong>{t(rotulo)}</strong>{" "}
+        {[
+          ...d.added.map((id) => `+ ${nomeDe(lista, id)}`),
+          ...d.removed.map((id) => `− ${nomeDe(lista, id)}`),
+        ].join(" · ")}
+      </p>
+    ) : null;
+
+  const nadaMuda =
+    !!published &&
+    !providerChanged &&
+    !modelChanged &&
+    !promptMudou &&
+    toolsDiff.added.length + toolsDiff.removed.length === 0 &&
+    materiaisDiff.added.length + materiaisDiff.removed.length === 0 &&
+    funisDiff.added.length + funisDiff.removed.length === 0 &&
+    !horarioMudou &&
+    outros.length === 0;
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -80,7 +168,11 @@ export function PublishConfirmDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
 
-        <div className="space-y-2 rounded-md border border-border/60 p-3 text-xs">
+        <div
+          data-testid="publicar-o-que-muda"
+          className="space-y-2 rounded-md border border-border/60 p-3 text-xs"
+        >
+          {nadaMuda ? <p>{t("Nada muda em relação à versão publicada.")}</p> : null}
           {providerChanged ? (
             <p>
               <strong>{t("Empresa:")}</strong>{" "}
@@ -95,6 +187,16 @@ export function PublishConfirmDialog({
               {published ? `${published.model} → ${draft.model}` : draft.model}
             </p>
           ) : null}
+          {promptMudou ? (
+            <p>
+              <strong>{t("Instruções:")}</strong>{" "}
+              {promptDeltaChars > 0
+                ? `${promptDeltaChars} ${t("caracteres a mais")}`
+                : promptDeltaChars < 0
+                  ? `${Math.abs(promptDeltaChars)} ${t("caracteres a menos")}`
+                  : t("texto alterado, com o mesmo tamanho")}
+            </p>
+          ) : null}
           {toolsDiff.added.length > 0 ? (
             <p>
               <strong>{t("Tools adicionadas:")}</strong> {toolsDiff.added.join(", ")}
@@ -105,14 +207,18 @@ export function PublishConfirmDialog({
               <strong>{t("Tools removidas:")}</strong> {toolsDiff.removed.join(", ")}
             </p>
           ) : null}
-          <p>
-            <strong>{t("Prompt:")}</strong>{" "}
-            {promptDeltaChars > 0
-              ? `${promptDeltaChars} ${t("caracteres a mais")}`
-              : promptDeltaChars < 0
-                ? `${Math.abs(promptDeltaChars)} ${t("caracteres a menos")}`
-                : t("sem alteração")}
-          </p>
+          {linhaDeNomes("Materiais:", materiaisDiff, materiais)}
+          {linhaDeNomes("Funis:", funisDiff, funis)}
+          {horarioMudou ? (
+            <p>
+              <strong>{t("Horário de atendimento:")}</strong> {t("mudou")}
+            </p>
+          ) : null}
+          {outros.length > 0 ? (
+            <p>
+              <strong>{t("Também muda:")}</strong> {outros.map((r) => t(r)).join(", ")}
+            </p>
+          ) : null}
         </div>
 
         <AlertDialogFooter>
