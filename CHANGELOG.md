@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.22.0] — 2026-11-18
+
+### Adicionado
+
+- **Etiquetas Meta e Google corrigem a origem no Marketing** No funil por origem do Marketing, um lead sem a marca automática do anúncio conta como Meta ou
+  Google quando tem a etiqueta "Meta" ou "Google" (ou "Anúncio Meta"/"Anúncio Google"). A recepção
+  usa isso para quem disse que veio do anúncio; as vendas dele passam para aquele canal no CAC e ROAS.
+
 ## [5.21.0] — 2026-11-18
 
 ### Alterado
@@ -9419,7 +9427,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.21.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.22.0...HEAD
+[5.22.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.21.0...v5.22.0
 [5.21.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.20.1...v5.21.0
 [5.20.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.20.0...v5.20.1
 [5.20.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.2...v5.20.0
