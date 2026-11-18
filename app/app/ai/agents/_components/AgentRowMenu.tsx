@@ -78,7 +78,11 @@ export function AgentRowMenu({ agent }: Props) {
 
   return (
     <>
-      <DropdownMenu>
+      {/* `modal={false}`: os diálogos de Renomear, Pausar e Arquivar abrem a
+          partir deste menu, e com o menu modal o fechamento deixava a página
+          travada — `pointer-events: none` no body e a lista `aria-hidden` —
+          até apertar F5. Medido no Chromium e no WebKit. */}
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"

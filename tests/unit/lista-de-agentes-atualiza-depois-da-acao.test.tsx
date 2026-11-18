@@ -89,12 +89,16 @@ describe("lista de agentes — o cartão reflete a ação", () => {
     await user.type(campo, "Clara da Recepção");
     await user.click(within(dialogo).getByRole("button", { name: "Salvar" }));
 
-    // Por texto e não por papel: no jsdom o Radix deixa o fundo `aria-hidden`
-    // depois do diálogo aberto a partir do menu, e o papel some da árvore.
+    // Por PAPEL de propósito: com o menu modal, fechar o diálogo deixava a
+    // lista `aria-hidden` (e o body sem clique) até recarregar — o cartão
+    // sumia da árvore de acessibilidade, e a página parava de responder.
     expect(
-      await screen.findByText("Clara da Recepção", { selector: "h3" }),
-      "o aviso verde apareceu e o cartão seguiu com o nome antigo",
+      await screen.findByRole("heading", { name: "Clara da Recepção" }),
+      "o aviso verde apareceu e o cartão seguiu com o nome antigo (ou a página ficou travada)",
     ).toBeInTheDocument();
+    expect(document.body.style.pointerEvents, "a página ficou sem clique depois do diálogo").not.toBe(
+      "none",
+    );
     expect(api.get).toHaveBeenCalledWith("/api/v1/ai/agents");
   });
 
