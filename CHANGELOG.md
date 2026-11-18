@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.20.1] — 2026-11-18
+
+### Corrigido
+
+- **Vendido por origem não some com contato de id antigo** O funil por origem do Marketing deixava de trazer o vendido do período inteiro quando algum contato
+  tinha id fora do formato que o Financeiro aceita (contatos antigos). Agora esses poucos ficam fora
+  da soma e o resto aparece normalmente.
+
 ## [5.20.0] — 2026-11-17
 
 ### Adicionado
@@ -9333,7 +9341,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.20.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.20.1...HEAD
+[5.20.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.20.0...v5.20.1
 [5.20.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.2...v5.20.0
 [5.19.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.1...v5.19.2
 [5.19.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.19.0...v5.19.1
