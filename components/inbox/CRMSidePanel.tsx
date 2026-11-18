@@ -627,6 +627,30 @@ function BotaoDeRecolherDoPainel({ recolhido, onAlternar }: { recolhido: boolean
 }
 
 export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolhido }: Props) {
+  // RECOLHIDO (porte do #3043): só o trilho, com a porta de volta. Sem o
+  // controle (o `Sheet` do celular) o trilho não teria saída, então ali o
+  // painel desenha inteiro, como sempre.
+  //
+  // O trilho fica AQUI, antes de montar o painel, e não dentro dele: recolhido
+  // é o padrão desde 18/11/2026, e o painel montado buscava o resumo do contato
+  // a cada conversa e gravava na auditoria que a ficha foi aberta, com ninguém
+  // vendo a ficha (a mesma classe do item 36 da auditoria de 17/11).
+  if (recolhido && onAlternarRecolhido) {
+    return (
+      <aside
+        // O fio da borda como sombra interna, não `border-l`: a borda comeria
+        // 1px dos 44px do trilho e o botão não caberia inteiro.
+        className="flex h-full flex-col items-center bg-surface py-2 shadow-[inset_1px_0_0_var(--border)]"
+        data-testid="inbox-painel-recolhido"
+      >
+        <BotaoDeRecolherDoPainel recolhido onAlternar={onAlternarRecolhido} />
+      </aside>
+    );
+  }
+  return <PainelDoContato conversation={conversation} onAlternarRecolhido={onAlternarRecolhido} />;
+}
+
+function PainelDoContato({ conversation, onAlternarRecolhido }: Omit<Props, "recolhido">) {
   const { user } = useAuth();
   const readonly = user.support?.access_mode === "support_readonly";
   const localeDaData = useLocaleDeData();
@@ -787,22 +811,6 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
       (summaryContactId !== contactId || (leads === null && orders === null && activities === null && demandas === null)),
     [erro, summaryContactId, contactId, leads, orders, activities, demandas],
   );
-
-  // RECOLHIDO (porte do #3043): só o trilho, com a porta de volta. Sem o
-  // controle (o `Sheet` do celular) o trilho não teria saída, então ali o
-  // painel desenha inteiro, como sempre.
-  if (recolhido && onAlternarRecolhido) {
-    return (
-      <aside
-        // O fio da borda como sombra interna, não `border-l`: a borda comeria
-        // 1px dos 44px do trilho e o botão não caberia inteiro.
-        className="flex h-full flex-col items-center bg-surface py-2 shadow-[inset_1px_0_0_var(--border)]"
-        data-testid="inbox-painel-recolhido"
-      >
-        <BotaoDeRecolherDoPainel recolhido onAlternar={onAlternarRecolhido} />
-      </aside>
-    );
-  }
 
   if (!conversation) {
     return (

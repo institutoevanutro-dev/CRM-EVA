@@ -176,6 +176,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   togglePainelDoContato.mockClear();
+  get.mockClear();
   window.localStorage.clear();
 });
 
@@ -285,6 +286,21 @@ describe("Inbox: recolher o painel do contato (porte do #3043)", () => {
     expect(togglePainelDoContato).toHaveBeenCalledWith(true);
     // Aberto, o recolher é ícone de 32px no mouse e 44px no toque.
     expect(botaoRecolher().className).toContain("pointer-coarse:size-11");
+  });
+
+  it("⭐ recolhido não lê a ficha: sem resumo do contato (e sem auditoria de leitura) até expandir", async () => {
+    const user = userEvent.setup();
+    const pediuResumo = () => get.mock.calls.some((c) => String(c[0] ?? "").includes("crm-summary"));
+    montar(true);
+    await screen.findByTestId("inbox-painel-recolhido");
+    // A conversa carregou (o painel recebe a conversa), e mesmo assim nada da ficha.
+    await waitFor(() => expect(get.mock.calls.length).toBeGreaterThan(0));
+    expect(pediuResumo()).toBe(false);
+
+    await user.click(botaoExpandir());
+
+    await screen.findByTestId("inbox-demandas");
+    expect(pediuResumo()).toBe(true);
   });
 
   it("a preferência do servidor vence na primeira pintura: nasce recolhido", async () => {
