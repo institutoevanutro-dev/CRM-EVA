@@ -20,10 +20,34 @@ import {
 
 export type SignInResult = {
   ok: false;
-  error: "invalid_credentials" | "rate_limited" | "validation_error" | "mfa_required";
+  error:
+    | "invalid_credentials"
+    | "rate_limited"
+    | "validation_error"
+    | "mfa_required"
+    | "email_not_confirmed"
+    | "unavailable";
   details?: Record<string, unknown>;
   challengeId?: string;
 };
+
+/**
+ * Por que o GoTrue recusou. `status` ausente, 0 ou 5xx é o servidor que não
+ * respondeu (o supabase-js embrulha falha de rede em status 0); 429 é o teto
+ * do próprio GoTrue. O resto dos 4xx continua contando como credencial errada:
+ * na dúvida, o teto de tentativas vale.
+ */
+function causaDaRecusa(
+  error: { status?: number; code?: string; message?: string } | null,
+): "invalid_credentials" | "email_not_confirmed" | "unavailable" | "rate_limited" {
+  if (!error) return "invalid_credentials";
+  if (error.code === "email_not_confirmed" || /email not confirmed/i.test(error.message ?? "")) {
+    return "email_not_confirmed";
+  }
+  if (!error.status || error.status >= 500) return "unavailable";
+  if (error.status === 429) return "rate_limited";
+  return "invalid_credentials";
+}
 
 /**
  * Sign in with password.
@@ -74,6 +98,21 @@ export async function signInWithPassword(input: LoginInput, next?: string): Prom
   });
 
   if (error || !data.user) {
+    // Nem toda recusa é senha errada (auditoria 17/11, item 50). E-mail não
+    // confirmado e servidor de login fora do ar viravam "Email ou senha
+    // incorretos" e gastavam tentativa: a pessoa errava de propósito, achando
+    // que a senha estava errada, até ser trancada por algo que não era dela.
+    const causa = causaDaRecusa(error);
+    if (causa !== "invalid_credentials") {
+      await audit({
+        action: "auth.login_failed",
+        metadata: { email_hash: hashEmail(parsed.data.email), reason: causa },
+        requestId,
+        ip,
+        userAgent,
+      });
+      return { ok: false, error: causa };
+    }
     // Só senha errada gasta o orçamento da conta.
     await registrarFalhaDeLogin(parsed.data.email, AUTH_LIMITS.login);
     await audit({

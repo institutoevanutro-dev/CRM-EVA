@@ -18,13 +18,16 @@ function paginas(dir: string): string[] {
 }
 
 describe("uma margem só", () => {
-  it("a casca define a altura do topo e a margem, 56→48 px e 16→24 px", () => {
-    expect(casca).toContain("[--altura-do-topo:3.5rem]");
-    expect(casca).toContain("md:[--altura-do-topo:3rem]");
+  it("a casca define o topo, a barra e a margem: topo 0 (barra escondida, por cima), barra 56→48 px, margem 16→24 px", () => {
+    // Desde 18/11 a barra de cima fica escondida e aparece por cima do conteúdo
+    // (pedido do André): ela não ocupa lugar na linha, e a tela ganha a altura.
+    expect(casca).toContain("[--altura-do-topo:0px]");
+    expect(casca).toContain("[--altura-da-barra:3.5rem]");
+    expect(casca).toContain("md:[--altura-da-barra:3rem]");
     expect(casca).toContain("[--margem-do-conteudo:var(--space-4)]");
     expect(casca).toContain("md:[--margem-do-conteudo:var(--space-6)]");
     expect(casca).toMatch(/<main id="conteudo" tabIndex=\{-1\} className="[^"]*p-\(--margem-do-conteudo\)/);
-    expect(readFileSync("components/shell/TopBar.tsx", "utf8")).toContain("h-(--altura-do-topo,3.5rem)");
+    expect(readFileSync("components/shell/TopBar.tsx", "utf8")).toContain("h-(--altura-da-barra,3.5rem)");
   });
 
   it("as contas de altura leem as variáveis, não 3.5rem nem p-6 somados à mão", () => {

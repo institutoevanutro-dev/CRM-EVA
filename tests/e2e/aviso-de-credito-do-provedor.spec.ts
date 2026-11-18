@@ -32,6 +32,7 @@ import pg from "pg";
 import { runModelCall } from "../../lib/agent-engine/edge/llm/run-model-call";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { expect, login } from "./qa-l12-comum";
+import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
 
 const credenciais = credenciaisSupabaseDeTeste();
 const db = createClient(credenciais.url, credenciais.serviceRole, { auth: { persistSession: false } });
@@ -202,6 +203,7 @@ test("o crédito acaba: a campainha toca e a Central explica; o crédito volta: 
   // A campainha: toca (com o CRM aberto) e conta o aviso.
   await expect.poll(bipes, { timeout: 75_000, intervals: [2_000] }).toBeGreaterThan(0);
   await expect(page.getByTestId("alerts-bell-count")).toHaveText("1", { timeout: ESPERA });
+  await mostrarBarraDeCima(page);
   await page.screenshot({ path: path.join(EVIDENCIA, "1-campainha-com-o-aviso.png") });
 
   // A Central diz o que houve, desde quando, o que parou e o que fazer.

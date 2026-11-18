@@ -23,8 +23,19 @@ const auditorias: Array<{ action: string; metadata?: Record<string, unknown> }> 
 let ip = "";
 
 vi.mock("next/headers", () => ({
-  // Jar vazio a cada requisição: o cliente que não devolve o cookie.
-  cookies: async () => ({ get: () => undefined, set: () => {}, delete: () => {} }),
+  // Jar vazio a cada requisição (o cliente que não devolve o cookie), menos a
+  // marca do link de troca de senha verificado: sem ela a troca é recusada
+  // antes do código (auditoria 17/11, item 48), e é a tela de troca que estes
+  // casos medem.
+  cookies: async () => {
+    const { marcaDaTroca } = await import("@/lib/auth/troca-de-senha");
+    return {
+      get: (nome: string) =>
+        nome === "troca_de_senha" ? { value: marcaDaTroca(usuario, "dono@exemplo.test") } : undefined,
+      set: () => {},
+      delete: () => {},
+    };
+  },
   headers: async () => ({
     get: (k: string) => (k === "x-forwarded-for" ? ip : null),
   }),

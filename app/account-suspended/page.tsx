@@ -1,5 +1,9 @@
 import Link from "next/link";
+import { signOut } from "@/app/actions/auth/signOut";
+import { OutrasOrganizacoes } from "@/components/auth/OutrasOrganizacoes";
+import { loadAuthUser } from "@/lib/auth/server";
 import { emailDeSuporte } from "@/lib/branding/saida";
+import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
@@ -31,8 +35,12 @@ export default async function AccountSuspendedPage() {
   const idioma = normalizarIdioma(
     (user?.user_metadata?.locale as string | undefined) ?? null,
   );
+  // Quem é de outras organizações não fica preso na suspensa (auditoria 17/11,
+  // item 54): só as ATIVAS, lidas agora — a ação de trocar confere de novo.
+  const outras = await organizacoesAtivasAlemDaSuspensa(supabase);
 
   return (
+    <IdiomaProvider locale={idioma}>
     <main className="flex min-h-screen items-center justify-center p-8">
       <Card className="w-full max-w-md p-8 text-center space-y-4">
         <h1 className="titulo-tela">{traduzir("Conta suspensa", idioma)}</h1>
@@ -55,12 +63,38 @@ export default async function AccountSuspendedPage() {
             )}
           </p>
         )}
+        <OutrasOrganizacoes organizacoes={outras} />
         <div className="pt-2">
-          <Button asChild variant="outline">
-            <Link href="/login">{traduzir("Sair", idioma)}</Link>
-          </Button>
+          {user ? (
+            // "Sair" de verdade: o link para /login deixava a sessão aberta e a
+            // pessoa voltava para cá ao entrar.
+            <form action={signOut}>
+              <Button type="submit" variant="outline">
+                {traduzir("Sair", idioma)}
+              </Button>
+            </form>
+          ) : (
+            <Button asChild variant="outline">
+              <Link href="/login">{traduzir("Entrar", idioma)}</Link>
+            </Button>
+          )}
         </div>
       </Card>
     </main>
+    </IdiomaProvider>
   );
+}
+
+async function organizacoesAtivasAlemDaSuspensa(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<{ id: string; nome: string }[]> {
+  const authUser = await loadAuthUser().catch(() => null);
+  if (!authUser || authUser.organizations.length < 2) return [];
+  const ids = authUser.organizations.map((o) => o.organization_id);
+  const { data, error } = await supabase.from("organizations").select("id, status").in("id", ids);
+  if (error || !data) return [];
+  const ativas = new Set(data.filter((o) => o.status === "active").map((o) => o.id as string));
+  return authUser.organizations
+    .filter((o) => ativas.has(o.organization_id))
+    .map((o) => ({ id: o.organization_id, nome: o.organization_name }));
 }

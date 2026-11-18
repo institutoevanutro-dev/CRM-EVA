@@ -11,7 +11,11 @@ export async function signOut(): Promise<void> {
   } = await supabase.auth.getUser();
 
   const hdrs = await headers();
-  await supabase.auth.signOut();
+  // "Sair" encerra só ESTE aparelho (auditoria 17/11, item 46). O padrão do
+  // supabase-js é `global`: sair no iPhone derrubava o Mac e, com o login da
+  // recepção compartilhado, os outros computadores. Encerrar todos é escolha
+  // explícita em Configurações › Segurança (`signOutEverywhere`).
+  await supabase.auth.signOut({ scope: "local" });
 
   // Clear active_org cookie too.
   const store = await cookies();

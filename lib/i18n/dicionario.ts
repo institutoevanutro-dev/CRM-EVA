@@ -5553,6 +5553,33 @@ export const DICIONARIO: Traducoes = {
   },
   "Saindo…": { es: "Saliendo…" },
   "Sair de todos os dispositivos": { es: "Salir de todos los dispositivos" },
+  // ─── Entrada, sessão e casca do app (auditoria 17/11, lotes 4 e 5) ───
+  "Sua sessão terminou. Entre de novo para voltar à tela onde estava.": {
+    es: "Tu sesión terminó. Inicia sesión de nuevo para volver a la pantalla donde estabas.",
+  },
+  "Entrar com senha (administração)": { es: "Entrar con contraseña (administración)" },
+  "Se você entra pelo EvaLink, use o botão acima.": { es: "Si entras con EvaLink, usa el botón de arriba." },
+  "Confirme seu e-mail pelo link que enviamos antes de entrar.": {
+    es: "Confirma tu correo con el enlace que te enviamos antes de entrar.",
+  },
+  "O servidor de login não respondeu. Tente de novo em instantes.": {
+    es: "El servidor de inicio de sesión no respondió. Inténtalo de nuevo en unos instantes.",
+  },
+  "Este link não vale mais. Peça um novo em Esqueci minha senha.": {
+    es: "Este enlace ya no es válido. Pide uno nuevo en Olvidé mi contraseña.",
+  },
+  "Abrir outra organização": { es: "Abrir otra organización" },
+  "Não foi possível abrir esta organização. Seu acesso pode ter mudado.": {
+    es: "No fue posible abrir esta organización. Tu acceso puede haber cambiado.",
+  },
+  "Entrou com outra conta? Sair": { es: "¿Entraste con otra cuenta? Salir" },
+  "Nenhuma mensagem entra nem sai.": { es: "Ningún mensaje entra ni sale." },
+  "A organização foi trocada em outra aba. Abrindo a mesma aqui…": {
+    es: "La organización se cambió en otra pestaña. Abriendo la misma aquí…",
+  },
+  "Mostrar a barra de cima": { es: "Mostrar la barra superior" },
+  "Esconder a barra de cima": { es: "Ocultar la barra superior" },
+  // ─── fim do bloco da auditoria 17/11 ───
   "A verificação em duas etapas da sua conta, os códigos de recuperação e as sessões abertas.": {
     es: "La verificación en dos pasos de tu cuenta, los códigos de recuperación y las sesiones abiertas.",
   },
@@ -7813,7 +7840,7 @@ export const DICIONARIO: Traducoes = {
   },
   "Voltar ao login": { es: "Volver al login" },
   "Definir nova senha": { es: "Definir nueva contraseña" },
-  "Escolha uma nova senha para sua conta": { es: "Elige una nueva contraseña para tu cuenta" },
+  "Nova senha para": { es: "Nueva contraseña para" },
   "Crie sua senha para entrar na empresa que te convidou": {
     es: "Crea tu contraseña para entrar en la empresa que te invitó",
   },
@@ -8162,9 +8189,8 @@ export const DICIONARIO: Traducoes = {
   "Excluir este template?": { es: "¿Eliminar esta plantilla?" },
   "Essa ação não pode ser desfeita.": { es: "Esta acción no se puede deshacer." },
   "Scripts salvos para responder mais rápido; pessoais ou compartilhados com a equipe.": { es: "Guiones guardados para responder más rápido; personales o compartidos con el equipo." },
-  "está desconectado": { es: "está desconectado" },
   "conexões": { es: "conexiones" },
-  "de WhatsApp estão desconectadas": { es: "de WhatsApp están desconectadas" },
+  "de WhatsApp desconectadas": { es: "de WhatsApp desconectadas" },
   "nenhuma mensagem entra nem sai.": { es: "ningún mensaje entra ni sale." },
   "Escanear o QR": { es: "Escanear el QR" },
   "Ver conexões": { es: "Ver conexiones" },
@@ -8535,7 +8561,7 @@ export const DICIONARIO: Traducoes = {
   "Dados inválidos. Confira os campos destacados.": {
     es: "Datos inválidos. Revisa los campos destacados.",
   },
-  "Sessão expirada. Faça login novamente.": { es: "Sesión vencida. Inicia sesión de nuevo." },
+  "Sua sessão terminou. Entre de novo.": { es: "Tu sesión terminó. Inicia sesión de nuevo." },
   "Você não tem permissão para esta ação.": { es: "No tienes permiso para esta acción." },
   "Recurso não encontrado ou já removido.": { es: "Recurso no encontrado o ya eliminado." },
   "Organização não encontrada.": { es: "Organización no encontrada." },

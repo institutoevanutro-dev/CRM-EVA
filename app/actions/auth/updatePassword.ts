@@ -1,12 +1,13 @@
 "use server";
 
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import { resetPasswordSchema, type ResetPasswordInput } from "@/lib/auth/schemas";
 import { audit } from "@/lib/audit";
 import { mfaBloqueadoPorFalhas, registrarFalhaDeMfa } from "@/lib/auth/rate-limit";
+import { COOKIE_TROCA_DE_SENHA, lerMarcaDaTroca } from "@/lib/auth/troca-de-senha";
 
 export type UpdatePasswordResult = {
   ok: false;
@@ -44,6 +45,13 @@ export async function updatePassword(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "session_expired" };
+  // Só a sessão aberta por um link de recuperação verificado troca a senha sem
+  // a senha atual — nunca a de quem já estava logado no navegador
+  // (`lib/auth/troca-de-senha.ts`, auditoria 17/11, item 48).
+  const store = await cookies();
+  if (lerMarcaDaTroca(store.get(COOKIE_TROCA_DE_SENHA)?.value)?.userId !== user.id) {
+    return { ok: false, error: "session_expired" };
+  }
 
   const hdrs = await headers();
   const requestId = hdrs.get("x-request-id");
@@ -113,6 +121,7 @@ export async function updatePassword(
     userAgent,
   });
 
+  store.delete(COOKIE_TROCA_DE_SENHA);
   await supabase.auth.signOut();
   redirect("/login?reset=success");
 }

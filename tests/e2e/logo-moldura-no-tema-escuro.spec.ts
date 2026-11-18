@@ -78,6 +78,7 @@ import { test, expect, type Page, type Locator } from "@playwright/test";
 
 import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
 import { abrirMenuLateral } from "./utils/menu-lateral";
+import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), "evidence", "logo-moldura-tema-escuro");
@@ -258,6 +259,7 @@ async function escolherTemaPelaTela(page: Page, alvo: "dark" | "light"): Promise
   await expect(botao, "o controle de tema não está na tela").toBeVisible({ timeout: 15_000 });
   for (let i = 0; i < 4; i++) {
     if ((await temaDaPagina(page)) === alvo) return;
+    await mostrarBarraDeCima(page);
     await botao.click();
     // O `setTheme` escreve o atributo no mesmo tick do clique; a espera curta é
     // para o repaint, não para a lógica.

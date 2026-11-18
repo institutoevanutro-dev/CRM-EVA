@@ -198,6 +198,11 @@ describe("a sétima cópia não nasce", () => {
       motivo: "nome de MODELO de IA",
     },
     {
+      arquivo: "lib/channels/health.ts",
+      trecho: 'apelido: s.display_name ?? s.phone_number ?? "sem nome",',
+      motivo: "apelido do CANAL na faixa de conexão caída (`conexoesCaidasDe`); `channel_sessions` não tem `name`",
+    },
+    {
       arquivo: "lib/channels/estado.ts",
       trecho: '(c.display_name ?? "").trim()',
       motivo: "`nomeDoCanal` — a função central do rótulo de canal",

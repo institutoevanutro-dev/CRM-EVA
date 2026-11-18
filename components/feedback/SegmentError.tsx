@@ -10,10 +10,15 @@ import { copyToClipboard } from "@/lib/clipboard";
 export interface SegmentErrorProps {
   error: Error & { digest?: string };
   reset: () => void;
+  /**
+   * Next 16.3+: busca de novo e redesenha. `reset` só redesenha — se o erro veio
+   * do servidor, voltava na hora e só o F5 resolvia (auditoria 17/11, item 60).
+   */
+  retry?: () => void;
   segment?: string;
 }
 
-export function SegmentError({ error, reset, segment }: SegmentErrorProps) {
+export function SegmentError({ error, reset, retry, segment }: SegmentErrorProps) {
   const t = useT();
   const [eventId, setEventId] = useState<string | undefined>(undefined);
   const [copied, setCopied] = useState(false);
@@ -50,7 +55,7 @@ export function SegmentError({ error, reset, segment }: SegmentErrorProps) {
           <Button type="button" variant="outline" onClick={copyId}>
             {copied ? t("Copiado!") : t("Copiar ID")}
           </Button>
-          <Button type="button" onClick={() => reset()}>
+          <Button type="button" onClick={() => (retry ?? reset)()}>
             {t("Tentar de novo")}
           </Button>
         </div>

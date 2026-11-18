@@ -14,6 +14,7 @@ import { TETO_DA_ESPERA_MS } from "./teto-da-espera";
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (value: string) => value }));
 vi.mock("@/app/actions/auth/enrollMfa", () => ({ enrollMfa: vi.fn() }));
 vi.mock("@/app/actions/auth/confirmMfaEnroll", () => ({ confirmMfaEnroll: vi.fn() }));
+vi.mock("@/app/actions/auth/signOut", () => ({ signOut: vi.fn() }));
 
 const { enrollMfa } = await import("@/app/actions/auth/enrollMfa");
 
@@ -45,5 +46,23 @@ describe("MfaEnrollModal — a espera tem teto", () => {
       "Não recebemos a resposta do servidor. Recarregue a página para tentar de novo.",
     );
     expect(screen.getByRole("button", { name: "Iniciar configuração" })).toBeEnabled();
+  });
+});
+
+/**
+ * Auditoria de 17/11, item 56: a janela obrigatória cobria a tela sem rolagem e
+ * sem "Sair" — com o teclado aberto o botão sumia, e quem entrou com a conta
+ * errada não tinha saída.
+ */
+describe("MfaEnrollModal — obrigatório tem rolagem e saída", () => {
+  it("o fundo rola e há \"Sair\" quando a empresa exige", () => {
+    render(<MfaEnrollModal />);
+    expect(screen.getByRole("dialog").className).toMatch(/\boverflow-y-auto\b/);
+    expect(screen.getByRole("button", { name: "Sair" })).toBeInTheDocument();
+  });
+
+  it("CONTROLE — ligado por escolha (Configurações), sem \"Sair\"", () => {
+    render(<MfaEnrollModal motivo="escolha" />);
+    expect(screen.queryByRole("button", { name: "Sair" })).toBeNull();
   });
 });

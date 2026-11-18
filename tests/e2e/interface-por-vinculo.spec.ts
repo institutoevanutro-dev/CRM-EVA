@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page } from "@playwright/test";
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { abrirMenuLateral } from "./utils/menu-lateral";
+import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
 const credentials = credenciaisSupabaseDeTeste();
 const db = createClient(credentials.url, credentials.serviceRole, {
   auth: { persistSession: false },
@@ -148,6 +149,7 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     mkdirSync(evidence, { recursive: true });
     await member.screenshot({ path: `${evidence}/interface-hub-only.png` });
     await member.setViewportSize({ width: 390, height: 844 });
+    await mostrarBarraDeCima(member);
     await member.getByRole("button", { name: "Abrir navegação" }).click();
     await expect(member.getByRole("button", { name: "Clínica", exact: true }).last()).toBeVisible();
     expect(

@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { esquecerOrganizacaoAtiva } from "./helpers/esquecer-organizacao-ativa";
 import { test, expect } from "@playwright/test";
 import { procedimentosOferecidos } from "./helpers/marcacao-simples";
+import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
 
 /**
  * A AGENDA MOSTRA A ORGANIZAÇÃO ATIVA — e só ela.
@@ -91,6 +92,7 @@ async function tiposOferecidos(page: import("@playwright/test").Page): Promise<s
 }
 
 async function trocarPara(page: import("@playwright/test").Page, orgId: string, nome: string) {
+  await mostrarBarraDeCima(page);
   await page.getByTestId("tenant-switcher").click();
   await page.getByTestId(`tenant-switcher-item-${orgId}`).click();
   if (nome) {

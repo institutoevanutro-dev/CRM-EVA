@@ -18,6 +18,7 @@ import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { PROVIDERS_DE_MENSAGEM, canalDeEnvioAutomatico } from "@/lib/channels/capabilities";
+import { nuncaPareou } from "@/lib/channels/health";
 import { createChannelSchema } from "@/lib/schemas/channels";
 import { createClient } from "@/lib/supabase/server";
 import { getWahaClient } from "@/lib/waha/client";
@@ -63,9 +64,15 @@ export async function GET(): Promise<Response> {
   // `can_send` e não `provider`: a tela pergunta o que o canal PERMITE, nunca
   // qual ele é. As listas de "número de WhatsApp" (Conexões › Números, o
   // destino das automações) mostram só quem envia; o Inbox mostra todos.
-  const canais = ((data ?? []) as unknown as Array<Record<string, unknown> & { provider?: string | null }>).map(
-    ({ provider, ...resto }) => ({ ...resto, can_send: canalDeEnvioAutomatico(provider) }),
-  );
+  // `nunca_pareou` pelo mesmo motivo: a faixa de conexão caída pergunta se o
+  // canal já esteve no ar, não qual transporte ele usa (`lib/channels/health.ts`).
+  const canais = (
+    (data ?? []) as unknown as Array<Record<string, unknown> & { provider?: string | null; phone_number?: string | null }>
+  ).map(({ provider, ...resto }) => ({
+    ...resto,
+    can_send: canalDeEnvioAutomatico(provider),
+    nunca_pareou: nuncaPareou({ provider, phone_number: resto.phone_number }),
+  }));
 
   return ok(canais, {
     requestId,

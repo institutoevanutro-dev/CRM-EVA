@@ -75,9 +75,12 @@ function canal(over: Partial<ChannelSession>): ChannelSession {
 describe("GET /api/v1/channel-sessions diz quem envia", () => {
   it("can_send pela capability, sem expor o provider; filtrado pela organização da sessão", async () => {
     const corpo = (await (await GET()).json()) as { data: Record<string, unknown>[] };
+    // `nunca_pareou` (auditoria 17/11, item 58) também sai sem nomear o
+    // transporte: o canal por QR desta linha não tem número, nunca pareou; o
+    // Instagram não tem número por natureza e fica fora da regra.
     expect(corpo.data).toEqual([
-      { id: "wa", display_name: "Vendas", can_send: true },
-      { id: "ig", display_name: "@clinica", can_send: false },
+      { id: "wa", display_name: "Vendas", can_send: true, nunca_pareou: true },
+      { id: "ig", display_name: "@clinica", can_send: false, nunca_pareou: false },
     ]);
     expect(filtros).toContainEqual(["organization_id", "ORG"]);
   });

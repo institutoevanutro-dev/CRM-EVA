@@ -9,6 +9,7 @@ import { RecoveryCodesPanel } from "@/components/auth/RecoveryCodesPanel";
 import { enrollMfa } from "@/app/actions/auth/enrollMfa";
 import { confirmMfaEnroll } from "@/app/actions/auth/confirmMfaEnroll";
 import { AvisoSemResposta, useEnvioComTeto } from "@/components/auth/teto-da-espera";
+import { signOut } from "@/app/actions/auth/signOut";
 
 type Step = "intro" | "scan" | "codes";
 
@@ -88,8 +89,11 @@ export function MfaEnrollModal({ motivo = "obrigatorio" }: { motivo?: "obrigator
       role="dialog"
       aria-modal="true"
       aria-labelledby="mfa-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      // Rola quando não cabe (auditoria 17/11, item 56): com o teclado aberto ou
+      // o iPhone deitado, o centro fixo cortava o botão de confirmar.
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60"
     >
+      <div className="flex min-h-full items-center justify-center p-4">
       <div className="w-full max-w-md rounded-lg border border-border bg-background p-6 shadow-xl">
         {step === "intro" && (
           <div className="space-y-4">
@@ -217,6 +221,19 @@ export function MfaEnrollModal({ motivo = "obrigatorio" }: { motivo?: "obrigator
             />
           </div>
         )}
+        {/* A obrigação vem da empresa; quem entrou com a conta errada precisa de
+            saída. Some nos códigos: o fator já existe e eles não voltam. */}
+        {motivo === "obrigatorio" && step !== "codes" && (
+          <form action={signOut} className="mt-4 border-t border-border pt-2 text-center">
+            <button
+              type="submit"
+              className="min-h-11 rounded-md px-3 text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+            >
+              {t("Sair")}
+            </button>
+          </form>
+        )}
+      </div>
       </div>
     </div>
   );
