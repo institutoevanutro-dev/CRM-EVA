@@ -5565,6 +5565,14 @@ export const DICIONARIO: Traducoes = {
   "O servidor de login não respondeu. Tente de novo em instantes.": {
     es: "El servidor de inicio de sesión no respondió. Inténtalo de nuevo en unos instantes.",
   },
+  "Este link não vale mais. Peça um novo em Esqueci minha senha.": {
+    es: "Este enlace ya no es válido. Pide uno nuevo en Olvidé mi contraseña.",
+  },
+  "Abrir outra organização": { es: "Abrir otra organización" },
+  "Não foi possível abrir esta organização. Seu acesso pode ter mudado.": {
+    es: "No fue posible abrir esta organización. Tu acceso puede haber cambiado.",
+  },
+  "Entrou com outra conta? Sair": { es: "¿Entraste con otra cuenta? Salir" },
   // ─── fim do bloco da auditoria 17/11 ───
   "A verificação em duas etapas da sua conta, os códigos de recuperação e as sessões abertas.": {
     es: "La verificación en dos pasos de tu cuenta, los códigos de recuperación y las sesiones abiertas.",
@@ -7826,7 +7834,7 @@ export const DICIONARIO: Traducoes = {
   },
   "Voltar ao login": { es: "Volver al login" },
   "Definir nova senha": { es: "Definir nueva contraseña" },
-  "Escolha uma nova senha para sua conta": { es: "Elige una nueva contraseña para tu cuenta" },
+  "Nova senha para": { es: "Nueva contraseña para" },
   "Crie sua senha para entrar na empresa que te convidou": {
     es: "Crea tu contraseña para entrar en la empresa que te invitó",
   },

@@ -246,3 +246,53 @@ describe("GET /auth/confirm: link de recovery/magiclink/email não é uma porta 
     expect(destino(res)).toBe("/onboarding/welcome");
   });
 });
+
+/**
+ * Auditoria de 17/11, item 48: link de troca de senha vencido, aberto num
+ * navegador onde OUTRA pessoa está logada, levava à troca da senha dela.
+ */
+describe("GET /auth/confirm: troca de senha nunca reaproveita a sessão de outra pessoa", () => {
+  const OUTRA = { id: "99999999-9999-4999-8999-999999999999", email: "recepcao@exemplo.test" };
+  const vencido = { data: { user: null }, error: { message: "Email link is invalid or has expired" } };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(configEvalink).mockReturnValue(null);
+    vi.mocked(reservaBloqueia).mockResolvedValue(false);
+  });
+
+  function comSupabase(c: Cenario) {
+    vi.mocked(createClient).mockResolvedValue(
+      stubSupabase(c) as unknown as Awaited<ReturnType<typeof createClient>>,
+    );
+  }
+
+  it("link vencido com outra pessoa logada: recusa, sem abrir a troca", async () => {
+    comSupabase({ verifyOtp: vencido, getUser: { data: { user: OUTRA } } });
+    const { GET } = await import("./route");
+    const res = await GET(requisicao("type=recovery&token_hash=vencido"));
+    expect(destino(res)).toBe("/login?error=link_invalido");
+  });
+
+  it("segundo clique do MESMO fluxo (marca do primeiro clique): segue para a troca", async () => {
+    const { marcaDaTroca } = await import("@/lib/auth/troca-de-senha");
+    comSupabase({ verifyOtp: vencido, getUser: { data: { user: USUARIO } } });
+    const { GET } = await import("./route");
+    const req = new NextRequest("http://localhost:3000/auth/confirm?type=recovery&token_hash=ja-usado", {
+      headers: { cookie: `troca_de_senha=${marcaDaTroca(USUARIO.id, USUARIO.email)}` },
+    });
+    expect(destino(await GET(req))).toBe("/login/reset");
+  });
+
+  it("link válido grava a marca da conta do link", async () => {
+    comSupabase({ verifyOtp: { data: { user: USUARIO }, error: null }, getUser: { data: { user: null } } });
+    const { GET } = await import("./route");
+    const { lerMarcaDaTroca } = await import("@/lib/auth/troca-de-senha");
+    const res = await GET(requisicao("type=recovery&token_hash=bom"));
+    expect(destino(res)).toBe("/login/reset");
+    const cookie = res.headers.getSetCookie().find((c) => c.startsWith("troca_de_senha="));
+    expect(cookie).toMatch(/HttpOnly/i);
+    const valor = decodeURIComponent(cookie!.split(";")[0]!.slice("troca_de_senha=".length));
+    expect(lerMarcaDaTroca(valor)).toEqual({ userId: USUARIO.id, email: USUARIO.email });
+  });
+});

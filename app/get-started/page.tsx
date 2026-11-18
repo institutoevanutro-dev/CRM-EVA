@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { signOut } from "@/app/actions/auth/signOut";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { marcaDaSaida } from "@/lib/branding/saida";
@@ -65,6 +66,15 @@ export default async function GetStartedPage() {
               "Se você recebeu um convite, não crie uma organização nova. Use o link do convite ou peça ao administrador para reenviá-lo.",
             )}
           </p>
+          {/* Quem entrou com a conta errada precisa de saída (auditoria 17/11, item 55). */}
+          <form action={signOut} className="border-t pt-3 text-center">
+            <button
+              type="submit"
+              className="min-h-11 rounded-md px-3 text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+            >
+              {t("Entrou com outra conta? Sair")}
+            </button>
+          </form>
         </div>
       </main>
     </IdiomaProvider>

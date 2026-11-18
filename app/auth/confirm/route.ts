@@ -11,6 +11,13 @@ import { env } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { configEvalink } from "@/lib/evalink/config";
 import { reservaBloqueia } from "@/lib/evalink/reserva";
+import { cookieSecure } from "@/lib/supabase/cookie-secure";
+import {
+  COOKIE_TROCA_DE_SENHA,
+  PRAZO_DA_TROCA_S,
+  lerMarcaDaTroca,
+  marcaDaTroca,
+} from "@/lib/auth/troca-de-senha";
 
 /**
  * GET /auth/confirm — troca o token do e-mail por uma sessão.
@@ -156,7 +163,23 @@ export async function GET(request: NextRequest) {
   }
 
   if (type === "recovery") {
-    return redirectTo("/login/reset");
+    // Link que FALHOU não reaproveita a sessão de quem já estava no navegador
+    // para trocar senha (ver `lib/auth/troca-de-senha.ts`). Só segue se a sessão
+    // preservada é a do primeiro clique deste mesmo fluxo, que deixou a marca.
+    if (sessaoPreservada) {
+      return lerMarcaDaTroca(request.cookies.get(COOKIE_TROCA_DE_SENHA)?.value)?.userId === usuario.id
+        ? redirectTo("/login/reset")
+        : redirectTo("/login?error=link_invalido");
+    }
+    const res = redirectTo("/login/reset");
+    res.cookies.set(COOKIE_TROCA_DE_SENHA, marcaDaTroca(usuario.id, usuario.email ?? ""), {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: cookieSecure(),
+      path: "/",
+      maxAge: PRAZO_DA_TROCA_S,
+    });
+    return res;
   }
 
   // Foi convidado? Então NÃO ganha organização própria. Sem esta bifurcação,
