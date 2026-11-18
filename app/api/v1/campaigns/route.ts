@@ -23,6 +23,7 @@ import {
   criarCampanhaSchema,
   decodificarCursor,
   listarCampanhasSchema,
+  mensagemDaRecusa,
 } from "@/lib/campanhas/schemas";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { requireSupportWrite } from "@/lib/impersonate/support";
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const parsed = criarCampanhaSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return fail("validation_failed", t("Dados inválidos."), 422, {
+    return fail("validation_failed", t(mensagemDaRecusa(parsed.error)), 422, {
       requestId,
       details: parsed.error.flatten().fieldErrors as Record<string, unknown>,
     });

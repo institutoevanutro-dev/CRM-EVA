@@ -37,6 +37,9 @@ export const CAMPANHAS_VIVAS = [
   "paused",
 ] as const;
 
+/** As frases ficam aqui porque a TELA as mostra embaixo do campo (`PublicoDaCampanha`). */
+const INTEIRO = { error: "Use um número inteiro." };
+
 export const filtroDeAudienciaSchema = z
   .strictObject({
     /** Contato precisa ter TODAS estas etiquetas. */
@@ -56,7 +59,13 @@ export const filtroDeAudienciaSchema = z
     situacoes_do_negocio: z.array(z.enum(["open", "won", "lost"])).max(3).default([]),
 
     /** Sem interação há N dias (silêncio) — o filtro de reativação. */
-    sem_interacao_ha_dias: z.number().int().min(1).max(3650).nullable().default(null),
+    sem_interacao_ha_dias: z
+      .number(INTEIRO)
+      .int(INTEIRO)
+      .min(1, { error: "Use de 1 a 3650 dias." })
+      .max(3650, { error: "Use de 1 a 3650 dias." })
+      .nullable()
+      .default(null),
     /** Com interação nos últimos N dias. */
     com_interacao_ha_dias: z.number().int().min(0).max(3650).nullable().default(null),
     /** Cadastrado a partir de / até (ISO). */
@@ -69,9 +78,23 @@ export const filtroDeAudienciaSchema = z
     incluir_contatos: z.array(z.string().uuid()).max(5000).default([]),
     /** Contatos a tirar, mesmo que o recorte os pegue. */
     excluir_contatos: z.array(z.string().uuid()).max(5000).default([]),
+    /**
+     * Campanhas cujos destinatários que JÁ RECEBERAM ficam de fora. É o que a
+     * cópia ganha ao duplicar (decisão do André, 18/11/2026: a cópia de uma
+     * campanha enviada não fala de novo com quem recebeu a original). Guarda a
+     * CAMPANHA, não a lista: quem receber a original depois da cópia criada
+     * também fica de fora quando a cópia for preparada. Não conta como
+     * critério — é exclusão, como `excluir_contatos`.
+     */
+    sem_quem_recebeu_campanhas: z.array(z.string().uuid()).max(20).default([]),
 
     /** Teto do lote. A mesma régua do import de CSV para "quanta gente de uma vez". */
-    limite: z.number().int().min(1).max(5000).default(500),
+    limite: z
+      .number(INTEIRO)
+      .int(INTEIRO)
+      .min(1, { error: "Use de 1 a 5000 pessoas." })
+      .max(5000, { error: "Use de 1 a 5000 pessoas." })
+      .default(500),
   })
   .refine(
     (f) =>
@@ -93,6 +116,30 @@ export const filtroDeAudienciaSchema = z
 
 export type FiltroDeAudiencia = z.infer<typeof filtroDeAudienciaSchema>;
 
+/**
+ * A EDIÇÃO do filtro MESCLA por chave com o que está gravado — a mesma regra de
+ * `contacts.consent` e `leads.custom_fields`: merge, nunca substituição.
+ *
+ * Auditoria de 17/11/2026: a tela de edição mandava o filtro sem `funis` e
+ * `etapas`, o `default([])` do schema completava as chaves ausentes, e salvar o
+ * rascunho APAGAVA o critério "com negócio no funil" — a campanha passava a
+ * pegar gente que nunca esteve no recorte. Chave ausente agora é "não mexi";
+ * para limpar um critério, mande-o vazio (`funis: []`).
+ *
+ * O resultado passa pelo schema INTEIRO: o recorte que vale é o mesclado, e é
+ * ele que precisa de pelo menos um critério. Do gravado só entram as chaves que
+ * o schema conhece — uma chave de versão antiga não pode travar a edição; a
+ * chave desconhecida que vem do cliente continua recusada pelo `strictObject`.
+ */
+export function mesclarFiltroDeAudiencia(gravado: unknown, enviado: Record<string, unknown>) {
+  const conhecidas = new Set(Object.keys(filtroDeAudienciaSchema.shape));
+  const base =
+    gravado && typeof gravado === "object" && !Array.isArray(gravado)
+      ? Object.fromEntries(Object.entries(gravado).filter(([chave]) => conhecidas.has(chave)))
+      : {};
+  return filtroDeAudienciaSchema.safeParse({ ...base, ...enviado });
+}
+
 /** Um filtro vazio, para campanha recém-criada. Não passa no `refine` — e é o ponto. */
 export const FILTRO_VAZIO = {
   com_todas_tags: [],
@@ -109,6 +156,7 @@ export const FILTRO_VAZIO = {
   origens: [],
   incluir_contatos: [],
   excluir_contatos: [],
+  sem_quem_recebeu_campanhas: [],
   limite: 500,
 } satisfies FiltroDeAudiencia;
 

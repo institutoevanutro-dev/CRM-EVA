@@ -2977,3 +2977,26 @@ A recepção abre a conversa do paciente e, numa mensagem recebida nos últimos 
 - **Safari de verdade:** botão, selo e erro no balão não foram abertos no Safari.
 - **Configuração pela metade** (estado inválido): coberta nos testes da rota e do cliente, não pela tela — trocar variável no meio da spec exigiria outro `next start`.
 - **Mídia que fica pendente para sempre:** sem botão e sem aviso; só a que o worker marcou como falha ganha a dica.
+
+## J44 — Campanhas: público e envio certos `[P0]` (2026-11-18)
+
+Lote 2 da auditoria de 17/11/2026 (itens 13 a 27). A gerente cria, edita, prepara, testa, inicia e duplica uma campanha pela tela, numa organização fictícia própria ("Clínica Fictícia A2") no Supabase local com o `baseline.sql`, app em `next build` + `next start`, sem WAHA e sem Redis. Rodado em Chromium 1440, WebKit 1440 e WebKit 390. Evidência (capturas, medidas e o filtro no banco antes e depois da edição) em `.superpowers/evidence/a2/`.
+
+| Caso | O que a pessoa faz | Resultado esperado | Situação |
+|---|---|---|---|
+| J44.1 `[P0]` | Cria rascunho com "com negócio no funil / na etapa" e salva uma edição do nome | A edição mostra funil e etapa; no banco, `funis` e `etapas` do `audience_filter` iguais antes e depois | PROVADO NA TELA + banco; rota e tela com teste |
+| J44.2 `[P1]` | Abre "Enviar teste" | Nada listado antes de 2 letras; "Enviar para este" pede "Enviar teste para {nome}?" | PROVADO NA TELA (envio real sem WAHA não provado; aviso de sucesso só em teste de tela) |
+| J44.3 `[P1]` | Prepara e clica "Voltar para rascunho" | Volta a Rascunho, lista descartada (0 destinatários), "Editar" reaparece | PROVADO NA TELA + banco |
+| J44.4 `[P1]` | Abre "Nova campanha" com padrões salvos | Ritmo já preenchido com os padrões da organização | PROVADO NA TELA |
+| J44.5 `[P1]` | Duplica | Abre a cópia com aviso; cópia com o funil do card e o número extra do rodízio | PROVADO NA TELA + banco |
+| J44.6 `[P1]` | Preenche "a partir das" sem "parar às" | Frase embaixo do campo e Salvar desligado (criar, ritmo da campanha e padrões) | PROVADO NA TELA |
+| J44.7 `[P1]` | Campanha com mais de 1.000 pessoas | Números contados no banco | UNIT (dublê cortando em 1.000 linhas) |
+| J44.8 `[P2]` | Usa texto salvo e variável | Texto salvo entra na mensagem; balão com "Ana" no lugar de `{{primeiro_nome}}`; variável entra no cursor | PROVADO NA TELA (cursor em teste de tela) |
+| J44.9 `[P2]` | Conta o público e muda um critério | O número antigo some | PROVADO NA TELA |
+| J44.10 `[P2]` | Inicia com janela 20–22 às 7h | "Só sai entre 20h e 22h" na confirmação; "Aguardando o horário de envio. Volta às 20h." | PROVADO NA TELA |
+| J44.11 `[P2]` | Prepara com recorte vazio e depois com recorte certo | Frase "A última preparação não achou ninguém…" aparece sem F5 e some depois | PROVADO NA TELA |
+| J44.12 `[P2]` | Olha a campanha | Rascunho sem os quatro zeros, um botão cheio, cancelar em cor de perigo; sem rolagem lateral a 390 px; alvos de 44 px no celular | PROVADO NA TELA + medidas |
+| J44.13 `[P2]` | Escolhe etiquetas do público | Menu com as etiquetas dos contatos, sem campo "separe por vírgula" | PROVADO NA TELA |
+| J44.14 `[P1]` | Duplica uma campanha que já enviou (envio simulado no banco fictício) | A cópia diz "2 pessoas que já receberam a original ficam de fora"; a contagem mostra "Já recebeu a campanha original" | PROVADO NA TELA (Chromium 1440 e WebKit 390) |
+
+**O que esta jornada NÃO tem:** envio real (sem WAHA), lista de destinatários andando durante um envio de verdade (o recarregar e o filtro por carimbo têm teste) e Safari de verdade (só o WebKit do Playwright).

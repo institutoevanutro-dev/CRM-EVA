@@ -891,6 +891,10 @@ export const AUDIT_ACTIONS = [
   "scheduled_message.cancelled",
   "scheduled_message.dispatched",
   "scheduled_message.failed",
+  // Campanha preparada que voltou a rascunho para corrigir texto ou público: a
+  // lista montada foi DESCARTADA (metadata: quantos). Só vale antes de qualquer
+  // envio — mas tira gente de uma lista conferida, e isso pede rastro.
+  "campaign.reverted_to_draft",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -1,9 +1,9 @@
 /**
  * Um PostgREST de mentira, com estado, para testar rota contra dado que muda.
  *
- * Só o que as rotas de pedido LGPD usam: `select/eq/neq/in/gt/gte/order/limit/range`,
- * a contagem `select(…, { count, head })`, `maybeSingle/single`, `insert`,
- * `update` e `rpc` (espionado). `from` também é espionado: é como o teste conta
+ * Só o que as rotas de pedido LGPD e de campanha usam: `select/eq/neq/in/gt/gte/order/limit/range`,
+ * `not(…, "is", null)`, a contagem `select(…, { count, head })`, `maybeSingle/single`, `insert`,
+ * `update`, `delete` e `rpc` (espionado). `from` também é espionado: é como o teste conta
  * quantas consultas uma rota faz por tabela (N+1). Embutidos do `select` são
  * ignorados. Os filtros são
  * aplicados de verdade: é o que deixa o teste de isolamento entre organizações
@@ -14,7 +14,14 @@ import { vi } from "vitest";
 export type Linha = Record<string, unknown>;
 type Resposta = { data: unknown; error: { code: string; message: string } | null; count?: number };
 
-export function supabaseEmMemoria(tabelas: Record<string, Linha[]>) {
+export function supabaseEmMemoria(
+  tabelas: Record<string, Linha[]>,
+  /**
+   * `maxRows` imita o corte do PostgREST (1.000 no Supabase): a resposta com
+   * linhas para nesse número em silêncio, e só a contagem (`head`) é exata.
+   */
+  opcoes: { maxRows?: number } = {},
+) {
   let seq = 0;
   /** Erro devolvido pela próxima gravação nessa tabela (simula recusa do banco). */
   const recusar: Record<string, { code: string; message: string } | undefined> = {};
@@ -23,7 +30,11 @@ export function supabaseEmMemoria(tabelas: Record<string, Linha[]>) {
   function from(tabela: string) {
     const linhas = (tabelas[tabela] ??= []);
     const filtros: Array<(l: Linha) => boolean> = [];
-    let acao: { tipo: "select" } | { tipo: "insert"; linha: Linha } | { tipo: "update"; patch: Linha } = {
+    let acao:
+      | { tipo: "select" }
+      | { tipo: "insert"; linha: Linha | Linha[] }
+      | { tipo: "update"; patch: Linha }
+      | { tipo: "delete" } = {
       tipo: "select",
     };
     let limite = Infinity;
@@ -34,9 +45,12 @@ export function supabaseEmMemoria(tabelas: Record<string, Linha[]>) {
     function executar(): Resposta {
       if (acao.tipo !== "select" && recusar[tabela]) return { data: null, error: recusar[tabela]! };
       if (acao.tipo === "insert") {
-        const criada = { id: `00000000-0000-4000-8000-${String(++seq).padStart(12, "0")}`, ...acao.linha };
-        linhas.push(criada);
-        return { data: [criada], error: null };
+        const criadas = (Array.isArray(acao.linha) ? acao.linha : [acao.linha]).map((linha) => ({
+          id: `00000000-0000-4000-8000-${String(++seq).padStart(12, "0")}`,
+          ...linha,
+        }));
+        linhas.push(...criadas);
+        return { data: criadas, error: null };
       }
       const todas = linhas.filter((l) => filtros.every((f) => f(l)));
       if (descPor) {
@@ -44,7 +58,11 @@ export function supabaseEmMemoria(tabelas: Record<string, Linha[]>) {
         todas.sort((a, b) => (String(a[c]) < String(b[c]) ? 1 : String(a[c]) > String(b[c]) ? -1 : 0));
       }
       if (soContar) return { data: null, error: null, count: todas.length };
-      const achadas = todas.slice(inicio, inicio + limite);
+      if (acao.tipo === "delete") {
+        for (const l of todas) linhas.splice(linhas.indexOf(l), 1);
+        return { data: todas, error: null };
+      }
+      const achadas = todas.slice(inicio, inicio + Math.min(limite, opcoes.maxRows ?? Infinity));
       if (acao.tipo === "update") for (const l of achadas) Object.assign(l, acao.patch);
       return { data: achadas, error: null };
     }
@@ -64,14 +82,17 @@ export function supabaseEmMemoria(tabelas: Record<string, Linha[]>) {
       in: (c: string, vs: unknown[]) => (filtros.push((l) => vs.includes(l[c])), q),
       gt: (c: string, v: unknown) => (filtros.push((l) => String(l[c]) > String(v)), q),
       neq: (c: string, v: unknown) => (filtros.push((l) => l[c] !== v), q),
+      // Só `not(coluna, "is", null)` — "o carimbo existe".
+      not: (c: string, _op: "is", _v: null) => (filtros.push((l) => l[c] !== null && l[c] !== undefined), q),
       gte: (c: string, v: unknown) => (filtros.push((l) => String(l[c]) >= String(v)), q),
       // Só a ordem descendente reordena: as rotas LGPD contam com a ordem de
       // inserção nas consultas ascendentes, e ela continua igual.
       order: (c: string, o?: { ascending?: boolean }) => ((descPor = o?.ascending === false ? c : descPor), q),
       limit: (n: number) => ((limite = n), q),
       range: (de: number, ate: number) => ((inicio = de), (limite = ate - de + 1), q),
-      insert: (linha: Linha) => ((acao = { tipo: "insert", linha }), q),
+      insert: (linha: Linha | Linha[]) => ((acao = { tipo: "insert", linha }), q),
       update: (patch: Linha) => ((acao = { tipo: "update", patch }), q),
+      delete: () => ((acao = { tipo: "delete" }), q),
       maybeSingle: uma(false),
       single: uma(true),
       then: (ok: (r: Resposta) => unknown, falha?: (e: unknown) => unknown) =>

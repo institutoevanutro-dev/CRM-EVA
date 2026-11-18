@@ -23,6 +23,13 @@ const COLUNAS =
   "id, contact_id, channel_session_id, status, eligibility_status, exclusion_reason, sent_at, delivered_at, " +
   "read_at, replied_at, opted_out_at, last_error_code, created_at, contacts(name, display_name)";
 
+const CARIMBO_DO_FILTRO: Record<string, string> = {
+  sent: "sent_at",
+  delivered: "delivered_at",
+  read: "read_at",
+  replied: "replied_at",
+};
+
 export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
@@ -50,7 +57,13 @@ export async function GET(
     .order("id", { ascending: true })
     .limit(q.limit + 1);
 
-  if (q.status) query = query.eq("status", q.status);
+  // Os filtros que têm quadro na tela contam por CARIMBO, como os quadros
+  // (`metrics/route.ts`): quem respondeu também foi entregue, e filtrar
+  // "Entregues" por `status` escondia justamente quem foi além (auditoria de
+  // 17/11/2026, item 22). Os outros são estado mesmo.
+  const carimbo = q.status ? CARIMBO_DO_FILTRO[q.status] : undefined;
+  if (carimbo) query = query.not(carimbo, "is", null);
+  else if (q.status) query = query.eq("status", q.status);
   if (q.cursor) {
     const c = decodificarCursor(q.cursor);
     if (!c) return fail("invalid_cursor", t("Cursor inválido."), 400, { requestId });

@@ -9,28 +9,44 @@
  * não podia ser editada. O caminho real era recriar a campanha do zero, com o
  * público e o ritmo de novo. Medido em produção, no dia em que a feature subiu.
  *
+ * ═══ O público é o MESMO componente da criação ═══
+ *
+ * Esta tela tinha a sua cópia do formulário, sem "com negócio no funil / na
+ * etapa" — e salvar apagava esse critério do público (auditoria de 17/11/2026,
+ * item 13, P0). Agora o público e a mensagem são os componentes da criação, e o
+ * filtro sai INTEIRO: o gravado, com o que a tela mostra por cima.
+ *
  * ═══ O que esta tela NÃO faz ═══
  *
  * Não edita campanha que já foi preparada. Depois do snapshot, cada destinatário
  * carrega o texto congelado com que vai receber, e trocar a campanha ali faria a
  * tela mostrar uma coisa e a fila enviar outra. Para mexer no conteúdo é preciso
- * voltar ao rascunho — e isso só vale enquanto nada saiu. O RITMO é a exceção, e
- * ele se edita na própria tela de detalhe, com a campanha em pé.
+ * voltar ao rascunho — o botão está aqui e na tela da campanha —, e isso só vale
+ * enquanto nada saiu. O RITMO é a exceção, e ele se edita na própria tela de
+ * detalhe, com a campanha em pé.
  */
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
-import { useCampanha, useEditarCampanha, usePreviaDaAudiencia } from "@/hooks/campanhas/useCampanhas";
+import { useAcaoDeCampanha, useCampanha, useEditarCampanha } from "@/hooks/campanhas/useCampanhas";
 import { channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useT } from "@/hooks/i18n/useT";
 import { useAgentesPublicados, useEtapas, useFunis } from "@/hooks/campanhas/useDestinoDaCampanha";
-import { DESCRICAO_DA_VARIAVEL, VARIAVEIS_DA_CAMPANHA } from "@/lib/campanhas/renderizador";
+import { destinosDe } from "@/lib/campanhas/maquina-de-estados";
+
+import { MensagemDaCampanha } from "../../_components/MensagemDaCampanha";
+import {
+  PUBLICO_EM_BRANCO,
+  PublicoDaCampanha,
+  conferirPublico,
+  filtroDoPublico,
+  publicoDoFiltro,
+} from "../../_components/PublicoDaCampanha";
 
 export function EditarCampanha({ id }: { id: string }) {
   const t = useT();
@@ -38,16 +54,13 @@ export function EditarCampanha({ id }: { id: string }) {
   const campanha = useCampanha(id);
   const canais = useChannelSessions();
   const salvar = useEditarCampanha(id);
-  const previa = usePreviaDaAudiencia();
+  const acao = useAcaoDeCampanha(id);
 
   const [nome, setNome] = useState("");
   const [canal, setCanal] = useState("");
   const [baseLegal, setBaseLegal] = useState<"consent" | "legitimate_interest">("consent");
   const [liaRef, setLiaRef] = useState("");
-  const [comAlgumaTag, setComAlgumaTag] = useState("");
-  const [semTags, setSemTags] = useState("");
-  const [semInteracao, setSemInteracao] = useState("");
-  const [limite, setLimite] = useState("100");
+  const [publico, setPublico] = useState(PUBLICO_EM_BRANCO);
   const [texto, setTexto] = useState("");
   const [funil, setFunil] = useState("");
   const [etapa, setEtapa] = useState("");
@@ -63,15 +76,11 @@ export function EditarCampanha({ id }: { id: string }) {
   useEffect(() => {
     const c = campanha.data;
     if (!c || carregado) return;
-    const f = (c.audience_filter ?? {}) as Record<string, unknown>;
     setNome(c.name);
     setCanal(c.channel_session_id);
     setBaseLegal(c.base_legal === "legitimate_interest" ? "legitimate_interest" : "consent");
     setLiaRef(c.lia_ref ?? "");
-    setComAlgumaTag(juntar(f.com_alguma_tag));
-    setSemTags(juntar(f.sem_tags));
-    setSemInteracao(f.sem_interacao_ha_dias == null ? "" : String(f.sem_interacao_ha_dias));
-    setLimite(f.limite == null ? "100" : String(f.limite));
+    setPublico(publicoDoFiltro(c.audience_filter));
     setTexto(c.message_body ?? "");
     setFunil(c.pipeline_id ?? "");
     setEtapa(c.stage_id ?? "");
@@ -79,22 +88,20 @@ export function EditarCampanha({ id }: { id: string }) {
     setCarregado(true);
   }, [campanha.data, carregado]);
 
-  const filtro = useMemo(
-    () => ({
-      com_alguma_tag: listar(comAlgumaTag),
-      sem_tags: listar(semTags),
-      sem_interacao_ha_dias: semInteracao ? Number(semInteracao) : null,
-      limite: Number(limite) || 100,
-    }),
-    [comAlgumaTag, semTags, semInteracao, limite],
-  );
+  // Falha ANTES de "carregando": sem isto, um erro deixava a tela no cinza para
+  // sempre, sem "Tentar novamente" (auditoria de 17/11/2026, item 27).
+  if (campanha.isError) {
+    return (
+      <Card className="p-6 text-center">
+        <p className="text-sm text-error-fg">{t("Não foi possível carregar a campanha.")}</p>
+        <Button size="sm" variant="outline" className="mt-2" onClick={() => void campanha.refetch()}>
+          {t("Tentar novamente")}
+        </Button>
+      </Card>
+    );
+  }
 
-  const temCriterio =
-    filtro.com_alguma_tag.length > 0 ||
-    filtro.sem_tags.length > 0 ||
-    filtro.sem_interacao_ha_dias !== null;
-
-  if (campanha.isLoading || !carregado) {
+  if (campanha.isLoading || !carregado || !campanha.data) {
     return (
       <div className="space-y-3">
         <Skeleton className="h-8 w-64" />
@@ -104,42 +111,45 @@ export function EditarCampanha({ id }: { id: string }) {
   }
 
   const c = campanha.data;
-  if (!c) {
-    return (
-      <div>
-        <Card className="p-6 text-center">
-          <p className="text-sm text-error-fg">{t("Não foi possível carregar a campanha.")}</p>
-        </Card>
-      </div>
-    );
-  }
 
   if (c.status !== "draft") {
+    const podeVoltar = destinosDe(c.status).includes("draft");
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <h1 className="titulo-tela">{t("Editar campanha")}</h1>
         <Card className="space-y-3 p-4">
           <p className="text-sm">
-            {t(
-              "Esta campanha já foi preparada: cada pessoa da lista tem o texto que vai receber guardado. Para mudar o texto ou o público, volte a campanha para rascunho — isso descarta a lista montada.",
-            )}
+            {podeVoltar
+              ? t(
+                  "Esta campanha já foi preparada: cada pessoa da lista tem o texto que vai receber guardado. Para mudar o texto ou o público, volte a campanha para rascunho — isso descarta a lista montada.",
+                )
+              : t("Só um rascunho aceita mudar o texto e o público. O ritmo você pode ajustar a qualquer momento.")}
           </p>
           <p className="text-sm text-muted-foreground">
             {t("O ritmo você ajusta na própria tela da campanha, sem descartar nada.")}
           </p>
-          <Button variant="outline" onClick={() => router.push(`/app/campaigns/${id}`)}>
-            {t("Voltar para a campanha")}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {podeVoltar && (
+              <Button disabled={acao.isPending} onClick={() => acao.mutate({ acao: "rascunho" })}>
+                {acao.isPending ? t("Voltando…") : t("Voltar para rascunho")}
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => router.push(`/app/campaigns/${id}`)}>
+              {t("Voltar para a campanha")}
+            </Button>
+          </div>
         </Card>
       </div>
     );
   }
 
+  const gravado = c.audience_filter ?? {};
+  const filtro = filtroDoPublico(publico, gravado);
   const podeSalvar =
     nome.trim() !== "" &&
     canal !== "" &&
     texto.trim() !== "" &&
-    temCriterio &&
+    conferirPublico(filtro).valido &&
     (baseLegal !== "legitimate_interest" || liaRef.trim() !== "");
 
   return (
@@ -203,62 +213,11 @@ export function EditarCampanha({ id }: { id: string }) {
 
       <Card className="space-y-4 p-4">
         <h2 className="font-medium">{t("Público")}</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="e-com-tags">{t("Com alguma destas etiquetas")}</Label>
-            <Input
-              id="e-com-tags"
-              value={comAlgumaTag}
-              onChange={(e) => setComAlgumaTag(e.target.value)}
-              placeholder={t("separe por vírgula")}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="e-sem-tags">{t("Sem nenhuma destas etiquetas")}</Label>
-            <Input
-              id="e-sem-tags"
-              value={semTags}
-              onChange={(e) => setSemTags(e.target.value)}
-              placeholder={t("separe por vírgula")}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="e-silencio">{t("Sem falar com a gente há (dias)")}</Label>
-            <Input
-              id="e-silencio"
-              type="number"
-              min={1}
-              value={semInteracao}
-              onChange={(e) => setSemInteracao(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="e-limite">{t("Máximo de contatos nesta campanha")}</Label>
-            <Input
-              id="e-limite"
-              type="number"
-              min={1}
-              value={limite}
-              onChange={(e) => setLimite(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!temCriterio || previa.isPending}
-            onClick={() => previa.mutate({ audience_filter: filtro, message_body: texto, campaign_id: id })}
-          >
-            {previa.isPending ? t("Contando…") : t("Ver quantas pessoas")}
-          </Button>
-          {previa.data && (
-            <p className="text-sm">
-              <strong>{previa.data.elegiveis}</strong> {t("podem receber")}
-              {previa.data.excluidos > 0 ? ` · ${previa.data.excluidos} ${t("ficam de fora")}` : ""}
-            </p>
-          )}
-        </div>
+        <PublicoDaCampanha campos={publico} onChange={setPublico} gravado={gravado} texto={texto} campanhaId={id} />
+      </Card>
+
+      <Card className="p-4">
+        <MensagemDaCampanha texto={texto} onChange={setTexto} />
       </Card>
 
       <Card className="space-y-4 p-4">
@@ -324,65 +283,33 @@ export function EditarCampanha({ id }: { id: string }) {
         </div>
       </Card>
 
-      <Card className="space-y-4 p-4">
-        <h2 className="font-medium">{t("Mensagem")}</h2>
-        <Textarea
-          rows={6}
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          aria-label={t("Texto da mensagem")}
-        />
-        <ul className="space-y-1 text-sm text-muted-foreground">
-          {VARIAVEIS_DA_CAMPANHA.map((v) => (
-            <li key={v}>
-              <button
-                type="button"
-                className="rounded-md bg-surface-elevated px-1 font-mono text-xs"
-                onClick={() => setTexto((atual) => `${atual}{{${v}}}`)}
-              >
-                {`{{${v}}}`}
-              </button>{" "}
-              — {t(DESCRICAO_DA_VARIAVEL[v])}
-            </li>
-          ))}
-        </ul>
-      </Card>
-
       <div className="flex items-center justify-end gap-2">
         <Button variant="outline" onClick={() => router.push(`/app/campaigns/${id}`)}>
           {t("Cancelar")}
         </Button>
         <Button
           disabled={!podeSalvar || salvar.isPending}
-          onClick={async () => {
-            await salvar.mutateAsync({
-              name: nome.trim(),
-              channel_session_id: canal,
-              message_body: texto.trim(),
-              base_legal: baseLegal,
-              lia_ref: liaRef.trim() || null,
-              audience_filter: filtro,
-              pipeline_id: funil || null,
-              stage_id: etapa || null,
-              agent_id: agente || null,
-            });
-            router.push(`/app/campaigns/${id}`);
-          }}
+          onClick={() =>
+            // Falhou: o toast diz por quê e a tela fica com o que foi digitado.
+            salvar.mutate(
+              {
+                name: nome.trim(),
+                channel_session_id: canal,
+                message_body: texto.trim(),
+                base_legal: baseLegal,
+                lia_ref: liaRef.trim() || null,
+                audience_filter: filtro,
+                pipeline_id: funil || null,
+                stage_id: etapa || null,
+                agent_id: agente || null,
+              },
+              { onSuccess: () => router.push(`/app/campaigns/${id}`) },
+            )
+          }
         >
           {salvar.isPending ? t("Salvando…") : t("Salvar alterações")}
         </Button>
       </div>
     </div>
   );
-}
-
-function listar(bruto: string): string[] {
-  return bruto
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-function juntar(valor: unknown): string {
-  return Array.isArray(valor) ? valor.filter((v) => typeof v === "string").join(", ") : "";
 }
