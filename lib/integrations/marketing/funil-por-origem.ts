@@ -4,7 +4,8 @@
  * Só agregados: nenhum id, nome ou telefone sai daqui.
  *
  * Origem é do CONTATO, nesta ordem: anúncio da Meta, anúncio do Google
- * (`contacts.source_metadata.ad_platform`, primeiro toque), "Indicação" como
+ * (`contacts.source_metadata.ad_platform`, primeiro toque), as etiquetas "Meta" e "Google" postas à mão
+ * (ou "Anúncio Meta"/"Anúncio Google"), "Indicação" como
  * etiqueta ou como origem de algum lead do contato (a importação de planilha
  * grava a coluna "origem" ali), e o resto é orgânico.
  *
@@ -78,6 +79,11 @@ const semAcento = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "
 export function origemDe({ adPlatform, tags }: { adPlatform: string | null; tags: string[] }): Origem {
   if (adPlatform === "meta_ads") return "meta";
   if (adPlatform === "google_ads") return "google";
+  // Correção à mão (18/11): sem a marca automática do anúncio, a recepção põe a etiqueta "Meta" ou
+  // "Google" (ou "Anúncio Meta"/"Anúncio Google") no lead de quem disse que veio do anúncio.
+  const t = tags.map(semAcento);
+  if (t.some((x) => x === "meta" || x === "anuncio meta")) return "meta";
+  if (t.some((x) => x === "google" || x === "anuncio google")) return "google";
   // `tags` leva também a origem (`source`) dos leads do contato.
   if (tags.some((t) => semAcento(t) === "indicacao")) return "indicacao";
   return "organico";

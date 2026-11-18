@@ -9,6 +9,13 @@ describe("origemDe", () => {
   it("etiqueta Indicação, com ou sem acento e em qualquer caixa", () => {
     for (const t of ["Indicação", "indicacao", "INDICAÇÃO", " Indicacao "]) expect(origemDe({ adPlatform: null, tags: [t] })).toBe("indicacao");
   });
+  it("etiqueta posta à mão Meta/Google vale quando falta a marca do anúncio; a marca automática vence", () => {
+    for (const t of ["Meta", "meta", " Anúncio Meta "]) expect(origemDe({ adPlatform: null, tags: [t] })).toBe("meta");
+    for (const t of ["Google", "Anuncio Google"]) expect(origemDe({ adPlatform: null, tags: [t] })).toBe("google");
+    expect(origemDe({ adPlatform: null, tags: ["Meta", "Indicação"] })).toBe("meta");
+    expect(origemDe({ adPlatform: "google_ads", tags: ["Meta"] })).toBe("google");
+    expect(origemDe({ adPlatform: null, tags: ["meta_ads"] })).toBe("organico"); // a origem crua do lead não muda de regra
+  });
   it("o resto é orgânico, inclusive plataforma desconhecida", () => {
     expect(origemDe({ adPlatform: null, tags: ["Meta_ads_antigo"] })).toBe("organico");
     expect(origemDe({ adPlatform: "tiktok", tags: [] })).toBe("organico");
