@@ -8,6 +8,8 @@ export interface AuditTrailEntry {
   id: string;
   action: string;
   actor_user_id: string | null;
+  /** Nome de quem agiu, resolvido no servidor; `null` quando não se acha. */
+  actor_name: string | null;
   resource_type: string | null;
   resource_id: string | null;
   metadata: Record<string, unknown> | null;
@@ -42,5 +44,8 @@ export function useLgpdRequest(id: string) {
     },
     staleTime: 15_000,
     enabled: Boolean(id),
+    // Aprovado, o pedido anda sozinho no worker: sem isto a tela ficava em
+    // "Em andamento" até alguém apertar F5.
+    refetchInterval: (query) => (query.state.data?.data.request.status === "processing" ? 5_000 : false),
   });
 }

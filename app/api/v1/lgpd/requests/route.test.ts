@@ -372,4 +372,42 @@ describe("GET: a lista", () => {
     expect(p1?.prazo).toMatchObject({ estado: "vence_hoje" });
     expect(p1?.sla_bucket).toBe("critical");
   });
+
+  async function listarCom(qs: string) {
+    const r = await GET(new NextRequest(`http://localhost/api/v1/lgpd/requests?${qs}`));
+    expect(r.status).toBe(200);
+    return (await r.json()) as {
+      data: Array<Record<string, unknown> & { id: string }>;
+      meta: { total: number; has_more: boolean; alertas: { criticos: number; em_alerta: number } };
+    };
+  }
+
+  it("pedido concluído não tem balde: o relógio parou (não aparece 'Vencido')", async () => {
+    const por = Object.fromEntries((await listar()).map((l) => [l.id, l.sla_bucket]));
+    expect(por.p2).toBeNull();
+    expect(por.p8).toBeNull();
+    expect(por.p3).toBe("overdue");
+  });
+
+  it("o filtro de prazo vale antes de paginar: total e páginas contam só o balde pedido", async () => {
+    const p1 = await listarCom("sla_bucket=warning&limit=2&page=1");
+    expect(p1.data.map((l) => l.id)).toEqual(["p4", "p6"]);
+    expect(p1.meta.total).toBe(3);
+    expect(p1.meta.has_more).toBe(true);
+    const p2 = await listarCom("sla_bucket=warning&limit=2&page=2");
+    expect(p2.data.map((l) => l.id)).toEqual(["p7"]);
+    expect(p2.meta.has_more).toBe(false);
+  });
+
+  it("o filtro de prazo não traz pedido concluído nem de outra organização", async () => {
+    const { data, meta } = await listarCom("sla_bucket=overdue");
+    expect(data.map((l) => l.id)).toEqual(["p3"]);
+    expect(meta.total).toBe(1);
+    expect((await listarCom("sla_bucket=warning&type=redact")).data.map((l) => l.id)).toEqual(["p7"]);
+  });
+
+  it("o aviso do topo conta os abertos da organização inteira, não só a página", async () => {
+    const { meta } = await listarCom("limit=1");
+    expect(meta.alertas).toEqual({ criticos: 2, em_alerta: 3 });
+  });
 });

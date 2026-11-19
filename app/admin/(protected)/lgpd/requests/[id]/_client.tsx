@@ -210,6 +210,8 @@ export function LgpdRequestAdminDetail({ id }: Props) {
                 received_at={request.received_at}
                 due_at={request.due_at}
                 request_type={request.request_type}
+                status={request.status}
+                completed_at={request.completed_at}
               />
             ) : (
               <p className="text-sm text-muted-foreground">{t("SLA não definido.")}</p>
