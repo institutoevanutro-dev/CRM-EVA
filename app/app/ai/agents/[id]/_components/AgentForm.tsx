@@ -738,10 +738,12 @@ export function AgentForm(props: Props) {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
+          {/* Na edição, o nome e a situação moram no cabeçalho da página,
+              acima das abas; aqui fica só a versão. */}
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold tracking-tight">
-              {isEdit ? props.agent.name : t("Novo agente")}
-            </h2>
+            {isEdit ? null : (
+              <h2 className="text-xl font-semibold tracking-tight">{t("Novo agente")}</h2>
+            )}
             {statusBadge}
           </div>
           {isEdit && props.agent.description ? (
@@ -1115,7 +1117,7 @@ export function AgentForm(props: Props) {
                 <ErroDoCampo campo="token_budget" erro={validation.token_budget} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="cost_budget_cents">{t("Custo máximo por atendimento (centavos)")}</Label>
+                <Label htmlFor="cost_budget_cents">{t("Custo máximo por atendimento (centavos de dólar)")}</Label>
                 <Input
                   id="cost_budget_cents"
                   type="number"
@@ -1127,6 +1129,10 @@ export function AgentForm(props: Props) {
                   aria-invalid={!!validation.cost_budget_cents}
                   aria-describedby={validation.cost_budget_cents ? "cost_budget_cents-erro" : undefined}
                 />
+                {/* O provedor cobra em dólar: "50" eram US$ 0,50 e a tela não dizia. */}
+                <p className="text-xs text-muted-foreground" data-testid="custo-em-dolar">
+                  = US$ {(form.cost_budget_cents / 100).toFixed(2).replace(".", ",")}
+                </p>
                 <ErroDoCampo campo="cost_budget_cents" erro={validation.cost_budget_cents} />
               </div>
               <div className="space-y-1">

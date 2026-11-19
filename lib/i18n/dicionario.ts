@@ -1622,7 +1622,7 @@ export const DICIONARIO: Traducoes = {
   "Freios de segurança": { es: "Frenos de seguridad" },
   "Ações por atendimento (1 a 25)": { es: "Acciones por atención (1 a 25)" },
   "Volume de texto por atendimento": { es: "Volumen de texto por atención" },
-  "Custo máximo por atendimento (centavos)": { es: "Costo máximo por atención (centavos)" },
+  "Custo máximo por atendimento (centavos de dólar)": { es: "Costo máximo por atención (centavos de dólar)" },
   "Mensagens anteriores que ele lê": { es: "Mensajes anteriores que lee" },
   "Tamanho máximo desse histórico": { es: "Tamaño máximo de ese historial" },
   "Pausa entre uma resposta e a próxima (segundos)": { es: "Pausa entre una respuesta y la siguiente (segundos)" },
@@ -2002,7 +2002,6 @@ export const DICIONARIO: Traducoes = {
     es: "Stub: el runtime real se entrega en S-13.08. La traza de abajo es simulada.",
   },
   "Tokens in/out": { es: "Tokens entrada/salida" },
-  "Custo (cents)": { es: "Costo (centavos)" },
   // ─── Agentes de IA: diff e histórico de versões, uso das capacidades ───
   Provider: { es: "Proveedor" },
   Model: { es: "Modelo" },

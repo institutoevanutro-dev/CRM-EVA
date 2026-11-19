@@ -338,7 +338,9 @@ export function TestPanel({
                 {result.tokens_in?.toLocaleString()??"—"} /{" "}
                 {result.tokens_out?.toLocaleString()??"—"}
               </Cell>
-              <Cell label={t("Custo (cents)")}>{result.cost_cents ?? "—"}</Cell>
+              <Cell label={t("Custo")}>
+                {result.cost_cents == null ? "—" : `US$ ${(result.cost_cents / 100).toFixed(4)}`}
+              </Cell>
             </div>
 
             <RunTrace

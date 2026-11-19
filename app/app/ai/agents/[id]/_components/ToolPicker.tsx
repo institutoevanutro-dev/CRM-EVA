@@ -69,7 +69,7 @@ const TODOS_OS_PACOTES: ReadonlyArray<ToolBundle> = PACOTES.map((p) => p.id);
 
 const CLASSE_RISCO: Record<ToolRisk, string> = {
   seguro: "border-border/60 text-muted-foreground",
-  atencao: "border-amber-500/40 text-amber-700 dark:text-amber-400",
+  atencao: "border-warning-border text-warning-fg",
   critico: "border-destructive/40 text-destructive",
 };
 
@@ -378,7 +378,7 @@ export function ToolPicker({ value, onChange, disabled }: Props) {
       {orfas.length > 0 ? (
         <div
           data-testid="capacidades-orfas"
-          className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400"
+          className="space-y-2 rounded-md border border-warning-border bg-warning-bg p-3 text-xs text-warning-fg"
         >
           <p>
             {orfas.length === 1
