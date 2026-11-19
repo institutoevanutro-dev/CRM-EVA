@@ -751,6 +751,13 @@
 
 
 @layer base {
+  /* O preflight do v4 pinta o placeholder com 50% da cor do texto (~3,3:1),
+     e todo campo nativo sem `placeholder:` herdava isso (item 244). O token
+     subtle passa de 4,5:1 nos dois temas; utilitário `placeholder:` ainda vence. */
+  ::placeholder {
+    color: var(--color-text-subtle);
+  }
+
   /* O preflight do v4 não pinta mais borda por padrão (`border: 0 solid`, cor
      = `currentColor`), então os ~300 `class="border"` sem cor desta base
      dependem inteiramente desta regra. Ela já existia no v3 pelo mesmo motivo;
