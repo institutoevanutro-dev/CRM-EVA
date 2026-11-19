@@ -17,6 +17,9 @@ it("o interruptor salva no toque, sozinho, e o texto espera o Salvar com aviso",
   );
   expect(screen.queryByText("Há mudanças não salvas")).toBeNull();
 
+  // O interruptor fica desabilitado enquanto o primeiro salvamento termina; sob
+  // carga, clicar antes disso caía num botão desabilitado e o teste piscava.
+  await waitFor(() => expect(screen.getByRole("switch")).not.toBeDisabled());
   fireEvent.click(screen.getByRole("switch"));
   await waitFor(() => expect(patch).toHaveBeenCalledTimes(2));
   fireEvent.change(screen.getByLabelText(/Quanto tempo a IA fica fora/), { target: { value: "120" } });

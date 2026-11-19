@@ -34,6 +34,9 @@ vi.mock("@/lib/api/client", () => ({
 
 describe("Início — Sem resposta à vista", () => {
   it("mostra quantos ficaram sem resposta, com link para o Radar e hachura — nunca só a cor", async () => {
+    // A Visão da clínica nasce fechada (item 187) e não busca nada fechada: a
+    // pessoa deixou-a aberta da última vez — o que a sanfona lembra.
+    window.localStorage.setItem("inicio:secoes-abertas", JSON.stringify({ "inicio-visao": true }));
     const { PaineisDaClinica } = await import("@/app/app/inicio/_components/PaineisDaClinica");
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const { container } = render(

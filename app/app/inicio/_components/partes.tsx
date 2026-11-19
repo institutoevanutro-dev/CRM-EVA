@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { ChevronDown, type LucideIcon } from "lucide-react";
 
 import { useT } from "@/hooks/i18n/useT";
@@ -82,6 +82,11 @@ export function Esqueleto({ quantos, altura = "h-44", colunas = "md:grid-cols-2"
 /** A chave do localStorage onde fica o que a pessoa deixou aberto no Início. */
 const CHAVE_DAS_SECOES = "inicio:secoes-abertas";
 
+function inscreverEmSecoes(avisar: () => void): () => void {
+  window.addEventListener("storage", avisar);
+  return () => window.removeEventListener("storage", avisar);
+}
+
 function lerAbertas(): Record<string, boolean> {
   try {
     return JSON.parse(window.localStorage.getItem(CHAVE_DAS_SECOES) ?? "{}") as Record<string, boolean>;
@@ -108,14 +113,21 @@ export function Secao({
   abertaPorPadrao?: boolean;
   children: ReactNode;
 }) {
-  // Lido já no primeiro render: o Início só monta as seções depois de a
-  // consulta voltar, no navegador — não há HTML do servidor a desencontrar.
-  const [aberta, setAberta] = useState(() => {
-    const guardada = typeof window === "undefined" ? undefined : lerAbertas()[id];
-    return typeof guardada === "boolean" ? guardada : abertaPorPadrao;
-  });
+  // O que a pessoa guardou mora no localStorage, que o servidor não vê: lido
+  // como external store, com snapshot de servidor fixo (`undefined`), para a
+  // hidratação bater com o HTML e o valor guardado entrar logo depois.
+  const guardada = useSyncExternalStore(
+    inscreverEmSecoes,
+    () => lerAbertas()[id],
+    () => undefined,
+  );
+  // O toque desta sessão vale acima do guardado: sem localStorage (aba
+  // privada) a sanfona continua abrindo e fechando, só não lembra.
+  const [tocada, setTocada] = useState<boolean | undefined>(undefined);
+  const aberta = tocada ?? (typeof guardada === "boolean" ? guardada : abertaPorPadrao);
   const alternar = (valor: boolean) => {
-    setAberta(valor);
+    if (valor === aberta) return;
+    setTocada(valor);
     try {
       window.localStorage.setItem(CHAVE_DAS_SECOES, JSON.stringify({ ...lerAbertas(), [id]: valor }));
     } catch {

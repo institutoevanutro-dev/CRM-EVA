@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { ChatCircle, MagnifyingGlass, UserCircle } from "@/lib/ui/icons";
@@ -46,8 +47,6 @@ interface ConversaAchada {
   contacts: ContatoAchado | null;
 }
 
-const nomeDe = (c: ContatoAchado | null) => c?.display_name || c?.name || c?.phone_number || "";
-
 /** Até 5 de cada. Falha (papel sem acesso, rede) só deixa a parte vazia: as telas continuam. */
 async function buscarPessoas(termo: string, signal: AbortSignal): Promise<Item[]> {
   const qs = `search=${encodeURIComponent(termo)}&limit=5`;
@@ -59,7 +58,7 @@ async function buscarPessoas(termo: string, signal: AbortSignal): Promise<Item[]
     ...contatos.map((c) => ({
       chave: `contato-${c.id}`,
       href: `/app/contacts/${c.id}`,
-      titulo: nomeDe(c),
+      titulo: rotuloDoContato(c),
       detalhe: c.phone_number ?? "",
       rotulo: "Contato",
       Icon: UserCircle,
@@ -67,7 +66,7 @@ async function buscarPessoas(termo: string, signal: AbortSignal): Promise<Item[]
     ...conversas.map((c) => ({
       chave: `conversa-${c.id}`,
       href: `/app/inbox?id=${c.id}`,
-      titulo: nomeDe(c.contacts),
+      titulo: rotuloDoContato(c.contacts),
       detalhe: c.last_message_preview ?? "",
       rotulo: "Conversa",
       Icon: ChatCircle,
