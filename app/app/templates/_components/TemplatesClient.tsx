@@ -227,7 +227,7 @@ export function TemplatesClient({ canShare, currentUserId }: Props) {
                                         {...provido.dragHandleProps}
                                         aria-label={t("Arrastar para reordenar")}
                                         title={t("Arrastar para reordenar")}
-                                        className="mt-0.5 shrink-0 cursor-grab text-text-muted"
+                                        className="-m-3.5 flex size-11 shrink-0 cursor-grab items-center justify-center text-text-muted lg:m-0 lg:mt-0.5 lg:size-auto"
                                       >
                                         <DragHandle size={16} aria-hidden />
                                       </span>
