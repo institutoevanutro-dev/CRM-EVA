@@ -461,9 +461,18 @@ test.describe.serial("Inbox: enviar exame ao Prontuário", () => {
   test("10: auditoria com o id da mensagem e a lista sem exam_id", async ({ page }) => {
     await entrar(page, pessoas.admin!.email);
     await page.goto("/app/audit");
-    await page.getByPlaceholder("ex: lead.created").fill("prontuario.exam_s");
-    await expect(page.getByText("prontuario.exam_sent").first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText("prontuario.exam_send_failed").first()).toBeVisible();
+    // O Histórico de alterações filtra por lista ("O quê") e escreve frases (lote 15);
+    // o código da ação fica nos detalhes da linha.
+    await page.getByLabel("O quê").click();
+    await page.getByRole("option", { name: "Prontuário", exact: true }).click();
+    const enviado = page.getByRole("row").filter({ hasText: "enviou um exame ao Prontuário" }).first();
+    const falhou = page.getByRole("row").filter({ hasText: "tentou enviar um exame ao Prontuário" }).first();
+    await expect(enviado).toBeVisible({ timeout: 20_000 });
+    await expect(falhou).toBeVisible();
+    await enviado.getByText("Ver", { exact: true }).click();
+    await expect(enviado.getByText(/prontuario\.exam_sent\b/)).toBeVisible();
+    await falhou.getByText("Ver", { exact: true }).click();
+    await expect(falhou.getByText("prontuario.exam_send_failed")).toBeVisible();
     await page.screenshot({ path: path.join(EVIDENCIA, "10-auditoria.png"), fullPage: true });
     const lista = await page.request.get(`/api/v1/conversations/${conv.vinculado!.conversa}/messages`);
     const texto = await lista.text();

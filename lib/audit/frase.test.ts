@@ -11,6 +11,7 @@ describe("fraseDaAcao", () => {
   it("frase própria vence a genérica", () => {
     expect(fraseDaAcao("contact.viewed")).toEqual({ verbo: "abriu a ficha de um contato" });
     expect(fraseDaAcao("auth.login_success")).toEqual({ verbo: "entrou no sistema" });
+    expect(fraseDaAcao("prontuario.exam_sent")).toEqual({ verbo: "enviou um exame ao Prontuário" });
   });
 
   it("sem tradução segura devolve null (a tela mostra o código)", () => {
