@@ -1205,6 +1205,7 @@ export function GradeDaAgenda({
   onAbrirAgendamento,
   onAbrirDia,
   interacao,
+  janelaSobre,
   className,
 }: {
   visao: VisaoDaAgenda;
@@ -1239,6 +1240,12 @@ export function GradeDaAgenda({
   onAbrirDia?: (dia: Date) => void;
   /** Ausente = grade só de leitura, como a vitrine a monta. Ver `InteracaoDaGrade`. */
   interacao?: InteracaoDaGrade;
+  /**
+   * Os compromissos do período INTEIRO, antes do filtro de pessoas: a janela de
+   * horas é calculada sobre eles junto com os desenhados, e não pula ao trocar
+   * quem aparece (item 136). Ausente = só os desenhados (a vitrine).
+   */
+  janelaSobre?: Agendamento[];
   className?: string;
 }) {
   const t = useT();
@@ -1273,7 +1280,10 @@ export function GradeDaAgenda({
   } | null>(null);
 
   // Só os dias DESENHADOS alargam a janela: no Mês esta parte nem aparece.
-  const janela = React.useMemo(() => janelaDoPeriodo(agendamentos, fuso), [agendamentos, fuso]);
+  const janela = React.useMemo(
+    () => janelaDoPeriodo(janelaSobre ? [...janelaSobre, ...agendamentos] : agendamentos, fuso),
+    [janelaSobre, agendamentos, fuso],
+  );
   const limites = { primeiro: janela.primeira * 60, ultimo: (janela.ultima + 1) * 60 };
 
   /** A proposta para um instante — a mesma conta para o ponteiro e para o teclado. */

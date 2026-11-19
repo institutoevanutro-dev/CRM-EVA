@@ -1216,6 +1216,9 @@ export function AgendaClient({
         pessoas={pessoas}
         agendamentos={agendamentosDaGrade}
         fechamentos={fechamentosDaGrade}
+        // A janela de horas sai do período INTEIRO: com o filtro de pessoas ela
+        // pulava a cada troca (item 136). Cancelado não alarga.
+        janelaSobre={todos}
         recorte={recorteDaGrade}
         tipos={tiposIniciais.map((t) => ({ id: t.id, nome: t.nome, duracaoMin: t.duracaoMin }))}
         tipo={tipo ? { id: tipo.id, duracaoMin: tipo.duracaoMin, donoId: tipo.donoId } : null}
