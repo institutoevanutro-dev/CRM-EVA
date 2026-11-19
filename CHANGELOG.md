@@ -8,6 +8,15 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.26.2] — 2026-11-19
+
+### Corrigido
+
+- **Tela de chaves de integração volta a carregar** Cada execução da IA cria uma chave temporária de 5 minutos, e elas nunca eram apagadas. Com
+  milhares acumuladas, a tela Chaves de integração passava de 18 segundos e mostrava "Não foi
+  possível carregar as chaves". Agora as temporárias vencidas há mais de um dia são apagadas na
+  próxima execução da IA da organização.
+
 ## [5.26.1] — 2026-11-19
 
 ### Alterado
@@ -9611,7 +9620,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.2...HEAD
+[5.26.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.1...v5.26.2
 [5.26.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.0...v5.26.1
 [5.26.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.25.0...v5.26.0
 [5.25.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.24.0...v5.25.0
