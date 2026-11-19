@@ -90,6 +90,10 @@ function agenteDeTeste(): string {
 /** Abre a aba do Operador, onde a marcação de funis vive. */
 async function abrirOperacao(): Promise<void> {
   await pagina.goto(`/app/ai/agents/${agenteDeTeste()}`);
+  // Logo depois do carregamento o formulário pode aparecer duas vezes por um
+  // instante (o HTML do servidor e o da hidratação); espera ficar UM só antes de
+  // usar seletor estrito — e reprova se ficar duplicado.
+  await expect(pagina.getByTestId("papel-operacao")).toHaveCount(1, { timeout: 15_000 });
   await pagina.getByTestId("papel-operacao").click();
   await expect(pagina.getByText(/em que neg(ó|o)cios ele pode mexer/i)).toBeVisible({
     timeout: 20_000,

@@ -85,6 +85,10 @@ test.describe("O motivo do Publicar bloqueado aparece na tela", () => {
 
     try {
       await page.goto(`/app/ai/agents/${agentId}`);
+      // Logo depois do carregamento o formulário pode aparecer duas vezes por um
+      // instante (o HTML do servidor e o da hidratação); espera ficar UM só antes de
+      // usar seletor estrito — e reprova se ficar duplicado.
+      await expect(page.getByTestId("motivo-do-publicar")).toHaveCount(1, { timeout: 15_000 });
       await expect(page.getByRole("heading", { name: /E2E Motivo do Publicar/ })).toBeVisible();
 
       // O diálogo de confirmação tem um botão com o mesmo rótulo ("Publicar vN"),

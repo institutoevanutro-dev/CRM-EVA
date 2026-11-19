@@ -92,15 +92,24 @@ function agenteDeTeste(): string {
   return id;
 }
 
+/** Abre o agente semeado e espera o formulário ficar único na tela. */
+async function abrirAgente(): Promise<void> {
+  await pagina.goto(`/app/ai/agents/${agenteDeTeste()}`);
+  // Logo depois do carregamento o formulário pode aparecer duas vezes por um
+  // instante (o HTML do servidor e o da hidratação); espera ficar UM só antes de
+  // usar seletor estrito — e reprova se ficar duplicado.
+  await expect(pagina.getByTestId("papel-conversa")).toHaveCount(1, { timeout: 15_000 });
+}
+
 /** Abre o agente semeado e vai para a aba do papel que organiza o sistema. */
 async function abrirAbaDoOperador(): Promise<void> {
-  await pagina.goto(`/app/ai/agents/${agenteDeTeste()}`);
+  await abrirAgente();
   await pagina.getByTestId("papel-operacao").click();
 }
 
 test.describe("A aba do papel que organiza o sistema", () => {
   test("os TRÊS papéis aparecem, e os nomes dizem o que cada um faz", async () => {
-    await pagina.goto(`/app/ai/agents/${agenteDeTeste()}`);
+    await abrirAgente();
 
     // Os rótulos são o contrato com quem configura. "Conversador"/"Operador" é
     // vocabulário nosso; quem tem uma clínica pensa em quem fala com o cliente
@@ -113,7 +122,7 @@ test.describe("A aba do papel que organiza o sistema", () => {
   });
 
   test("o papel que confere mostra a lista inteira, aberta, e sem interruptor decorativo", async () => {
-    await pagina.goto(`/app/ai/agents/${agenteDeTeste()}`);
+    await abrirAgente();
     await pagina.getByTestId("papel-seguranca").click();
 
     const painel = pagina.getByTestId("painel-de-seguranca");
