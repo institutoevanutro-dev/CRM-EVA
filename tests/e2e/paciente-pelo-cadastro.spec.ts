@@ -338,6 +338,8 @@ test("ligar 'Pacientes pelo cadastro' manda quem tem cadastro para o funil de cl
 
   // ── 6 · desligar: sem confirmação, e vale para quem escrever depois ─────
   await page.goto("/app/settings/tenant/agenda");
+  // Os blocos de configuração ficam em sanfonas fechadas (lote 11, item 126).
+  await page.locator("summary", { hasText: "Pacientes pelo cadastro" }).click();
   await expect(page.getByTestId("paciente-pelo-cadastro-estado")).toContainText("Ligado:", { timeout: 30_000 });
   await page.getByTestId("paciente-pelo-cadastro-interruptor").click();
   await expect(page.getByTestId("paciente-pelo-cadastro-estado")).toContainText("Desligado:", {

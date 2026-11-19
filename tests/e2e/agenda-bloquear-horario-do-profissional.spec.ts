@@ -164,6 +164,8 @@ test("gerente bloqueia 14:00 a 16:00 de um profissional e só a agenda dele perd
 
   // ── pela tela, como o gerente faria ──────────────────────────────────────
   await page.goto("/app/settings/tenant/agenda");
+  // Os blocos de configuração ficam em sanfonas fechadas (lote 11, item 126).
+  await page.locator("summary", { hasText: "Dias fora da rotina" }).click();
   const secao = page.getByRole("main").getByTestId("dias-bloqueados");
   await expect(secao).toBeVisible({ timeout: 20_000 });
 
@@ -216,6 +218,8 @@ test("atendente não bloqueia a agenda de outra pessoa, nem pela API", async ({ 
 
   // Na tela, o "De quem" do atendente só tem ele mesmo.
   await page.goto("/app/settings/tenant/agenda");
+  // Os blocos de configuração ficam em sanfonas fechadas (lote 11, item 126).
+  await page.locator("summary", { hasText: "Dias fora da rotina" }).click();
   const seletor = page.getByRole("main").getByTestId("dono-do-bloqueio");
   await expect(seletor).toBeDisabled({ timeout: 20_000 });
   await expect(seletor.locator("option")).toHaveCount(1);

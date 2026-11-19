@@ -541,6 +541,8 @@ test("gestão configura prazos e gatilho; falta inicia uma vez e resposta interr
   await inbound(f, p, "Quero uma consulta");
   await login(page, f.email);
   await page.goto("/app/settings/tenant/agenda");
+  // Os blocos de configuração ficam em sanfonas fechadas (lote 11, item 126).
+  await page.locator("summary", { hasText: "Confirmação de presença" }).click();
   await page.getByLabel("Pedir confirmação após o fim (minutos)").fill("15");
   await page.getByLabel("Proteger de cobranças por silêncio após o fim (minutos)").fill("120");
   await page.getByRole("button", { name: "Salvar prazos" }).click();
