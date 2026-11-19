@@ -1,5 +1,7 @@
 "use client";
+import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,6 +26,11 @@ const DURATIONS: Array<{ hours: 1 | 3 | 24; label: string }> = [
   { hours: 24, label: "Em 24 horas" },
 ];
 
+/** "15:40" no idioma da sessão. */
+export function horaDoLembrete(iso: string | Date, tag: string): string {
+  return new Date(iso).toLocaleTimeString(tag, { hour: "2-digit", minute: "2-digit" });
+}
+
 function isSnoozeActive(snoozeUntil: string | null): boolean {
   return snoozeUntil != null && new Date(snoozeUntil).getTime() > Date.now();
 }
@@ -33,7 +40,9 @@ export function SnoozeButton({ conversationId, snoozeUntil, disabled, variante =
   const { snooze, cancel } = useSnoozeConversation();
   const isActive = isSnoozeActive(snoozeUntil);
   const isPending = snooze.isPending || cancel.isPending;
-  const rotulo = isActive ? t("Lembrete ativo") : t("Lembrar");
+  const tag = useTagDeIdioma();
+  // Item 213: o lembrete diz ATÉ QUANDO, e cada opção diz a hora em que vai tocar.
+  const rotulo = isActive && snoozeUntil ? `${t("Lembrete às")} ${horaDoLembrete(snoozeUntil, tag)}` : t("Lembrar");
 
   return (
     <DropdownMenu>
@@ -78,10 +87,16 @@ export function SnoozeButton({ conversationId, snoozeUntil, disabled, variante =
             <DropdownMenuItem
               key={d.hours}
               onClick={() =>
-                snooze.mutate({ conversation_id: conversationId, duration_hours: d.hours })
+                snooze.mutate(
+                  { conversation_id: conversationId, duration_hours: d.hours },
+                  {
+                    onSuccess: (r) =>
+                      toast.success(`${t("Vou lembrar às")} ${horaDoLembrete(r.data.snooze_until, tag)}`),
+                  },
+                )
               }
             >
-              {t(d.label)}
+              {t(d.label)} · {horaDoLembrete(new Date(Date.now() + d.hours * 3_600_000), tag)}
             </DropdownMenuItem>
           ))
         )}

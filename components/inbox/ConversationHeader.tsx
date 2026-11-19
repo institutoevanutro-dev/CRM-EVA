@@ -450,9 +450,11 @@ export function ConversationHeader({
               variant="ghost"
               className={ITEM}
               disabled={release.isPending}
+              // Item 213: "Liberar" não dizia o que fazia.
+              title={t("Você deixa de ser o responsável e o automático volta a responder.")}
               onClick={doMenu(() => release.mutate({ conversation_id: conversation.id }))}
             >
-              {t("Liberar")}
+              {t("Deixar com o automático")}
             </Button>
           )}
           {/* A VOLTA aparece sempre que há algo a devolver — inclusive em

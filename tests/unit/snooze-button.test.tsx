@@ -16,7 +16,10 @@ vi.mock("@/components/feedback/ApiErrorToast", () => ({
   showApiError: (...args: unknown[]) => showApiErrorMock(...args),
 }));
 
-import { SnoozeButton } from "@/components/inbox/SnoozeButton";
+const toastSuccess = vi.fn();
+vi.mock("sonner", () => ({ toast: { success: (...a: unknown[]) => toastSuccess(...a) } }));
+
+import { SnoozeButton, horaDoLembrete } from "@/components/inbox/SnoozeButton";
 
 function wrap(ui: React.ReactNode) {
   return <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>;
@@ -40,23 +43,31 @@ describe("SnoozeButton", () => {
     render(wrap(<SnoozeButton conversationId="conv-1" snoozeUntil={null} />));
 
     openTrigger(screen.getByRole("button", { name: /lembrar/i }));
-    fireEvent.click(await screen.findByText("Em 3 horas"));
+    fireEvent.click(await screen.findByText(/^Em 3 horas · \d{2}:\d{2}$/));
 
     await waitFor(() =>
       expect(postMock).toHaveBeenCalledWith("/api/v1/conversations/conv-1/snooze", {
         duration_hours: 3,
       }),
     );
+    // Item 213: confirma, e diz a hora.
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith(
+        `Vou lembrar às ${horaDoLembrete("2026-07-22T12:00:00.000Z", "pt-BR")}`,
+      ),
+    );
   });
 
-  it("com lembrete ativo (futuro): mostra estado ativo e 'Cancelar lembrete' chama o DELETE", async () => {
+  it("com lembrete ativo (futuro): mostra a hora e 'Cancelar lembrete' chama o DELETE", async () => {
     deleteMock.mockResolvedValue(undefined);
     const futureIso = new Date(Date.now() + 3_600_000).toISOString();
 
     render(wrap(<SnoozeButton conversationId="conv-1" snoozeUntil={futureIso} />));
 
-    expect(screen.getByRole("button", { name: /lembrete ativo/i })).toBeInTheDocument();
-    openTrigger(screen.getByRole("button", { name: /lembrete ativo/i }));
+    // Item 213: diz até quando.
+    const rotulo = `Lembrete às ${horaDoLembrete(futureIso, "pt-BR")}`;
+    expect(screen.getByRole("button", { name: rotulo })).toBeInTheDocument();
+    openTrigger(screen.getByRole("button", { name: rotulo }));
     fireEvent.click(await screen.findByText("Cancelar lembrete"));
 
     await waitFor(() =>
@@ -74,7 +85,7 @@ describe("SnoozeButton", () => {
 
     render(wrap(<SnoozeButton conversationId="conv-1" snoozeUntil={null} />));
     openTrigger(screen.getByRole("button", { name: /lembrar/i }));
-    fireEvent.click(await screen.findByText("Em 1 hora"));
+    fireEvent.click(await screen.findByText(/^Em 1 hora · /));
 
     await waitFor(() => expect(showApiErrorMock).toHaveBeenCalled());
   });

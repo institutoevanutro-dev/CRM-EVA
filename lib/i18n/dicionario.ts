@@ -1090,7 +1090,10 @@ export const DICIONARIO: Traducoes = {
 
   // ─── Inbox: cabeçalho e ações da conversa ───
   Assumir: { es: "Asumir" },
-  Liberar: { es: "Liberar" },
+  "Deixar com o automático": { es: "Dejar al automático" },
+  "Você deixa de ser o responsável e o automático volta a responder.": {
+    es: "Dejas de ser el responsable y el automático vuelve a responder.",
+  },
   Transferir: { es: "Transferir" },
   Lembrar: { es: "Recordar" },
   Fechar: { es: "Cerrar" },
@@ -5984,7 +5987,8 @@ export const DICIONARIO: Traducoes = {
   "Essa pessoa ainda não escreveu para este perfil. A Meta só deixa responder depois que ela mandar uma mensagem.": {
     es: "Esta persona aún no escribió a este perfil. Meta solo permite responder después de que ella envíe un mensaje.",
   },
-  "Lembrete ativo": { es: "Recordatorio activo" },
+  "Lembrete às": { es: "Recordatorio a las" },
+  "Vou lembrar às": { es: "Te recordaré a las" },
   "Cancelar lembrete": { es: "Cancelar recordatorio" },
   "Em 1 hora": { es: "En 1 hora" },
   "Em 3 horas": { es: "En 3 horas" },
