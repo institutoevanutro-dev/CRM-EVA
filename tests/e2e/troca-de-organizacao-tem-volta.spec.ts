@@ -2,6 +2,9 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { createClient } from "@supabase/supabase-js";
+
+import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 import { esquecerOrganizacaoAtiva } from "./helpers/esquecer-organizacao-ativa";
 import { test, expect, type Page } from "@playwright/test";
 import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
@@ -34,6 +37,15 @@ import { mostrarBarraDeCima } from "./helpers/barra-de-cima";
  * com uma organização legitimamente **não configurada** — e é exatamente o
  * fixture de que este caso precisa. Está escrito lá, no `insert`, para ninguém
  * "consertar" a ausência do `onboarded_at` achando que é descuido.
+ *
+ * ─── Quem cai no wizard (lote 17, item 176) ──────────────────────────────
+ *
+ * Desde então só quem MONTA o assistente (admin da organização, ou o dono da
+ * instalação) é levado a ele; a equipe convidada usa o app enquanto o dono
+ * termina. O seed vincula o `manager` à segunda org como `manager`, então a
+ * spec prova as duas pontas: como manager, a troca fica no app (com o seletor);
+ * promovido a admin ali, a troca leva ao wizard, que precisa ter saída. O papel
+ * volta a `manager` no `afterAll`.
  */
 const RAIZ = path.resolve(__dirname, "../..");
 
@@ -76,9 +88,24 @@ test.describe.configure({ timeout: 150_000 });
 // A troca pelo seletor fica GRAVADA no banco (migration 0282) e o `manager` é
 // do seed inteiro: sem isto, toda spec seguinte loga na última org trocada.
 test.afterAll(async () => {
-  const manager = lerCreds().users.manager;
-  if (manager) await esquecerOrganizacaoAtiva(manager.id);
+  const c = lerCreds();
+  const manager = c.users.manager;
+  if (manager) {
+    await esquecerOrganizacaoAtiva(manager.id);
+    await papelNaOrganizacao(manager.id, c.funis!.segunda_org_id, "manager");
+  }
 });
+
+async function papelNaOrganizacao(userId: string, orgId: string, role: "admin" | "manager"): Promise<void> {
+  const c = credenciaisSupabaseDeTeste();
+  const db = createClient(c.url, c.serviceRole, { auth: { persistSession: false } });
+  const { error } = await db
+    .from("user_organizations")
+    .update({ role })
+    .eq("user_id", userId)
+    .eq("organization_id", orgId);
+  if (error) throw new Error(`papelNaOrganizacao: ${error.message}`);
+}
 
 test("trocar para uma organização não configurada leva ao wizard — e dá para voltar", async ({ page }) => {
   const creds = lerCreds();
@@ -98,7 +125,25 @@ test("trocar para uma organização não configurada leva ao wizard — e dá pa
   const nomeDaOrgA = (await seletor.textContent())!.trim();
   expect(nomeDaOrgA.length, "o seletor não anuncia o nome da organização ativa").toBeGreaterThan(0);
 
-  // ── a troca que prendia ────────────────────────────────────────────────
+  // ── quem não monta o assistente fica no app ────────────────────────────
+  // Como `manager` da segunda org, a troca não leva ao wizard: a equipe usa o
+  // app enquanto o dono termina, e o seletor continua ali para voltar.
+  await mostrarBarraDeCima(page);
+  await seletor.click();
+  await page.getByTestId(`tenant-switcher-item-${semOnboarding}`).click();
+  await expect(seletor).toBeEnabled({ timeout: 60_000 });
+  await expect
+    .poll(async () => (await seletor.textContent())?.trim(), { timeout: 20_000 })
+    .not.toBe(nomeDaOrgA);
+  expect(page.url(), "quem é da equipe não deveria cair no assistente").not.toMatch(/\/onboarding/);
+  await mostrarBarraDeCima(page);
+  await seletor.click();
+  await page.getByTestId(`tenant-switcher-item-${orgA}`).click();
+  await expect(seletor).toBeEnabled({ timeout: 60_000 });
+  await expect(seletor).toContainText(nomeDaOrgA, { timeout: 20_000 });
+
+  // ── a troca que prendia: quem monta o assistente ───────────────────────
+  await papelNaOrganizacao(creds.users.manager!.id, semOnboarding, "admin");
   await mostrarBarraDeCima(page);
   await seletor.click();
   await page.getByTestId(`tenant-switcher-item-${semOnboarding}`).click();
@@ -119,7 +164,8 @@ test("trocar para uma organização não configurada leva ao wizard — e dá pa
       `troquei para a organização ${semOnboarding} e o produto NÃO mandou para o wizard ` +
         `(fiquei em ${page.url()}). O caso precisa de uma organização SEM \`onboarded_at\`, e ` +
         "quem garante isso é `scripts/seed-e2e-funis.ts` — se aquele seed parou de zerar o " +
-        `campo na org que reencontra, é aqui que aparece.\n\n${(erro as Error).message}`,
+        "campo na org que reencontra, é aqui que aparece. E só quem é admin ali cai no wizard " +
+        `(a spec promove o manager antes desta troca).\n\n${(erro as Error).message}`,
     );
   }
   await expect(
