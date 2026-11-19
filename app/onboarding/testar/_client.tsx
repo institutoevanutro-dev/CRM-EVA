@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
@@ -104,6 +105,9 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
               "Sem ninguém treinado, não há o que testar. Dá para voltar ao passo anterior agora ou fazer isso depois, em IA › Agentes.",
             )}
           </p>
+          <Button asChild variant="outline" size="sm" className="mt-3">
+            <Link href="/onboarding/setup-ai">{t("Voltar e treinar")}</Link>
+          </Button>
         </div>
       )}
 

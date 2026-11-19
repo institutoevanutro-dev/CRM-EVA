@@ -6486,6 +6486,7 @@ export const DICIONARIO: Traducoes = {
     es: "y seguir desde aquí mismo — lo que armaste está guardado.",
   },
   "Não consegui salvar este passo.": { es: "No pude guardar este paso." },
+  "Voltar e treinar": { es: "Volver y entrenar" },
 
   // ─── Onboarding: invite-team ───
   "Quem trabalha com ele": { es: "Quién trabaja con él" },
