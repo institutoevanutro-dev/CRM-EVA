@@ -7440,8 +7440,8 @@ export const DICIONARIO: Traducoes = {
     es: "Espera unos minutos y abre el enlace de la invitación de nuevo.",
   },
   "Convite inválido ou expirado": { es: "Invitación inválida o vencida" },
-  "Este link não é válido ou já passou da janela de 24h. Peça um novo convite ao admin do tenant.": {
-    es: "Este enlace no es válido o ya pasó la ventana de 24h. Pide una nueva invitación al admin del tenant.",
+  "Este link venceu ou não vale mais. Peça um novo convite a quem convidou você.": {
+    es: "Este enlace venció o ya no es válido. Pide una nueva invitación a quien te invitó.",
   },
   "Você foi convidado": { es: "Fuiste invitado" },
   "Para aceitar o convite como": { es: "Para aceptar la invitación como" },
@@ -7669,9 +7669,11 @@ export const DICIONARIO: Traducoes = {
   "Enviar convites": { es: "Enviar invitaciones" },
   "Enviados": { es: "Enviados" },
   "Email enviado.": { es: "Correo enviado." },
-  "Resend não configurado — link copiável abaixo (DEV).": {
-    es: "Resend no configurado — enlace copiable abajo (DEV).",
+  "O e-mail não saiu. Copie o link e envie você.": {
+    es: "El correo no salió. Copia el enlace y envíalo tú.",
   },
+  "Confira estes e-mails:": { es: "Revisa estos correos:" },
+  "E-mails": { es: "Correos" },
   "Falhas": { es: "Fallas" },
   "Resultados aparecerão aqui após o envio.": { es: "Los resultados aparecerán aquí después del envío." },
   "Erro ao carregar membros.": { es: "Error al cargar miembros." },
@@ -7681,8 +7683,8 @@ export const DICIONARIO: Traducoes = {
   "Aceito": { es: "Aceptado" },
   "Revogar acesso": { es: "Revocar acceso" },
   "você": { es: "tú" },
-  "perderá acesso ao tenant. Esta ação pode ser desfeita reconvidando o membro.": {
-    es: "perderá acceso al tenant. Esta acción se puede deshacer reinvitando al miembro.",
+  "perderá o acesso. Dá para devolver depois pelo menu da pessoa.": {
+    es: "perderá el acceso. Se puede devolver después desde el menú de la persona.",
   },
   "Acesso revogado.": { es: "Acceso revocado." },
   "Manual (atendente puxa da fila)": { es: "Manual (el agente toma de la cola)" },
@@ -7704,7 +7706,6 @@ export const DICIONARIO: Traducoes = {
   },
   "Modo": { es: "Modo" },
   "Balanceamento por carga (em breve)": { es: "Balanceo por carga (próximamente)" },
-  "Tentativas máx.": { es: "Intentos máx." },
   "Backoff (s)": { es: "Backoff (s)" },
   "Atendentes": { es: "Agentes" },
   "Status, carga atual e capacidade de cada atendente da organização.": {
@@ -11028,7 +11029,10 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível copiar. Copie da barra do navegador.": {
     es: "No se pudo copiar. Cópialo desde la barra del navegador.",
   },
-  "Convite reenviado.": { es: "Invitación reenviada." },
+  "Convite reenviado por e-mail.": { es: "Invitación reenviada por correo." },
+  "Convite renovado, mas o e-mail não saiu. Copie o link e envie você.": {
+    es: "Invitación renovada, pero el correo no salió. Copia el enlace y envíalo tú.",
+  },
   "Convite revogado.": { es: "Invitación revocada." },
 
   // ─── issue #651 — tabelas de rótulo que só o guarda ampliado alcança ───

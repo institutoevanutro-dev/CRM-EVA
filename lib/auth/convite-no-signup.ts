@@ -8,7 +8,7 @@
  * e faz o que faria com qualquer visitante novo: cria uma organização e o torna
  * ADMIN dela. A pessoa termina com uma empresa fantasma, um wizard de
  * onboarding que não é dela e o gate de MFA de administrador — e só depois, se
- * voltar ao link dentro das 24h, entra na empresa certa, ficando nas duas.
+ * voltar ao link dentro do prazo, entra na empresa certa, ficando nas duas.
  *
  * Este módulo é o ponto onde essa bifurcação passa a existir. É uma função
  * PURA de propósito: a propriedade que ela carrega é de segurança, e precisa
@@ -46,7 +46,7 @@ export function decidirConviteDoSignup(user: UsuarioConfirmado): DecisaoDeSignup
 
   const payload = verifyInviteToken(bruto);
   // FALHA FECHADA. Token expirado ou adulterado NÃO pode cair no provisionamento:
-  // o convite dura 24h e o link de confirmação de e-mail tem prazo próprio, então
+  // o convite tem prazo e o link de confirmação de e-mail tem prazo próprio, então
   // quem demora entre "criar conta" e "confirmar e-mail" reproduziria o defeito
   // original — agora com um conserto por cima dando a impressão de resolvido.
   if (!payload) return { tipo: "recusar", motivo: "token_invalido" };

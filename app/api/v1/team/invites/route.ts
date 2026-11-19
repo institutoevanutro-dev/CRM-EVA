@@ -16,7 +16,6 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import {
-  conviteEstaEmAberto,
   linkDeAceite,
   statusConvite,
   type ConviteDeTime,
@@ -47,7 +46,8 @@ export async function GET(_req: NextRequest): Promise<Response> {
     return {
       ...row,
       status,
-      accept_url: conviteEstaEmAberto(row, now) ? linkDeAceite(row) : null,
+      // Vencido não ganha link: o token já não abre. A saída é "Reenviar".
+      accept_url: status === "pendente" ? linkDeAceite(row) : null,
     };
   });
 

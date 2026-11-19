@@ -50,6 +50,9 @@ interface Props {
   canManage: boolean;
 }
 
+/** No celular ficam membro, papel, status e ações — o "⋯" não sai da tela. */
+const SO_NO_COMPUTADOR = "hidden md:table-cell";
+
 function rotuloDoPapel(role: string): string {
   return (ROTULO_DO_PAPEL as Record<string, string>)[role] ?? role;
 }
@@ -78,15 +81,15 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
 
   return (
     <>
-      <div className="rounded-md border">
+      <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t("Membro")}</TableHead>
               <TableHead>{t("Papel")}</TableHead>
-              <TableHead>{t("Interface")}</TableHead>
+              <TableHead className={SO_NO_COMPUTADOR}>{t("Interface")}</TableHead>
               <TableHead>{t("Status")}</TableHead>
-              <TableHead>{t("Última atividade")}</TableHead>
+              <TableHead className={SO_NO_COMPUTADOR}>{t("Última atividade")}</TableHead>
               {canManage ? <TableHead className="w-[80px]" /> : null}
             </TableRow>
           </TableHeader>
@@ -125,7 +128,7 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
                     <Badge variant="secondary">{t(rotuloDoPapel(m.role))}</Badge>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell className={SO_NO_COMPUTADOR}>
                   {canManage ? (
                     <Button
                       variant="outline"
@@ -165,7 +168,7 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
                     <Badge variant="outline">{t("Pendente")}</Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
+                <TableCell className={`text-sm text-muted-foreground ${SO_NO_COMPUTADOR}`}>
                   {m.last_sign_in_at
                     ? new Date(m.last_sign_in_at).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" })
                     : "—"}
@@ -234,7 +237,7 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
             <DialogTitle>{t("Revogar acesso")}</DialogTitle>
             <DialogDescription>
               {revokeDialog?.email ?? revokeDialog?.user_id}{" "}
-              {t("perderá acesso ao tenant. Esta ação pode ser desfeita reconvidando o membro.")}
+              {t("perderá o acesso. Dá para devolver depois pelo menu da pessoa.")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

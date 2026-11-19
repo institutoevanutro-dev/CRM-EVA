@@ -4,13 +4,16 @@
  * Behavior matrix:
  *  - Invalid/expired token         → render error
  *  - Unauthenticated user          → render CTA → /login?next=...
- *  - Authenticated, email mismatch → render mismatch + sign-out CTA
+ *  - Authenticated, email mismatch → render mismatch + sign-out CTA (volta ao convite)
  *  - Authenticated, email match    → form posts to Server Action which inserts
  *                                    membership and redirects to /app/inbox
  */
 import Link from "next/link";
 
 import { verifyInviteToken } from "@/lib/auth/invite-token";
+import { ROTULO_DO_PAPEL } from "@/lib/auth/types";
+import { signOut } from "@/app/actions/auth/signOut";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { AcceptInviteForm } from "./AcceptInviteForm";
@@ -64,12 +67,23 @@ export default async function AcceptInvitePage({ params }: PageProps) {
         <h1 className="text-xl font-semibold">{t("Convite inválido ou expirado")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {t(
-            "Este link não é válido ou já passou da janela de 24h. Peça um novo convite ao admin do tenant.",
+            "Este link venceu ou não vale mais. Peça um novo convite a quem convidou você.",
           )}
         </p>
       </Shell>
     );
   }
+
+  // Papel em português (não "agent") e o nome da empresa: quem recebe precisa
+  // saber ONDE vai entrar. O token é HMAC verificado, então o id é confiável.
+  const papel = t((ROTULO_DO_PAPEL as Record<string, string>)[payload.role] ?? payload.role);
+  const empresa = await nomeDaEmpresa(payload.organization_id);
+  const naEmpresa = empresa ? (
+    <>
+      {" "}
+      {t("em")} <strong>{empresa}</strong>
+    </>
+  ) : null;
 
   if (!user) {
     const next = encodeURIComponent(`/team/accept-invite/${token}`);
@@ -77,7 +91,8 @@ export default async function AcceptInvitePage({ params }: PageProps) {
       <Shell>
         <h1 className="text-xl font-semibold">{t("Você foi convidado")}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {t("Para aceitar o convite como")} <strong>{payload.role}</strong>,{" "}
+          {t("Para aceitar o convite como")} <strong>{papel}</strong>
+          {naEmpresa},{" "}
           {t("faça login com o email")} <strong>{payload.email}</strong>.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -115,7 +130,9 @@ export default async function AcceptInvitePage({ params }: PageProps) {
           {t("mas o convite foi enviado para")} <strong>{payload.email}</strong>.{" "}
           {t("Saia e faça login com o email correto.")}
         </p>
-        <form action="/api/auth/signout" method="post" className="mt-4">
+        {/* Sai e volta ao login apontando para este convite. */}
+        <form action={signOut} className="mt-4">
+          <input type="hidden" name="next" value={`/team/accept-invite/${token}`} />
           <button
             type="submit"
             className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent"
@@ -131,12 +148,27 @@ export default async function AcceptInvitePage({ params }: PageProps) {
     <Shell>
       <h1 className="text-xl font-semibold">{t("Aceitar convite")}</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        {t("Você foi convidado para entrar como")} <strong>{payload.role}</strong>.{" "}
+        {t("Você foi convidado para entrar como")} <strong>{papel}</strong>
+        {naEmpresa}.{" "}
         {t("Confirme abaixo para ativar seu acesso.")}
       </p>
       <AcceptInviteForm token={token} label={t("Aceitar convite")} pendingLabel={t("Confirmando…")} failureLabel={t("Não foi possível aceitar este convite. Ele pode ter vencido ou seu acesso foi revogado. Peça um novo link ao administrador.")} />
     </Shell>
   );
+}
+
+/** Nunca lança: sem service role ou com erro, a frase só perde o nome. */
+async function nomeDaEmpresa(orgId: string): Promise<string | null> {
+  try {
+    const { data } = await createAdminClient()
+      .from("organizations")
+      .select("name")
+      .eq("id", orgId)
+      .maybeSingle();
+    return (data as { name?: string } | null)?.name ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function Shell({ children }: { children: React.ReactNode }) {

@@ -2,7 +2,7 @@
  * POST /api/v1/team/invites/[id]/resend — reenvia um convite pendente.
  *
  * admin-only. Re-assina o token com o mesmo `invite_id`, dispara o e-mail de
- * novo e renova a validade (24h a partir de agora). Audita `member.invited`
+ * novo e renova a validade (INVITE_TTL_SECONDS a partir de agora). Audita `member.invited`
  * pelo admin que clicou — é uma nova emissão do mesmo convite.
  */
 import { randomUUID } from "node:crypto";
