@@ -25,12 +25,16 @@ export interface AtRiskData {
   recomecado_em: string | null;
 }
 
+/** O teto da rota (`limit` ≤ 200): o "ver mais" do radar pede até aqui. */
+export const LIMITE_MAXIMO_DO_RADAR = 200;
+
 /** Radar de risco (C1). Polling 60s — a atividade dos leads muda no worker/inbox. */
-export function useAtRiskLeads() {
+export function useAtRiskLeads(limite = 50) {
   return useQuery({
-    queryKey: ["leads-at-risk"],
+    // O prefixo `["leads-at-risk"]` é o que as mutações invalidam: o limite vai depois.
+    queryKey: ["leads-at-risk", limite],
     refetchInterval: 60_000,
     queryFn: () =>
-      apiClient.get<{ data: AtRiskData }>(`/api/v1/leads/at-risk`).then((r) => r.data),
+      apiClient.get<{ data: AtRiskData }>(`/api/v1/leads/at-risk?limit=${limite}`).then((r) => r.data),
   });
 }

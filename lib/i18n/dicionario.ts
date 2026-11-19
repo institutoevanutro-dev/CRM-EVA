@@ -8177,6 +8177,7 @@ export const DICIONARIO: Traducoes = {
   "Toda demanda aberta teve atividade recente ou já tem um retorno agendado.": { es: "Toda demanda abierta tuvo actividad reciente o ya tiene un retorno agendado." },
   "demanda aberta sem próximo passo": { es: "demanda abierta sin próximo paso" },
   "demandas abertas sem próximo passo": { es: "demandas abiertas sin próximo paso" },
+  "Mostrando {{n}} de {{total}}": { es: "Mostrando {{n}} de {{total}}" },
   "Ninguém marcou o que acontece a seguir. Cada uma é alguém esperando sem que nada esteja combinado.": { es: "Nadie marcó qué pasa después. Cada una es alguien esperando sin que nada esté acordado." },
   "aberta há": { es: "abierta hace" },
   "crítico": { es: "crítico" },
