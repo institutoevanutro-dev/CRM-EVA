@@ -209,14 +209,17 @@ export function HistoricoDaAgenda({
                 <li
                   key={a.id}
                   data-testid={`linha-${a.id}`}
-                  className="flex items-center gap-3 border-b border-border px-3 py-2.5 last:border-b-0"
+                  // No celular a linha QUEBRA (item 132): data, nome e selo em
+                  // cima, as ações embaixo. Numa linha só o nome sumia e
+                  // "Remarcar" saía cortado.
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-3 py-2.5 last:border-b-0 md:flex-nowrap"
                 >
                   <span
                     aria-hidden
                     className="h-8 w-[3px] shrink-0 rounded-full"
                     style={{ backgroundColor: corDaTrilha(pessoa?.trilha ?? 1) }}
                   />
-                  <div className="w-28 shrink-0">
+                  <div className="w-20 shrink-0 md:w-28">
                     <div className="text-sm font-medium tabular-nums first-letter:uppercase">
                       {format(dataDeParede(comeca, fuso), t("d 'de' MMM"), { locale: localeDaData })}
                     </div>
@@ -242,11 +245,11 @@ export function HistoricoDaAgenda({
                       {pessoa ? ` · ${t("com")} ${pessoa.nome}` : ""}
                     </div>
                   </div>
-                  {pessoa && <AvatarDaPessoa pessoa={pessoa} tamanho="sm" />}
+                  {pessoa && <AvatarDaPessoa pessoa={pessoa} tamanho="sm" className="max-md:hidden" />}
                   <Badge variant={variante} className="shrink-0">
                     {t(ROTULO_DA_SITUACAO[a.situacao])}
                   </Badge>
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="flex shrink-0 items-center justify-end gap-1 empty:hidden max-md:w-full">
                     {/*
                       Ação por aba, e a lista de CADA aba tem razão própria.
                       A primeira versão disto oferecia ação só em "próximos" e

@@ -292,7 +292,7 @@ export function AgendaInterativa({
               aria-label={t("Tipo de atendimento dos horários livres")}
               value={tipo?.id ?? ""}
               onChange={(e) => onEscolherTipo(e.target.value)}
-              className="min-w-0 max-w-[260px] rounded-full border border-border bg-transparent px-2.5 py-0.5 text-xs text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500"
+              className="min-w-0 max-w-[260px] rounded-full border border-border bg-transparent px-2.5 py-0.5 text-xs max-lg:min-h-11 text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500"
             >
               {tipos.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -309,7 +309,7 @@ export function AgendaInterativa({
                 aria-pressed={t.id === tipo?.id}
                 onClick={() => onEscolherTipo(t.id)}
                 className={cn(
-                  "rounded-full border px-2.5 py-0.5 transition-colors duration-fast",
+                  "rounded-full border px-2.5 py-0.5 transition-colors duration-fast max-lg:min-h-11",
                   t.id === tipo?.id
                     ? "border-transparent bg-accent text-accent-foreground"
                     : "border-border hover:border-border-strong hover:text-text",

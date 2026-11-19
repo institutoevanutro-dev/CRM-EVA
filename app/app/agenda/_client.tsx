@@ -778,7 +778,12 @@ export function AgendaClient({
                 aria-pressed={visao === v.id}
                 onClick={() => setVisao(v.id)}
                 className={cn(
-                  "rounded-sm px-2.5 py-1 text-xs transition-colors duration-fast ease-out",
+                  // 44 px no toque, como os botões (item 135).
+                  "rounded-sm px-2.5 py-1 text-xs transition-colors duration-fast ease-out max-lg:min-h-11",
+                  // No celular a grade da semana mostra UM dia: o botão
+                  // prometia a semana e as setas pulavam 7 dias (item 133). A
+                  // tela já abre no Dia abaixo de `md`.
+                  v.id === "semana" && "max-md:hidden",
                   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
                   visao === v.id
                     ? "bg-accent font-semibold text-accent-foreground"
