@@ -134,7 +134,7 @@ export function CartaoDoJev() {
         </Badge>
       </div>
 
-      <div role="note" className="rounded-md border border-amber-500/40 bg-amber-50/40 p-3 text-sm dark:border-amber-400/40 dark:bg-amber-900/10">
+      <div role="note" className="rounded-md border border-warning-border bg-warning-bg p-3 text-sm">
         {t("Área da saúde: as mensagens podem conter dado de saúde. Com o Jev ligado, cada mensagem do cliente, sem CPF, telefone e e-mail, vai para a TypeSafe AI, nos EUA. Confira se o contrato com a TypeSafe cobre esse tipo de dado antes de ligar.")}
       </div>
 

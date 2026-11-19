@@ -68,7 +68,7 @@ function StatCard({ label, value, warning }: { label: string; value: number; war
   return (
     <div className={[
       "rounded-lg border p-4 flex flex-col gap-1",
-      warning && value > 0 ? "border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/20" : "bg-card",
+      warning && value > 0 ? "border-warning-border bg-warning-bg" : "bg-card",
     ].join(" ")}>
       <span className="text-2xl font-bold tabular-nums">{value.toLocaleString("pt-BR")}</span>
       <span className="text-xs text-muted-foreground leading-tight">{label}</span>
