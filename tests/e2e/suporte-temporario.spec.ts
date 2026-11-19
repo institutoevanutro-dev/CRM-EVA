@@ -148,7 +148,8 @@ test("suporte mantém identidade, opera B e encerra sem misturar A; readonly/exp
   await page.getByLabel("Nome de exibição").fill("Alteração que deve ser recusada");
   const downgrade=await db.from("platform_admins").update({scope:"support_readonly"}).eq("user_id",actor);if(downgrade.error)throw downgrade.error;
   await page.getByRole("button",{name:"Salvar",exact:true}).click();
-  await expect(page.getByText(/Erro: forbidden/)).toBeVisible();
+  // O código cru virou frase (lote 8): "forbidden" é "Este acesso é só de leitura."
+  await expect(page.getByText("Este acesso é só de leitura.")).toBeVisible();
   expect((await db.from("organizations").select("display_name").eq("id",orgs[1]).single()).data?.display_name).toBe(`Suporte B ${suffix}`);
   await acknowledgeKnownAction(page,"/app/settings/tenant");
   await db.from("platform_admins").update({scope:"full"}).eq("user_id",actor);

@@ -204,7 +204,14 @@ test("configura responsáveis por canal e o cron distribui sem misturar números
       "Somente as pessoas selecionadas recebem este número.",
     );
 
+    // Salvar sem ninguém marcado pergunta antes (lote 8): as conversas parariam na fila.
+    let aviso = "";
+    page.once("dialog", async (d) => {
+      aviso = d.message();
+      await d.accept();
+    });
     await southGroup.getByRole("button", { name: "Salvar responsáveis" }).click();
+    await expect.poll(() => aviso).toContain("ficam paradas na fila");
     await expect(southGroup.getByTestId("channel-routing-state")).toHaveText(
       "Ninguém configurado — as conversas ficarão na fila.",
     );
