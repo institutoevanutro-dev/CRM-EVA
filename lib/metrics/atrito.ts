@@ -155,7 +155,7 @@ export function vetosPorExecucao(e: AtritoRaw["empresa"]): number | null {
   return razao(e.vetos, e.execucoes_medidas);
 }
 
-const ESCOPO_PARCIAL = "Sobre as demandas encerradas no período.";
+const ESCOPO_PARCIAL = "Sobre os atendimentos encerrados no período.";
 
 /**
  * `t` é opcional (identidade por padrão) porque `montarPares` roda no servidor
@@ -186,17 +186,17 @@ export function montarPares(
       danos: [
         {
           chave: "turnos_p50",
-          rotulo: t("Turnos até o desfecho (mediana)"),
+          rotulo: t("Trocas de mensagem até concluir (mediana)"),
           valor: cliente.turnos_p50,
           unidade: "media",
           nota: t(ESCOPO_PARCIAL),
         },
         {
           chave: "insistencia_media",
-          rotulo: t("Insistência do agente (média de retornos)"),
+          rotulo: t("Retornos do assistente (IA) sem ser chamado (média)"),
           valor: cliente.insistencia_media,
           unidade: "media",
-          nota: `${t("Quantas vezes o agente voltou ao cliente por conta própria. Medido sobre as")} ${escopo.demandas_com_caso} ${t("demandas que passaram por atendimento humano.")}`,
+          nota: `${t("Quantas vezes o assistente (IA) voltou a falar com o paciente sem ser chamado. Medido sobre os")} ${escopo.demandas_com_caso} ${t("atendimentos que passaram por um atendente.")}`,
         },
         // O MÁXIMO ao lado da média, e não no lugar dela. A spec 17 nasceu do
         // agente que insiste seis vezes: numa base de 40 demandas, seis retornos
@@ -215,7 +215,7 @@ export function montarPares(
           rotulo: t("Descadastros no período"),
           valor: cliente.descadastros,
           unidade: "contagem",
-          nota: t("Atrito máximo: a pessoa pediu para sair."),
+          nota: t("O pior sinal: a pessoa pediu para sair."),
         },
         // ABANDONO é irmão do descadastro e muito mais comum: em vez de pedir
         // para sair, a pessoa simplesmente para de responder. Não gera ticket,
@@ -235,21 +235,21 @@ export function montarPares(
       titulo: t("Automação"),
       eficiencia: {
         chave: "taxa_automacao",
-        rotulo: t("Respostas dadas pelo agente"),
+        rotulo: t("Respostas dadas pelo assistente (IA)"),
         valor: taxaDeAutomacao(empresa),
         unidade: "razao",
       },
       danos: [
         {
           chave: "pedidos_de_humano",
-          rotulo: t("Passagens para humano"),
+          rotulo: t("Passagens para atendente"),
           valor: cliente.pedidos_de_humano,
           unidade: "contagem",
           nota: t("Confiança perdida na automação."),
         },
         {
           chave: "taxa_de_contorno",
-          rotulo: t("Respostas humanas fora do sistema"),
+          rotulo: t("Respostas da equipe fora do sistema"),
           valor: taxaDeContorno(empresa),
           unidade: "razao",
           nota: t("O time respondeu pelo celular, contornando a ferramenta."),
@@ -270,7 +270,7 @@ export function montarPares(
       titulo: t("Custo humano"),
       eficiencia: {
         chave: "demandas",
-        rotulo: t("Demandas encerradas"),
+        rotulo: t("Atendimentos encerrados"),
         valor: escopo.demandas,
         unidade: "contagem",
         nota: t(ESCOPO_PARCIAL),
@@ -278,19 +278,19 @@ export function montarPares(
       danos: [
         {
           chave: "intervencoes_por_demanda",
-          rotulo: t("Intervenções humanas por demanda"),
+          rotulo: t("Intervenções da equipe por atendimento"),
           valor: empresa.intervencoes_por_demanda,
           unidade: "media",
         },
         {
           chave: "espera_humana_p50_s",
-          rotulo: t("Espera na fila humana (mediana)"),
+          rotulo: t("Espera por um atendente (mediana)"),
           valor: empresa.espera_humana_p50_s,
           unidade: "segundos",
         },
         {
           chave: "espera_humana_p90_s",
-          rotulo: t("Espera na fila humana (p90)"),
+          rotulo: t("Espera dos 10% que mais esperaram"),
           valor: empresa.espera_humana_p90_s,
           unidade: "segundos",
           // Mediana e p90 iguais denunciam base pequena, não uma fila homogênea.
@@ -299,21 +299,21 @@ export function montarPares(
             empresa.espera_humana_p50_s !== null &&
             empresa.espera_humana_p50_s === empresa.espera_humana_p90_s
               ? t("Igual à mediana: há poucas esperas medidas no período para os dois se separarem.")
-              : t("O p90 é a experiência de quem espera mais — a mediana a esconde."),
+              : t("É o que sente quem mais espera — a mediana esconde isso."),
         },
         // O INVARIANTE 4 como número: demanda aberta sem próximo passo é o
         // vazamento que a doutrina inteira combate — e vazamento que ninguém vê
         // é o pior tipo. Antes da entidade de demanda isto não era enumerável.
         {
           chave: "demandas_sem_proximo_passo",
-          rotulo: t("Demandas abertas sem próximo passo"),
+          rotulo: t("Atendimentos abertos sem próximo passo"),
           valor: empresa.demandas_sem_proximo_passo,
           unidade: "contagem",
-          nota: `${t("De")} ${escopo.demandas_abertas} ${t("abertas agora. Cada uma é alguém esperando sem que nada esteja marcado para acontecer.")}`,
+          nota: `${t("De")} ${escopo.demandas_abertas} ${t("abertos agora. Cada um é alguém esperando sem que nada esteja marcado para acontecer.")}`,
         },
         {
           chave: "retrabalho",
-          rotulo: t("Demandas que precisaram subir de nível"),
+          rotulo: t("Atendimentos que precisaram subir de nível"),
           valor: empresa.retrabalho,
           unidade: "contagem",
         },
@@ -330,47 +330,61 @@ export function montarPares(
     },
     {
       chave: "contencao",
-      titulo: t("Contenção"),
+      titulo: t("Freios do assistente (IA)"),
       eficiencia: {
         chave: "envios_por_ia",
-        rotulo: t("Mensagens enviadas pelo agente"),
+        rotulo: t("Mensagens enviadas pelo assistente (IA)"),
         valor: empresa.envios_por_ia,
         unidade: "contagem",
       },
       danos: [
         {
           chave: "vetos_por_execucao",
-          rotulo: t("Vetos por execução"),
+          rotulo: t("Respostas barradas pelas regras (média por resposta)"),
           valor: vetosPorExecucao(empresa),
           unidade: "media",
-          nota: t("Quanto o sistema precisou ser contido de si mesmo antes de falar."),
+          nota: t("Quantas vezes as regras de segurança seguraram o assistente (IA) antes de responder."),
         },
       ],
     },
   ];
 }
 
-/** Formatação para tela. `null` é "—" — nunca "0". */
+/** Formatação para tela. `null` é "—" — nunca "0". Números com vírgula. */
 export function formatarMedida(m: Medida): string {
   if (m.valor === null || !Number.isFinite(m.valor)) return "—";
   switch (m.unidade) {
     case "razao":
-      return `${(m.valor * 100).toFixed(1)}%`;
+      return `${umaCasa(m.valor * 100)}%`;
     case "segundos":
       return formatarDuracao(m.valor);
     case "media":
-      return m.valor.toFixed(1);
+      return umaCasa(m.valor);
     case "contagem":
       return String(Math.round(m.valor));
   }
 }
 
-export function formatarDuracao(segundos: number): string {
-  const s = Math.round(segundos);
-  if (s < 60) return `${s}s`;
-  const min = Math.floor(s / 60);
-  if (min < 60) return `${min}min`;
-  const h = Math.floor(min / 60);
-  const restoMin = min % 60;
-  return restoMin === 0 ? `${h}h` : `${h}h ${restoMin}min`;
+function umaCasa(n: number): string {
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+/**
+ * O ÚNICO formatador de tempo dos relatórios (Desempenho, Por canal, Por
+ * etiqueta): "12 min", "2 h 5 min", "3 d 4 h". `null` é "não medido" e vira
+ * travessão — nunca "0 min".
+ */
+export function formatarDuracao(segundos: number | null): string {
+  if (segundos === null || !Number.isFinite(segundos)) return "—";
+  if (segundos < 60) return "< 1 min";
+  const minutos = Math.round(segundos / 60);
+  if (minutos < 60) return `${minutos} min`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 24) {
+    const resto = minutos % 60;
+    return resto ? `${horas} h ${resto} min` : `${horas} h`;
+  }
+  const dias = Math.floor(horas / 24);
+  const restoH = horas % 24;
+  return restoH ? `${dias} d ${restoH} h` : `${dias} d`;
 }

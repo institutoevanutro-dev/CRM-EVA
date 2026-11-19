@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { EmptyState } from "@/components/empty";
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
@@ -21,34 +22,16 @@ import {
 } from "@/components/ui/table";
 import { useT } from "@/hooks/i18n/useT";
 import { useTagReport } from "@/hooks/reports/useTagReport";
+import { formatarDuracao } from "@/lib/metrics/atrito";
 import { Tag } from "@/lib/ui/icons";
 
 /** As mesmas três janelas de Atividades; a rota cobre no máximo 90 dias. */
 const PERIODOS = [7, 30, 90] as const;
 
-/**
- * Segundos → "12 min", "2 h 5 min", "3 d 4 h". `null` é "não medido" (a rota
- * não inventa zero), e vira travessão — nunca "0 min".
- */
-export function esperaLegivel(segundos: number | null): string {
-  if (segundos === null) return "—";
-  if (segundos < 60) return "< 1 min";
-  const minutos = Math.round(segundos / 60);
-  if (minutos < 60) return `${minutos} min`;
-  const horas = Math.floor(minutos / 60);
-  if (horas < 24) {
-    const resto = minutos % 60;
-    return resto ? `${horas} h ${resto} min` : `${horas} h`;
-  }
-  const dias = Math.floor(horas / 24);
-  const restoH = horas % 24;
-  return restoH ? `${dias} d ${restoH} h` : `${dias} d`;
-}
-
 export function TagReportClient() {
   const t = useT();
   const [dias, setDias] = useState<number>(30);
-  const { data, isLoading, isError } = useTagReport(dias);
+  const { data, isLoading, isError, refetch } = useTagReport(dias);
   const relatorio = data?.data;
 
   const seletor = (
@@ -70,11 +53,7 @@ export function TagReportClient() {
   if (isLoading) {
     corpo = <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>;
   } else if (isError || !relatorio) {
-    corpo = (
-      <p className="text-sm text-destructive" role="alert">
-        {t("Erro ao carregar o relatório.")}
-      </p>
-    );
+    corpo = <ErroDeLeitura texto={t("Erro ao carregar o relatório.")} onRetry={() => refetch()} />;
   } else if (relatorio.sem_dados) {
     corpo = (
       <EmptyState
@@ -110,7 +89,7 @@ export function TagReportClient() {
                   <TableCell className="text-right tabular-nums">{l.abertas}</TableCell>
                   <TableCell className="text-right tabular-nums">{l.resolvidas}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {esperaLegivel(l.espera_media_segundos)}
+                    {formatarDuracao(l.espera_media_segundos)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{l.fatia}%</TableCell>
                 </TableRow>

@@ -25,6 +25,7 @@ import { ROLE_RANK } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { existeConexaoDeLeitura } from "@/lib/plataformas-de-anuncio/credenciais-de-leitura";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 
 import { MetaAdsClient } from "./_components/MetaAdsClient";
 
@@ -69,7 +70,11 @@ export default async function MetaAdsPage() {
       </header>
 
       {conexao.conectada ? (
-        <MetaAdsClient contaPadrao={conexao.contaPadrao} idioma={idioma} />
+        <MetaAdsClient
+          contaPadrao={conexao.contaPadrao}
+          idioma={idioma}
+          fuso={fusoUtilizavel(activeOrg.timezone)}
+        />
       ) : (
         <div className="rounded-md border p-6 text-sm">
           <p className="font-medium">{t("Nenhuma conta de anúncios conectada.")}</p>

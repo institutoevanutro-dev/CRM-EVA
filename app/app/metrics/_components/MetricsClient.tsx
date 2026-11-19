@@ -3,6 +3,8 @@
 import { useT } from "@/hooks/i18n/useT";
 import { useState } from "react";
 
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
+import { formatarDuracao } from "@/lib/metrics/atrito";
 import { useAttendantMetrics, type AttendantMetric } from "@/hooks/metrics/useAttendantMetrics";
 import { AtritoPanel } from "./AtritoPanel";
 import { CanaisPanel } from "./CanaisPanel";
@@ -26,15 +28,6 @@ import {
 
 const ALL = "__all__";
 
-function formatDuration(seconds: number | null): string {
-  if (seconds == null) return "—";
-  const s = Math.round(seconds);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rest = s % 60;
-  return rest === 0 ? `${m}min` : `${m}min ${rest}s`;
-}
-
 function attendantLabel(a: AttendantMetric, t: (texto: string) => string): string {
   return a.name ?? a.email ?? `${t("Atendente")} ${a.user_id.slice(0, 8)}`;
 }
@@ -48,13 +41,13 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
   const t = useT();
   const [owner, setOwner] = useState<string>(ALL);
   const selectedOwner = owner === ALL ? null : owner;
-  const { data, isLoading, isError } = useAttendantMetrics(selectedOwner);
+  const { data, isLoading, isError, refetch } = useAttendantMetrics(selectedOwner);
   // Opções do filtro: só manager+ (a rota /team é manager+). Agent nem vê o filtro.
   const team = useTeamMembers({ enabled: canCompare });
 
   if (isLoading) return <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>;
   if (isError || !data)
-    return <p className="text-sm text-destructive">{t("Erro ao carregar métricas.")}</p>;
+    return <ErroDeLeitura texto={t("Erro ao carregar métricas.")} onRetry={() => refetch()} />;
 
   const metrics = data.data;
   const funnelTotal = metrics.funnel.reduce((acc, s) => acc + s.count, 0);
@@ -154,7 +147,7 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
                       {a.conversations_handled}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatDuration(a.avg_first_response_seconds)}
+                      {formatarDuracao(a.avg_first_response_seconds)}
                     </TableCell>
                   </TableRow>
                 ))}
