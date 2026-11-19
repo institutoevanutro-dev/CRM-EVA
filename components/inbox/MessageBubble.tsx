@@ -595,7 +595,7 @@ export const MessageBubble = memo(function MessageBubble({
 
         <div
           className={cn(
-            "mt-1 flex items-center justify-end gap-1 text-[10px]",
+            "mt-1 flex items-center justify-end gap-1 text-xs",
             // Só o balão da equipe é escuro; o do automático é claro e pede texto escuro.
             // A apagada é cinza: o carimbo claro da equipe sumiria nela.
             falhou

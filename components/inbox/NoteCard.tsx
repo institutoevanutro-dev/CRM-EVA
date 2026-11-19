@@ -126,7 +126,7 @@ export function NoteCard({ note, onDelete }: Props) {
             )}
           </p>
         )}
-        <div className="mt-1 text-right text-[10px] opacity-70">{time}</div>
+        <div className="mt-1 text-right text-xs opacity-70">{time}</div>
       </div>
       {onDelete && (
         <ConfirmarNaTela
