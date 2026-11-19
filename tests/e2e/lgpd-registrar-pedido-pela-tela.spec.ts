@@ -6,8 +6,8 @@
  * nascia pelo webhook da Nuvemshop). Esta spec é a jornada inteira, sem insert:
  *
  *   "Registrar pedido" (recebido há 3 dias) → Recebido, com o prazo contado do
- *   dia em que a pessoa pediu → "Aprovar export" → Processando → (dreno) →
- *   Revisão pendente, com o PDF → "Marcar como entregue" → Concluído.
+ *   dia em que a pessoa pediu → "Aprovar a cópia dos dados" → Em andamento → (dreno) →
+ *   Aguardando revisão, com o PDF → "Marcar como entregue" → Concluído.
  *
  * O ambiente não tem envio de e-mail (`.env.e2e` sem `RESEND_API_KEY`), que é o
  * estado de um primeiro deploy: por isso o pedido termina em revisão pendente.
@@ -21,7 +21,7 @@ import { expect, test } from "@playwright/test";
 import { hojeNoBrasil, instanteDoRecebimento } from "../../lib/lgpd/pedido-manual";
 import { computeDueAt, prazoEmBr } from "../../lib/lgpd/sla";
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
-import { baixarPdfDaTela, drenarAteSairDeProcessando, servico } from "./helpers/lgpd-pedido";
+import { baixarPdfDaTela, drenarAteSairDeProcessando, linhaDoPedido, servico } from "./helpers/lgpd-pedido";
 
 const PASTA = ".superpowers/evidence/lgpd-registrar";
 
@@ -88,7 +88,7 @@ test("registrar o pedido pela tela, aprovar, e marcar o relatório como entregue
   expect(eventos.data ?? []).toHaveLength(0);
 
   // 2. Aparece na lista, Recebido; a página do pedido mostra o prazo e por onde chegou.
-  const linha = page.getByRole("row").filter({ hasText: pedidoId.slice(0, 8) });
+  const linha = linhaDoPedido(page, pedidoId);
   await expect(linha).toContainText("Recebido", { timeout: 30_000 });
   // Quem pediu aparece pelo NOME (era `ctt:` + o começo do id), e o prazo como
   // data mais o estado, contado no fuso da clínica.
@@ -101,7 +101,7 @@ test("registrar o pedido pela tela, aprovar, e marcar o relatório como entregue
   await page.waitForURL(new RegExp(`/app/lgpd/requests/${pedidoId}`));
   await expect(page.getByText(`Vence em ${prazoEmBr(prazo)}`)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("Pessoalmente", { exact: true })).toBeVisible();
-  await expect(page.getByText("lgpd.data_request_received")).toBeVisible();
+  await expect(page.getByTitle("lgpd.data_request_received")).toBeVisible();
   await expect(page.getByRole("button", { name: "Marcar como entregue" })).toHaveCount(0);
 
   // 3. Registrar de novo o mesmo pedido é recusado, com a ligação para o que existe.
@@ -116,13 +116,13 @@ test("registrar o pedido pela tela, aprovar, e marcar o relatório como entregue
   await page.waitForURL(new RegExp(`/app/lgpd/requests/${pedidoId}`));
 
   // 4. Aprovar, e o dreno gera o relatório: sem e-mail, vira revisão pendente.
-  await page.getByRole("button", { name: "Aprovar export" }).click();
+  await page.getByRole("button", { name: "Aprovar a cópia dos dados" }).click();
   await page.locator("#approved_reason").fill("Titular confirmou a identidade no balcão da clínica.");
   await page.getByRole("button", { name: "Confirmar aprovação" }).click();
-  await expect(page.getByText("Processando", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Em andamento", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
   expect(await drenarAteSairDeProcessando(page, banco, pedidoId)).toBe("pending_review");
   await page.reload();
-  await expect(page.getByText("Revisão pendente", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Aguardando revisão", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
   expect((await baixarPdfDaTela(page)).length).toBeGreaterThan(1000);
   await page.screenshot({ path: `${PASTA}/4-revisao-pendente.png`, fullPage: true });
 
@@ -135,7 +135,7 @@ test("registrar o pedido pela tela, aprovar, e marcar o relatório como entregue
   await confirmacao.getByRole("button", { name: "Confirmar entrega" }).click();
   await expect(page.getByText("Concluído", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("Em mãos, pessoalmente")).toBeVisible();
-  await expect(page.getByText("lgpd.export_delivered")).toBeVisible();
+  await expect(page.getByTitle("lgpd.export_delivered")).toBeVisible();
   await expect(page.getByRole("button", { name: "Marcar como entregue" })).toHaveCount(0);
   await page.screenshot({ path: `${PASTA}/6-concluido.png`, fullPage: true });
 
@@ -167,11 +167,11 @@ test("registrar o pedido pela tela, aprovar, e marcar o relatório como entregue
   for (const l of trilha.data ?? []) expect(l.actor_user_id).toBeTruthy();
 
   await page.goto("/app/lgpd/requests");
-  await expect(page.getByRole("row").filter({ hasText: pedidoId.slice(0, 8) })).toContainText("Concluído", {
+  await expect(linhaDoPedido(page, pedidoId)).toContainText("Concluído", {
     timeout: 30_000,
   });
   // Pedido encerrado mostra a data do prazo, sem "faltam" nem "vencido".
-  await expect(page.getByRole("row").filter({ hasText: pedidoId.slice(0, 8) })).not.toContainText(
+  await expect(linhaDoPedido(page, pedidoId)).not.toContainText(
     /faltam|vence |vencido/,
   );
   await page.screenshot({ path: `${PASTA}/7-lista-concluido.png`, fullPage: true });
@@ -223,8 +223,12 @@ test("pedido de apagamento registrado pela tela fica parado até alguém aprovar
 
   // E a página do pedido oferece a aprovação, com o aviso de que não tem volta.
   await page.goto(`/app/lgpd/requests/${pedido.data!.id}`);
-  await page.getByRole("button", { name: "Aprovar anonimização" }).click();
-  await expect(page.getByRole("alertdialog")).toContainText("irreversível");
+  await page.getByRole("button", { name: "Apagar dados do paciente" }).click();
+  const aprovacao = page.getByRole("alertdialog");
+  await expect(aprovacao).toContainText(nome);
+  await expect(aprovacao).toContainText("Não dá para desfazer");
+  // A mesma guarda da ficha: sem justificativa e sem digitar ANONIMIZAR, não apaga.
+  await expect(aprovacao.getByRole("button", { name: "Apagar permanentemente" })).toBeDisabled();
   await page.screenshot({ path: `${PASTA}/9-apagamento-espera-aprovacao.png`, fullPage: true });
   await page.getByRole("button", { name: "Cancelar" }).click();
 });
@@ -310,18 +314,23 @@ test("apagamento: evento emitido sem aprovação não anonimiza; aprovado pela t
   expect(intacto.data).toMatchObject({ name: nome, is_anonymized: false });
 
   await page.goto("/app/lgpd/requests");
-  const linhaDaLista = page.getByRole("row").filter({ hasText: pedidoId.slice(0, 8) });
+  const linhaDaLista = linhaDoPedido(page, pedidoId);
   await expect(linhaDaLista).toContainText("Recebido", { timeout: 30_000 });
   await page.screenshot({ path: `${PASTA_DO_PORTAO}/1-evento-sem-aprovacao-continua-recebido.png`, fullPage: true });
 
   // 2. O administrador aprova pela tela, com justificativa.
   await page.goto(`/app/lgpd/requests/${pedidoId}`);
-  await page.getByRole("button", { name: "Aprovar anonimização" }).click();
-  await expect(page.getByRole("alertdialog")).toContainText("irreversível");
+  await page.getByRole("button", { name: "Apagar dados do paciente" }).click();
+  const aprovacao = page.getByRole("alertdialog");
+  await expect(aprovacao).toContainText("Não dá para desfazer");
+  const apagar = aprovacao.getByRole("button", { name: "Apagar permanentemente" });
   await page.locator("#approved_reason").fill("Paciente pediu o apagamento por escrito no balcão.");
+  // Justificativa sozinha não basta: falta digitar a palavra de confirmação.
+  await expect(apagar).toBeDisabled();
+  await page.locator("#approved_confirm").fill("ANONIMIZAR");
   await page.screenshot({ path: `${PASTA_DO_PORTAO}/2-aprovar-com-justificativa.png`, fullPage: true });
-  await page.getByRole("button", { name: "Confirmar aprovação" }).click();
-  await expect(page.getByText("Processando", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await apagar.click();
+  await expect(page.getByText("Em andamento", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
 
   const aprovado = await banco.from("lgpd_requests").select("request_payload").eq("id", pedidoId).single();
   const prova = (aprovado.data!.request_payload as { approval: Record<string, string> }).approval;
@@ -353,7 +362,7 @@ test("apagamento: evento emitido sem aprovação não anonimiza; aprovado pela t
   await page.screenshot({ path: `${PASTA_DO_PORTAO}/3-pedido-concluido.png`, fullPage: true });
 
   await page.goto("/app/lgpd/requests");
-  await expect(page.getByRole("row").filter({ hasText: pedidoId.slice(0, 8) })).toContainText("Concluído", {
+  await expect(linhaDoPedido(page, pedidoId)).toContainText("Concluído", {
     timeout: 30_000,
   });
   await page.screenshot({ path: `${PASTA_DO_PORTAO}/4-lista-concluido.png`, fullPage: true });

@@ -32,6 +32,7 @@ import {
   baixarPdfDaTela,
   criarPedido,
   drenarAteSairDeProcessando,
+  linhaDoPedido,
   servico,
 } from "./helpers/lgpd-pedido";
 
@@ -97,12 +98,12 @@ test("pedido com e-mail de entrega é enviado ao titular e conclui", async ({ pa
   await page.reload();
   await expect(page.getByText("Concluído", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
   await baixarPdfDaTela(page);
-  await expect(page.getByText("lgpd.export_generated")).toBeVisible();
-  await expect(page.getByText("lgpd.export_delivered")).toBeVisible();
+  await expect(page.getByTitle("lgpd.export_generated")).toBeVisible();
+  await expect(page.getByTitle("lgpd.export_delivered")).toBeVisible();
   await page.screenshot({ path: `${PASTA}/4-concluido.png`, fullPage: true });
 
   await page.goto("/app/lgpd/requests");
-  await expect(page.getByRole("row").filter({ hasText: pedidoId.slice(0, 8) })).toContainText("Concluído", {
+  await expect(linhaDoPedido(page, pedidoId)).toContainText("Concluído", {
     timeout: 30_000,
   });
   await page.screenshot({ path: `${PASTA}/5-lista-concluido.png`, fullPage: true });

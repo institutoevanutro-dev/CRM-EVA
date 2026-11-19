@@ -22,6 +22,7 @@ import {
   baixarPdfDaTela,
   criarPedido,
   drenarAteSairDeProcessando,
+  linhaDoPedido,
   servico,
 } from "./helpers/lgpd-pedido";
 
@@ -41,12 +42,12 @@ test("pedido sem e-mail de entrega vira Revisão pendente e oferece o PDF", asyn
   expect(status, "o pedido não pode ficar em processing nem falhar: o relatório foi gerado").toBe("pending_review");
 
   await page.reload();
-  await expect(page.getByText("Revisão pendente", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Aguardando revisão", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
   const pdf = await baixarPdfDaTela(page);
   expect(pdf.length).toBeGreaterThan(1000);
   // A trilha conta o que aconteceu: aprovado por alguém, relatório gerado.
-  await expect(page.getByText("lgpd.manually_approved")).toBeVisible();
-  await expect(page.getByText("lgpd.export_generated")).toBeVisible();
+  await expect(page.getByTitle("lgpd.manually_approved")).toBeVisible();
+  await expect(page.getByTitle("lgpd.export_generated")).toBeVisible();
   await page.screenshot({ path: `${PASTA}/4-revisao-pendente-com-pdf.png`, fullPage: true });
 
   const linha = await banco
@@ -63,7 +64,7 @@ test("pedido sem e-mail de entrega vira Revisão pendente e oferece o PDF", asyn
 
   // E a lista mostra o estado, e o filtro por ele encontra o pedido.
   await page.goto("/app/lgpd/requests");
-  const naLista = page.getByRole("row").filter({ hasText: pedidoId.slice(0, 8) });
-  await expect(naLista).toContainText("Revisão pendente", { timeout: 30_000 });
+  const naLista = linhaDoPedido(page, pedidoId);
+  await expect(naLista).toContainText("Aguardando revisão", { timeout: 30_000 });
   await page.screenshot({ path: `${PASTA}/5-lista-revisao-pendente.png`, fullPage: true });
 });
