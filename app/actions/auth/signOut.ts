@@ -3,8 +3,14 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { audit } from "@/lib/audit";
+import { safeNext } from "@/lib/auth/safe-next";
 
-export async function signOut(): Promise<void> {
+/**
+ * `formData.next` (campo oculto do `<form action={signOut}>`): volta ao login
+ * já apontando para lá. O convite aberto com outra conta logada usa isto para
+ * a pessoa sair, entrar com o e-mail certo e cair de novo no convite.
+ */
+export async function signOut(formData?: FormData): Promise<void> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -31,5 +37,7 @@ export async function signOut(): Promise<void> {
     });
   }
 
-  redirect("/login");
+  const bruto = formData?.get("next");
+  const next = typeof bruto === "string" ? safeNext(bruto, "") : "";
+  redirect(next ? `/login?next=${encodeURIComponent(next)}` : "/login");
 }

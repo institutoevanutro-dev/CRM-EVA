@@ -7361,9 +7361,11 @@ export const DICIONARIO: Traducoes = {
     es: "Espera unos minutos y abre el enlace de la invitación de nuevo.",
   },
   "Convite inválido ou expirado": { es: "Invitación inválida o vencida" },
-  "Este link não é válido ou já passou da janela de 24h. Peça um novo convite ao admin do tenant.": {
-    es: "Este enlace no es válido o ya pasó la ventana de 24h. Pide una nueva invitación al admin del tenant.",
+  "Este link venceu ou não vale mais. Peça um novo convite a quem convidou você.": {
+    es: "Este enlace venció o ya no es válido. Pide una nueva invitación a quien te invitó.",
   },
+  // Fragmento "em <nome da empresa>" das frases do convite.
+  "em": { es: "en" },
   "Você foi convidado": { es: "Fuiste invitado" },
   "Para aceitar o convite como": { es: "Para aceptar la invitación como" },
   "faça login com o email": { es: "inicia sesión con el correo" },

@@ -81,4 +81,5 @@ export function verifyInviteToken(token: string): InvitePayload | null {
   return payload;
 }
 
-export const INVITE_TTL_SECONDS = 60 * 60 * 24; // 24h
+// 7 dias: decisão do dono do produto (18/11). 24 h vencia antes de a pessoa abrir o e-mail.
+export const INVITE_TTL_SECONDS = 60 * 60 * 24 * 7;
