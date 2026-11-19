@@ -574,8 +574,8 @@ export const DICIONARIO: Traducoes = {
   "Novos canais começam em modo de teste, sem respostas automáticas até você autorizar números ou liberar o público.": { es: "Los canales nuevos empiezan en modo de prueba, sin respuestas automáticas hasta que autorices números o habilites al público." },
   "Assistência do agente": { es: "Asistencia del agente" },
   "Resposta aprovada. Acompanhe o envio aqui.": { es: "Respuesta aprobada. Sigue el envío aquí." },
-  "Sugestão rejeitada. O feedback será usado na próxima sugestão.": {
-    es: "Sugerencia rechazada. Los comentarios se usarán en la próxima sugerencia.",
+  "Sugestão rejeitada. O comentário será usado na próxima sugestão.": {
+    es: "Sugerencia rechazada. El comentario se usará en la próxima sugerencia.",
   },
   "Sua edição foi preservada. Confira se a conversa mudou antes de aprovar novamente.": {
     es: "Tu edición se conservó. Comprueba si la conversación cambió antes de aprobar de nuevo.",
@@ -611,7 +611,7 @@ export const DICIONARIO: Traducoes = {
   "Abra a ação correspondente no CRM ou na agenda para confirmar.": {
     es: "Abre la acción correspondiente en el CRM o en el calendario para confirmar.",
   },
-  "Feedback para a próxima sugestão": { es: "Comentarios para la próxima sugerencia" },
+  "O que melhorar na próxima sugestão": { es: "Qué mejorar en la próxima sugerencia" },
   "Aprovar e enviar": { es: "Aprobar y enviar" },
   Rejeitar: { es: "Rechazar" },
   "Confira a configuração do agente e tente gerar novamente.": {
