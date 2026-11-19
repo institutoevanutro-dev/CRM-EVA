@@ -10,24 +10,29 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
+import { mesDe } from "@/lib/bonus/calendario";
 import { diaNoPeriodo, periodoAberto, type RespostaDaEquipe } from "@/lib/bonus/tela";
 import { formatCentsBRL } from "@/lib/money";
 
-import { fraseDaFaixa } from "./MeuBonus";
+import { fraseDaFaixa, SeletorDeMes } from "./MeuBonus";
 
 export function BonusDaEquipe() {
   const t = useT();
+  // `null` = o mês de hoje; o aprovador volta ao mês que fechou para pagar.
+  const [mes, setMes] = useState<string | null>(null);
   const q = useQuery({
-    queryKey: ["bonus", "equipe"],
-    queryFn: () => apiClient.get<{ data: RespostaDaEquipe }>("/api/v1/bonus/equipe"),
+    queryKey: mes ? ["bonus", "equipe", mes] : ["bonus", "equipe"],
+    queryFn: () => apiClient.get<{ data: RespostaDaEquipe }>(`/api/v1/bonus/equipe${mes ? `?mes=${mes}` : ""}`),
   });
 
   if (q.isLoading) return <p className="text-sm text-muted-foreground">{t("Carregando os placares…")}</p>;
   if (q.isError || !q.data) return <p className="text-sm text-destructive">{t("Não foi possível carregar os placares.")}</p>;
   const d = q.data.data;
+  const doMesAtual = d.mes === mesDe(d.hoje);
 
   return (
     <div className="flex flex-col gap-6" data-testid="bonus-da-equipe">
+      <SeletorDeMes mes={d.mes} hoje={d.hoje} aoMudar={setMes} />
       {d.fila_reduzida_hoje ? (
         <p className="rounded-md border border-border p-3 text-sm">
           {t("A fila de leads antigos está reduzida: os pedidos para parar passaram do limite.")}
@@ -38,7 +43,31 @@ export function BonusDaEquipe() {
           <CardTitle>{t("Placares do mês")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          {/* No celular, um cartão por pessoa com o Total em cima: a tabela de 7 colunas não cabe. */}
+          <ul className="flex flex-col gap-3 md:hidden" data-testid="placar-em-cartoes">
+            {d.placar.pessoas.map((p) => (
+              <li key={p.userId} className="rounded-md border border-border p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-medium">{d.nomes[p.userId] ?? t("Sem nome")}</span>
+                  <span className="text-lg tabular-nums">{formatCentsBRL(p.totalCents)}</span>
+                </div>
+                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                  <dt className="text-muted-foreground">{t("Tarefas no prazo")}</dt>
+                  <dd className="text-right tabular-nums">
+                    {p.tarefas.percentualBps === null ? t("Sem itens") : `${Math.floor(p.tarefas.percentualBps / 100)}%`} ·{" "}
+                    {formatCentsBRL(p.tarefas.valorCents)}
+                  </dd>
+                  <dt className="text-muted-foreground">{t("Comparecimentos")}</dt>
+                  <dd className="text-right tabular-nums">
+                    {p.comparecimentos.total} · {formatCentsBRL(p.comparecimentos.valorCents)}
+                  </dd>
+                  <dt className="text-muted-foreground">{t("Resultados")}</dt>
+                  <dd className="text-right tabular-nums">{formatCentsBRL(p.resultadosCents)}</dd>
+                </dl>
+              </li>
+            ))}
+          </ul>
+          <Table className="hidden md:table">
             <TableHeader>
               <TableRow>
                 <TableHead>{t("Pessoa")}</TableHead>
@@ -79,12 +108,29 @@ export function BonusDaEquipe() {
           </Table>
         </CardContent>
       </Card>
-      <LancarStories hoje={d.hoje} contagemDeHoje={d.stories_hoje.contagem} leituraErro={d.stories_hoje.leitura_erro} />
+      {doMesAtual ? (
+        <LancarStories
+          hoje={d.hoje}
+          contagemDeHoje={d.stories_hoje.contagem}
+          leituraErro={d.stories_hoje.leitura_erro}
+          porDia={d.stories_por_dia}
+        />
+      ) : null}
     </div>
   );
 }
 
-function LancarStories({ hoje, contagemDeHoje, leituraErro }: { hoje: string; contagemDeHoje: number; leituraErro: string | null }) {
+function LancarStories({
+  hoje,
+  contagemDeHoje,
+  leituraErro,
+  porDia,
+}: {
+  hoje: string;
+  contagemDeHoje: number;
+  leituraErro: string | null;
+  porDia: Record<string, number>;
+}) {
   const t = useT();
   const qc = useQueryClient();
   const [dia, setDia] = useState(hoje);
@@ -134,6 +180,14 @@ function LancarStories({ hoje, contagemDeHoje, leituraErro }: { hoje: string; co
             {t("Lançar")}
           </Button>
         </div>
+        {diaNoPeriodo(dia, hoje) ? (
+          <p className="text-sm" data-testid="stories-do-dia">
+            {t("Já lançados neste dia: {n}. O número que você lançar substitui este (não soma).").replace(
+              "{n}",
+              String(dia === hoje ? contagemDeHoje : (porDia[dia] ?? 0)),
+            )}
+          </p>
+        ) : null}
         <p className="text-xs text-muted-foreground">{t("Só dá para lançar os dias deste mês, até hoje.")}</p>
         {lancar.isError ? <p className="text-sm text-destructive">{t("Não foi possível lançar. Tente de novo.")}</p> : null}
         {lancar.isSuccess ? <p className="text-sm text-muted-foreground">{t("Stories lançados.")}</p> : null}

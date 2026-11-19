@@ -56,6 +56,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       placar: calcularMes(entrada),
       nomes: Object.fromEntries(programa.regras.participantes.map((id) => [id, nomes.get(id) ?? null])),
       stories_hoje: { contagem: linha ? contagemDoDia(linha) : 0, leitura_erro: linha?.leitura_erro ?? null },
+      stories_por_dia: entrada.storiesPorDia,
       fila_reduzida_hoje: tamanhoDaFilaDeLeads(programa.regras, historico).reduzida,
     };
     return ok(corpo, { requestId });

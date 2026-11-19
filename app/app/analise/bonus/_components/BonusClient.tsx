@@ -71,7 +71,8 @@ export function BonusClient({ papel }: Props) {
         </TabsContent>
       ) : null}
       {papel.aprovador ? (
-        <TabsContent value="config">
+        // Montada sempre (só escondida): trocar de aba não apaga o que foi digitado e não salvo.
+        <TabsContent value="config" forceMount className="data-[state=inactive]:hidden">
           <ConfiguracaoDoBonus />
         </TabsContent>
       ) : null}

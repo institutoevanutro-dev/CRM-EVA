@@ -151,8 +151,10 @@ export function avaliarCriterio(
   valorCents: number,
   meta: { basica: number; alta: number } | undefined,
 ): ResultadoDoCriterio {
-  const base = { chave, contagem, basica: meta?.basica ?? null, alta: meta?.alta ?? null };
-  if (!meta) return { ...base, valorCents: 0, faixa: "sem_meta" };
+  // Meta alta 0 é meta não definida (regras antigas gravavam 0 nos critérios
+  // vazios): nunca paga.
+  if (!meta || meta.alta <= 0) return { chave, contagem, basica: null, alta: null, valorCents: 0, faixa: "sem_meta" };
+  const base = { chave, contagem, basica: meta.basica, alta: meta.alta };
   if (contagem === null) return { ...base, valorCents: 0, faixa: "pendente" };
   if (contagem >= meta.alta) return { ...base, valorCents, faixa: "alta" };
   if (contagem >= meta.basica) return { ...base, valorCents: Math.floor(valorCents / 2), faixa: "basica" };

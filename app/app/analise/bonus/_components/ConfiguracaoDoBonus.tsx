@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
 import { type RegrasDoBonus, regrasSchema } from "@/lib/bonus/regras";
-import type { RespostaDoPrograma } from "@/lib/bonus/tela";
+import { mesesParaEscolher, nomeDoMes, type RespostaDoPrograma } from "@/lib/bonus/tela";
 import { CHAVES_DE_RESULTADO } from "@/lib/bonus/tipos";
+import { parseReaisToCents } from "@/lib/money";
 
 import { ROTULO_DO_CRITERIO } from "./MeuBonus";
 
@@ -24,16 +25,17 @@ interface Membro {
 
 /** Texto do campo para número. Vazio ou torto vira NaN, e o esquema aponta o campo. */
 const numero = (texto: string) => (texto.trim() === "" ? Number.NaN : Number(texto.replace(",", ".")));
-const reais = (cents: number | null) => (cents === null || Number.isNaN(cents) ? "" : String(cents / 100));
-const centavos = (texto: string) => Math.round(numero(texto) * 100);
+// Dinheiro como se escreve no Brasil: "1.500" e "1.500,00" são mil e quinhentos.
+const reais = (cents: number | null) =>
+  cents === null || Number.isNaN(cents) ? "" : (cents / 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+const centavos = (texto: string) => parseReaisToCents(texto) ?? Number.NaN;
 const porcento = (bps: number) => (Number.isNaN(bps) ? "" : String(bps / 100));
 const bps = (texto: string) => Math.round(numero(texto) * 100);
 const texto = (n: number) => (Number.isNaN(n) ? "" : String(n));
-const METAS_VAZIAS = () => ({
-  comparecimento: { basica: 0, alta: 0 },
-  sinal_pago: { basica: 0, alta: 0 },
-  avaliacao_google: { basica: 0, alta: 0 },
-});
+function mesDeHoje(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
 
 /**
  * O campo guarda o TEXTO digitado; a regra guarda o número. Assim apagar o
@@ -60,8 +62,8 @@ function Campo({
       <Label htmlFor={id}>{rotulo}</Label>
       <Input
         id={id}
-        type={tipo}
-        inputMode={tipo === "number" ? "decimal" : undefined}
+        type={tipo === "dinheiro" ? "text" : tipo}
+        inputMode={tipo === "number" || tipo === "dinheiro" ? "decimal" : undefined}
         aria-invalid={invalido || undefined}
         className={invalido ? "border-destructive" : undefined}
         value={atual}
@@ -93,11 +95,13 @@ export function ConfiguracaoDoBonus() {
 
 function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; aprovador: string; membros: Membro[] }) {
   const t = useT();
+  const tag = useTagDeIdioma();
   const qc = useQueryClient();
   const [r, setR] = useState<RegrasDoBonus>(inicial);
   const [mesDaMeta, setMesDaMeta] = useState("");
   const [novoAprovador, setNovoAprovador] = useState("");
-  const [feriados, setFeriados] = useState(inicial.feriados.join("\n"));
+  const [feriados, setFeriados] = useState<string[]>(inicial.feriados);
+  const [novoFeriado, setNovoFeriado] = useState("");
 
   const salvar = useMutation({
     mutationFn: (corpo: Record<string, unknown>) => apiClient.put("/api/v1/bonus/programa", corpo),
@@ -105,12 +109,13 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
   });
 
   const muda = (f: (x: RegrasDoBonus) => RegrasDoBonus) => setR((x) => f(structuredClone(x)));
-  const candidato = { ...r, feriados: feriados.split("\n").map((l) => l.trim()).filter(Boolean) };
+  const candidato = { ...r, feriados };
   // A mesma régua da rota, na tela: o campo errado fica marcado antes de salvar.
   const conferido = regrasSchema.safeParse(candidato);
   const invalidos = new Set(conferido.success ? [] : conferido.error.issues.map((i) => i.path.join(".")));
   const errado = (caminho: string) => [...invalidos].some((c) => c === caminho || c.startsWith(`${caminho}.`));
   const meta = mesDaMeta ? r.metas_por_mes[mesDaMeta] : undefined;
+  const meses = mesesParaEscolher(mesDeHoje(), [...Object.keys(inicial.metas_por_mes), ...Object.keys(inicial.meses_de_teste)]);
   const idsDaEquipe = new Set(membros.map((m) => m.user_id));
   // Quem saiu da equipe continua na regra até alguém tirar: sem isto o PUT
   // recusa a configuração inteira ("um dos participantes não faz parte").
@@ -157,6 +162,7 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
         <CardContent className="grid gap-3 md:grid-cols-2">
           <Campo
             id="teto"
+            tipo="dinheiro"
             rotulo={t("Teto por pessoa (R$, vazio para sem teto)")}
             valor={reais(r.teto_cents)}
             invalido={errado("teto_cents")}
@@ -164,6 +170,7 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
           />
           <Campo
             id="tarefas"
+            tipo="dinheiro"
             rotulo={t("Tarefas, valor cheio (R$)")}
             valor={reais(r.tarefas.valor_cents)}
             invalido={errado("tarefas.valor_cents")}
@@ -173,6 +180,7 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
             <Campo
               key={chave}
               id={`valor-${chave}`}
+              tipo="dinheiro"
               rotulo={t("{criterio} (R$)").replace("{criterio}", t(ROTULO_DO_CRITERIO[chave]))}
               valor={reais(r.resultados[chave].valor_cents)}
               invalido={errado(`resultados.${chave}`)}
@@ -221,6 +229,7 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
           <div className="grid gap-3 md:grid-cols-2">
             <Campo
               id="comp-mensagem"
+              tipo="dinheiro"
               rotulo={t("Por consulta marcada por mensagem (R$)")}
               valor={reais(r.comparecimentos.por_mensagem_cents)}
               invalido={errado("comparecimentos.por_mensagem_cents")}
@@ -228,6 +237,7 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
             />
             <Campo
               id="comp-ligacao"
+              tipo="dinheiro"
               rotulo={t("Por consulta marcada por ligação (R$)")}
               valor={reais(r.comparecimentos.por_ligacao_cents)}
               invalido={errado("comparecimentos.por_ligacao_cents")}
@@ -254,6 +264,7 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
               />
               <Campo
                 id={`comp-faixa-valor-${i}`}
+                tipo="dinheiro"
                 rotulo={t("Ganha mais (R$)")}
                 valor={reais(f.valor_cents)}
                 invalido={errado(`comparecimentos.faixas.${i}.valor_cents`)}
@@ -301,7 +312,22 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
           <CardTitle>{t("Metas por mês")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <Campo id="mes-da-meta" tipo="month" rotulo={t("Mês")} valor={mesDaMeta} aoMudar={setMesDaMeta} />
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="mes-da-meta">{t("Mês")}</Label>
+            <select
+              id="mes-da-meta"
+              className="rounded-md border border-border bg-surface p-2"
+              value={mesDaMeta}
+              onChange={(e) => setMesDaMeta(e.target.value)}
+            >
+              <option value="">{t("Escolha o mês")}</option>
+              {meses.map((m) => (
+                <option key={m} value={m}>
+                  {nomeDoMes(m, tag)}
+                </option>
+              ))}
+            </select>
+          </div>
           {mesDaMeta ? (
             // A chave pelo mês remonta os campos: cada mês abre com os números dele.
             <div key={mesDaMeta} className="flex flex-col gap-3">
@@ -322,6 +348,7 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
               {r.meses_de_teste[mesDaMeta] ? (
                 <Campo
                   id="garantia"
+                  tipo="dinheiro"
                   rotulo={t("Garantia dos resultados (R$)")}
                   valor={reais(r.meses_de_teste[mesDaMeta]!.garantia_resultados_cents)}
                   invalido={errado(`meses_de_teste.${mesDaMeta}`)}
@@ -340,13 +367,19 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
                       key={nivel}
                       id={`${nivel}-${chave}`}
                       rotulo={`${t(ROTULO_DO_CRITERIO[chave])} · ${nivel === "basica" ? t("Meta básica") : t("Meta alta")}`}
-                      valor={meta ? texto(meta[chave][nivel]) : ""}
+                      valor={meta?.[chave] ? texto(meta[chave][nivel]) : ""}
                       invalido={errado(`metas_por_mes.${mesDaMeta}.${chave}`)}
                       aoMudar={(v) =>
                         muda((x) => {
-                          const atual = x.metas_por_mes[mesDaMeta] ?? METAS_VAZIAS();
-                          atual[chave][nivel] = numero(v);
-                          x.metas_por_mes[mesDaMeta] = atual;
+                          // Só o critério preenchido entra na regra; os outros
+                          // ficam sem meta (nunca 0, que contaria como batida).
+                          const doMes = x.metas_por_mes[mesDaMeta] ?? {};
+                          const criterio = doMes[chave] ?? { basica: Number.NaN, alta: Number.NaN };
+                          criterio[nivel] = numero(v);
+                          if (Number.isNaN(criterio.basica) && Number.isNaN(criterio.alta)) delete doMes[chave];
+                          else doMes[chave] = criterio;
+                          if (Object.keys(doMes).length === 0) delete x.metas_por_mes[mesDaMeta];
+                          else x.metas_por_mes[mesDaMeta] = doMes;
                           return x;
                         })
                       }
@@ -373,10 +406,10 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
           <Campo id="sem-msg" rotulo={t("Dias sem mensagem")} valor={texto(r.fila.dias_sem_mensagem)} invalido={errado("fila.dias_sem_mensagem")} aoMudar={(v) => muda((x) => ({ ...x, fila: { ...x.fila, dias_sem_mensagem: numero(v) } }))} />
           <Campo id="sem-repetir" rotulo={t("Dias sem repetir o contato")} valor={texto(r.fila.dias_sem_repetir)} invalido={errado("fila.dias_sem_repetir")} aoMudar={(v) => muda((x) => ({ ...x, fila: { ...x.fila, dias_sem_repetir: numero(v) } }))} />
           <Campo id="etiqueta" tipo="text" rotulo={t("Etiqueta que tira da fila")} valor={r.fila.etiqueta_excluida} invalido={errado("fila.etiqueta_excluida")} aoMudar={(v) => muda((x) => ({ ...x, fila: { ...x.fila, etiqueta_excluida: v } }))} />
-          <Campo id="limite" rotulo={t("Limite de pedidos para parar (%)")} valor={porcento(r.protecao.limite_bps)} invalido={errado("protecao.limite_bps")} aoMudar={(v) => muda((x) => ({ ...x, protecao: { ...x.protecao, limite_bps: bps(v) } }))} />
-          <Campo id="dias-seguidos" rotulo={t("Dias seguidos acima do limite")} valor={texto(r.protecao.dias_seguidos)} invalido={errado("protecao.dias_seguidos")} aoMudar={(v) => muda((x) => ({ ...x, protecao: { ...x.protecao, dias_seguidos: numero(v) } }))} />
-          <Campo id="fracao-reduzida" rotulo={t("Fila reduzida a (%)")} valor={porcento(r.protecao.fracao_reduzida_bps)} invalido={errado("protecao.fracao_reduzida_bps")} aoMudar={(v) => muda((x) => ({ ...x, protecao: { ...x.protecao, fracao_reduzida_bps: bps(v) } }))} />
-          <Campo id="intervalo" rotulo={t("Intervalo mínimo entre mensagens da fila (segundos)")} valor={texto(r.protecao.intervalo_minimo_s)} invalido={errado("protecao.intervalo_minimo_s")} aoMudar={(v) => muda((x) => ({ ...x, protecao: { ...x.protecao, intervalo_minimo_s: numero(v) } }))} />
+          <Campo id="limite" rotulo={t("Reduzir a fila se os pedidos para parar passarem de (%)")} valor={porcento(r.protecao.limite_bps)} invalido={errado("protecao.limite_bps")} aoMudar={(v) => muda((x) => ({ ...x, protecao: { ...x.protecao, limite_bps: bps(v) } }))} />
+          <Campo id="dias-seguidos" rotulo={t("Por quantos dias seguidos")} valor={texto(r.protecao.dias_seguidos)} invalido={errado("protecao.dias_seguidos")} aoMudar={(v) => muda((x) => ({ ...x, protecao: { ...x.protecao, dias_seguidos: numero(v) } }))} />
+          <Campo id="fracao-reduzida" rotulo={t("Nesse caso, a fila cai para (% do normal)")} valor={porcento(r.protecao.fracao_reduzida_bps)} invalido={errado("protecao.fracao_reduzida_bps")} aoMudar={(v) => muda((x) => ({ ...x, protecao: { ...x.protecao, fracao_reduzida_bps: bps(v) } }))} />
+          <Campo id="intervalo" rotulo={t("Espera entre uma mensagem e outra (segundos)")} valor={texto(r.protecao.intervalo_minimo_s)} invalido={errado("protecao.intervalo_minimo_s")} aoMudar={(v) => muda((x) => ({ ...x, protecao: { ...x.protecao, intervalo_minimo_s: numero(v) } }))} />
         </CardContent>
       </Card>
 
@@ -397,15 +430,36 @@ function Formulario({ inicial, aprovador, membros }: { inicial: RegrasDoBonus; a
         <CardHeader>
           <CardTitle>{t("Feriados")}</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-1">
-          <Label htmlFor="feriados">{t("Feriados (um por linha, AAAA-MM-DD)")}</Label>
-          <Textarea
-            id="feriados"
-            aria-invalid={errado("feriados") || undefined}
-            className={errado("feriados") ? "min-h-24 border-destructive" : "min-h-24"}
-            value={feriados}
-            onChange={(e) => setFeriados(e.target.value)}
-          />
+        <CardContent className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">{t("Nos feriados não há rotina a cumprir.")}</p>
+          {feriados.length > 0 ? (
+            <ul className="flex flex-wrap gap-2" data-testid="feriados">
+              {feriados.map((dia) => (
+                <li key={dia} className="flex items-center gap-1 rounded-md border border-border py-1 pl-2 pr-1 text-sm tabular-nums">
+                  {new Date(`${dia}T12:00:00Z`).toLocaleDateString(tag, { timeZone: "UTC" })}
+                  <Button size="sm" variant="ghost" aria-label={t("Tirar feriado")} onClick={() => setFeriados((f) => f.filter((d) => d !== dia))}>
+                    {t("Tirar")}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="novo-feriado">{t("Dia do feriado")}</Label>
+              <Input id="novo-feriado" type="date" className="w-44" value={novoFeriado} onChange={(e) => setNovoFeriado(e.target.value)} />
+            </div>
+            <Button
+              variant="outline"
+              disabled={!/^\d{4}-\d{2}-\d{2}$/.test(novoFeriado) || feriados.includes(novoFeriado) || feriados.length >= 60}
+              onClick={() => {
+                setFeriados((f) => [...f, novoFeriado].sort());
+                setNovoFeriado("");
+              }}
+            >
+              {t("Adicionar feriado")}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

@@ -9,11 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/types";
 import { marcarReleitura } from "@/lib/audit/releitura";
 import type { PlacarDosComparecimentos, ResultadoDoCriterio } from "@/lib/bonus/calculo";
-import type { ItemDaFilaNaTela, RespostaMeuBonus } from "@/lib/bonus/tela";
+import { mesDe } from "@/lib/bonus/calendario";
+import { type ItemDaFilaNaTela, nomeDoMes, type RespostaMeuBonus, somarMeses } from "@/lib/bonus/tela";
 import type { ResultadoDeLigacao } from "@/lib/bonus/tipos";
 import { formatCentsBRL } from "@/lib/money";
 
@@ -41,15 +44,55 @@ export function fraseDaFaixa(c: PlacarDosComparecimentos, t: (s: string) => stri
   return c.faixaAtingida === null ? t("Sem faixas configuradas") : t("Todas as faixas atingidas");
 }
 
+/**
+ * De que mês é o placar, com setas para os anteriores: no dia 1º o placar zera,
+ * e quem aprova precisa do mês que fechou para pagar. Usado aqui e na equipe.
+ */
+export function SeletorDeMes({ mes, hoje, aoMudar }: { mes: string; hoje: string; aoMudar: (mes: string | null) => void }) {
+  const t = useT();
+  const tag = useTagDeIdioma();
+  const atual = mesDe(hoje);
+  return (
+    <div className="flex items-center gap-2" data-testid="seletor-de-mes">
+      <Button variant="outline" size="sm" aria-label={t("Mês anterior")} onClick={() => aoMudar(somarMeses(mes, -1))}>
+        ‹
+      </Button>
+      <p className="min-w-40 text-center font-medium" aria-live="polite">
+        {nomeDoMes(mes, tag)}
+      </p>
+      <Button
+        variant="outline"
+        size="sm"
+        aria-label={t("Próximo mês")}
+        disabled={mes >= atual}
+        onClick={() => {
+          const proximo = somarMeses(mes, 1);
+          aoMudar(proximo === atual ? null : proximo);
+        }}
+      >
+        ›
+      </Button>
+      {mes < atual ? (
+        <Button variant="ghost" size="sm" onClick={() => aoMudar(null)}>
+          {t("Voltar ao mês atual")}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 export function MeuBonus() {
   const t = useT();
   const qc = useQueryClient();
+  // `null` = o mês de hoje (com a fila); outro mês só mostra o placar.
+  const [mes, setMes] = useState<string | null>(null);
   const q = useQuery({
-    queryKey: CHAVE_MEU,
+    queryKey: mes ? [...CHAVE_MEU, mes] : CHAVE_MEU,
     // A primeira carga é a abertura (audita a leitura da fila); recarga, polling
     // e invalidação vão com `atualizacao=1` e não viram linha nova na trilha.
     queryFn: () => {
       const qs = marcarReleitura(new URLSearchParams(), qc.getQueryData(CHAVE_MEU) !== undefined);
+      if (mes) qs.set("mes", mes);
       const sufixo = qs.size > 0 ? `?${qs.toString()}` : "";
       return apiClient.get<{ data: RespostaMeuBonus }>(`/api/v1/bonus/meu${sufixo}`);
     },
@@ -67,6 +110,7 @@ export function MeuBonus() {
 
   return (
     <div className="flex flex-col gap-6" data-testid="meu-bonus">
+      <SeletorDeMes mes={d.mes} hoje={d.hoje} aoMudar={setMes} />
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader>
@@ -220,25 +264,26 @@ export function MeuBonus() {
                       <span className="block truncate">{l.contato_nome}</span>
                       <span className="block text-xs text-muted-foreground">
                         {l.motivo ? t(ROTULO_DO_MOTIVO[l.motivo]) : null}
-                        {l.telefone ? (
-                          <>
-                            {l.motivo ? " · " : null}
-                            <a className="underline" href={`tel:${l.telefone}`}>
-                              {l.telefone}
-                            </a>
-                          </>
-                        ) : null}
+                        {l.telefone ? `${l.motivo ? " · " : ""}${l.telefone}` : null}
                       </span>
                     </span>
-                    {l.ligacao_resultado ? (
-                      <Badge variant={l.ligacao_resultado === "atendeu" ? "success" : "neutral"}>
-                        {l.ligacao_resultado === "atendeu" ? t("Atendeu") : t("Não atendeu")}
-                      </Badge>
-                    ) : (
-                      <Button size="sm" onClick={() => setLigando(l)}>
-                        {t("Registrar ligação")}
-                      </Button>
-                    )}
+                    <span className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      {l.telefone ? (
+                        // 44 px de altura: alvo de toque confortável no iPhone.
+                        <Button asChild variant="outline" className="min-h-11">
+                          <a href={`tel:${l.telefone}`}>{t("Ligar")}</a>
+                        </Button>
+                      ) : null}
+                      {l.ligacao_resultado ? (
+                        <Badge variant={l.ligacao_resultado === "atendeu" ? "success" : "neutral"}>
+                          {l.ligacao_resultado === "atendeu" ? t("Atendeu") : t("Não atendeu")}
+                        </Badge>
+                      ) : (
+                        <Button className="min-h-11" onClick={() => setLigando(l)}>
+                          {t("Registrar ligação")}
+                        </Button>
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -305,7 +350,9 @@ function RegistrarLigacao({ item, aoFechar }: { item: ItemDaFilaNaTela; aoFechar
           onChange={(e) => setResumo(e.target.value)}
         />
         {salvar.isError ? (
-          <p className="text-sm text-destructive">{t("Não foi possível registrar. Confira o resumo e tente de novo.")}</p>
+          <p className="text-sm text-destructive">
+            {salvar.error instanceof ApiError ? salvar.error.message : t("Não foi possível registrar. Confira a internet e tente de novo.")}
+          </p>
         ) : null}
         <DialogFooter>
           <Button variant="outline" onClick={aoFechar}>
