@@ -67,6 +67,10 @@ function textosVisiveis(src: string): string[] {
     // logo depois de um `>` (de um genérico ou de um JSX acima) entra como se
     // fosse copy — e um teste que acusa o que não é defeito se aprende a ignorar.
     if (/^[/*]|\*\//.test(t)) continue;
+    // Nem comparação: o `>` de um `>=` abre um "texto" que é código até o
+    // próximo `<` (ex.: `x >= ROLE_RANK.manager; … pipelineQuery.data?.pipeline`).
+    // Texto de JSX nunca começa por `=`.
+    if (t.startsWith("=")) continue;
     if (t.length > 2) achados.push(t);
   }
 

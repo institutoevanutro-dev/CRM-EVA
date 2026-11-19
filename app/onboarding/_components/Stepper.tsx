@@ -85,7 +85,7 @@ export function Stepper({ passos }: { passos: PassoVisivel[] }) {
             {volta ? (
               <Link
                 href={`/onboarding/${p.segmento}`}
-                className="group flex flex-col items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group flex flex-col items-center rounded-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {conteudo}
               </Link>

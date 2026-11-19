@@ -169,9 +169,12 @@ export function PipelinePageClient({
   // ...e quando o FILTRO muda, a seleção é PODADA de fato: só derivar fazia os
   // escondidos voltarem marcados ao limpar o filtro. Ajuste durante a
   // renderização (padrão do React para estado que depende de outro), sem efeito.
-  const [filtrosDaSelecao, setFiltrosDaSelecao] = useState(filters);
-  if (filtrosDaSelecao !== filters) {
-    setFiltrosDaSelecao(filters);
+  // Compara pelo VALOR serializado, não pela referência: `useSearchParams` pode
+  // devolver objeto novo a cada render, e a referência viraria laço infinito.
+  const chaveDosFiltros = filtersToParams(filters);
+  const [filtrosDaSelecao, setFiltrosDaSelecao] = useState(chaveDosFiltros);
+  if (filtrosDaSelecao !== chaveDosFiltros) {
+    setFiltrosDaSelecao(chaveDosFiltros);
     if (selecionadosVisiveis.length !== selectedIds.length) setSelectedIds(selecionadosVisiveis);
   }
   const tagsDoQuadro = useMemo(
