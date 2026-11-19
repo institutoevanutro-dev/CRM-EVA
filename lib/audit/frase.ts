@@ -26,6 +26,7 @@ export const AREAS_DA_AUDITORIA = {
   member: { nome: "Equipe", objeto: "um membro da equipe" },
   auth: { nome: "Entrada no sistema", objeto: "o acesso" },
   lgpd: { nome: "LGPD", objeto: "um pedido de LGPD" },
+  prontuario: { nome: "Prontuário", objeto: "o Prontuário" },
   webhook: { nome: "Formulários", objeto: "um formulário" },
   automation: { nome: "Automações", objeto: "uma automação" },
   org: { nome: "Configurações", objeto: "a configuração da clínica" },
@@ -81,6 +82,8 @@ const FRASE_EXATA: Record<string, string> = {
   "agenda.appointment_updated": "alterou uma consulta",
   "agenda.appointment_rescheduled": "remarcou uma consulta",
   "agenda.appointment_cancelled": "desmarcou uma consulta",
+  "prontuario.exam_sent": "enviou um exame ao Prontuário",
+  "prontuario.exam_send_failed": "tentou enviar um exame ao Prontuário, sem sucesso",
 };
 
 /** A frase da ação, sem o sujeito; `null` quando não há tradução segura. */
