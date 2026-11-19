@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { headers } from "next/headers";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 import { coresDaBarraDoNavegador } from "@/lib/branding/barra-do-navegador";
 import { versaoDoIcone } from "@/lib/branding/icone-versao";
 import { MarcaDaInstalacaoProvider } from "@/lib/branding/contexto";
@@ -316,14 +316,12 @@ export default function RootLayout({
       <body className="min-h-screen bg-bg font-sans text-text antialiased">
         <Providers>
           <MarcaDosClientComponents>
-            <ThemeProvider>{children}</ThemeProvider>
+            <ThemeProvider>
+              {children}
+              {/* Dentro do ThemeProvider: o aviso segue o tema escuro. */}
+              <Toaster position="top-right" closeButton duration={4000} />
+            </ThemeProvider>
           </MarcaDosClientComponents>
-          <Toaster
-            position="top-right"
-            richColors
-            closeButton
-            duration={4000}
-          />
         </Providers>
       </body>
     </html>

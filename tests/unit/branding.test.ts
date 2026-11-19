@@ -119,7 +119,7 @@ describe("guarda de white-label (self-host)", () => {
     // no layout raiz E ele envolve `children` (um provedor montado ao lado, sem
     // envolver a árvore, deixaria todo consumidor no padrão do produto).
     expect(layoutRaiz).toMatch(/<MarcaDaInstalacaoProvider\s+marca=\{/);
-    expect(layoutRaiz).toMatch(/<MarcaDosClientComponents>\s*\n\s*<ThemeProvider>\{children\}/);
+    expect(layoutRaiz).toMatch(/<MarcaDosClientComponents>\s*\n\s*<ThemeProvider>\s*\{children\}/);
   });
 });
 

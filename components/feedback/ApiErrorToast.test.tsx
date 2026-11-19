@@ -11,7 +11,19 @@ vi.mock("sonner", () => ({
 }));
 
 import { toast } from "sonner";
+import { isValidElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
+
+/** O código vai recolhido em "Detalhes técnicos", nunca como "ID: <código>" solto. */
+const comDetalhes = (requestId: string) =>
+  expect.objectContaining({
+    description: expect.toSatisfy((d: unknown) => {
+      if (!isValidElement(d)) return false;
+      const html = renderToStaticMarkup(d);
+      return html.includes("<summary") && html.includes("Detalhes técnicos") && html.includes(requestId) && !html.includes("ID:");
+    }),
+  });
 
 describe("ApiErrorToast", () => {
   beforeEach(() => {
@@ -53,7 +65,7 @@ describe("ApiErrorToast", () => {
     const frase = "Aguarde 8 s para mandar a próxima mensagem da fila (proteção do número).";
     showApiError(new ApiError(429, "bonus_ritmo", { aguarde_s: 8 }, "req-r", frase));
     expect(toast.error).not.toHaveBeenCalled();
-    expect(toast.warning).toHaveBeenCalledWith(frase, expect.objectContaining({ description: "ID: req-r" }));
+    expect(toast.warning).toHaveBeenCalledWith(frase, comDetalhes("req-r"));
   });
 
   it("calls toast.warning with canonical PT-BR for conversation_already_claimed", () => {
@@ -61,7 +73,7 @@ describe("ApiErrorToast", () => {
     expect(toast.warning).toHaveBeenCalledTimes(1);
     expect(toast.warning).toHaveBeenCalledWith(
       "Outro atendente já assumiu.",
-      expect.objectContaining({ description: "ID: req-1" }),
+      comDetalhes("req-1"),
     );
   });
 
@@ -70,7 +82,7 @@ describe("ApiErrorToast", () => {
     expect(toast.warning).toHaveBeenCalledTimes(1);
     expect(toast.warning).toHaveBeenCalledWith(
       "Este caso já foi respondido ou fechado.",
-      expect.objectContaining({ description: "ID: req-3" }),
+      comDetalhes("req-3"),
     );
   });
 
@@ -83,7 +95,7 @@ describe("ApiErrorToast", () => {
     expect(toast.error).not.toHaveBeenCalled();
     expect(toast.warning).toHaveBeenCalledWith(
       "Informe o motivo da perda.",
-      expect.objectContaining({ description: "ID: req-917" }),
+      comDetalhes("req-917"),
     );
   });
 
@@ -107,7 +119,7 @@ describe("ApiErrorToast", () => {
     expect(toast.error).toHaveBeenCalledTimes(1);
     expect(toast.error).toHaveBeenCalledWith(
       "I'm a teapot",
-      expect.objectContaining({ description: "ID: req-2" }),
+      comDetalhes("req-2"),
     );
   });
 
@@ -119,7 +131,7 @@ describe("ApiErrorToast", () => {
     expect(toast.error).not.toHaveBeenCalled();
     expect(toast.warning).toHaveBeenCalledWith(
       "Sua sessão terminou. Entre de novo.",
-      expect.objectContaining({ description: "ID: req-401" }),
+      comDetalhes("req-401"),
     );
   });
 

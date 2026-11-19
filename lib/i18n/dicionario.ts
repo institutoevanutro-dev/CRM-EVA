@@ -8791,6 +8791,7 @@ export const DICIONARIO: Traducoes = {
   "Papel atualizado.": { es: "Rol actualizado." },
 
   // ─── Feedback: catálogo genérico de erros de API (ApiErrorToast) ───
+  "Detalhes técnicos": { es: "Detalles técnicos" },
   "Requisição inválida. Recarregue e tente de novo.": {
     es: "Solicitud inválida. Recarga e intenta de nuevo.",
   },
