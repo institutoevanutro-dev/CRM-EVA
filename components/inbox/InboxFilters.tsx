@@ -499,7 +499,8 @@ export function InboxFilters({ value, onChange }: Props) {
                       "inline-flex items-center",
                       abaSecundariaAtiva && "bg-accent-soft font-semibold text-accent-hover",
                     )}
-                    aria-label={t("Mais abas")}
+                    // Mostrando o nome da aba ativa, o nome visível é o certo (item 215).
+                    aria-label={abaSecundariaAtiva ? undefined : t("Mais abas")}
                   >
                     {abaSecundariaAtiva
                       ? t(INBOX_TABS.find((x) => x.value === value.tab)!.label)

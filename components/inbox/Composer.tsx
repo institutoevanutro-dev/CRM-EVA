@@ -25,6 +25,7 @@ import { ContactPickerDialog } from "@/components/inbox/composer/ContactPickerDi
 import { AudioRecorder } from "@/components/inbox/composer/AudioRecorder";
 import { ReplyReviewPanel } from "@/components/inbox/composer/ReplyReviewPanel";
 import { DraftReplyButton } from "@/components/inbox/composer/DraftReplyButton";
+import { useDraftReply } from "@/hooks/inbox/useDraftReply";
 import { EmojiButton } from "@/components/inbox/composer/EmojiButton";
 import {
   MentionMenu,
@@ -218,6 +219,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
    * última mensagem, e "Nota interna" ficava escondida justo de quem precisa
    * saber, antes de escrever, se o texto vai ao paciente ou fica com o time.
    */
+  // O "Sugerir resposta" do "+" no toque (item 209): mesmo POST do botão.
+  const sugerirPeloMenu = useDraftReply();
   // "Há sugestão" é a MESMA consulta que o `ReplyReviewPanel` lê (porte do
   // original #3234): uma chave, um cache, sem um segundo estado para divergir.
   // Desligada em nota e com o compositor bloqueado (o GET exige `agent`; quem
@@ -777,6 +780,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             onPickContact={mode === "reply" ? () => setContactPickerOpen(true) : undefined}
             onAgendar={agendamentoLigado && mode === "reply" ? () => setAgendaAberta(true) : undefined}
             soFoto={mode === "reply" ? soFoto : false}
+            onSugerir={
+              mode === "reply" && !sugestao && !isDisabled
+                ? () => sugerirPeloMenu.mutate(conversationId, { onSuccess: () => void invalidar() })
+                : undefined
+            }
           />
           <EmojiButton
             disabled={isDisabled}
@@ -807,6 +815,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             <DraftReplyButton
               conversationId={conversationId}
               disabled={isDisabled}
+              className="pointer-coarse:hidden"
               onDraft={() => void invalidar()}
             />
           )}
