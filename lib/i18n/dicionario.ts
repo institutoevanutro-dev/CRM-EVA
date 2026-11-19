@@ -5426,6 +5426,7 @@ export const DICIONARIO: Traducoes = {
   "O que muda": { es: "Qué cambia" },
   "Iniciando…": { es: "Iniciando…" },
   "Atualizar agora": { es: "Actualizar ahora" },
+  "A atualização é feita pela equipe que cuida do servidor.": { es: "La actualización la hace el equipo que cuida el servidor." },
   "O sistema sai do ar por cerca de 2 minutos e volta sozinho. Faço uma cópia de segurança dos seus dados antes.": {
     es: "El sistema se apaga por cerca de 2 minutos y vuelve solo. Hago una copia de seguridad de tus datos antes.",
   },

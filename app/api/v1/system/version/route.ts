@@ -9,6 +9,7 @@ import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { loadAuthUser } from "@/lib/auth/server";
+import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { extractChangelogRange } from "@/lib/system/changelog";
@@ -140,6 +141,9 @@ export async function GET(_req: NextRequest): Promise<Response> {
     is_owner: true,
     latest_version: latest,
     update_available: Boolean(latest) && latest !== running,
+    // Instalação atualizada por fora (ex.: pela equipe do servidor): a tela e o
+    // rodapé do menu não oferecem "Atualizar agora". Padrão: oferecem.
+    atualizar_pela_tela: env.ESCONDER_ATUALIZAR_AGORA !== "true",
     off_release: version?.off_release ?? false,
     // Sem isto, a tela lê "sem versão nova anunciada" como "você está em dia" —
     // e uma instalação atrasada cujo host não conseguiu comparar é informada de
