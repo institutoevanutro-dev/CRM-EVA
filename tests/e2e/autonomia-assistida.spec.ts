@@ -282,7 +282,7 @@ test("testa sem enviar, pausa preserva publicação e duas aprovações entregam
     await login(page, f);
     await page.goto(`/app/ai/agents/${f.agent}`);
     await page.getByRole("tab", { name: "Teste", exact: true }).click();
-    await page.getByLabel("Mensagem do cliente (sample)").fill("Quais informações vocês oferecem?");
+    await page.getByLabel("Mensagem do cliente (exemplo)").fill("Quais informações vocês oferecem?");
     await page.getByLabel("Nome (opcional)").fill("Maria do cenário");
     await page.getByLabel("Telefone (opcional)").fill("+15551234567");
     const count = async () =>
@@ -334,7 +334,7 @@ test("testa sem enviar, pausa preserva publicação e duas aprovações entregam
       .getByLabel("Resposta sugerida")
       .fill("Maria, confirmei as informações e posso ajudar por aqui.");
     await panel(page)
-      .getByLabel("Feedback para a próxima sugestão")
+      .getByLabel("O que melhorar na próxima sugestão")
       .fill("Usar linguagem curta e clara.");
     await capture(page, panel(page), info, "revisao-desktop");
     const approved = page.waitForResponse(

@@ -27,6 +27,8 @@ function confirmOnOs(on: boolean): void {
   });
 }
 
+const permissaoNoServidor = (): NotificationPermissionState => "unsupported";
+
 export function useNotificationPermission(): {
   permission: NotificationPermissionState;
   enabled: boolean;
@@ -48,19 +50,23 @@ export function useNotificationPermission(): {
    * controle pronto para uso que sumia na frente dele — e um clique naquela
    * janela ia parar num `request()` que já estava decidido.
    *
-   * `useSyncExternalStore` lê o valor no PRÓPRIO render e reconcilia junto com
-   * a hidratação, sem chute e sem janela. No servidor `getPermission()` devolve
-   * `"unsupported"` sozinho (não existe `Notification` lá), o que é a verdade
-   * daquele ambiente e desabilita o controle no HTML — o único flash que sobra
-   * é o seguro, de desabilitado para habilitado, que nunca oferece o que talvez
-   * não funcione.
+   * `useSyncExternalStore` lê o valor no PRÓPRIO render e reconcilia logo
+   * depois da hidratação, sem chute e sem janela.
+   *
+   * ⚠️ O TERCEIRO ARGUMENTO É `"unsupported"` FIXO, NÃO `getPermission`. Ele é o
+   * valor da HIDRATAÇÃO, e precisa ser o mesmo do HTML do servidor — onde não
+   * existe `Notification`, então é `"unsupported"`. Com `getPermission` ali, o
+   * navegador hidratava com `granted`/`denied` contra um HTML `unsupported`, e
+   * o React acusava o erro #418 toda vez que a tela abria. Logo depois da
+   * hidratação o React troca para o valor real. O único flash é o seguro, de
+   * desabilitado para habilitado, que nunca oferece o que talvez não funcione.
    *
    * O custo dessa janela não foi teórico: ela deixou
    * `tests/e2e/notificacoes-diz-o-que-falta.spec.ts` passando por SORTE, e o
    * primeiro PR a mudar o timing o bastante para perder a corrida ficou vermelho
    * sem ter quebrado nada.
    */
-  const permission = useSyncExternalStore(assinarPermissao, getPermission, getPermission);
+  const permission = useSyncExternalStore(assinarPermissao, getPermission, permissaoNoServidor);
   const [enabled, setEnabledState] = useState(false);
 
   useEffect(() => {

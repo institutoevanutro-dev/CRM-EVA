@@ -9,7 +9,7 @@ import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import type { FaixasDeAtendimento, Origem } from "@/lib/inicio/paineis";
 import { DIAS_DE_ESPERA_RECENTE } from "@/lib/inicio/tipos";
-import { Barra, CabecalhoDaSecao, Cartao, Esqueleto, FOCO } from "./partes";
+import { Barra, Cartao, Esqueleto, FOCO, Secao } from "./partes";
 
 /**
  * "Visão da clínica" no Início — só para gestor (a rota responde 403 aos demais).
@@ -348,7 +348,8 @@ function PainelAtendimento({ a, e }: { a: Atendimento; e: Esperando }) {
           </dd>
         </div>
         <div>
-          <dt className="text-sm text-text-muted">{t("Esperando resposta agora")}</dt>
+          {/* O recorte no rótulo (item 184): aqui são TODAS; o "Meu dia" conta só as com você ou sem responsável. */}
+          <dt className="text-sm text-text-muted">{t("Esperando resposta agora, todas as conversas")}</dt>
           {e.ok ? (
             <>
               <dd className="mt-1 flex flex-wrap items-baseline gap-x-2">
@@ -456,6 +457,20 @@ function PainelOrigem({ p }: { p: OrigemPainel }) {
 
 export function PaineisDaClinica({ numerosDeHoje = null }: { numerosDeHoje?: NumerosDeHoje }) {
   const t = useT();
+  // Em sanfona fechada (item 187): o conteúdo só monta — e só busca — quando abre.
+  return (
+    <Secao
+      id="inicio-visao"
+      titulo={t("Visão da clínica")}
+      descricao={t("Como a clínica está indo: agenda, atendimento e vendas. Só gerente e admin veem.")}
+    >
+      <ConteudoDaVisao numerosDeHoje={numerosDeHoje} />
+    </Secao>
+  );
+}
+
+function ConteudoDaVisao({ numerosDeHoje }: { numerosDeHoje: NumerosDeHoje }) {
+  const t = useT();
   const nomeDoMes = useNomeDoMes();
   const [funil, setFunil] = useState<string | null>(null);
   const q = useQuery({
@@ -481,12 +496,7 @@ export function PaineisDaClinica({ numerosDeHoje = null }: { numerosDeHoje?: Num
   const funilAtual = f?.ok && !f.semFunil ? f.funis.find((x) => x.id === f.funilId) : null;
 
   return (
-    <section aria-labelledby="inicio-visao">
-      <CabecalhoDaSecao
-        id="inicio-visao"
-        titulo={t("Visão da clínica")}
-        descricao={t("Como a clínica está indo: agenda, atendimento e vendas. Só gerente e admin veem.")}
-      />
+    <>
       {q.isLoading ? (
         <div className="space-y-4">
           <Esqueleto quantos={3} altura="h-24" colunas="sm:grid-cols-3" />
@@ -556,6 +566,6 @@ export function PaineisDaClinica({ numerosDeHoje = null }: { numerosDeHoje?: Num
           </Bloco>
         </div>
       )}
-    </section>
+    </>
   );
 }

@@ -2,11 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("sonner", () => ({ toast: vi.fn() }));
 vi.mock("./emit", () => ({ emitNotification: vi.fn() }));
+const empurrar = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: empurrar }) }));
 
+import { renderHook } from "@testing-library/react";
 import { toast } from "sonner";
 import { entregarAviso } from "./deliver";
 import { emitNotification } from "./emit";
 import { gravarCanal } from "./prefs";
+import { useNotifyOpenFromServiceWorker } from "./notify_open";
 
 describe("entregarAviso", () => {
   afterEach(() => {
@@ -86,5 +90,34 @@ describe("entregarAviso", () => {
 
     const [, opcoes] = vi.mocked(toast).mock.calls.at(-1)!;
     expect(opcoes?.action).toBeUndefined();
+  });
+
+  it("com a aba em foco, só o toast: sem aviso do sistema nem som por cima", () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    entregarAviso({ category: "message", kind: "message_inbound", title: "Maria", body: "oi" });
+    expect(toast).toHaveBeenCalledTimes(1);
+    expect(emitNotification).not.toHaveBeenCalled();
+    vi.mocked(document.hasFocus).mockRestore();
+  });
+
+  it("com a aba em foco e o toast desligado, o aviso do sistema continua saindo", () => {
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    gravarCanal("message", "in_app", false);
+    entregarAviso({ category: "message", kind: "message_inbound", title: "Maria", body: "oi" });
+    expect(toast).not.toHaveBeenCalled();
+    expect(emitNotification).toHaveBeenCalledTimes(1);
+    vi.mocked(document.hasFocus).mockRestore();
+  });
+
+  it("dentro do app, 'Abrir conversa' navega sem recarregar (router.push)", () => {
+    const assign = vi.fn();
+    const { unmount } = renderHook(() => useNotifyOpenFromServiceWorker());
+    vi.spyOn(window, "location", "get").mockReturnValue({ ...window.location, assign } as Location);
+    entregarAviso({ category: "message", kind: "message_inbound", title: "Maria", body: "oi", href: "/app/inbox?id=conv-1" });
+    const [, opcoes] = vi.mocked(toast).mock.calls.at(-1)!;
+    (opcoes?.action as unknown as { onClick: () => void }).onClick();
+    expect(empurrar).toHaveBeenCalledWith("/app/inbox?id=conv-1");
+    expect(assign).not.toHaveBeenCalled();
+    unmount();
   });
 });

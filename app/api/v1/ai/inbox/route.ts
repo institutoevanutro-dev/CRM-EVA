@@ -14,6 +14,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolverDestinosDosAvisos } from "@/lib/ai/inbox-destino";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { avisosAbertos } from "@/lib/inicio/meu-dia";
+import { FUSO_PADRAO } from "@/lib/inicio/tipos";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +63,27 @@ export async function GET(req: NextRequest): Promise<Response> {
     .eq("organization_id", org.orgId)
     .eq("status", "open");
 
-  const items = await resolverDestinosDosAvisos(await createClient(), org.orgId, org.role, data ?? []);
-  return ok({ items, open_count: openCount ?? 0 }, { requestId });
+  const db = await createClient();
+  const items = await resolverDestinosDosAvisos(db, org.orgId, org.role, data ?? []);
+
+  // O sino conta os avisos DA PESSOA — o mesmo recorte do Início (decisão do
+  // André, 18/11) —, e não os 144 da clínica. Falhou? `null`: o sino some em
+  // vez de mostrar um número errado.
+  let myOpenCount: number | null = null;
+  if (status === "open") {
+    try {
+      const meus = await avisosAbertos(db, {
+        orgId: org.orgId,
+        userId: authz.user.id,
+        agora: new Date(),
+        fuso: FUSO_PADRAO,
+        idioma: authz.user.idioma,
+        papel: org.role,
+      });
+      if (meus.ok) myOpenCount = meus.total;
+    } catch {
+      myOpenCount = null;
+    }
+  }
+  return ok({ items, open_count: openCount ?? 0, my_open_count: myOpenCount }, { requestId });
 }

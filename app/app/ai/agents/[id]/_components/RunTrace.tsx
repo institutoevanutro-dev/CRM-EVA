@@ -16,6 +16,7 @@ import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/hooks/i18n/useT";
+import { catalogEntry } from "@/lib/mcp/tools/catalogo";
 
 interface ToolCallStep {
   step?: number;
@@ -59,7 +60,7 @@ function clip(text: string, max = 4000): string {
 export function RunTrace({
   toolCalls,
   finalText,
-  emptyMessage = "Sem trace disponível.",
+  emptyMessage = "Nenhuma ação registrada.",
 }: Props) {
   const t = useT();
   const steps = asArray(toolCalls);
@@ -86,7 +87,16 @@ export function RunTrace({
                 <Badge variant="outline" className="font-mono text-xs">
                   #{stepNum}
                 </Badge>
-                <span className="font-mono">{s.tool_name ?? s.tool ?? t("(sem nome)")}</span>
+                {/* O rótulo da tela ("Ver uma oportunidade"), não o id do código;
+                    o id fica no `title` para quem depura. */}
+                <span title={s.tool_name ?? s.tool}>
+                  {(() => {
+                    const id = s.tool_name ?? s.tool;
+                    if (!id) return t("(sem nome)");
+                    const rotulo = catalogEntry(id)?.rotulo;
+                    return rotulo ? t(rotulo) : id;
+                  })()}
+                </span>
                 {errMsg ? (
                   <Badge variant="destructive" className="text-xs">
                     {t("erro")}
@@ -99,20 +109,20 @@ export function RunTrace({
             </summary>
             <div className="space-y-3 border-t border-border/60 px-3 py-3 text-xs">
               <div>
-                <p className="mb-1 font-medium text-muted-foreground">{t("Args")}</p>
+                <p className="mb-1 font-medium text-muted-foreground">{t("Dados enviados")}</p>
                 <pre className="overflow-x-auto rounded-md bg-muted/40 p-2 font-mono leading-relaxed">
                   {clip(fmtJson(s.args ?? s.arguments))}
                 </pre>
               </div>
               <div>
-                <p className="mb-1 font-medium text-muted-foreground">{t("Result")}</p>
+                <p className="mb-1 font-medium text-muted-foreground">{t("Resposta")}</p>
                 <pre className="overflow-x-auto rounded-md bg-muted/40 p-2 font-mono leading-relaxed">
                   {clip(fmtJson(s.result))}
                 </pre>
               </div>
               {errMsg ? (
                 <div>
-                  <p className="mb-1 font-medium text-destructive">{t("Error")}</p>
+                  <p className="mb-1 font-medium text-destructive">{t("Erro")}</p>
                   <pre className="overflow-x-auto rounded-md bg-destructive/10 p-2 font-mono leading-relaxed text-destructive">
                     {clip(errMsg)}
                   </pre>

@@ -31,6 +31,13 @@ vi.mock("@/lib/api/client", () => ({
   },
 }));
 
+// A saúde vem por `fetch` direto, não pelo apiClient (item 188): o 503 já é a
+// resposta, com o que caiu no corpo.
+vi.stubGlobal(
+  "fetch",
+  vi.fn(async () => new Response(JSON.stringify({ data: respostas.health }), { status: 200 })),
+);
+
 function bloco(total: number): Bloco {
   return {
     ok: true,
@@ -142,7 +149,8 @@ describe("painel Início — Meu dia claro", () => {
     await montar();
     const c = within(cartao("Pacientes esperando resposta"));
     expect(totalDoCartao("Pacientes esperando resposta")).toHaveTextContent("6");
-    expect(c.getByText("esperando há até 3 dias")).toBeInTheDocument();
+    // O recorte vai no rótulo (item 184): a Visão da clínica conta TODAS.
+    expect(c.getByText("com você ou sem responsável, há até 3 dias")).toBeInTheDocument();
     expect(c.getByText("Com você").nextElementSibling).toHaveTextContent("2");
     expect(c.getByText("Sem responsável").nextElementSibling).toHaveTextContent("4");
     const antigas = c.getByText("Conversas antigas sem resposta (mais de 3 dias)");
@@ -237,6 +245,9 @@ describe("painel Início — Gestão em três quadros pequenos", () => {
     ...extra,
   });
   beforeEach(() => {
+    // A Gestão nasce fechada (item 187) e não monta nada fechada: a pessoa
+    // deixou-a aberta da última vez — o que a sanfona lembra.
+    window.localStorage.setItem("inicio:secoes-abertas", JSON.stringify({ "inicio-gestao": true }));
     respostas.inicio = { meuDia: { avisos: NENHUM_AVISO, esperando: NADA_ESPERANDO, agenda: bloco(0), tarefas: bloco(0) }, gestao: gestao() };
     respostas.health = { status: "healthy", version: "5.6.0" };
   });
@@ -266,7 +277,7 @@ describe("painel Início — Gestão em três quadros pequenos", () => {
     await montar();
     const c = cartao("Gasto com IA no mês");
     expect(c).toHaveTextContent(/US\$\s?12,34 de US\$\s?50,00/);
-    expect(within(c).getByText("25% do limite do mês")).toBeInTheDocument();
+    expect(within(c).getByText(/^25% do limite do mês/)).toBeInTheDocument();
   });
 
   it("Gasto com IA sem limite: só o valor", async () => {

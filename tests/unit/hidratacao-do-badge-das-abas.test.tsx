@@ -122,7 +122,11 @@ describe("Inbox › as abas hidratam sem divergir do HTML do servidor (#3736)", 
 
     expect(erros, "o React teve de recuperar a árvore: a contagem do gatilho divergiu do HTML").toEqual([]);
     expect(avisosDeHidratacao).toEqual([]);
-    expect(container.querySelector("[aria-label='Mais abas']")?.textContent).toContain("25");
+    // Com a aba secundária ativa, o gatilho mostra o NOME dela e perde o
+    // aria-label "Mais abas" (item 215): é pelo nome que se acha o gatilho.
+    const gatilho = [...container.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Fechadas"));
+    expect(gatilho, "o gatilho de 'Mais' com a aba Fechadas ativa sumiu").toBeDefined();
+    expect(gatilho?.textContent).toContain("25");
   });
 
   it("os canais chegam DURANTE a hidratação: nenhum erro recuperável, e o seletor de número aparece depois", async () => {

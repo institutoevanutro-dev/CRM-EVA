@@ -89,11 +89,11 @@ test("agent abre contexto, volta ainda aberto, resolve e reabre; RLS e menu ocul
   await page.setViewportSize({ width: 1440, height: 1000 });
   await login(page, "agent"); await central(page);
   const navigation = page.getByRole("navigation", { name: "Navegação principal" });
-  // Menu por área (07/10/2026): o Inbox é aba, então a prova de "oculto" é a busca ⌘K.
+  // Menu por área (07/10/2026): as Conversas são aba, então a prova de "oculto" é a busca ⌘K.
   await expect(navigation).toBeVisible();
   await page.keyboard.press("ControlOrMeta+k");
-  await page.getByRole("combobox").fill("Inbox");
-  await expect(page.getByRole("option").filter({ hasText: /^Inbox/ })).toHaveCount(0);
+  await page.getByRole("combobox").fill("Conversas");
+  await expect(page.getByRole("option").filter({ hasText: /^Conversas/ })).toHaveCount(0);
   await page.keyboard.press("Escape");
   for (const prefix of ["Conversa", "Negócio"]) {
     await expect(row(page, `${prefix} própria`).getByRole("link")).toBeVisible();

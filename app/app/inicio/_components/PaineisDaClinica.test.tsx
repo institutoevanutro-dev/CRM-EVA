@@ -65,9 +65,21 @@ function montar(dados: unknown) {
 /** O número de um indicador: o `dd` logo depois do rótulo. */
 const valorDe = (rotulo: string) => screen.getByText(rotulo).nextElementSibling;
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // A Visão nasce fechada (sanfona, item 187); aqui ela está aberta, como a pessoa a deixou.
+  window.localStorage.setItem("inicio:secoes-abertas", JSON.stringify({ "inicio-visao": true }));
+});
 
 describe("Visão da clínica", () => {
+  it("nasce fechada e não busca nada até ser aberta (item 187)", async () => {
+    window.localStorage.clear();
+    montar(CHEIO);
+    expect(screen.getByRole("heading", { level: 2, name: "Visão da clínica" })).toBeInTheDocument();
+    expect(screen.queryByText("A clínica hoje")).not.toBeInTheDocument();
+    expect(apiClient.get).not.toHaveBeenCalled();
+  });
+
   it("três blocos, e o título de cada um diz o período", async () => {
     montar(CHEIO);
     expect(await screen.findByRole("heading", { level: 3, name: "A clínica hoje" })).toBeInTheDocument();
@@ -104,8 +116,8 @@ describe("Visão da clínica", () => {
     // Mediana de 240 s: nunca "10 h 58 m".
     expect(screen.getByText("Metade das conversas recebe resposta em até 4 min.")).toBeInTheDocument();
     // Esperando agora: só as recentes no número; as antigas vão à parte.
-    expect(valorDe("Esperando resposta agora")).toHaveTextContent("12");
-    expect(valorDe("Esperando resposta agora")).toHaveTextContent("há até 3 dias · 5 sem responsável");
+    expect(valorDe("Esperando resposta agora, todas as conversas")).toHaveTextContent("12");
+    expect(valorDe("Esperando resposta agora, todas as conversas")).toHaveTextContent("há até 3 dias · 5 sem responsável");
     expect(screen.getByText(/^Conversas antigas sem resposta \(mais de 3 dias\):/)).toHaveTextContent(/: 40$/);
   });
 
@@ -184,7 +196,7 @@ describe("Visão da clínica", () => {
     expect(screen.getAllByText("Nenhuma consulta nesta semana.")).toHaveLength(2);
     expect(screen.getByText("Nenhum funil ativo.")).toBeInTheDocument();
     expect(screen.getByText("Nenhum contato novo neste mês.")).toBeInTheDocument();
-    expect(valorDe("Esperando resposta agora")).toHaveTextContent("0");
+    expect(valorDe("Esperando resposta agora, todas as conversas")).toHaveTextContent("0");
     expect(screen.getByText("R$ 0,00")).toBeInTheDocument();
   });
 });

@@ -154,7 +154,6 @@
   /* Motion */
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --ease-in-out: cubic-bezier(0.25, 0.1, 0.25, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --duration-fast: 120ms;
   --duration-base: 200ms;
   --duration-slow: 320ms;
@@ -681,7 +680,6 @@
   /* Motion */
   --ease-out: var(--ease-out);
   --ease-in-out: var(--ease-in-out);
-  --ease-spring: var(--ease-spring);
 }
 
 /* `duration-*` não tem espaço de tema no v4 (o `transitionDuration` do v3 não
@@ -753,6 +751,13 @@
 
 
 @layer base {
+  /* O preflight do v4 pinta o placeholder com 50% da cor do texto (~3,3:1),
+     e todo campo nativo sem `placeholder:` herdava isso (item 244). O token
+     subtle passa de 4,5:1 nos dois temas; utilitário `placeholder:` ainda vence. */
+  ::placeholder {
+    color: var(--color-text-subtle);
+  }
+
   /* O preflight do v4 não pinta mais borda por padrão (`border: 0 solid`, cor
      = `currentColor`), então os ~300 `class="border"` sem cor desta base
      dependem inteiramente desta regra. Ela já existia no v3 pelo mesmo motivo;

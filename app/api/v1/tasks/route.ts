@@ -95,13 +95,17 @@ export async function GET(req: NextRequest): Promise<Response> {
   // ⚠️ `organization_id` à mão mesmo com RLS ligada: é a regra do CLAUDE.md, e
   // ela não é redundante — o dia em que esta rota trocar para o admin client
   // (que bypassa RLS) o filtro já está aqui.
+  // Encerradas vêm das MAIS RECENTES (item 192): pelo prazo mais antigo, o
+  // corte de 500 guardava as velhas e as concluídas desta semana sumiam.
+  const encerradas = filtros.status === "done" || filtros.status === "cancelled";
   let query = supabase
     .from("crm_tasks")
     .select(COLUNAS)
-    .eq("organization_id", authz.org.orgId)
-    .order("due_date", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: false })
-    .limit(500);
+    .eq("organization_id", authz.org.orgId);
+  query = encerradas
+    ? query.order("updated_at", { ascending: false })
+    : query.order("due_date", { ascending: true, nullsFirst: false }).order("created_at", { ascending: false });
+  query = query.limit(500);
 
   if (filtros.status) query = query.eq("status", filtros.status);
   if (filtros.priority) query = query.eq("priority", filtros.priority);

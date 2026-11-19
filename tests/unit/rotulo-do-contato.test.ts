@@ -158,6 +158,11 @@ describe("a sétima cópia não nasce", () => {
    */
   const LEITURAS_LEGITIMAS: ReadonlyArray<{ arquivo: string; trecho: string; motivo: string }> = [
     {
+      arquivo: "app/app/ai/agents/[id]/_components/ModelPicker.tsx",
+      trecho: "{meta?.display_name ?? model}",
+      motivo: "nome do MODELO de IA no catálogo do provedor, não de contato",
+    },
+    {
       arquivo: "app/api/v1/channels/official/route.ts",
       trecho: "displayName: data?.display_name ?? null,",
       motivo: "nome do NÚMERO no canal oficial da Meta, não de contato",

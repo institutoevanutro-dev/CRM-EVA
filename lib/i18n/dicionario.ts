@@ -298,10 +298,15 @@ export const DICIONARIO: Traducoes = {
   "esperando por você": { es: "esperando por ti" },
   "Ninguém esperando resposta sua.": { es: "Nadie espera respuesta tuya." },
   "compromissos hoje": { es: "citas hoy" },
+  "compromisso hoje": { es: "cita hoy" },
+  "Nenhum compromisso na clínica hoje.": { es: "No hay citas en la clínica hoy." },
+  "Agenda de hoje da clínica": { es: "Agenda de hoy de la clínica" },
   "Nenhum compromisso seu hoje.": { es: "No tienes citas hoy." },
   "para hoje ou atrasadas": { es: "para hoy o atrasadas" },
+  "para hoje ou atrasada": { es: "para hoy o atrasada" },
   "Nenhuma tarefa sua para hoje.": { es: "No tienes tareas para hoy." },
   "pedem a sua atenção": { es: "piden tu atención" },
+  "pede a sua atenção": { es: "pide tu atención" },
   "Nenhum aviso para você.": { es: "Ningún aviso para ti." },
   "para resolver": { es: "por resolver" },
   "Tudo configurado.": { es: "Todo configurado." },
@@ -402,6 +407,7 @@ export const DICIONARIO: Traducoes = {
   "O que precisa de você hoje: conversas, agenda, tarefas e avisos.": { es: "Lo que te necesita hoy: conversaciones, agenda, tareas y avisos." },
   "Ninguém esperando resposta.": { es: "Nadie esperando respuesta." },
   "esperando há até {{n}} dias": { es: "esperando desde hace hasta {{n}} días" },
+  "com você ou sem responsável, há até {{n}} dias": { es: "contigo o sin responsable, desde hace hasta {{n}} días" },
   "Com você": { es: "Contigo" },
   "Conversas antigas sem resposta (mais de {{n}} dias)": { es: "Conversaciones antiguas sin respuesta (más de {{n}} días)" },
   "Avisos, separados por assunto": { es: "Avisos, separados por asunto" },
@@ -443,6 +449,7 @@ export const DICIONARIO: Traducoes = {
   "Tempo até a primeira resposta": { es: "Tiempo hasta la primera respuesta" },
   "Metade das conversas recebe resposta {{prazo}}.": { es: "La mitad de las conversaciones recibe respuesta {{prazo}}." },
   "Esperando resposta agora": { es: "Esperando respuesta ahora" },
+  "Esperando resposta agora, todas as conversas": { es: "Esperando respuesta ahora, todas las conversaciones" },
   "há até {{n}} dias": { es: "desde hace hasta {{n}} días" },
   "{{n}} sem responsável": { es: "{{n}} sin responsable" },
   "igual aos mesmos dias de {{mes}}": { es: "igual que en los mismos días de {{mes}}" },
@@ -483,6 +490,10 @@ export const DICIONARIO: Traducoes = {
   "Agendamentos criados": { es: "Citas creadas" },
   "sem limite configurado": { es: "sin límite configurado" },
   "Tudo no ar": { es: "Todo en línea" },
+  "Com problema: {{servicos}}. Avise o suporte.": { es: "Con problema: {{servicos}}. Avisa al soporte." },
+  "Banco de dados": { es: "Base de datos" },
+  "Fila de envio": { es: "Cola de envío" },
+  "Em dólar (US$), cobrado pelo provedor de IA.": { es: "En dólares (US$), cobrado por el proveedor de IA." },
   "Algum serviço está fora do ar. Avise o suporte.": { es: "Algún servicio está caído. Avisa al soporte." },
   // vocabulario.ts (followups) — MatchReplyForm.tsx não traduzia, ClassifyForm.tsx sim.
   "Se a informação já existir": { es: "Si la información ya existe" },
@@ -581,8 +592,8 @@ export const DICIONARIO: Traducoes = {
   "Novos canais começam em modo de teste, sem respostas automáticas até você autorizar números ou liberar o público.": { es: "Los canales nuevos empiezan en modo de prueba, sin respuestas automáticas hasta que autorices números o habilites al público." },
   "Assistência do agente": { es: "Asistencia del agente" },
   "Resposta aprovada. Acompanhe o envio aqui.": { es: "Respuesta aprobada. Sigue el envío aquí." },
-  "Sugestão rejeitada. O feedback será usado na próxima sugestão.": {
-    es: "Sugerencia rechazada. Los comentarios se usarán en la próxima sugerencia.",
+  "Sugestão rejeitada. O comentário será usado na próxima sugestão.": {
+    es: "Sugerencia rechazada. El comentario se usará en la próxima sugerencia.",
   },
   "Sua edição foi preservada. Confira se a conversa mudou antes de aprovar novamente.": {
     es: "Tu edición se conservó. Comprueba si la conversación cambió antes de aprobar de nuevo.",
@@ -618,7 +629,7 @@ export const DICIONARIO: Traducoes = {
   "Abra a ação correspondente no CRM ou na agenda para confirmar.": {
     es: "Abre la acción correspondiente en el CRM o en el calendario para confirmar.",
   },
-  "Feedback para a próxima sugestão": { es: "Comentarios para la próxima sugerencia" },
+  "O que melhorar na próxima sugestão": { es: "Qué mejorar en la próxima sugerencia" },
   "Aprovar e enviar": { es: "Aprobar y enviar" },
   Rejeitar: { es: "Rechazar" },
   "Confira a configuração do agente e tente gerar novamente.": {
@@ -739,7 +750,7 @@ export const DICIONARIO: Traducoes = {
   "Remover esta conta": { es: "Quitar esta cuenta" },
   "Remover esta conta do Google? As agendas dela deixam de ocupar seus horários.": { es: "¿Quitar esta cuenta de Google? Sus calendarios dejarán de ocupar sus horarios." },
   "Ocupação do Google ainda não verificada neste período.": { es: "La ocupación de Google aún no se ha verificado en este período." },
-  "Marcar compromisso": {es:"Programar cita"},
+  "Marcar consulta": { es: "Agendar consulta" },
   "Recuperação encerrada. Revise o próximo passo.": {es:"Recuperación finalizada. Revise el siguiente paso."},
   "Acompanhamento encerrado sem novo envio": {es:"Seguimiento finalizado sin nuevo envío"},
   "Só começa após falta confirmada pela equipe. Remarcação, cancelamento ou nova resposta interrompem a recuperação. Outro acompanhamento ativo impede o início.": {es:"Solo comienza tras una ausencia confirmada por el equipo. Reprogramar, cancelar o una nueva respuesta interrumpen la recuperación. Otro seguimiento activo impide el inicio."},
@@ -909,8 +920,8 @@ export const DICIONARIO: Traducoes = {
   "Confirmar desfecho": { es: "Confirmar resultado" },
   "Demanda vigente neste canal": { es: "Solicitud vigente en este canal" },
   "Memória do contato": { es: "Memoria del contacto" },
-  "Fatos duráveis registrados nas notas. Pendências pertencem à demanda vigente.": { es: "Hechos duraderos registrados en las notas. Las tareas pendientes pertenecen a la solicitud vigente." },
-  "Nenhum fato durável registrado.": { es: "No hay hechos duraderos registrados." },
+  "O que vale guardar sobre a pessoa, tirado das notas.": { es: "Lo que vale la pena guardar sobre la persona, sacado de las notas." },
+  "Nada guardado ainda.": { es: "Nada guardado todavía." },
   "Histórico encerrado — sem tarefas pendentes": { es: "Historial cerrado — sin tareas pendientes" },
 
   "Interface": { es: "Interfaz" },
@@ -985,9 +996,6 @@ export const DICIONARIO: Traducoes = {
   "Prepara no compositor: você revisa e envia": { es: "Lo prepara en el editor: tú revisas y envías" },
   "Buscar resposta": { es: "Buscar respuesta" },
   "Mostrar na barra do Inbox": { es: "Mostrar en la barra del Inbox" },
-  'Para não depender do dado, ponha um texto de reserva: {{primeiro_nome|"aluno"}}.': {
-    es: 'Para no depender del dato, pon un texto de respaldo: {{primeiro_nome|"alumno"}}.',
-  },
   "Desmarcado, a resposta sai da barra do Inbox e continua no atalho /.": {
     es: "Sin marcar, la respuesta sale de la barra del Inbox y sigue en el atajo /.",
   },
@@ -1099,7 +1107,10 @@ export const DICIONARIO: Traducoes = {
 
   // ─── Inbox: cabeçalho e ações da conversa ───
   Assumir: { es: "Asumir" },
-  Liberar: { es: "Liberar" },
+  "Deixar com o automático": { es: "Dejar al automático" },
+  "Você deixa de ser o responsável e o automático volta a responder.": {
+    es: "Dejas de ser el responsable y el automático vuelve a responder.",
+  },
   Transferir: { es: "Transferir" },
   Lembrar: { es: "Recordar" },
   Fechar: { es: "Cerrar" },
@@ -1111,7 +1122,6 @@ export const DICIONARIO: Traducoes = {
   "conversas selecionadas": { es: "conversaciones seleccionadas" },
   "Marcar como lida": { es: "Marcar como leída" },
   "Mais ações": { es: "Más acciones" },
-  "Pausar IA": { es: "Pausar IA" },
   "Transferir para…": { es: "Transferir a…" },
   "Transferir a conversa selecionada": { es: "Transferir la conversación seleccionada" },
   "Cada conversa é transferida pelo mesmo caminho de sempre, com evento e auditoria próprios.": {
@@ -1134,8 +1144,8 @@ export const DICIONARIO: Traducoes = {
   "Os atendimentos terminam. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.": {
     es: "Las atenciones terminan. Si el paciente vuelve a escribir, la conversación vuelve a la cola y el automático puede responder.",
   },
-  "As letras valem com o cursor na lista de conversas.": {
-    es: "Las letras funcionan con el cursor en la lista de conversaciones.",
+  "O r vale com o cursor na lista de conversas.": {
+    es: "La r funciona con el cursor en la lista de conversaciones.",
   },
   "Selecionar todas as conversas visíveis": { es: "Seleccionar todas las conversaciones visibles" },
   Máximo: { es: "Máximo" },
@@ -1215,7 +1225,6 @@ export const DICIONARIO: Traducoes = {
   "Sem etiquetas.": { es: "Sin etiquetas." },
   "Sem leads.": { es: "Sin leads." },
   "Nenhum negócio aberto.": { es: "Ningún negocio abierto." },
-  "Sem pedidos.": { es: "Sin pedidos." },
   "Sem atividade.": { es: "Sin actividad." },
   "Nova etiqueta…": { es: "Nueva etiqueta…" },
   "Sem próximo passo definido": { es: "Sin próximo paso definido" },
@@ -1243,7 +1252,6 @@ export const DICIONARIO: Traducoes = {
   Telefone: { es: "Teléfono" },
   "Nenhum contato": { es: "Ningún contacto" },
   Bloqueado: { es: "Bloqueado" },
-  "Marcar consulta": { es: "Agendar consulta" },
   Conversar: { es: "Conversar" },
   Consultas: { es: "Consultas" },
   Próximas: { es: "Próximas" },
@@ -1448,6 +1456,9 @@ export const DICIONARIO: Traducoes = {
   "Buscar telas": { es: "Buscar pantallas" },
   "Buscar telas do sistema…": { es: "Buscar pantallas del sistema…" },
   Telas: { es: "Pantallas" },
+  // A busca ⌘K acha também contatos e conversas (item 233).
+  "Buscar telas, contatos e conversas…": { es: "Buscar pantallas, contactos y conversaciones…" },
+  "Resultados da busca": { es: "Resultados de la búsqueda" },
   // O gatilho da busca no topo mostra RETICENCIA ASCII desde antes do i18n
   // (`Buscar...`). A chave e o byte que a tela ja mostrava: trocar por "…"
   // aqui mudaria a tela de quem usa em portugues — que e o unico jeito de
@@ -1467,10 +1478,10 @@ export const DICIONARIO: Traducoes = {
   "Menu do usuário": { es: "Menú del usuario" },
   Sair: { es: "Cerrar sesión" },
   "Central de avisos": { es: "Central de avisos" },
-  // Lembrete de caso parado na Central (migration 0397; porte do original #3399, ideia de @Atlasads no #2584).
+  // Lembrete de caso parado, em Configurações › Distribuição de atendimento (migration 0397; porte do original #3399, ideia de @Atlasads no #2584).
   "Lembrete de caso parado": { es: "Recordatorio de caso detenido" },
-  "Quando um caso espera uma decisão da equipe, esta Central volta a avisar. O relógio começa quando o caso chega à equipe e recomeça quando o cliente responde.": {
-    es: "Cuando un caso espera una decisión del equipo, esta Central vuelve a avisar. El reloj empieza cuando el caso llega al equipo y se reinicia cuando el cliente responde.",
+  "Quando um caso espera uma decisão da equipe, a Central de avisos volta a avisar. O relógio começa quando o caso chega à equipe e recomeça quando o cliente responde.": {
+    es: "Cuando un caso espera una decisión del equipo, la Central de avisos vuelve a avisar. El reloj empieza cuando el caso llega al equipo y se reinicia cuando el cliente responde.",
   },
   "Lembrar a equipe dos casos parados": { es: "Recordar al equipo los casos detenidos" },
   "Lembrar a cada": { es: "Recordar cada" },
@@ -1482,7 +1493,7 @@ export const DICIONARIO: Traducoes = {
   "1 hora": { es: "1 hora" },
   "{n} dias": { es: "{n} días" },
   "{n} horas": { es: "{n} horas" },
-  "em aberto": { es: "abiertos" },
+  "para você": { es: "para ti" },
   // ─── Agentes de IA: lista ───
   "Agents de IA": { es: "Agentes de IA" },
   "Configure o comportamento dos agents que respondem no WhatsApp.": {
@@ -1638,7 +1649,7 @@ export const DICIONARIO: Traducoes = {
   "Freios de segurança": { es: "Frenos de seguridad" },
   "Ações por atendimento (1 a 25)": { es: "Acciones por atención (1 a 25)" },
   "Volume de texto por atendimento": { es: "Volumen de texto por atención" },
-  "Custo máximo por atendimento (centavos)": { es: "Costo máximo por atención (centavos)" },
+  "Custo máximo por atendimento (centavos de dólar)": { es: "Costo máximo por atención (centavos de dólar)" },
   "Mensagens anteriores que ele lê": { es: "Mensajes anteriores que lee" },
   "Tamanho máximo desse histórico": { es: "Tamaño máximo de ese historial" },
   "Pausa entre uma resposta e a próxima (segundos)": { es: "Pausa entre una respuesta y la siguiente (segundos)" },
@@ -1937,8 +1948,8 @@ export const DICIONARIO: Traducoes = {
   },
   "Empresa:": { es: "Empresa:" },
   "Modelo:": { es: "Modelo:" },
-  "Tools adicionadas:": { es: "Herramientas agregadas:" },
-  "Tools removidas:": { es: "Herramientas eliminadas:" },
+  "Ações adicionadas:": { es: "Acciones añadidas:" },
+  "Ações removidas:": { es: "Acciones eliminadas:" },
   "Prompt:": { es: "Prompt:" },
   "caracteres a mais": { es: "caracteres a más" },
   "caracteres a menos": { es: "caracteres a menos" },
@@ -1947,25 +1958,22 @@ export const DICIONARIO: Traducoes = {
   Execução: { es: "Ejecución" },
   Iniciado: { es: "Iniciado" },
   Concluído: { es: "Concluido" },
-  "Tokens (in/out)": { es: "Tokens (entrada/salida)" },
   Custo: { es: "Costo" },
   Latência: { es: "Latencia" },
   Steps: { es: "Pasos" },
   error: { es: "error" },
   "Ver conversa": { es: "Ver conversación" },
-  "Ver inbound": { es: "Ver mensaje entrante" },
-  Trace: { es: "Traza" },
+  "Ver mensagem recebida": { es: "Ver mensaje recibido" },
+  "Passo a passo": { es: "Paso a paso" },
   "Selecione uma execução.": { es: "Selecciona una ejecución." },
-  "Sem trace disponível.": { es: "Sin traza disponible." },
+  "Nenhuma ação registrada.": { es: "Ninguna acción registrada." },
   "(sem nome)": { es: "(sin nombre)" },
   erro: { es: "error" },
-  Args: { es: "Argumentos" },
-  Result: { es: "Resultado" },
-  Error: { es: "Error" },
+  "Dados enviados": { es: "Datos enviados" },
+  "Empresa": { es: "Empresa" },
+  "Materiais": { es: "Materiales" },
   "Mensagem que SERIA enviada": { es: "Mensaje que SE enviaría" },
-  "Sem tool calls (resposta direta do LLM).": {
-    es: "Sin llamadas a herramientas (respuesta directa del LLM).",
-  },
+  "Nenhuma ação usada: respondeu direto.": { es: "Ninguna acción usada: respondió directo." },
   "execuções recentes": { es: "ejecuciones recientes" },
   "Atualizando…": { es: "Actualizando…" },
   Atualizar: { es: "Actualizar" },
@@ -1999,13 +2007,9 @@ export const DICIONARIO: Traducoes = {
   "Teste executado.": { es: "Prueba ejecutada." },
   "Erro inesperado.": { es: "Error inesperado." },
   "Versão alvo": { es: "Versión de destino" },
-  "⚠ Modo teste consome créditos do provider.": {
-    es: "⚠ El modo de prueba consume créditos del proveedor.",
-  },
-  "Nenhuma mensagem é enviada via WhatsApp. O run é registrado como dry-run.": {
-    es: "No se envía ningún mensaje por WhatsApp. La ejecución se registra como dry-run.",
-  },
-  "Mensagem do cliente (sample)": { es: "Mensaje del cliente (ejemplo)" },
+  "O teste gasta créditos da inteligência artificial.": { es: "La prueba gasta créditos de la inteligencia artificial." },
+  "Nenhuma mensagem vai pelo WhatsApp. O teste aparece em Execuções marcado como teste.": { es: "Ningún mensaje sale por WhatsApp. La prueba aparece en Ejecuciones marcada como prueba." },
+  "Mensagem do cliente (exemplo)": { es: "Mensaje del cliente (ejemplo)" },
   "Oi, quanto custa X?": { es: "Hola, ¿cuánto cuesta X?" },
   "Nome (opcional)": { es: "Nombre (opcional)" },
   "Telefone (opcional)": { es: "Teléfono (opcional)" },
@@ -2013,25 +2017,24 @@ export const DICIONARIO: Traducoes = {
   "Executar teste": { es: "Ejecutar prueba" },
   Resultado: { es: "Resultado" },
   "Nenhum teste executado ainda.": { es: "Todavía no se ejecutó ninguna prueba." },
-  "Executando dry-run…": { es: "Ejecutando dry-run…" },
+  "Executando o teste…": { es: "Ejecutando la prueba…" },
   "Stub: o runtime real é entregue na S-13.08. O trace abaixo é simulado.": {
     es: "Stub: el runtime real se entrega en S-13.08. La traza de abajo es simulada.",
   },
-  "Tokens in/out": { es: "Tokens entrada/salida" },
-  "Custo (cents)": { es: "Costo (centavos)" },
+  "Volume de texto (entrada/saída)": { es: "Volumen de texto (entrada/salida)" },
   // ─── Agentes de IA: diff e histórico de versões, uso das capacidades ───
   Provider: { es: "Proveedor" },
   Model: { es: "Modelo" },
   Canal: { es: "Canal" },
   Configuração: { es: "Configuración" },
-  Tools: { es: "Herramientas" },
-  "Handoff keywords": { es: "Palabras clave de transferencia" },
+  "Maior do que o modelo consegue ler": { es: "Más grande de lo que el modelo puede leer" },
+  "Horário de atendimento": { es: "Horario de atención" },
   "System prompt": { es: "Prompt del sistema" },
   "Sem mudanças.": { es: "Sin cambios." },
   Campo: { es: "Campo" },
   Adicionadas: { es: "Agregadas" },
   Removidas: { es: "Eliminadas" },
-  "Habilitado:": { es: "Habilitado:" },
+  "Perto do limite do que o modelo lê": { es: "Cerca del límite de lo que el modelo lee" },
   "Fluxos adicionados": { es: "Flujos agregados" },
   "Fluxos removidos": { es: "Flujos eliminados" },
   "Nenhuma versão criada ainda.": { es: "Todavía no se creó ninguna versión." },
@@ -2040,17 +2043,16 @@ export const DICIONARIO: Traducoes = {
   " (publicada como v": { es: " (publicada como v" },
   Substituída: { es: "Reemplazada" },
   "publicada em": { es: "publicada el" },
-  "Diff v": { es: "Comparar v" },
+  "Comparar v": { es: "Comparar v" },
   " ↔ v": { es: " ↔ v" },
   Diff: { es: "Comparar" },
   Reverter: { es: "Revertir" },
-  "Reverter para v": { es: "Revertir a v" },
+  "Voltar para a v": { es: "Volver a la v" },
   "Uma nova versão idêntica a v": { es: "Se creará una versión idéntica a v" },
   " será criada e publicada imediatamente. A versão atualmente publicada vira superseded.": {
     es: " y se publicará de inmediato. La versión actualmente publicada queda reemplazada.",
   },
-  "Revertendo…": { es: "Revirtiendo…" },
-  "Confirmar revert": { es: "Confirmar reversión" },
+  "Voltar a esta versão": { es: "Volver a esta versión" },
   "falhando sempre": { es: "fallando siempre" },
   falhas: { es: "fallas" },
   "usada sem estar ligada": { es: "usada sin estar activada" },
@@ -2992,6 +2994,13 @@ export const DICIONARIO: Traducoes = {
   "Linha do tempo do aprendizado": { es: "Línea de tiempo del aprendizaje" },
   "Marcar resolvido": { es: "Marcar resuelto" },
   "Marcar todos resolvidos": { es: "Marcar todos como resueltos" },
+  "Marcar {n} avisos como resolvidos?": { es: "¿Marcar {n} avisos como resueltos?" },
+  "Marcar 1 aviso como resolvido?": { es: "¿Marcar 1 aviso como resuelto?" },
+  "Todos os avisos em aberto saem da lista, inclusive os que não aparecem na tela.": {
+    es: "Todos los avisos abiertos salen de la lista, incluso los que no aparecen en la pantalla.",
+  },
+  "Marcar resolvidos": { es: "Marcar resueltos" },
+  "Mostrando {n} de {total}": { es: "Mostrando {n} de {total}" },
   "Não foi possível resolver todos os avisos. Confira a lista e tente novamente.": {
     es: "No se pudieron resolver todos los avisos. Revisa la lista e inténtalo de nuevo.",
   },
@@ -3057,8 +3066,8 @@ export const DICIONARIO: Traducoes = {
   "O que fazer:": { es: "Qué hacer:" },
   "O que mudou no resultado": { es: "Lo que cambió en el resultado" },
   "O que o agente deve saber": { es: "Lo que el agente debe saber" },
-  "O que o assistente precisou escalar para o time: conexões caídas, tarefas que falharam, atendimentos passados a humanos.": {
-    es: "Lo que el asistente necesitó escalar al equipo: conexiones caídas, tareas que fallaron, atenciones pasadas a humanos.",
+  "O que o assistente passou para a equipe: conexões caídas, tarefas que falharam, atendimentos passados a pessoas.": {
+    es: "Lo que el asistente pasó al equipo: conexiones caídas, tareas que fallaron, atenciones pasadas a personas.",
   },
   "O que os clientes mais quiseram, segundo o que o roteador entendeu de cada conversa.": {
     es: "Lo que los clientes más quisieron, según lo que el enrutador entendió de cada conversación.",
@@ -5417,6 +5426,7 @@ export const DICIONARIO: Traducoes = {
   "O que muda": { es: "Qué cambia" },
   "Iniciando…": { es: "Iniciando…" },
   "Atualizar agora": { es: "Actualizar ahora" },
+  "A atualização é feita pela equipe que cuida do servidor.": { es: "La actualización la hace el equipo que cuida el servidor." },
   "O sistema sai do ar por cerca de 2 minutos e volta sozinho. Faço uma cópia de segurança dos seus dados antes.": {
     es: "El sistema se apaga por cerca de 2 minutos y vuelve solo. Hago una copia de seguridad de tus datos antes.",
   },
@@ -5493,7 +5503,14 @@ export const DICIONARIO: Traducoes = {
     es: "El nombre y el color que tu empresa muestra para quien trabaja aquí dentro.",
   },
   // ─── Configurações: Notificações ───
-  "Canais e categorias.": { es: "Canales y categorías." },
+  "Escolha como ser avisado. As escolhas valem só neste aparelho e neste navegador.": {
+    es: "Elige cómo recibir los avisos. Las elecciones valen solo en este dispositivo y en este navegador.",
+  },
+  "Na tela": { es: "En pantalla" },
+  "na tela": { es: "en pantalla" },
+  "Notificação": { es: "Notificación" },
+  "notificação": { es: "notificación" },
+  "Na Central de avisos": { es: "En la Central de avisos" },
   "Preferências de notificação em breve. Por enquanto, alertas críticos são enviados por email.": {
     es: "Preferencias de notificación próximamente. Por ahora, las alertas críticas se envían por correo.",
   },
@@ -5921,7 +5938,6 @@ export const DICIONARIO: Traducoes = {
   "Nenhuma demanda aberta.": { es: "No hay demandas abiertas." },
   "Demandas abertas": { es: "Demandas abiertas" },
   "Leads recentes": { es: "Leads recientes" },
-  "Pedidos recentes": { es: "Pedidos recientes" },
   "O que acontece a seguir?": { es: "¿Qué pasa a continuación?" },
   "Próximo passo desta demanda": { es: "Próximo paso de esta demanda" },
   "Não consegui salvar o próximo passo. Tente de novo.": {
@@ -6005,8 +6021,6 @@ export const DICIONARIO: Traducoes = {
   "Transferindo…": { es: "Transfiriendo…" },
   Gestor: { es: "Gestor" },
   "Atalhos de teclado": { es: "Atajos de teclado" },
-  "Próxima conversa": { es: "Siguiente conversación" },
-  "Conversa anterior": { es: "Conversación anterior" },
   "Focar resposta": { es: "Enfocar respuesta" },
   "Enviar a mensagem": { es: "Enviar el mensaje" },
   "Quebrar linha sem enviar": { es: "Salto de línea sin enviar" },
@@ -6067,7 +6081,8 @@ export const DICIONARIO: Traducoes = {
   "Essa pessoa ainda não escreveu para este perfil. A Meta só deixa responder depois que ela mandar uma mensagem.": {
     es: "Esta persona aún no escribió a este perfil. Meta solo permite responder después de que ella envíe un mensaje.",
   },
-  "Lembrete ativo": { es: "Recordatorio activo" },
+  "Lembrete às": { es: "Recordatorio a las" },
+  "Vou lembrar às": { es: "Te recordaré a las" },
   "Cancelar lembrete": { es: "Cancelar recordatorio" },
   "Em 1 hora": { es: "En 1 hora" },
   "Em 3 horas": { es: "En 3 horas" },
@@ -6718,6 +6733,7 @@ export const DICIONARIO: Traducoes = {
   // ─── Onboarding: invite-team — ROTULO_DO_PAPEL (lib/auth/types.ts) ───
   "Somente leitura": { es: "Solo lectura" },
   "Gerente": { es: "Gerente" },
+  "Prestador de serviço": { es: "Prestador de servicios" },
   "Administrador": { es: "Administrador" },
 
   // ─── Onboarding: funil — EXPLICACAO_DO_PASSO (lib/leads/agent-mapping.ts) ───
@@ -8380,6 +8396,7 @@ export const DICIONARIO: Traducoes = {
   "Toda demanda aberta teve atividade recente ou já tem um retorno agendado.": { es: "Toda demanda abierta tuvo actividad reciente o ya tiene un retorno agendado." },
   "demanda aberta sem próximo passo": { es: "demanda abierta sin próximo paso" },
   "demandas abertas sem próximo passo": { es: "demandas abiertas sin próximo paso" },
+  "Mostrando {{n}} de {{total}}": { es: "Mostrando {{n}} de {{total}}" },
   "Ninguém marcou o que acontece a seguir. Cada uma é alguém esperando sem que nada esteja combinado.": { es: "Nadie marcó qué pasa después. Cada una es alguien esperando sin que nada esté acordado." },
   "aberta há": { es: "abierta hace" },
   "crítico": { es: "crítico" },
@@ -8405,7 +8422,7 @@ export const DICIONARIO: Traducoes = {
   "Só um administrador pode recomeçar o radar.": { es: "Solo un administrador puede reiniciar el radar." },
   "Não foi possível recomeçar o radar.": { es: "No fue posible reiniciar el radar." },
   "Demandas abertas que esfriaram e precisam de você. Se o assistente já agendou um retorno, aparece como “em voo”; sem próximo passo, é risco de perder o cliente.": { es: "Demandas abiertas que se enfriaron y te necesitan. Si el asistente ya agendó un retorno, aparece como “en vuelo”; sin próximo paso, es riesgo de perder al cliente." },
-  "Scripts salvos para responder mais rápido no atendimento.": { es: "Guiones guardados para responder más rápido en la atención." },
+  "Textos prontos para responder mais rápido no atendimento.": { es: "Textos listos para responder más rápido en la atención." },
   "Saudação inicial": { es: "Saludo inicial" },
   "Use": { es: "Usa" },
   "para personalizar.": { es: "para personalizar." },
@@ -8635,9 +8652,11 @@ export const DICIONARIO: Traducoes = {
   "Aqui a IA lê o material e responde com as palavras dela; para uma resposta que sai igual, sem IA, use Perguntas frequentes.": { es: "Aquí la IA lee el material y responde con sus palabras; para una respuesta que sale igual, sin IA, usa Preguntas frecuentes." },
   " — edição bloqueada.": { es: " — edición bloqueada." },
   "O navegador bloqueou as notificações. Libere-as nas configurações do site e recarregue.": { es: "El navegador bloqueó las notificaciones. Habilítalas en la configuración del sitio y recarga." },
-  "Email ainda não está disponível. In-app (toast) e Push (Chrome) já funcionam, inclusive com a aba fechada.": { es: "El email todavía no está disponible. In-app (toast) y Push (Chrome) ya funcionan, incluso con la pestaña cerrada." },
+  "Os avisos chegam aqui mesmo com a aba fechada, depois que você liga a Notificação abaixo.": { es: "Los avisos llegan aquí incluso con la pestaña cerrada, después de que activas la Notificación de abajo." },
   "Nesta instalação, os avisos só aparecem com o site aberto.": { es: "En esta instalación, los avisos solo aparecen con el sitio abierto." },
-  "Ligar o Push abaixo já faz o aviso aparecer na bandeja do sistema enquanto você está com o site aberto numa aba. Para receber também com a aba fechada, quem administra o servidor precisa gerar um par de chaves uma única vez e reiniciar:": { es: "Activar el Push de abajo ya hace que el aviso aparezca en la bandeja del sistema mientras tienes el sitio abierto en una pestaña. Para recibirlo también con la pestaña cerrada, quien administra el servidor necesita generar un par de claves una sola vez y reiniciar:" },
+  "Ligar a Notificação abaixo já faz o aviso aparecer na bandeja do sistema enquanto o site está aberto numa aba. Para receber também com a aba fechada, quem administra o servidor precisa configurar uma vez.": { es: "Activar la Notificación de abajo ya hace que el aviso aparezca en la bandeja del sistema mientras el sitio está abierto en una pestaña. Para recibirlo también con la pestaña cerrada, quien administra el servidor necesita configurarlo una vez." },
+  "Como configurar no servidor": { es: "Cómo configurarlo en el servidor" },
+  "Gere um par de chaves uma única vez e reinicie:": { es: "Genera un par de claves una sola vez y reinicia:" },
   "VAPID_PUBLIC_KEY": { es: "VAPID_PUBLIC_KEY" },
   "VAPID_PRIVATE_KEY": { es: "VAPID_PRIVATE_KEY" },
   ". Email ainda não está disponível.": { es: ". El email todavía no está disponible." },
@@ -8776,6 +8795,7 @@ export const DICIONARIO: Traducoes = {
   "Papel atualizado.": { es: "Rol actualizado." },
 
   // ─── Feedback: catálogo genérico de erros de API (ApiErrorToast) ───
+  "Detalhes técnicos": { es: "Detalles técnicos" },
   "Requisição inválida. Recarregue e tente de novo.": {
     es: "Solicitud inválida. Recarga e intenta de nuevo.",
   },
@@ -9653,8 +9673,11 @@ export const DICIONARIO: Traducoes = {
   "Salvar produto": { es: "Guardar producto" },
   "em estoque": { es: "en stock" },
   "sem controle de estoque": { es: "sin control de stock" },
-  "preço da Precificação": { es: "precio de la Fijación de precios" },
-  "Este item vem da Precificação. Nome, categoria, preço, custo e situação são atualizados de lá a cada hora: o que mudar aqui volta ao valor da Precificação. Para mudar o preço, altere na Precificação.": { es: "Este artículo viene de la Fijación de precios. Nombre, categoría, precio, costo y estado se actualizan desde allí cada hora: lo que cambie aquí vuelve al valor de la Fijación de precios. Para cambiar el precio, modifíquelo en la Fijación de precios." },
+  "Da Precificação": { es: "De la Fijación de precios" },
+  "Este item vem da Precificação. Código, nome, categoria, preço, custo e situação só mudam lá: altere na Precificação.": { es: "Este artículo viene de la Fijación de precios. Código, nombre, categoría, precio, costo y estado solo cambian allí: modifíquelo en la Fijación de precios." },
+  "Desative na Precificação": { es: "Desactívelo en la Fijación de precios" },
+  "Ações do produto": { es: "Acciones del producto" },
+  "Este item vem da Precificação: altere na Precificação.": { es: "Este artículo viene de la Fijación de precios: modifíquelo en la Fijación de precios." },
 
   // Chamada de voz WhatsApp (WaCalls, spec 18)
   // "Chamar", não "Ligar" — a chave já existe com outro sentido (ativar/toggle,
@@ -10082,6 +10105,12 @@ export const DICIONARIO: Traducoes = {
   },
   "Marcar como concluída": { es: "Marcar como completada" },
   "Reabrir a tarefa": { es: "Reabrir la tarea" },
+  "Reabrir mesmo assim": { es: "Reabrir de todos modos" },
+  "Se reabrir, ao concluir de novo a data de conclusão vira a de hoje e a tarefa passa a contar como atrasada no bônus.": {
+    es: "Si la reabres, al concluirla de nuevo la fecha de conclusión pasa a ser la de hoy y la tarea cuenta como atrasada en el bono.",
+  },
+  "Não foi possível apagar a tarefa.": { es: "No se pudo borrar la tarea." },
+  "Nova tarefa em {{dia}}": { es: "Nueva tarea el {{dia}}" },
   "Editar a tarefa": { es: "Editar la tarea" },
   "Apagar a tarefa": { es: "Eliminar la tarea" },
   "O que precisa ser feito": { es: "Qué hay que hacer" },
@@ -12113,18 +12142,18 @@ export const DICIONARIO: Traducoes = {
   "Quem a equipe tirar do Inbox aparece aqui. As mensagens dessas pessoas continuam guardadas, e um gerente pode trazê-las de volta.": {
     es: "Quien el equipo saque del Inbox aparece aquí. Los mensajes de esas personas siguen guardados, y un gerente puede traerlas de vuelta.",
   },
-  "As conversas deste contato saem do Inbox, das contagens, da Fila, do radar e do Início. A IA não responde, follow-ups e automações não mandam mensagem e ele não ganha card novo no funil.": {
-    es: "Las conversaciones de este contacto salen del Inbox, de los conteos, de la Fila, del radar y del Inicio. La IA no responde, los seguimientos y automatizaciones no envían mensajes y no gana una tarjeta nueva en el embudo.",
+  "As conversas desta pessoa saem da Fila, das contagens e do Início. O automático não responde, nenhuma mensagem automática sai e ela não vira negócio novo no funil.": {
+    es: "Las conversaciones de esta persona salen de la Fila, de los conteos y del Inicio. El automático no responde, no sale ningún mensaje automático y no se convierte en un negocio nuevo en el embudo.",
   },
-  "Nada é apagado: as mensagens continuam guardadas. Um gerente pode trazê-lo de volta em Inbox › Mais › Ocultos.": {
-    es: "No se borra nada: los mensajes siguen guardados. Un gerente puede traerlo de vuelta en Inbox › Más › Ocultos.",
+  "Nada é apagado: as mensagens continuam guardadas. Um gestor pode trazê-la de volta em Mais › Ocultos.": {
+    es: "No se borra nada: los mensajes siguen guardados. Un gestor puede traerla de vuelta en Más › Ocultos.",
   },
   "Ocultar do Inbox o contato da conversa selecionada?": {
     es: "¿Ocultar del Inbox el contacto de la conversación seleccionada?",
   },
   "Ocultar do Inbox os contatos de": { es: "¿Ocultar del Inbox los contactos de" },
-  "As conversas desses contatos saem do Inbox, das contagens, da Fila, do radar e do Início. A IA não responde, follow-ups e automações não mandam mensagem, e as mensagens continuam guardadas. Um gerente pode trazê-los de volta em Inbox › Mais › Ocultos.": {
-    es: "Las conversaciones de esos contactos salen del Inbox, de los conteos, de la Fila, del radar y del Inicio. La IA no responde, los seguimientos y automatizaciones no envían mensajes, y los mensajes siguen guardados. Un gerente puede traerlos de vuelta en Inbox › Más › Ocultos.",
+  "As conversas dessas pessoas saem da Fila, das contagens e do Início. O automático não responde e nenhuma mensagem automática sai. Nada é apagado: as mensagens continuam guardadas, e um gestor pode trazê-las de volta em Mais › Ocultos.": {
+    es: "Las conversaciones de esas personas salen de la Fila, de los conteos y del Inicio. El automático no responde y no sale ningún mensaje automático. No se borra nada: los mensajes siguen guardados, y un gestor puede traerlas de vuelta en Más › Ocultos.",
   },
   "Conversa inválida.": { es: "Conversación inválida." },
   "Não foi possível mudar o contato no Inbox.": { es: "No fue posible cambiar el contacto en el Inbox." },

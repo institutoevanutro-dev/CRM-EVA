@@ -236,7 +236,7 @@ test("fechar canal preserva demanda, desfecho explícito e nova entrada volta à
     // e com a situação sem "Sem responsável" (ela mora no alto do menu).
     await abrirAcoesDaConversa(page);
     const menu = page.getByTestId("menu-da-conversa");
-    await expect(menu.getByRole("button", { name: "Liberar", exact: true })).toBeVisible();
+    await expect(menu.getByRole("button", { name: "Deixar com o automático", exact: true })).toBeVisible();
     await expect(menu.getByRole("button", { name: "Assumir", exact: true })).toHaveCount(0);
     await expect(menu.getByTestId("comando-da-conversa")).toBeVisible();
     await expect(menu.getByText("Sem responsável", { exact: true })).toHaveCount(0);

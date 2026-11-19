@@ -242,7 +242,7 @@ test("rejeitar tira a sugestão da tela e diz que rejeitou; sem agente publicado
     // Antes do conserto a rejeitada continuava sendo `drafts[0]` e ficava na
     // tela para sempre — caixa desabilitada, sem botão de fechar.
     await painel(page)
-      .getByLabel("Feedback para a próxima sugestão")
+      .getByLabel("O que melhorar na próxima sugestão")
       .fill("Muito formal para esta cliente.");
     await painel(page).getByRole("button", { name: "Rejeitar", exact: true }).click();
 
@@ -250,7 +250,7 @@ test("rejeitar tira a sugestão da tela e diz que rejeitou; sem agente publicado
     // sozinho; esperar antes por outros elementos poderia encontrá-lo já
     // dispensado, e o vermelho seria do relógio, não da tela.
     await expect(
-      page.getByText("Sugestão rejeitada. O feedback será usado na próxima sugestão.", {
+      page.getByText("Sugestão rejeitada. O comentário será usado na próxima sugestão.", {
         exact: true,
       }),
       "a tela esvaziou sem dizer que a sugestão foi rejeitada",

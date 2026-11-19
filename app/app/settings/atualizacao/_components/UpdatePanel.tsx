@@ -85,6 +85,8 @@ export function UpdatePanel() {
   }
 
   const versao = semV(data.current_version);
+  // `ESCONDER_ATUALIZAR_AGORA=true`: quem atualiza é a equipe do servidor; a tela só informa.
+  const pelaTela = data.atualizar_pela_tela !== false;
   const nova = semV(data.latest_version);
 
   if (rodando) {
@@ -240,7 +242,7 @@ export function UpdatePanel() {
         </p>
         <DetalhesTecnicos texto={data.run.log_tail} />
         <Saida
-          botao={Boolean(data.update_available)}
+          botao={pelaTela && Boolean(data.update_available)}
           mutate={() => atualizar.mutate()}
           isPending={atualizar.isPending}
           erro={erro}
@@ -418,7 +420,11 @@ export function UpdatePanel() {
         </div>
       ) : null}
 
-      <BotaoAtualizar mutate={() => atualizar.mutate()} isPending={atualizar.isPending} erro={erro} />
+      {pelaTela ? (
+        <BotaoAtualizar mutate={() => atualizar.mutate()} isPending={atualizar.isPending} erro={erro} />
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("A atualização é feita pela equipe que cuida do servidor.")}</p>
+      )}
     </Layout>
   );
 }

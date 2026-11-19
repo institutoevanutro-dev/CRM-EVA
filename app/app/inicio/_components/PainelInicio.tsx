@@ -1,4 +1,5 @@
 "use client";
+import { SERVICO_DA_SAUDE } from "@/lib/channels/servicos-da-saude";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, CalendarDays, CircleCheck, ListChecks, MessageCircle } from "lucide-react";
@@ -14,13 +15,13 @@ import {
   type TipoDePendencia,
 } from "@/lib/inicio/tipos";
 import { PaineisDaClinica, type NumerosDeHoje } from "./PaineisDaClinica";
-import { Barra, CabecalhoDaSecao, Cartao, Esqueleto, FOCO, haQuanto } from "./partes";
+import { Barra, Cartao, Esqueleto, FOCO, haQuanto, Secao } from "./partes";
 
 type Gasto =
   | { ok: true; consumidoCents: number; limiteCents: number | null }
   | { ok: false };
 type Resposta = {
-  meuDia: { avisos: Avisos; esperando: Esperando; agenda: Bloco; tarefas: Bloco };
+  meuDia: { avisos: Avisos; esperando: Esperando; agenda: Bloco & { daClinica?: boolean }; tarefas: Bloco };
   gestao: null | { configuracao: Pendencias; numeros: NumerosDeHoje; gastoIa: Gasto };
 };
 
@@ -44,6 +45,16 @@ const ONDE_RESOLVER: Record<TipoDePendencia, string> = {
   convite_vencido: "/app/team",
   agente_rascunho: "/app/ai/agents",
 };
+
+/** "1 compromisso", "2 compromissos": o rótulo segue o número (item 185). */
+export function noPlural(n: number, [um, varios]: readonly [string, string]): string {
+  return n === 1 ? um : varios;
+}
+
+type Saude = { status: string; version?: string; checks?: Record<string, { status: string }> };
+
+/** O nome de cada serviço da rota de saúde, como a recepção diria. */
+const SERVICO = SERVICO_DA_SAUDE;
 
 /** Centavos de DÓLAR (o custo de IA é calculado em USD — ver BudgetCard). */
 function dolares(cents: number) {
@@ -80,6 +91,7 @@ function Vazio({ texto }: { texto: string }) {
  * total conta o que está ESPERANDO alguém.
  */
 function Total({ valor, rotulo, pendencia }: { valor: number; rotulo: string; pendencia?: boolean }) {
+  // `rotulo` já vem no singular ou no plural certo (ver `noPlural`).
   return (
     <p className="mb-2 flex items-baseline gap-2">
       <span className={`numero-destaque ${pendencia ? "text-warning-fg" : "text-text"}`}>{valor}</span>
@@ -93,13 +105,13 @@ function Abrir() {
   return <span className="shrink-0 text-xs font-medium text-accent">{t("Abrir")} →</span>;
 }
 
-function ListaDoBloco({ bloco, vazio, rotulo }: { bloco: Bloco; vazio: string; rotulo: string }) {
+function ListaDoBloco({ bloco, vazio, rotulo }: { bloco: Bloco; vazio: string; rotulo: readonly [string, string] }) {
   const t = useT();
   if (!bloco.ok) return <FalhaDoBloco />;
   if (bloco.total === 0) return <Vazio texto={t(vazio)} />;
   return (
     <>
-      <Total valor={bloco.total} rotulo={t(rotulo)} />
+      <Total valor={bloco.total} rotulo={t(noPlural(bloco.total, rotulo))} />
       <ul className="divide-y divide-border">
         {bloco.itens.map((i) => (
           <li key={i.id}>
@@ -132,7 +144,8 @@ function EsperandoResposta({ e }: { e: Esperando }) {
       {e.total === 0 ? (
         <Vazio texto={t("Ninguém esperando resposta.")} />
       ) : (
-        <Total valor={e.total} rotulo={t("esperando há até {{n}} dias").replace("{{n}}", dias)} pendencia />
+        // O recorte vai no rótulo (item 184): a Visão da clínica conta TODAS.
+        <Total valor={e.total} rotulo={t("com você ou sem responsável, há até {{n}} dias").replace("{{n}}", dias)} pendencia />
       )}
       <dl className="space-y-1 text-sm">
         {e.total > 0 ? (
@@ -185,7 +198,7 @@ function AvisosPorAssunto({ a }: { a: Avisos }) {
   ];
   return (
     <>
-      <Total valor={a.total} rotulo={t("pedem a sua atenção")} pendencia />
+      <Total valor={a.total} rotulo={t(noPlural(a.total, ["pede a sua atenção", "pedem a sua atenção"]))} pendencia />
       <ul className="divide-y divide-border">
         {linhas.map((l) => (
           <li key={l.chave}>
@@ -204,20 +217,29 @@ function AvisosPorAssunto({ a }: { a: Avisos }) {
   );
 }
 
-function Sistema({ carregando, saude }: { carregando: boolean; saude: { status: string; version?: string } | undefined }) {
+function Sistema({ carregando, saude }: { carregando: boolean; saude: Saude | undefined }) {
   const t = useT();
   if (carregando)
     return <div role="status" aria-label={t("Carregando")} className="h-5 w-32 animate-pulse rounded-md bg-muted motion-reduce:animate-none" />;
-  const noAr = saude?.status === "healthy";
+  if (!saude) return <FalhaDoBloco />;
+  const noAr = saude.status === "healthy";
+  // Diz O QUE caiu (item 188): "algum serviço" não ajuda quem vai avisar o suporte.
+  const fora = Object.entries(saude.checks ?? {})
+    .filter(([, c]) => c.status !== "ok")
+    .map(([nome]) => t(SERVICO[nome] ?? nome));
   return (
     <>
       {/* Bolinha + frase: a cor nunca é a única pista. */}
       <p role={noAr ? undefined : "alert"} className="flex items-center gap-2 text-sm">
         <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${noAr ? "bg-success" : "bg-error"}`} />
-        {noAr ? t("Tudo no ar") : t("Algum serviço está fora do ar. Avise o suporte.")}
+        {noAr
+          ? t("Tudo no ar")
+          : fora.length
+            ? t("Com problema: {{servicos}}. Avise o suporte.").replace("{{servicos}}", fora.join(", "))
+            : t("Algum serviço está fora do ar. Avise o suporte.")}
       </p>
       {/* Fora de uma imagem publicada a rota de saúde responde "desconhecido": aí não há versão a mostrar. */}
-      {saude?.version && saude.version !== "desconhecido" ? (
+      {saude.version && saude.version !== "desconhecido" ? (
         <p className="mt-1 text-xs text-text-muted">
           {t("versão")} {saude.version}
         </p>
@@ -234,6 +256,7 @@ function GastoComIa({ g }: { g: Gasto }) {
       <p className="text-sm text-text-muted">
         <b className="numero block text-xl text-text">{dolares(g.consumidoCents)}</b>
         {t("sem limite configurado")}
+        <span className="mt-1 block text-xs">{t("Em dólar (US$), cobrado pelo provedor de IA.")}</span>
       </p>
     );
   const pct = Math.round((g.consumidoCents / g.limiteCents) * 100);
@@ -244,7 +267,7 @@ function GastoComIa({ g }: { g: Gasto }) {
       </p>
       <Barra pct={pct} className="mt-2 h-1.5" />
       <p className="mt-1 text-xs text-text-muted">
-        {t("{{n}}% do limite do mês").replace("{{n}}", String(pct))}
+        {t("{{n}}% do limite do mês").replace("{{n}}", String(pct))} · {t("Em dólar (US$), cobrado pelo provedor de IA.")}
       </p>
     </>
   );
@@ -313,8 +336,14 @@ export function PainelInicio() {
   });
   const saude = useQuery({
     queryKey: ["inicio", "saude"],
-    queryFn: async () =>
-      (await apiClient.get<{ data: { status: string; version?: string } }>("/api/v1/health")).data,
+    // fetch direto, e não o apiClient: o 503 da saúde JÁ É a resposta (traz o
+    // que caiu), e o apiClient o repetia 3 vezes (~7 s de barra cinza) e jogava
+    // o corpo fora (item 188).
+    queryFn: async (): Promise<Saude> => {
+      const r = await fetch("/api/v1/health", { credentials: "same-origin" });
+      return ((await r.json()) as { data: Saude }).data;
+    },
+    retry: false,
     enabled: Boolean(painel.data?.gestao),
     refetchOnWindowFocus: true,
   });
@@ -345,22 +374,31 @@ export function PainelInicio() {
 
   return (
     <div className="space-y-10">
-      <section aria-labelledby="inicio-meu-dia">
-        <CabecalhoDaSecao
+      <Secao
           id="inicio-meu-dia"
+          abertaPorPadrao
           titulo={t("Meu dia")}
           descricao={
             gestao
               ? t("O que precisa de você hoje, mais o que ninguém assumiu na clínica.")
               : t("O que precisa de você hoje: conversas, agenda, tarefas e avisos.")
           }
-        />
+      >
         <div className="grid gap-4 md:grid-cols-2">
           <Cartao titulo={t("Pacientes esperando resposta")} icone={MessageCircle} verTodos="/app/inbox">
             <EsperandoResposta e={meuDia.esperando} />
           </Cartao>
-          <Cartao titulo={t("Minha agenda de hoje")} icone={CalendarDays} verTodos="/app/agenda">
-            <ListaDoBloco bloco={meuDia.agenda} rotulo="compromissos hoje" vazio="Nenhum compromisso seu hoje." />
+          {/* Recepção e gerência veem a agenda do dia da clínica; a profissional, a dela (resposta 10). */}
+          <Cartao
+            titulo={meuDia.agenda.ok && meuDia.agenda.daClinica ? t("Agenda de hoje da clínica") : t("Minha agenda de hoje")}
+            icone={CalendarDays}
+            verTodos="/app/agenda"
+          >
+            <ListaDoBloco
+              bloco={meuDia.agenda}
+              rotulo={["compromisso hoje", "compromissos hoje"]}
+              vazio={meuDia.agenda.ok && meuDia.agenda.daClinica ? "Nenhum compromisso na clínica hoje." : "Nenhum compromisso seu hoje."}
+            />
           </Cartao>
           <Cartao
             titulo={t("Avisos, separados por assunto")}
@@ -373,7 +411,7 @@ export function PainelInicio() {
           </Cartao>
           {semTarefas ? null : (
             <Cartao titulo={t("Minhas tarefas")} icone={ListChecks} verTodos="/app/tasks">
-              <ListaDoBloco bloco={meuDia.tarefas} rotulo="para hoje ou atrasadas" vazio="Nenhuma tarefa sua para hoje." />
+              <ListaDoBloco bloco={meuDia.tarefas} rotulo={["para hoje ou atrasada", "para hoje ou atrasadas"]} vazio="Nenhuma tarefa sua para hoje." />
             </Cartao>
           )}
         </div>
@@ -389,14 +427,13 @@ export function PainelInicio() {
             </Link>
           </p>
         ) : null}
-      </section>
+      </Secao>
 
       {/* Só para gestor: o servidor manda `gestao` e a rota dos painéis exige manager. */}
       {gestao ? <PaineisDaClinica numerosDeHoje={gestao.numeros} /> : null}
 
       {gestao ? (
-        <section aria-labelledby="inicio-gestao">
-          <CabecalhoDaSecao id="inicio-gestao" titulo={t("Gestão")} descricao={t("O que impede o CRM de funcionar direito.")} />
+        <Secao id="inicio-gestao" titulo={t("Gestão")} descricao={t("O que impede o CRM de funcionar direito.")}>
           <div className="grid gap-4 md:grid-cols-3">
             <Cartao titulo={t("Sistema")}>
               <Sistema carregando={saude.isLoading} saude={saude.data} />
@@ -409,7 +446,7 @@ export function PainelInicio() {
             </Cartao>
           </div>
           <ListaParaArrumar p={gestao.configuracao} />
-        </section>
+        </Secao>
       ) : null}
     </div>
   );

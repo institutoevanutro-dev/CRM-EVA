@@ -205,7 +205,7 @@ test.describe("Inbox — o campo é da conversa, e a cara é de app de mensagem"
     await page.context().close();
   });
 
-  test("item 29: com o foco fora da lista, 'a' não assume; na lista, 'e' pergunta no Cancelar", async ({
+  test("item 29: 'a' não assume e 'e' não fecha, nem com o foco na lista", async ({
     browser,
   }) => {
     const page = await novaPagina(browser, "light", 1440);
@@ -225,18 +225,11 @@ test.describe("Inbox — o campo é da conversa, e a cara é de app de mensagem"
       .single();
     expect(depoisDoA?.assigned_to_user_id, "o 'a' com o foco fora da lista assumiu a conversa").toBeNull();
 
-    // Com o foco na lista, "e" pergunta — e o foco nasce no "Cancelar".
+    // Nem com o foco na lista "e" faz alguma coisa (a, e, j, k saíram em 18/11).
     await linha(page, ids.ana).focus();
     await page.keyboard.press("e");
-    const pergunta = page.getByRole("alertdialog");
-    await expect(pergunta).toContainText("Fechar esta conversa?");
-    await expect(pergunta.getByRole("button", { name: "Cancelar" })).toBeFocused();
-    await foto(page, "29-confirmacao-nasce-no-cancelar");
-    // O espaço seguinte cai no Cancelar: nada fecha.
-    await page.keyboard.press("Space");
-    await expect(pergunta).toHaveCount(0);
-    const { data: depoisDoE } = await admin.from("conversations").select("status").eq("id", ids.ana).single();
-    expect(depoisDoE?.status).toBe("open");
+    await page.waitForTimeout(500);
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
     await page.context().close();
   });
 

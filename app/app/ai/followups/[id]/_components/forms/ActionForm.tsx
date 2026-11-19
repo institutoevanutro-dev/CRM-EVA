@@ -292,7 +292,7 @@ export function ActionForm({
             {t("Sai exatamente assim, sem IA. No laço,")} {t("{{volta}}")} e {t("{{voltas}}")} {t("viram o número da volta.")}
           </p>
           <p className="text-xs text-text-muted">
-            {t('Para não depender do dado, ponha um texto de reserva: {{primeiro_nome|"aluno"}}.')}
+            {t('Para não depender do dado, ponha um texto de reserva: {{primeiro_nome|"paciente"}}.')}
           </p>
           <AjudaDasVariaveis texto={body} />
         </div>

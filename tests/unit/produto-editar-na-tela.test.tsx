@@ -44,7 +44,8 @@ describe("editar produto", () => {
     window.scrollTo = vi.fn();
     render(<ProdutosClient inicial={[PRODUTO]} podeEditar textos={TEXTOS} />);
 
-    await user.click(screen.getByTestId("editar-CONS"));
+    await user.click(screen.getByTestId("acoes-CONS"));
+    await user.click(await screen.findByTestId("editar-CONS"));
     expect(screen.getByTestId("editando-produto")).toHaveTextContent("Consulta");
     expect(screen.getByTestId("produto-preco")).toHaveValue("5.499,00");
     expect(screen.getByTestId("produto-codigo")).toHaveValue("CONS");
@@ -64,35 +65,53 @@ describe("editar produto", () => {
 
   it("quem não edita não vê o botão", () => {
     render(<ProdutosClient inicial={[PRODUTO]} podeEditar={false} textos={TEXTOS} />);
-    expect(screen.queryByTestId("editar-CONS")).toBeNull();
+    expect(screen.queryByTestId("acoes-CONS")).toBeNull();
   });
 });
 
 /**
- * ITEM QUE VEM DA PRECIFICAÇÃO: o aviso e o selo usam o nome do módulo.
+ * ITEM QUE VEM DA PRECIFICAÇÃO: código, nome, categoria, preço, custo e situação
+ * são dela. A sincronização de hora em hora desfazia o que se mudasse aqui (e a
+ * IA voltava a oferecer o procedimento "desativado"); mudar o código criava um
+ * item duplicado com o preço velho. A tela trava esses campos e não os envia.
  *
- * O módulo de preços aparece para a clínica como "Precificação". O nome interno
- * do sistema de origem (o valor `origem = "precificaeva"` e o `data-testid` do
- * aviso) é identificador e não sai na tela; que ele não volte a aparecer em TEXTO
- * é a catraca de `tests/unit/branding.test.ts`. O que só este caso mede é a
- * gramática: "do" virou "da", "no" virou "na".
+ * O nome interno (`origem = "precificaeva"`, o código "pe:proc:…") não sai na
+ * tela; a catraca do texto é `tests/unit/branding.test.ts`.
  */
 describe("item que vem da Precificação", () => {
-  const DA_PRECIFICACAO: Produto = { ...PRODUTO, origem: "precificaeva" };
+  const DA_PRECIFICACAO: Produto = { ...PRODUTO, codigo: "pe:proc:abc", origem: "precificaeva" };
 
-  it("a lista marca o preço como vindo da Precificação", () => {
+  it("a lista mostra a origem no lugar do código técnico", () => {
     render(<ProdutosClient inicial={[DA_PRECIFICACAO]} podeEditar textos={TEXTOS} />);
-    expect(screen.getByText(/preço da Precificação/)).toBeInTheDocument();
+    expect(screen.getByText(/Da Precificação/)).toBeInTheDocument();
+    expect(screen.queryByText(/pe:proc:/)).toBeNull();
   });
 
-  it("o aviso do formulário concorda em gênero: da, da e na Precificação", async () => {
+  it("trava os campos da Precificação e salva só o resto", async () => {
+    patch.mockClear();
     const user = userEvent.setup();
     window.scrollTo = vi.fn();
     render(<ProdutosClient inicial={[DA_PRECIFICACAO]} podeEditar textos={TEXTOS} />);
 
-    await user.click(screen.getByTestId("editar-CONS"));
+    await user.click(screen.getByTestId("acoes-pe:proc:abc"));
+    await user.click(await screen.findByTestId("editar-pe:proc:abc"));
     expect(screen.getByTestId("produto-do-precificaeva")).toHaveTextContent(
-      "Este item vem da Precificação. Nome, categoria, preço, custo e situação são atualizados de lá a cada hora: o que mudar aqui volta ao valor da Precificação. Para mudar o preço, altere na Precificação.",
+      "Este item vem da Precificação. Código, nome, categoria, preço, custo e situação só mudam lá: altere na Precificação.",
     );
+    for (const id of ["produto-codigo", "produto-nome", "produto-preco"]) expect(screen.getByTestId(id)).toBeDisabled();
+
+    await user.click(screen.getByTestId("salvar-produto"));
+    const corpo = patch.mock.calls[0]![1] as Record<string, unknown>;
+    for (const k of ["codigo", "nome", "categoria", "preco_cents", "custo_cents", "ativo"]) expect(corpo).not.toHaveProperty(k);
+    expect(corpo).toHaveProperty("marca", "Eva");
+  });
+
+  it("não oferece desativar: manda desativar na Precificação", async () => {
+    const user = userEvent.setup();
+    render(<ProdutosClient inicial={[DA_PRECIFICACAO]} podeEditar textos={TEXTOS} />);
+    await user.click(screen.getByTestId("acoes-pe:proc:abc"));
+    const item = await screen.findByTestId("alternar-pe:proc:abc");
+    expect(item).toHaveTextContent("Desative na Precificação");
+    expect(item).toHaveAttribute("data-disabled");
   });
 });

@@ -30,7 +30,8 @@ export function VersionFooter({
   // conta: uma instalação de desenvolvimento sem versão publicada mais nova
   // ficava com o ponto pulsando pra sempre, e o texto "Nova versão · " com o
   // número vazio, apontando para uma tela que não tem o que oferecer.
-  const alerta = data.is_owner && data.update_available;
+  // Instalação que esconde "Atualizar agora" não acende o aviso: só mostra a versão.
+  const alerta = data.is_owner && data.update_available && data.atualizar_pela_tela !== false;
 
   if (!alerta) {
     return (

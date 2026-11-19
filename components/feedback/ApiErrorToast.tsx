@@ -159,6 +159,19 @@ const COPY: Record<string, { variant: Variant; msg?: string }> = {
 };
 
 /**
+ * O código da requisição só serve para quem dá suporte: fica recolhido em
+ * "Detalhes técnicos", em vez de "ID: <código>" na cara da recepção.
+ */
+export function detalhesTecnicos(requestId: string, t: (texto: string) => string) {
+  return (
+    <details className="text-xs">
+      <summary className="cursor-pointer">{t("Detalhes técnicos")}</summary>
+      <code className="select-all break-all">{requestId}</code>
+    </details>
+  );
+}
+
+/**
  * `t` chega pronto de fora: `showApiError` resolve via `idiomaAtual()` (fora da
  * árvore React), `useApiErrorHandler` via `useT()` (dentro dela). Nenhum dos
  * dois passa `t` como segundo parâmetro de `onError` — o TanStack Query chama
@@ -169,7 +182,7 @@ const COPY: Record<string, { variant: Variant; msg?: string }> = {
 function toastFor(err: unknown, t: (texto: string) => string): void {
   if (err instanceof ApiError) {
     const entry = COPY[err.code];
-    const description = err.requestId ? `ID: ${err.requestId}` : undefined;
+    const description = err.requestId ? detalhesTecnicos(err.requestId, t) : undefined;
     if (entry) {
       const fn =
         entry.variant === "warning"

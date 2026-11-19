@@ -2,6 +2,8 @@
 import * as React from "react";
 import { encode } from "gpt-tokenizer";
 
+import { useT } from "@/hooks/i18n/useT";
+
 interface Props {
   text: string;
   contextWindow?: number | null;
@@ -9,43 +11,32 @@ interface Props {
 }
 
 export function TokenCounter({ text, contextWindow, className }: Props) {
+  const t = useT();
   const [count, setCount] = React.useState<number | null>(null);
 
   React.useEffect(() => {
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       try {
         setCount(encode(text ?? "").length);
       } catch {
         setCount(null);
       }
     }, 200);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [text]);
 
-  if (count === null) {
-    return (
-      <span className={className} aria-live="polite">
-        — tokens
-      </span>
-    );
-  }
-
-  const ratio = contextWindow && contextWindow > 0 ? count / contextWindow : null;
-  const warn = ratio !== null && ratio > 0.8;
-  const danger = ratio !== null && ratio > 1;
-
-  const tone = danger
-    ? "text-destructive"
-    : warn
-      ? "text-amber-600 dark:text-amber-400"
-      : "text-muted-foreground";
+  // "~21 tokens" era jargão sempre à vista. O contador de caracteres ao lado já
+  // diz o tamanho; este só aparece quando o texto chega perto do que o modelo lê.
+  const ratio = count !== null && contextWindow && contextWindow > 0 ? count / contextWindow : null;
+  if (ratio === null || ratio <= 0.8) return null;
+  const danger = ratio > 1;
 
   return (
-    <span className={`${tone} ${className ?? ""}`} aria-live="polite">
-      ~{count.toLocaleString("pt-BR")} tokens
-      {contextWindow ? ` / ${contextWindow.toLocaleString("pt-BR")}` : ""}
-      {warn && !danger ? " · próximo do limite" : ""}
-      {danger ? " · acima do limite" : ""}
+    <span
+      className={`${danger ? "text-destructive" : "text-warning-fg"} ${className ?? ""}`}
+      aria-live="polite"
+    >
+      {danger ? t("Maior do que o modelo consegue ler") : t("Perto do limite do que o modelo lê")}
     </span>
   );
 }

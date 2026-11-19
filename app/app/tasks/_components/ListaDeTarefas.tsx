@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
@@ -34,6 +34,13 @@ interface Props {
   compacta?: boolean;
 }
 
+const SEGUNDOS_PARA_DESARMAR = 5;
+
+/** Reabrir uma concluída de prazo vencido muda a conta do bônus ao concluir de novo. */
+export function reabrirMudaOBonus(tarefa: Tarefa, agora = new Date()): boolean {
+  return tarefa.status === "done" && Boolean(tarefa.due_date) && new Date(tarefa.due_date!).getTime() < agora.getTime();
+}
+
 /** A cor é do TEMA, nunca um hex: ela tem de sobreviver ao claro e ao escuro. */
 const COR_DA_PRIORIDADE: Record<PrioridadeDaTarefa, string> = {
   low: "bg-muted text-muted-foreground",
@@ -63,6 +70,16 @@ function Linha({
   const tag = useTagDeIdioma();
   const [ocupada, setOcupada] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
+  const [confirmandoReabrir, setConfirmandoReabrir] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  // O "Confirmar" de apagar desarma sozinho (item 190): armado e esquecido,
+  // ele apagava a tarefa no próximo toque distraído, minutos depois.
+  useEffect(() => {
+    if (!confirmando) return;
+    const timer = setTimeout(() => setConfirmando(false), SEGUNDOS_PARA_DESARMAR * 1000);
+    return () => clearTimeout(timer);
+  }, [confirmando]);
 
   const encerrada = estaEncerrada(tarefa);
   const atrasada = estaAtrasada(tarefa);
@@ -74,10 +91,14 @@ function Linha({
     urgent: t("Urgente"),
   };
 
+  // Falha à vista (item 191): antes a caixa só não marcava, sem dizer nada.
   async function comBloqueio(acao: () => Promise<unknown>) {
     setOcupada(true);
+    setErro(null);
     try {
       await acao();
+    } catch (e) {
+      setErro(t(e instanceof Error && e.message ? e.message : "Não foi possível salvar a tarefa."));
     } finally {
       setOcupada(false);
     }
@@ -97,7 +118,9 @@ function Linha({
         aria-checked={encerrada}
         aria-label={encerrada ? t("Reabrir a tarefa") : t("Marcar como concluída")}
         disabled={ocupada || !podeEditar}
-        onClick={() => comBloqueio(() => aoAlternarConcluida(tarefa))}
+        onClick={() =>
+          reabrirMudaOBonus(tarefa) ? setConfirmandoReabrir(true) : comBloqueio(() => aoAlternarConcluida(tarefa))
+        }
         className={cn(
           // O `before` estende a área de toque a 44px sem crescer o desenho de 16px.
           "relative mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition-colors pointer-coarse:before:absolute pointer-coarse:before:-inset-3.5 pointer-coarse:before:content-['']",
@@ -158,6 +181,35 @@ function Linha({
             </Link>
           ) : null}
         </div>
+        {confirmandoReabrir ? (
+          // Item 194: concluir de novo grava a data de HOJE, e a tarefa de prazo
+          // vencido passa a contar como atrasada no bônus.
+          <div role="alert" className="mt-2 rounded-md border border-warning-fg/30 bg-warning-bg p-2 text-xs text-warning-fg">
+            <p>{t("Se reabrir, ao concluir de novo a data de conclusão vira a de hoje e a tarefa passa a contar como atrasada no bônus.")}</p>
+            <div className="mt-2 flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs md:h-7"
+                disabled={ocupada}
+                onClick={() => {
+                  setConfirmandoReabrir(false);
+                  void comBloqueio(() => aoAlternarConcluida(tarefa));
+                }}
+              >
+                {t("Reabrir mesmo assim")}
+              </Button>
+              <Button size="sm" variant="ghost" className="text-xs md:h-7" onClick={() => setConfirmandoReabrir(false)}>
+                {t("Cancelar")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        {erro ? (
+          <p role="alert" className="mt-1 text-xs text-destructive">
+            {erro}
+          </p>
+        ) : null}
       </div>
 
       {podeEditar ? (
@@ -185,7 +237,9 @@ function Linha({
               size="sm"
               className="px-2 text-[11px] md:h-7"
               disabled={ocupada}
+              autoFocus
               onClick={() => comBloqueio(() => aoApagar(tarefa))}
+              onBlur={() => setConfirmando(false)}
             >
               {t("Confirmar")}
             </Button>

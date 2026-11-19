@@ -176,7 +176,7 @@ describe("cabeçalho — o resto do menu ⋯", () => {
   it("conversa minha: Liberar e Devolver ao automático moram no menu", () => {
     renderHeader({ assigned_to_user_id: "u-1", assignee_kind: "user", status: "claimed", bot_silenced_until: "infinity" });
     const menu = abrirMenu();
-    expect(within(menu).getByRole("button", { name: "Liberar" })).toBeTruthy();
+    expect(within(menu).getByRole("button", { name: "Deixar com o automático" })).toBeTruthy();
     expect(within(menu).getByTestId("devolver-ao-automatico")).toBeTruthy();
   });
 

@@ -95,12 +95,12 @@ describe("Liberar no cabeçalho", () => {
   it("Instagram: não oferece Liberar nem para o próprio dono", () => {
     renderHeader(CHANNEL_PROVIDER_INSTAGRAM, "instagram", "infinity", "u-1");
     abrirMenu(); // Liberar e a volta moram no ⋯
-    expect(screen.queryByRole("button", { name: "Liberar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deixar com o automático" })).toBeNull();
   });
 
   it("controle: no WhatsApp o dono continua podendo liberar", () => {
     renderHeader(CHANNEL_PROVIDER_WAHA, "whatsapp", emUmMinuto(), "u-1");
     abrirMenu(); // Liberar e a volta moram no ⋯
-    expect(screen.getByRole("button", { name: "Liberar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Deixar com o automático" })).toBeTruthy();
   });
 });

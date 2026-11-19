@@ -50,7 +50,7 @@ export function BarraDeRecursos({ respostas: todas, onEscolher, disabled = false
         aria-expanded={aberta}
         aria-controls="barra-de-recursos"
         onClick={() => setAberta((v) => !v)}
-        className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+        className="rounded-full border border-border px-2.5 py-1 text-xs font-medium pointer-coarse:min-h-11 pointer-coarse:px-4 text-muted-foreground transition-colors hover:bg-muted"
       >
         {t("Respostas rápidas")} ({respostas.length}) {aberta ? "▴" : "▾"}
       </button>

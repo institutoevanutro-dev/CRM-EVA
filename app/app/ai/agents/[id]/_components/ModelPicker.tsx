@@ -92,7 +92,7 @@ export function ModelPicker({ provider, value, onChange, disabled, id, placehold
             {models.map((m) => (
               <SelectItem key={m.model_id} value={m.model_id}>
                 {m.display_name}
-                {m.is_default_for_provider ? ` · ${t("default")}` : ""}
+                {m.is_default_for_provider ? ` · ${t("padrão")}` : ""}
               </SelectItem>
             ))}
           </SelectContent>
@@ -112,4 +112,10 @@ export function useModelMeta(provider: Provider, modelId: string): ModelOption |
     staleTime: 60_000,
   });
   return (query.data ?? []).find((m) => m.model_id === modelId) ?? null;
+}
+
+/** O nome que a pessoa reconhece ("Claude Sonnet"), no lugar do id cru. */
+export function NomeDoModelo({ provider, model }: { provider: string; model: string }) {
+  const meta = useModelMeta(provider as Provider, model);
+  return <>{meta?.display_name ?? model}</>;
 }

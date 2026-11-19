@@ -78,6 +78,6 @@ export async function atualizarLembreteDeCasoParado(
     metadata: novo,
   });
 
-  revalidatePath("/app/ai/inbox");
+  revalidatePath("/app/settings/atendimento");
   return { ok: true };
 }

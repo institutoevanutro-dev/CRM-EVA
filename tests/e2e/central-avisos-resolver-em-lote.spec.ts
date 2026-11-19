@@ -121,6 +121,10 @@ test("um clique fecha os abertos da minha organização e não encosta na vizinh
   await evidencia(page, info, "antes");
 
   await page.getByRole("button", { name: "Marcar todos resolvidos" }).click();
+  // Resolve TODOS os abertos, não só os da tela (lote 20): a confirmação diz quantos.
+  const confirmacao = page.getByRole("alertdialog");
+  await expect(confirmacao).toContainText(`Marcar ${QUANTOS} avisos como resolvidos?`);
+  await confirmacao.getByRole("button", { name: "Marcar resolvidos" }).click();
 
   await expect(page.getByText("Nenhum aviso em aberto")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Marcar todos resolvidos" })).toHaveCount(0);

@@ -141,6 +141,13 @@ export function sidebarGroups(
  * A ordem das seções é a de primeira aparição no registro, então reordenar a
  * jornada é reordenar o array — não há uma segunda lista para manter em sincronia.
  */
+/**
+ * Telas do produto de origem que a clínica não usa. Saem do menu E da página de área
+ * (item 231: o hub de Configurações ainda mostrava Nuvemshop e Plano e cobrança); a rota
+ * e a busca (⌘K) continuam, para o código não divergir do produto de origem.
+ */
+export const FORA_DO_MENU: readonly string[] = ["/app/integrations/nuvemshop", "/app/settings/billing"];
+
 export function hubSections(
   group: NavGroupId,
   isPlatformAdmin: boolean,
@@ -152,7 +159,7 @@ export function hubSections(
     destinosDaInterface(settings, isPlatformAdmin, role).map((d) => d.href),
   );
   for (const d of NAV_DESTINATIONS) {
-    if (d.group !== group || !visible.has(d.href)) continue;
+    if (d.group !== group || !visible.has(d.href) || FORA_DO_MENU.includes(d.href)) continue;
     const secao = d.section ?? "";
     const atual = porSecao.get(secao);
     if (atual) atual.push(d);

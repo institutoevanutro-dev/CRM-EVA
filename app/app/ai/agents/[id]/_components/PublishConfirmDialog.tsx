@@ -15,6 +15,7 @@ import { useT } from "@/hooks/i18n/useT";
 
 import { PROVEDORES } from "@/lib/ai/pontos/provedores";
 import { textoEstavel } from "@/lib/ai/agents/mesmo-rascunho";
+import { catalogEntry } from "@/lib/mcp/tools/catalogo";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 
 interface Props {
@@ -109,6 +110,10 @@ export function PublishConfirmDialog({
   const modelChanged = !published || draft.model !== published.model;
   const providerChanged = !published || draft.provider !== published.provider;
 
+  const rotuloDaAcao = (id: string) => {
+    const r = catalogEntry(id)?.rotulo;
+    return r ? t(r) : id;
+  };
   const nomeDe = (lista: ReadonlyArray<{ id: string; name: string }>, id: string) =>
     lista.find((x) => x.id === id)?.name ?? t("(fora da lista)");
   const materiaisDiff = diffArr(published?.knowledge_source_ids ?? [], draft.knowledge_source_ids ?? []);
@@ -199,12 +204,12 @@ export function PublishConfirmDialog({
           ) : null}
           {toolsDiff.added.length > 0 ? (
             <p>
-              <strong>{t("Tools adicionadas:")}</strong> {toolsDiff.added.join(", ")}
+              <strong>{t("Ações adicionadas:")}</strong> {toolsDiff.added.map(rotuloDaAcao).join(", ")}
             </p>
           ) : null}
           {toolsDiff.removed.length > 0 ? (
             <p>
-              <strong>{t("Tools removidas:")}</strong> {toolsDiff.removed.join(", ")}
+              <strong>{t("Ações removidas:")}</strong> {toolsDiff.removed.map(rotuloDaAcao).join(", ")}
             </p>
           ) : null}
           {linhaDeNomes("Materiais:", materiaisDiff, materiais)}

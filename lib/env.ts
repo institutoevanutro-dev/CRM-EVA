@@ -457,6 +457,14 @@ const schema = z.object({
   SIGNUP_MODE: z.string().optional().default(""),
 
   /**
+   * `true` esconde o botão "Atualizar agora" (tela Atualização e aviso no rodapé do
+   * menu) em instalação que é atualizada por fora, pela equipe do servidor. A tela
+   * continua mostrando a versão. Vazio (padrão) não muda nada. `z.string()` pelo
+   * mesmo motivo do `SIGNUP_MODE`: valor estranho não derruba o app, só não esconde.
+   */
+  ESCONDER_ATUALIZAR_AGORA: z.string().optional().default(""),
+
+  /**
    * Par VAPID do Web Push. Opcionais: sem elas a bandeja só funciona com a aba
    * viva (Notification API + SW local). Gerar: `npx web-push generate-vapid-keys`.
    */

@@ -126,7 +126,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
         <DialogHeader>
           <DialogTitle>{isEdit ? t("Editar resposta") : t("Nova resposta")}</DialogTitle>
           <DialogDescription>
-            {t("Scripts salvos para responder mais rápido no atendimento.")}
+            {t("Textos prontos para responder mais rápido no atendimento.")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -161,7 +161,7 @@ export function TemplateFormDialog({ open, onOpenChange, canShare, template }: P
               {t("Use")} {"{{primeiro_nome}}"} {t("e")} {"{{nome}}"} {t("para personalizar.")}
             </p>
             <p className="text-xs text-muted-foreground">
-              {t('Para não depender do dado, ponha um texto de reserva: {{primeiro_nome|"aluno"}}.')}
+              {t('Para não depender do dado, ponha um texto de reserva: {{primeiro_nome|"paciente"}}.')}
             </p>
           </div>
           <div className="space-y-2">

@@ -13,7 +13,7 @@ import { type NextRequest } from "next/server";
 import { audit } from "@/lib/audit";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
-import { COLUNAS_DO_PRODUTO, produtoPatchSchema } from "@/lib/schemas/produtos";
+import { CAMPOS_DA_PRECIFICACAO, COLUNAS_DO_PRODUTO, ORIGEM_DA_PRECIFICACAO, produtoPatchSchema } from "@/lib/schemas/produtos";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
@@ -32,21 +32,44 @@ export async function PATCH(
   const t = (texto: string) => traduzir(texto, authz.user.idioma);
   const { id } = await params;
 
-  const parsed = produtoPatchSchema.safeParse(await req.json().catch(() => null));
+  const corpo: unknown = await req.json().catch(() => null);
+  const parsed = produtoPatchSchema.safeParse(corpo);
   if (!parsed.success) {
     return fail("validation_failed", t("Dados inválidos."), 422, {
       requestId,
       details: parsed.error.flatten().fieldErrors as Record<string, unknown>,
     });
   }
-  if (Object.keys(parsed.data).length === 0) {
+  // O `.partial()` do Zod 4 ainda aplica os `.default()` (ativo, estoque):
+  // sem este filtro, editar o preço de um item desativado o reativava.
+  const veio = new Set(Object.keys(corpo as object));
+  const patch = Object.fromEntries(Object.entries(parsed.data).filter(([k]) => veio.has(k)));
+  if (Object.keys(patch).length === 0) {
     return fail("validation_failed", t("Nada para alterar."), 422, { requestId });
   }
 
   const supabase = await createClient();
+  // Item da Precificação: código, nome, categoria, preço, custo e situação são
+  // dela. A sincronização de hora em hora desfaria a mudança, e um código novo
+  // viraria item duplicado com o preço velho. Recusa em vez de dizer "salvo".
+  const travados = CAMPOS_DA_PRECIFICACAO.filter((k) => k in patch);
+  if (travados.length) {
+    const { data: atual } = await supabase
+      .from("catalog_products")
+      .select("origem")
+      .eq("organization_id", authz.org.orgId)
+      .eq("id", id)
+      .maybeSingle();
+    if (atual?.origem === ORIGEM_DA_PRECIFICACAO) {
+      return fail("state_conflict", t("Este item vem da Precificação: altere na Precificação."), 409, {
+        requestId,
+        details: { campos: travados },
+      });
+    }
+  }
   const { data, error } = await supabase
     .from("catalog_products")
-    .update(parsed.data)
+    .update(patch)
     .eq("organization_id", authz.org.orgId)
     .eq("id", id)
     .select(COLUNAS_DO_PRODUTO)
