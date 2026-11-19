@@ -73,11 +73,17 @@ const CLASSE_RISCO: Record<ToolRisk, string> = {
   critico: "border-destructive/40 text-destructive",
 };
 
-function BadgeRisco({ risco }: { risco: ToolRisk }) {
+/**
+ * Selo discreto enquanto a capacidade está desligada; a cor forte só aparece
+ * quando ela está LIGADA. Com ~15 selos rosa sempre à vista, o alarme virava
+ * paisagem — quando tudo é alarme, nada é.
+ */
+function BadgeRisco({ risco, ligada }: { risco: ToolRisk; ligada: boolean }) {
   const t = useT();
   const meta = riscoMeta(risco);
+  const classe = ligada ? CLASSE_RISCO[risco] : CLASSE_RISCO.seguro;
   return (
-    <Badge variant="outline" className={`text-[11px] ${CLASSE_RISCO[risco]}`} title={t(meta.explicacao)}>
+    <Badge variant="outline" className={`text-[11px] ${classe}`} title={t(meta.explicacao)}>
       {t(meta.rotulo)}
     </Badge>
   );
@@ -120,7 +126,7 @@ function FichaCapacidade({
       <span className="flex-1 space-y-1">
         <span className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{t(capacidade.rotulo)}</span>
-          <BadgeRisco risco={capacidade.risco} />
+          <BadgeRisco risco={capacidade.risco} ligada={marcada} />
           <span className="text-xs text-muted-foreground">· {t(capacidade.o_que_toca)}</span>
         </span>
         <span className="block text-xs text-muted-foreground">{t(capacidade.explicacao)}</span>
@@ -232,7 +238,7 @@ export function ToolPicker({ value, onChange, disabled }: Props) {
   return (
     <div className="space-y-4" data-testid="tool-picker">
       {/* Consumo do teto — o número que impede a surpresa no salvar. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/30 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm">
           <strong data-testid="consumo-teto">
             {value.length} {t("de")} {TETO_TOOLS_POR_AGENTE}
@@ -256,7 +262,7 @@ export function ToolPicker({ value, onChange, disabled }: Props) {
       ) : null}
 
       {/* Caminho padrão: pacotes por jornada. */}
-      <div className="grid gap-3">
+      <div className="divide-y divide-border/60 border-y border-border/60">
         {PACOTES.map((pacote) => {
           const automaticas = capacidadesAutomaticasDoPacote(catalogo, pacote.id);
           const criticas = capacidadesCriticasDoPacote(catalogo, pacote.id);
@@ -272,7 +278,7 @@ export function ToolPicker({ value, onChange, disabled }: Props) {
               key={pacote.id}
               data-testid={`pacote-${pacote.id}`}
               data-estado={estado}
-              className="space-y-3 rounded-md border border-border/60 p-4"
+              className="space-y-3 py-4"
             >
               <div className="flex items-start gap-3">
                 <Switch
@@ -308,9 +314,9 @@ export function ToolPicker({ value, onChange, disabled }: Props) {
               {criticas.length > 0 ? (
                 <div
                   data-testid={`criticas-${pacote.id}`}
-                  className="space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-2"
+                  className="space-y-1 pl-12"
                 >
-                  <p className="text-xs font-medium text-destructive">
+                  <p className="text-xs font-medium text-muted-foreground">
                     {t("Só ligando uma a uma — o pacote não liga por você:")}
                   </p>
                   {criticas.map((name) => {
@@ -350,7 +356,7 @@ export function ToolPicker({ value, onChange, disabled }: Props) {
         {avancado ? (
           <div
             data-testid="lista-avancada"
-            className="space-y-1 rounded-md border border-border/60 p-3"
+            className="space-y-1"
           >
             <p className="pb-1 text-xs text-muted-foreground">
               {t(

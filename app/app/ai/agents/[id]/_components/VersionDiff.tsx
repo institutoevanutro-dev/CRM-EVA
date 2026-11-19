@@ -10,6 +10,9 @@
  */
 import * as React from "react";
 
+import { PROVEDORES } from "@/lib/ai/pontos/provedores";
+import { textoEstavel } from "@/lib/ai/agents/mesmo-rascunho";
+import { catalogEntry } from "@/lib/mcp/tools/catalogo";
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/hooks/i18n/useT";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
@@ -17,6 +20,9 @@ import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 interface Props {
   versionA: AgentVersionRow; // mais antiga / base
   versionB: AgentVersionRow; // mais nova / candidata
+  /** Para nomear os materiais e funis que entram ou saem, em vez do id. */
+  materiais?: ReadonlyArray<{ id: string; name: string }>;
+  funis?: ReadonlyArray<{ id: string; name: string }>;
 }
 
 type DiffLine = { kind: "ctx" | "add" | "del"; text: string };
@@ -72,34 +78,80 @@ function diffArr(prev: string[], next: string[]) {
 interface FieldChange {
   key: string;
   label: string;
-  a: unknown;
-  b: unknown;
+  a: string;
+  b: string;
 }
+
+type Formato = "texto" | "provedor" | "simnao" | "dolar" | "segundos" | "opaco";
+
+/**
+ * Os MESMOS rótulos da Configuração. Antes a tabela dizia `max_steps`,
+ * `Provider` e `true`/`false`, e ignorava horário — quem só mudou o horário
+ * via "Sem mudanças".
+ */
+const CAMPOS: ReadonlyArray<[keyof AgentVersionRow, string, Formato]> = [
+  ["provider", "Empresa", "provedor"],
+  ["model", "Modelo", "texto"],
+  ["credential_id", "Chave de acesso", "opaco"],
+  ["channel_session_id", "Número do WhatsApp", "opaco"],
+  ["max_steps", "Ações por atendimento (1 a 25)", "texto"],
+  ["token_budget", "Volume de texto por atendimento", "texto"],
+  ["cost_budget_cents", "Custo máximo por atendimento (centavos de dólar)", "dolar"],
+  ["history_message_window", "Mensagens anteriores que ele lê", "texto"],
+  ["history_token_window", "Tamanho máximo desse histórico", "texto"],
+  ["reply_min_interval_ms", "Pausa entre uma resposta e a próxima (segundos)", "segundos"],
+  ["split_messages", "Responder em várias mensagens curtas (como uma pessoa digita)", "simnao"],
+  ["split_max_chars", "Tamanho máximo por bolha (80–4000)", "texto"],
+  ["handoff_tool_enabled", "Deixar o agente chamar uma pessoa quando perceber que não é caso dele", "simnao"],
+  ["cases_enabled", "Deixar o agente pedir uma tarefa a alguém e seguir conversando", "simnao"],
+];
+
+function formatar(v: unknown, f: Formato): string {
+  if (v == null || v === "") return "—";
+  switch (f) {
+    case "provedor":
+      return PROVEDORES.find((p) => p.id === v)?.rotulo ?? String(v);
+    case "simnao":
+      return v ? "Sim" : "Não";
+    case "dolar":
+      return `US$ ${(Number(v) / 100).toFixed(2).replace(".", ",")}`;
+    case "segundos":
+      return String(Number(v) / 1000).replace(".", ",");
+    case "opaco":
+      return "mudou";
+    default:
+      return String(v);
+  }
+}
+
+const horarioDe = (v: AgentVersionRow) =>
+  (v.trigger_config as { filters?: { business_hours?: unknown } } | null)?.filters?.business_hours ??
+  null;
 
 function buildFieldChanges(a: AgentVersionRow, b: AgentVersionRow): FieldChange[] {
-  const fields: Array<[keyof AgentVersionRow, string]> = [
-    ["provider", "Provider"],
-    ["model", "Model"],
-    ["channel_session_id", "Canal"],
-    ["max_steps", "max_steps"],
-    ["token_budget", "token_budget"],
-    ["cost_budget_cents", "cost_budget_cents"],
-    ["history_message_window", "history_message_window"],
-    ["history_token_window", "history_token_window"],
-    ["handoff_tool_enabled", "handoff_tool_enabled"],
-    ["cases_enabled", "cases_enabled"],
-    ["split_messages", "split_messages"],
-    ["split_max_chars", "split_max_chars"],
-    ["reply_min_interval_ms", "reply_min_interval_ms"],
-  ];
-  return fields
-    .filter(([k]) => a[k] !== b[k])
-    .map(([k, label]) => ({ key: k as string, label, a: a[k], b: b[k] }));
+  const out: FieldChange[] = CAMPOS.filter(([k]) => a[k] !== b[k]).map(([k, label, f]) => ({
+    key: k as string,
+    label,
+    a: f === "opaco" ? "" : formatar(a[k], f),
+    b: formatar(b[k], f),
+  }));
+  if (textoEstavel(horarioDe(a)) !== textoEstavel(horarioDe(b))) {
+    out.push({ key: "business_hours", label: "Horário de atendimento", a: "", b: "mudou" });
+  }
+  return out;
 }
 
-export function VersionDiff({ versionA, versionB }: Props) {
+export function VersionDiff({ versionA, versionB, materiais = [], funis = [] }: Props) {
   const t = useT();
+  const nome = (lista: ReadonlyArray<{ id: string; name: string }>) => (id: string) =>
+    lista.find((x) => x.id === id)?.name ?? t("(fora da lista)");
+  const rotuloDaAcao = (id: string) => {
+    const r = catalogEntry(id)?.rotulo;
+    return r ? t(r) : id;
+  };
   const tools = diffArr(versionA.tool_ids ?? [], versionB.tool_ids ?? []);
+  const mats = diffArr(versionA.knowledge_source_ids ?? [], versionB.knowledge_source_ids ?? []);
+  const funs = diffArr(versionA.pipeline_ids ?? [], versionB.pipeline_ids ?? []);
   const handoffKw = diffArr(versionA.handoff_keywords ?? [], versionB.handoff_keywords ?? []);
   const followupFlows = diffArr(
     versionA.followup?.flow_pointer_ids ?? [],
@@ -137,9 +189,9 @@ export function VersionDiff({ versionA, versionB }: Props) {
               <tbody>
                 {fields.map((f) => (
                   <tr key={f.key} className="border-t border-border/40">
-                    <td className="whitespace-nowrap py-1 pr-3 font-mono">{t(f.label)}</td>
-                    <td className="whitespace-nowrap py-1 pr-3 font-mono text-destructive">{String(f.a)}</td>
-                    <td className="whitespace-nowrap py-1 font-mono text-success-fg">{String(f.b)}</td>
+                    <td className="py-1 pr-3">{t(f.label)}</td>
+                    <td className="whitespace-nowrap py-1 pr-3 text-destructive">{f.a ? t(f.a) : ""}</td>
+                    <td className="whitespace-nowrap py-1 text-success-fg">{t(f.b)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -148,15 +200,31 @@ export function VersionDiff({ versionA, versionB }: Props) {
         )}
       </Section>
 
-      <Section title={t("Tools")}>
-        <Pills label={t("Adicionadas")} tone="add" items={tools.added} />
-        <Pills label={t("Removidas")} tone="del" items={tools.removed} />
+      <Section title={t("O que o agente pode fazer")}>
+        <Pills label={t("Adicionadas")} tone="add" items={tools.added.map(rotuloDaAcao)} />
+        <Pills label={t("Removidas")} tone="del" items={tools.removed.map(rotuloDaAcao)} />
         {tools.added.length === 0 && tools.removed.length === 0 ? (
           <p className="text-xs text-muted-foreground">{t("Sem mudanças.")}</p>
         ) : null}
       </Section>
 
-      <Section title={t("Handoff keywords")}>
+      <Section title={t("Materiais")}>
+        <Pills label={t("Adicionadas")} tone="add" items={mats.added.map(nome(materiais))} />
+        <Pills label={t("Removidas")} tone="del" items={mats.removed.map(nome(materiais))} />
+        {mats.added.length === 0 && mats.removed.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{t("Sem mudanças.")}</p>
+        ) : null}
+      </Section>
+
+      <Section title={t("Funis")}>
+        <Pills label={t("Adicionadas")} tone="add" items={funs.added.map(nome(funis))} />
+        <Pills label={t("Removidas")} tone="del" items={funs.removed.map(nome(funis))} />
+        {funs.added.length === 0 && funs.removed.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{t("Sem mudanças.")}</p>
+        ) : null}
+      </Section>
+
+      <Section title={t("Palavras que chamam uma pessoa na hora")}>
         <Pills label={t("Adicionadas")} tone="add" items={handoffKw.added} />
         <Pills label={t("Removidas")} tone="del" items={handoffKw.removed} />
         {handoffKw.added.length === 0 && handoffKw.removed.length === 0 ? (
@@ -167,13 +235,13 @@ export function VersionDiff({ versionA, versionB }: Props) {
       <Section title={t("Follow-up")}>
         {followupEnabledChanged ? (
           <p className="text-xs">
-            {t("Habilitado:")}{" "}
-            <span className="font-mono text-destructive">
-              {String(versionA.followup?.enabled ?? false)}
+            {t("Ligado")}:{" "}
+            <span className="text-destructive">
+              {t(versionA.followup?.enabled ? "Sim" : "Não")}
             </span>{" "}
             →{" "}
-            <span className="font-mono text-success-fg">
-              {String(versionB.followup?.enabled ?? false)}
+            <span className="text-success-fg">
+              {t(versionB.followup?.enabled ? "Sim" : "Não")}
             </span>
           </p>
         ) : null}
@@ -186,7 +254,7 @@ export function VersionDiff({ versionA, versionB }: Props) {
         ) : null}
       </Section>
 
-      <Section title={t("System prompt")}>
+      <Section title={t("As instruções dele")}>
         <pre className="max-h-96 overflow-auto rounded-md border border-border/60 bg-muted/30 p-2 font-mono text-xs leading-relaxed">
           {lines.map((l, idx) => {
             const cls =
@@ -233,9 +301,9 @@ function Pills({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-xs text-muted-foreground">{label}:</span>
-      {items.map((id) => (
+      {items.map((id, i) => (
         <Badge
-          key={id}
+          key={`${id}-${i}`}
           variant="outline"
           className={
             tone === "add"

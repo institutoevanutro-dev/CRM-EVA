@@ -143,6 +143,8 @@ export function AgentTabs(props: Props) {
           rascunhoVigente={props.draft}
           alteracoesNaoSalvas={alteracoesNaoSalvas}
           onIrParaConfiguracao={irParaConfiguracao}
+          materiais={props.materiais}
+          funis={props.funis}
           onAbrirNoEditor={(versao) => {
             setPedidoDeAbrir((anterior) => ({ versao, n: (anterior?.n ?? 0) + 1 }));
             setTab("configuration");
