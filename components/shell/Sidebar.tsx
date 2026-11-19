@@ -233,7 +233,8 @@ export function SidebarContent({
       </div>
       <div aria-hidden className="mx-4 mb-2 h-px bg-gradient-to-r from-transparent via-gold/70 to-transparent" />
       <div className={cn("px-3 pb-2", collapsed && "px-2")}>
-        <SearchTrigger naLateral recolhida={collapsed} atalho={showCollapseControl} />
+        {/* Escolheu na busca: a gaveta do celular fecha, como ao escolher no menu (item 234). */}
+        <SearchTrigger naLateral recolhida={collapsed} atalho={showCollapseControl} aoNavegar={onNavigate} />
       </div>
       {/* Só os grupos rolam. O Início fica parado acima deles: com um grupo grande aberto numa
           janela baixa, a lista rolava e ele aparecia cortado embaixo da busca (print de 10/10/2026). */}

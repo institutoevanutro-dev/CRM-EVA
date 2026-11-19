@@ -23,7 +23,8 @@ export function SearchTrigger({
   recolhida = false,
   atalho = true,
   noTopo = false,
-}: { naLateral?: boolean; recolhida?: boolean; atalho?: boolean; noTopo?: boolean }) {
+  aoNavegar,
+}: { naLateral?: boolean; recolhida?: boolean; atalho?: boolean; noTopo?: boolean; aoNavegar?: () => void }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   // "⌘K" só no Mac e no iPad; fora deles a tecla é Ctrl. O servidor não sabe o
@@ -71,7 +72,7 @@ export function SearchTrigger({
         {!recolhida && <kbd className="rounded-md border border-white/15 px-1.5 py-0.5 text-[10px]">{tecla}</kbd>}
       </button>
       {/* Só monta aberta: a busca carrega dados e não precisa existir antes do primeiro uso. */}
-      {open && <CommandPalette open={open} onOpenChange={setOpen} />}
+      {open && <CommandPalette open={open} onOpenChange={setOpen} aoNavegar={aoNavegar} />}
     </>
   );
 }

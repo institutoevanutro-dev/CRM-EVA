@@ -1456,6 +1456,9 @@ export const DICIONARIO: Traducoes = {
   "Buscar telas": { es: "Buscar pantallas" },
   "Buscar telas do sistema…": { es: "Buscar pantallas del sistema…" },
   Telas: { es: "Pantallas" },
+  // A busca ⌘K acha também contatos e conversas (item 233).
+  "Buscar telas, contatos e conversas…": { es: "Buscar pantallas, contactos y conversaciones…" },
+  "Resultados da busca": { es: "Resultados de la búsqueda" },
   // O gatilho da busca no topo mostra RETICENCIA ASCII desde antes do i18n
   // (`Buscar...`). A chave e o byte que a tela ja mostrava: trocar por "…"
   // aqui mudaria a tela de quem usa em portugues — que e o unico jeito de

@@ -1,12 +1,15 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
-import { MagnifyingGlass } from "@/lib/ui/icons";
-import { NAV_GROUPS, searchable, type NavDestination } from "@/lib/navigation/registry";
+import { apiClient } from "@/lib/api/client";
+import { buscaValeConsulta } from "@/lib/inbox/termo-de-busca";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { ChatCircle, MagnifyingGlass, UserCircle } from "@/lib/ui/icons";
+import { NAV_GROUPS, searchable } from "@/lib/navigation/registry";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,9 +18,62 @@ import { cn } from "@/lib/utils";
  * Sem `cmdk`: o projeto já tem Dialog e Input, e uma lista filtrada com setas e
  * Enter são poucas linhas. Uma dependência a mais para isso seria peso sem ganho.
  *
- * v1 busca só NAVEGAÇÃO — os destinos do registro. Contato, conversa e lead têm
- * outra fonte de dados e são outra feature.
+ * Acha as telas do registro e, desde o item 233 (decisão do André, 18/11), também
+ * contatos e conversas pelo nome ou telefone. Esses vêm das MESMAS rotas que as telas
+ * de Contatos e Conversas usam (`/api/v1/contacts` e `/api/v1/conversations`), com a
+ * sessão de quem busca: organização, papel e escopo são os delas, nada é decidido aqui.
  */
+
+/** Uma linha da lista: tela, contato ou conversa. */
+interface Item {
+  chave: string;
+  href: string;
+  titulo: string;
+  detalhe: string;
+  rotulo: string;
+  Icon: PhosphorIcon;
+}
+
+interface ContatoAchado {
+  id: string;
+  display_name: string | null;
+  name: string | null;
+  phone_number: string | null;
+}
+interface ConversaAchada {
+  id: string;
+  last_message_preview: string | null;
+  contacts: ContatoAchado | null;
+}
+
+const nomeDe = (c: ContatoAchado | null) => c?.display_name || c?.name || c?.phone_number || "";
+
+/** Até 5 de cada. Falha (papel sem acesso, rede) só deixa a parte vazia: as telas continuam. */
+async function buscarPessoas(termo: string, signal: AbortSignal): Promise<Item[]> {
+  const qs = `search=${encodeURIComponent(termo)}&limit=5`;
+  const [contatos, conversas] = await Promise.all([
+    apiClient.get<{ data: ContatoAchado[] }>(`/api/v1/contacts?${qs}`, { signal }).then((r) => r.data, () => []),
+    apiClient.get<{ data: ConversaAchada[] }>(`/api/v1/conversations?${qs}`, { signal }).then((r) => r.data, () => []),
+  ]);
+  return [
+    ...contatos.map((c) => ({
+      chave: `contato-${c.id}`,
+      href: `/app/contacts/${c.id}`,
+      titulo: nomeDe(c),
+      detalhe: c.phone_number ?? "",
+      rotulo: "Contato",
+      Icon: UserCircle,
+    })),
+    ...conversas.map((c) => ({
+      chave: `conversa-${c.id}`,
+      href: `/app/inbox?id=${c.id}`,
+      titulo: nomeDe(c.contacts),
+      detalhe: c.last_message_preview ?? "",
+      rotulo: "Conversa",
+      Icon: ChatCircle,
+    })),
+  ];
+}
 
 /** Sem acento e sem caixa: ninguém digita "orçamento" com cedilha às pressas. */
 function normalizar(texto: string): string {
@@ -29,9 +85,12 @@ const ROTULO_GRUPO = new Map(NAV_GROUPS.map((g) => [g.id, g.label]));
 export function CommandPalette({
   open,
   onOpenChange,
+  aoNavegar,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Depois de abrir a escolha: a gaveta do celular fecha em vez de ficar por cima da tela nova. */
+  aoNavegar?: () => void;
 }) {
   const t = useT();
   return (
@@ -41,7 +100,12 @@ export function CommandPalette({
         {/* O miolo é um componente à parte porque o Radix o DESMONTA ao fechar:
             busca e destaque nascem zerados na próxima abertura por construção,
             sem um efeito de reset para manter em sincronia. */}
-        <Resultados aoEscolher={() => onOpenChange(false)} />
+        <Resultados
+          aoEscolher={() => {
+            onOpenChange(false);
+            aoNavegar?.();
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -64,18 +128,54 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
     [user.is_platform_admin, user.support, activeOrg?.role, activeOrg?.interface_settings],
   );
 
-  const resultados = useMemo(() => {
+  const telas = useMemo<Item[]>(() => {
     const termo = normalizar(busca.trim());
     // Sem termo, abre no trabalho do dia em vez de uma tela vazia que não
     // ensina nada sobre o que dá para procurar aqui.
-    if (!termo) {
-      const daily = visiveis.filter((d) => d.group === "atendimento");
-      return daily.length ? daily : visiveis.slice(0, 8);
-    }
-    return visiveis.filter((d) => normalizar(`${d.label} ${d.description}`).includes(termo));
-  }, [busca, visiveis]);
+    const achadas = !termo
+      ? (() => {
+          const daily = visiveis.filter((d) => d.group === "atendimento");
+          return daily.length ? daily : visiveis.slice(0, 8);
+        })()
+      : visiveis.filter((d) => normalizar(`${d.label} ${d.description}`).includes(termo));
+    return achadas.map((d) => ({
+      chave: d.href,
+      href: d.href,
+      titulo: t(d.label),
+      detalhe: t(d.description),
+      rotulo: t(ROTULO_GRUPO.get(d.group) ?? ""),
+      Icon: d.icon,
+    }));
+  }, [busca, visiveis, t]);
 
-  function navegar(destino: NavDestination) {
+  // Contatos e conversas: só com termo que vale consulta, e um instante depois
+  // da última tecla, para não pedir ao servidor a cada letra.
+  const [pessoas, setPessoas] = useState<{ termo: string; itens: Item[] }>({ termo: "", itens: [] });
+  useEffect(() => {
+    const termo = busca.trim();
+    if (!buscaValeConsulta(termo)) return;
+    const ctrl = new AbortController();
+    const espera = setTimeout(async () => {
+      const itens = await buscarPessoas(termo, ctrl.signal);
+      if (!ctrl.signal.aborted) setPessoas({ termo, itens });
+    }, 250);
+    return () => {
+      clearTimeout(espera);
+      ctrl.abort();
+    };
+  }, [busca]);
+
+  const resultados = useMemo(
+    () => [...telas, ...(pessoas.termo === busca.trim() ? pessoas.itens.map((p) => ({ ...p, rotulo: t(p.rotulo) })) : [])],
+    [telas, pessoas, busca, t],
+  );
+
+  // As setas movem o destaque; a lista rola junto, senão o Enter abre algo fora de vista (item 234).
+  useEffect(() => {
+    document.getElementById(`palette-${destacado}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [destacado]);
+
+  function navegar(destino: Item) {
     aoEscolher();
     router.push(destino.href);
   }
@@ -117,7 +217,7 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
           value={busca}
           onChange={(e) => aoDigitar(e.target.value)}
           onKeyDown={aoTeclar}
-          placeholder={t("Buscar telas do sistema…")}
+          placeholder={t("Buscar telas, contatos e conversas…")}
           className="h-12 w-full bg-transparent text-sm outline-hidden placeholder:text-muted-foreground"
         />
       </div>
@@ -130,15 +230,17 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
         <ul
           id="palette-resultados"
           role="listbox"
-          aria-label={t("Telas")}
+          aria-label={t("Resultados da busca")}
           className="max-h-80 overflow-y-auto p-2"
         >
           {resultados.map((d, i) => {
-            const Icon = d.icon;
+            const Icon = d.Icon;
             const ativo = i === destacado;
+            // Na linha escolhida o fundo é de destaque: o cinza de apoio sumia nele (item 234).
+            const apoio = ativo ? "text-accent-foreground opacity-80" : "text-muted-foreground";
             return (
               <li
-                key={d.href}
+                key={d.chave}
                 id={`palette-${i}`}
                 role="option"
                 aria-selected={ativo}
@@ -150,15 +252,13 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
                   ativo && "bg-accent text-accent-foreground",
                 )}
               >
-                <Icon size={18} aria-hidden className="mt-0.5 shrink-0 text-muted-foreground" />
+                <Icon size={18} aria-hidden className={cn("mt-0.5 shrink-0", apoio)} />
                 <div className="min-w-0">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-sm font-medium">{t(d.label)}</span>
-                    <span className="truncate text-[11px] tracking-wider text-muted-foreground uppercase">
-                      {t(ROTULO_GRUPO.get(d.group) ?? "")}
-                    </span>
+                    <span className="truncate text-sm font-medium">{d.titulo}</span>
+                    <span className={cn("shrink-0 text-[11px] tracking-wider uppercase", apoio)}>{d.rotulo}</span>
                   </div>
-                  <p className="truncate text-xs text-muted-foreground">{t(d.description)}</p>
+                  {d.detalhe && <p className={cn("truncate text-xs", apoio)}>{d.detalhe}</p>}
                 </div>
               </li>
             );
