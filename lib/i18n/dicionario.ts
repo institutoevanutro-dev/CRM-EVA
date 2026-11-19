@@ -1252,7 +1252,6 @@ export const DICIONARIO: Traducoes = {
   Telefone: { es: "Teléfono" },
   "Nenhum contato": { es: "Ningún contacto" },
   Bloqueado: { es: "Bloqueado" },
-  "Marcar consulta": { es: "Agendar consulta" },
   Conversar: { es: "Conversar" },
   Consultas: { es: "Consultas" },
   Próximas: { es: "Próximas" },
