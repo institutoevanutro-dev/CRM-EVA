@@ -178,6 +178,7 @@ export function NovoMaterialDialog({ aberto, onFechar, onCriado, podeIndexar }: 
                     type="button"
                     disabled={rotina || enviando}
                     onClick={() => setTipo(tf.id)}
+                    aria-pressed={marcado}
                     data-testid={`material-tipo-${tf.id}`}
                     className={[
                       "rounded-lg border p-3 text-left text-sm transition",

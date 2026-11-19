@@ -63,7 +63,7 @@ export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
             ) : null}
             {run?.is_dry_run ? (
               <Badge variant="outline" className="text-xs">
-                dry-run
+                {t("teste")}
               </Badge>
             ) : null}
           </SheetTitle>
@@ -79,18 +79,18 @@ export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
               <Cell label={t("Concluído")}>
                 {run.completed_at ? new Date(run.completed_at).toLocaleString() : "—"}
               </Cell>
-              <Cell label={t("Tokens (in/out)")}>
+              <Cell label={t("Volume de texto (entrada/saída)")}>
                 {(run.tokens_in ?? 0).toLocaleString()} / {(run.tokens_out ?? 0).toLocaleString()}
               </Cell>
               <Cell label={t("Custo")}>{fmtCost(run.cost_cents)}</Cell>
               <Cell label={t("Latência")}>{fmtLatency(run.latency_ms)}</Cell>
-              <Cell label={t("Steps")}>{run.steps_count ?? 0}</Cell>
+              <Cell label={t("Ações")}>{run.steps_count ?? 0}</Cell>
             </dl>
 
             {run.error_code || run.error_message ? (
               <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs">
                 <p className="font-medium text-destructive">
-                  {run.error_code ?? t("error")}
+                  {run.error_code ?? t("Erro")}
                 </p>
                 {run.error_message ? (
                   <p className="mt-1 whitespace-pre-wrap">{run.error_message}</p>
@@ -109,7 +109,7 @@ export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
               {run.inbound_message_id ? (
                 <Button variant="ghost" size="sm" asChild>
                   <Link href={`/app/inbox?message=${run.inbound_message_id}`}>
-                    {t("Ver inbound")}
+                    {t("Ver mensagem recebida")}
                   </Link>
                 </Button>
               ) : null}
@@ -117,7 +117,7 @@ export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
 
             <div>
               <p className="rotulo-secao mb-2 text-muted-foreground">
-                {t("Trace")}
+                {t("Passo a passo")}
               </p>
               <RunTrace toolCalls={run.tool_calls} />
             </div>

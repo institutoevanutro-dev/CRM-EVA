@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -5,7 +6,7 @@ import { ROLE_RANK } from "@/lib/auth/types";
 import { listSelectableChannels } from "@/lib/channels/selectable";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
-import { Info } from "@/lib/ui/icons";
+import { CaretLeft, Info } from "@/lib/ui/icons";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import type { AgentVersionRow, AgentVersionSummary } from "@/hooks/ai/useAgentVersions";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
@@ -14,6 +15,7 @@ import { LegacyRecovery } from "./_components/LegacyRecovery";
 import { AgentOperation } from "./_components/AgentOperation";
 import type { MaterialDoAcervo } from "./_components/BasesDoAgente";
 import { AgentTabs } from "./_components/AgentTabs";
+import { AgentStatusBadge, deriveAgentStatus } from "../_components/AgentStatusBadge";
 import { lerFunisEMateriais } from "../_escopo-da-tela";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
@@ -169,6 +171,22 @@ export default async function AgentEditorPage({ params }: { params: Promise<{ id
 
   return (
     <div className="flex h-full flex-col gap-6">
+      {/* Nome e situação ACIMA das abas: antes só a Configuração dizia qual
+          agente estava aberto, e em Teste ou Execuções não se sabia qual das
+          várias "Cintia" era. */}
+      <header className="flex flex-col gap-1">
+        <Link
+          href="/app/ai/agents"
+          className="-ml-1 inline-flex min-h-11 w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <CaretLeft size={14} aria-hidden />
+          {traduzir("Agentes", user.idioma)}
+        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-xl font-semibold tracking-tight">{agent.name}</h1>
+          <AgentStatusBadge status={deriveAgentStatus(agent)} />
+        </div>
+      </header>
       {/* Gestor abre a tela, mas só administrador edita e testa: sem esta faixa,
           ele via tudo cinza e não sabia por quê. */}
       {readOnly ? (

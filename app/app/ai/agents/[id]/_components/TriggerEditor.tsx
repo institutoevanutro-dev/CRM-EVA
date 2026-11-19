@@ -238,7 +238,8 @@ export function TriggerEditor({ value, onChange, disabled }: Props) {
                       type="button"
                       onClick={() => toggleWeekday(d.id)}
                       disabled={disabled}
-                      className={`rounded-md border px-2 py-1 text-xs ${
+                      aria-pressed={active}
+                      className={`rounded-md border px-2 py-1 text-xs toque:min-h-11 toque:min-w-11 ${
                         active
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-border/60 text-muted-foreground"

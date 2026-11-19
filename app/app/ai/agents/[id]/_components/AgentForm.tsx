@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { CaretDown } from "@/lib/ui/icons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -391,6 +392,48 @@ function ErroDoCampo({ campo, erro }: { campo: string; erro?: string }) {
   );
 }
 
+/** Campos do cartão "Freios de segurança": erro em qualquer um abre a sanfona. */
+const FREIOS = [
+  "max_steps",
+  "token_budget",
+  "cost_budget_cents",
+  "history_message_window",
+  "history_token_window",
+  "reply_min_interval_ms",
+] as const;
+
+/**
+ * Cartão em sanfona (regra da casa). `<details>` nativo: teclado, leitor de
+ * tela e Safari sem JS. `aberta` vale só na montagem — depois quem manda é a
+ * pessoa.
+ */
+function Sanfona({
+  titulo,
+  aberta,
+  children,
+}: {
+  titulo: string;
+  aberta: boolean;
+  children: React.ReactNode;
+}) {
+  // Só o valor da montagem: se o `open` seguisse a prop, escolher o modelo
+  // fecharia a sanfona na cara de quem está mexendo nela.
+  const [inicial] = React.useState(aberta);
+  return (
+    <details open={inicial} className="group rounded-lg border border-border bg-surface">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-4 py-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
+        <h3>{titulo}</h3>
+        <CaretDown
+          size={14}
+          aria-hidden
+          className="shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+        />
+      </summary>
+      <div className="space-y-3 px-4 pb-4">{children}</div>
+    </details>
+  );
+}
+
 export function AgentForm(props: Props) {
   const t = useT();
   const funis = props.funis ?? [];
@@ -738,10 +781,12 @@ export function AgentForm(props: Props) {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
+          {/* Na edição, o nome e a situação moram no cabeçalho da página,
+              acima das abas; aqui fica só a versão. */}
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold tracking-tight">
-              {isEdit ? props.agent.name : t("Novo agente")}
-            </h2>
+            {isEdit ? null : (
+              <h2 className="text-xl font-semibold tracking-tight">{t("Novo agente")}</h2>
+            )}
             {statusBadge}
           </div>
           {isEdit && props.agent.description ? (
@@ -870,549 +915,538 @@ export function AgentForm(props: Props) {
         />
       ) : null}
 
-      {/* Two-column grid */}
-      <div className={papel === "conversa" ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : "hidden"}>
-        {/* COLUMN 1 */}
-        <div className="space-y-4">
-          {/* Identification */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Quem é este agente")}</h3>
-            <div className="space-y-1">
-              <Label htmlFor="name">{t("Nome")}</Label>
-              <Input
-                id="name"
-                value={form.name}
-                onChange={(e) => patch({ name: e.target.value })}
-                disabled={disabled}
-                maxLength={120}
-                aria-invalid={!!validation.name}
+      {/* Uma coluna, em sanfonas. Eram duas colunas desequilibradas (meia tela
+          vazia por ~2.400 px) e 12 cartões sempre abertos. Na edição, o que se
+          mexe pouco começa fechado — e abre ao carregar quando falta algo nele. */}
+      <div className={papel === "conversa" ? "flex flex-col gap-4" : "hidden"}>
+        {/* Identification */}
+        <Sanfona titulo={t("Quem é este agente")} aberta={!isEdit}>
+          <div className="space-y-1">
+            <Label htmlFor="name">{t("Nome")}</Label>
+            <Input
+              id="name"
+              value={form.name}
+              onChange={(e) => patch({ name: e.target.value })}
+              disabled={disabled}
+              maxLength={120}
+              aria-invalid={!!validation.name}
+            />
+            {validation.name ? (
+              <p className="text-xs text-destructive">{validation.name}</p>
+            ) : null}
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="description">{t("Descrição")}</Label>
+            <Textarea
+              id="description"
+              value={form.description}
+              onChange={(e) => patch({ description: e.target.value })}
+              disabled={disabled}
+              rows={2}
+              maxLength={2000}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="priority">{t("Ordem de preferência (0 a 1000)")}</Label>
+            <Input
+              id="priority"
+              type="number"
+              min={0}
+              max={1000}
+              step={1}
+              value={form.priority}
+              onChange={(e) => patch({ priority: Number(e.target.value) })}
+              disabled={disabled}
+              aria-invalid={!!validation.priority}
+            />
+            {validation.priority ? (
+              <p className="text-xs text-destructive">{validation.priority}</p>
+            ) : null}
+            <p className="text-xs text-muted-foreground">
+              {t(
+                "Quando mais de um agente puder atender a mesma conversa, o de número maior tenta primeiro. Se você só tem um agente, pode deixar como está.",
+              )}
+            </p>
+          </div>
+        </Sanfona>
+
+        {/* Prompt */}
+        <Card className="space-y-2 p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">{t("As instruções dele")}</h3>
+            <div className="flex items-center gap-2">
+              {/* O contador é o aviso que chega ANTES do erro: quem cola um
+                  texto grande vê na hora que ele não vai caber, em vez de
+                  descobrir depois — ou nunca. */}
+              <span
+                data-testid="contador-do-prompt"
+                className={
+                  form.system_prompt.trim().length > 20000
+                    ? "text-xs text-destructive"
+                    : "text-xs text-muted-foreground"
+                }
+              >
+                {form.system_prompt.trim().length.toLocaleString("pt-BR")}/20.000
+              </span>
+              <TokenCounter
+                text={form.system_prompt}
+                contextWindow={modelMeta?.context_window ?? null}
+                className="text-xs"
               />
-              {validation.name ? (
-                <p className="text-xs text-destructive">{validation.name}</p>
-              ) : null}
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="description">{t("Descrição")}</Label>
-              <Textarea
-                id="description"
-                value={form.description}
-                onChange={(e) => patch({ description: e.target.value })}
-                disabled={disabled}
-                rows={2}
-                maxLength={2000}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="priority">{t("Ordem de preferência (0 a 1000)")}</Label>
-              <Input
-                id="priority"
-                type="number"
-                min={0}
-                max={1000}
-                step={1}
-                value={form.priority}
-                onChange={(e) => patch({ priority: Number(e.target.value) })}
-                disabled={disabled}
-                aria-invalid={!!validation.priority}
-              />
-              {validation.priority ? (
-                <p className="text-xs text-destructive">{validation.priority}</p>
-              ) : null}
-              <p className="text-xs text-muted-foreground">
-                {t(
-                  "Quando mais de um agente puder atender a mesma conversa, o de número maior tenta primeiro. Se você só tem um agente, pode deixar como está.",
-                )}
+          </div>
+          <Textarea
+            value={form.system_prompt}
+            onChange={(e) => patch({ system_prompt: e.target.value })}
+            disabled={disabled}
+            rows={12}
+            /**
+             * SEM `maxLength`, e é o conserto — não um esquecimento.
+             *
+             * O navegador aplica o atributo na COLAGEM, sem evento e sem
+             * aviso: o que passa do limite não entra no campo. Cinco versões
+             * de um agente em produção foram salvas com exatamente 19.999
+             * caracteres, a última cortada no meio de uma frase, e o aviso
+             * logo acima — "passaram de 20.000" — era inalcançável, porque o
+             * estado nunca podia exceder o teto que o atributo já impunha.
+             *
+             * Sem ele o texto inteiro entra, a validação dispara e o autor lê
+             * quanto precisa cortar. Limite que recusa é honesto; limite que
+             * corta em silêncio faz o autor publicar o que não escreveu.
+             */
+            spellCheck={false}
+            className="font-mono text-xs"
+            aria-label={t("As instruções dele")}
+            aria-invalid={!!validation.system_prompt}
+          />
+          {validation.system_prompt ? (
+            <p className="text-xs text-destructive">{validation.system_prompt}</p>
+          ) : null}
+        </Card>
+
+        {/* Provider + credential + model */}
+        <Sanfona titulo={t("A inteligência que ele usa")} aberta={!isEdit || !form.model || !form.credential_id}>
+          <div className="space-y-1">
+            <Label htmlFor="provider">{t("Empresa de inteligência artificial")}</Label>
+            <Select
+              value={form.provider}
+              onValueChange={(v) => changeProvider(v as Provider)}
+              disabled={disabled}
+            >
+              <SelectTrigger id="provider">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {/*
+                  Derivado de PROVEDORES, nunca escrito à mão: esta lista tinha
+                  três itens fixos enquanto o sistema executava quatro, e a
+                  OpenRouter — a opção [1] do instalador — não aparecia. Um
+                  agente publicado nela abria com o campo em BRANCO, porque
+                  nenhum item casava com o valor, e o primeiro save silencioso
+                  trocava o provedor do dono por outro.
+                */}
+                {PROVEDORES.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.rotulo}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <ModelPicker
+            provider={form.provider}
+            value={form.model}
+            onChange={(modelId) => patch({ model: modelId })}
+            disabled={disabled}
+            id="model"
+          />
+          {validation.model ? (
+            <p className="text-xs text-destructive">{validation.model}</p>
+          ) : null}
+
+          <CredentialPicker
+            provider={form.provider}
+            credentials={props.credentials}
+            value={form.credential_id}
+            onChange={(id) => patch({ credential_id: id })}
+            disabled={disabled}
+            id="credential_id"
+            instalacaoTemChave={(props.provedoresDaInstalacao ?? []).includes(form.provider)}
+          />
+          {validation.credential_id ? (
+            <p className="text-xs text-destructive">{validation.credential_id}</p>
+          ) : null}
+          {/* Sempre visível: a tela exige credencial, então diz onde se consegue uma. */}
+          <Link
+            href="/app/ai/credentials"
+            className="text-xs font-medium text-text-muted underline underline-offset-4 hover:text-text"
+          >
+            {t("Cadastrar ou trocar credencial")}
+          </Link>
+          {cred && credSt && credSt !== "validated" ? (
+            <p className="text-xs text-warning-fg">
+              {t("Credencial selecionada está com status")} {t(STATUS_LABEL[credSt])}
+              {t(". Publish bloqueado até validar.")}
+            </p>
+          ) : null}
+        </Sanfona>
+
+        {/* WhatsApp session */}
+        <Sanfona titulo={t("Por qual número ele atende")} aberta={!isEdit || !form.channel_session_id}>
+          {props.routerMembership && (
+            <div className="flex items-start gap-2 rounded-md bg-accent-soft p-3 text-xs text-text-muted">
+              <Info className="mt-0.5 shrink-0" aria-hidden />
+              <p>
+                {t("Este agente é acionado pelo roteador")}{" "}
+                <Link
+                  href={`/app/ai/routers/${props.routerMembership.routerId}`}
+                  className="font-medium underline underline-offset-2"
+                >
+                  «{props.routerMembership.routerName}»
+                </Link>{" "}
+                {t("— o campo de número abaixo não se aplica.")}
               </p>
             </div>
-          </Card>
-
-          {/* Provider + credential + model */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("A inteligência que ele usa")}</h3>
-            <div className="space-y-1">
-              <Label htmlFor="provider">{t("Empresa de inteligência artificial")}</Label>
-              <Select
-                value={form.provider}
-                onValueChange={(v) => changeProvider(v as Provider)}
-                disabled={disabled}
-              >
-                <SelectTrigger id="provider">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {/*
-                    Derivado de PROVEDORES, nunca escrito à mão: esta lista tinha
-                    três itens fixos enquanto o sistema executava quatro, e a
-                    OpenRouter — a opção [1] do instalador — não aparecia. Um
-                    agente publicado nela abria com o campo em BRANCO, porque
-                    nenhum item casava com o valor, e o primeiro save silencioso
-                    trocava o provedor do dono por outro.
-                  */}
-                  {PROVEDORES.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.rotulo}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <ModelPicker
-              provider={form.provider}
-              value={form.model}
-              onChange={(modelId) => patch({ model: modelId })}
+          )}
+          <div className="space-y-1">
+            <Label htmlFor="channel_session_id">{t("Número conectado")}</Label>
+            <Select
+              value={form.channel_session_id || undefined}
+              onValueChange={(v) => patch({ channel_session_id: v })}
               disabled={disabled}
-              id="model"
-            />
-            {validation.model ? (
-              <p className="text-xs text-destructive">{validation.model}</p>
-            ) : null}
-
-            <CredentialPicker
-              provider={form.provider}
-              credentials={props.credentials}
-              value={form.credential_id}
-              onChange={(id) => patch({ credential_id: id })}
-              disabled={disabled}
-              id="credential_id"
-              instalacaoTemChave={(props.provedoresDaInstalacao ?? []).includes(form.provider)}
-            />
-            {validation.credential_id ? (
-              <p className="text-xs text-destructive">{validation.credential_id}</p>
-            ) : null}
-            {/* Sempre visível: a tela exige credencial, então diz onde se consegue uma. */}
+            >
+              <SelectTrigger id="channel_session_id">
+                <SelectValue placeholder={t("Selecione um número")} />
+              </SelectTrigger>
+              <SelectContent>
+                {props.channelSessions.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {/*
+                      O estado vinha CRU daqui — a opção lia "org_2dd5e6ea ·
+                      STARTING", juntando o identificador interno da sessão com
+                      o enum em inglês do banco. O nome agora nunca é o
+                      identificador (ver `nomeDoCanal`), e o estado passa pela
+                      mesma tradução que a tela de Conexões usa.
+                    */}
+                    {s.display_name}
+                    {s.phone_number ? ` · ${s.phone_number}` : ""} ·{" "}
+                    {rotuloDoEstadoDoCanal(s.status, t)}
+                  </SelectItem>
+                ))}
+                {props.channelSessions.length === 0 ? (
+                  <SelectItem value="__none__" disabled>
+                    {t("Nenhum número conectado")}
+                  </SelectItem>
+                ) : null}
+              </SelectContent>
+            </Select>
+            {/*
+              NÃO é erro: é o estado normal de quem ainda não pareou o aparelho.
+              Antes, esta linha era vermelha e vinha de `validation`, que também
+              travava o botão de salvar — o dono de uma instalação nova escrevia
+              o prompt inteiro e não conseguia guardar nada.
+            */}
+            {/* Sempre visível: o número é exigido para publicar; aqui se diz onde conectar. */}
             <Link
-              href="/app/ai/credentials"
+              href="/app/connections"
               className="text-xs font-medium text-text-muted underline underline-offset-4 hover:text-text"
             >
-              {t("Cadastrar ou trocar credencial")}
+              {t("Gerenciar números em Conexões")}
             </Link>
-            {cred && credSt && credSt !== "validated" ? (
-              <p className="text-xs text-warning-fg">
-                {t("Credencial selecionada está com status")} {t(STATUS_LABEL[credSt])}
-                {t(". Publish bloqueado até validar.")}
+            {!form.channel_session_id ? (
+              <p className="text-xs text-muted-foreground">
+                {props.channelSessions.length === 0 ? (
+                  <>
+                    {t("Nenhum número conectado ainda — o rascunho salva sem ele.")}{" "}
+                    <Link
+                      href="/app/connections"
+                      className="font-medium text-foreground underline underline-offset-4"
+                    >
+                      {t("Conectar WhatsApp")}
+                    </Link>{" "}
+                    {t("para poder publicar.")}
+                  </>
+                ) : (
+                  t("Escolha o número para poder publicar. Sem ele, o rascunho salva mas não atende.")
+                )}
               </p>
             ) : null}
-          </Card>
+          </div>
+        </Sanfona>
 
-          {/* WhatsApp session */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Por qual número ele atende")}</h3>
-            {props.routerMembership && (
-              <div className="flex items-start gap-2 rounded-md bg-accent-soft p-3 text-xs text-text-muted">
-                <Info className="mt-0.5 shrink-0" aria-hidden />
-                <p>
-                  {t("Este agente é acionado pelo roteador")}{" "}
-                  <Link
-                    href={`/app/ai/routers/${props.routerMembership.routerId}`}
-                    className="font-medium underline underline-offset-2"
-                  >
-                    «{props.routerMembership.routerName}»
-                  </Link>{" "}
-                  {t("— o campo de número abaixo não se aplica.")}
-                </p>
-              </div>
+        {/* Capacidades */}
+        <Sanfona titulo={t("O que o agente pode fazer")} aberta={true}>
+          <p className="text-xs text-muted-foreground">
+            {t(
+              "Ligue por jornada de trabalho. O agente só consegue fazer o que estiver ligado aqui — e o que estiver ligado, ele fará sozinho durante o atendimento.",
             )}
-            <div className="space-y-1">
-              <Label htmlFor="channel_session_id">{t("Número conectado")}</Label>
-              <Select
-                value={form.channel_session_id || undefined}
-                onValueChange={(v) => patch({ channel_session_id: v })}
-                disabled={disabled}
-              >
-                <SelectTrigger id="channel_session_id">
-                  <SelectValue placeholder={t("Selecione um número")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {props.channelSessions.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {/*
-                        O estado vinha CRU daqui — a opção lia "org_2dd5e6ea ·
-                        STARTING", juntando o identificador interno da sessão com
-                        o enum em inglês do banco. O nome agora nunca é o
-                        identificador (ver `nomeDoCanal`), e o estado passa pela
-                        mesma tradução que a tela de Conexões usa.
-                      */}
-                      {s.display_name}
-                      {s.phone_number ? ` · ${s.phone_number}` : ""} ·{" "}
-                      {rotuloDoEstadoDoCanal(s.status, t)}
-                    </SelectItem>
-                  ))}
-                  {props.channelSessions.length === 0 ? (
-                    <SelectItem value="__none__" disabled>
-                      {t("Nenhum número conectado")}
-                    </SelectItem>
-                  ) : null}
-                </SelectContent>
-              </Select>
-              {/*
-                NÃO é erro: é o estado normal de quem ainda não pareou o aparelho.
-                Antes, esta linha era vermelha e vinha de `validation`, que também
-                travava o botão de salvar — o dono de uma instalação nova escrevia
-                o prompt inteiro e não conseguia guardar nada.
-              */}
-              {/* Sempre visível: o número é exigido para publicar; aqui se diz onde conectar. */}
-              <Link
-                href="/app/connections"
-                className="text-xs font-medium text-text-muted underline underline-offset-4 hover:text-text"
-              >
-                {t("Gerenciar números em Conexões")}
-              </Link>
-              {!form.channel_session_id ? (
-                <p className="text-xs text-muted-foreground">
-                  {props.channelSessions.length === 0 ? (
-                    <>
-                      {t("Nenhum número conectado ainda — o rascunho salva sem ele.")}{" "}
-                      <Link
-                        href="/app/connections"
-                        className="font-medium text-foreground underline underline-offset-4"
-                      >
-                        {t("Conectar WhatsApp")}
-                      </Link>{" "}
-                      {t("para poder publicar.")}
-                    </>
-                  ) : (
-                    t("Escolha o número para poder publicar. Sem ele, o rascunho salva mas não atende.")
-                  )}
-                </p>
-              ) : null}
-            </div>
-          </Card>
-
-          {/* Limits */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Freios de segurança")}</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="max_steps">{t("Ações por atendimento (1 a 25)")}</Label>
-                <Input
-                  id="max_steps"
-                  type="number"
-                  min={1}
-                  max={25}
-                  value={form.max_steps}
-                  onChange={(e) => patch({ max_steps: Number(e.target.value) })}
-                  disabled={disabled}
-                  aria-invalid={!!validation.max_steps}
-                  aria-describedby={validation.max_steps ? "max_steps-erro" : undefined}
-                />
-                <ErroDoCampo campo="max_steps" erro={validation.max_steps} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="token_budget">{t("Volume de texto por atendimento")}</Label>
-                <Input
-                  id="token_budget"
-                  type="number"
-                  min={1000}
-                  max={500000}
-                  step={1000}
-                  value={form.token_budget}
-                  onChange={(e) => patch({ token_budget: Number(e.target.value) })}
-                  disabled={disabled}
-                  aria-invalid={!!validation.token_budget}
-                  aria-describedby={validation.token_budget ? "token_budget-erro" : undefined}
-                />
-                <ErroDoCampo campo="token_budget" erro={validation.token_budget} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="cost_budget_cents">{t("Custo máximo por atendimento (centavos)")}</Label>
-                <Input
-                  id="cost_budget_cents"
-                  type="number"
-                  min={1}
-                  max={10000}
-                  value={form.cost_budget_cents}
-                  onChange={(e) => patch({ cost_budget_cents: Number(e.target.value) })}
-                  disabled={disabled}
-                  aria-invalid={!!validation.cost_budget_cents}
-                  aria-describedby={validation.cost_budget_cents ? "cost_budget_cents-erro" : undefined}
-                />
-                <ErroDoCampo campo="cost_budget_cents" erro={validation.cost_budget_cents} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="history_message_window">{t("Mensagens anteriores que ele lê")}</Label>
-                <Input
-                  id="history_message_window"
-                  type="number"
-                  min={0}
-                  max={200}
-                  value={form.history_message_window}
-                  onChange={(e) =>
-                    patch({ history_message_window: Number(e.target.value) })
-                  }
-                  disabled={disabled}
-                  aria-invalid={!!validation.history_message_window}
-                  aria-describedby={
-                    validation.history_message_window ? "history_message_window-erro" : undefined
-                  }
-                />
-                <ErroDoCampo campo="history_message_window" erro={validation.history_message_window} />
-              </div>
-              <div className="col-span-2 space-y-1">
-                <Label htmlFor="history_token_window">{t("Tamanho máximo desse histórico")}</Label>
-                <Input
-                  id="history_token_window"
-                  type="number"
-                  min={0}
-                  max={50000}
-                  step={500}
-                  value={form.history_token_window}
-                  onChange={(e) =>
-                    patch({ history_token_window: Number(e.target.value) })
-                  }
-                  disabled={disabled}
-                  aria-invalid={!!validation.history_token_window}
-                  aria-describedby={
-                    validation.history_token_window ? "history_token_window-erro" : undefined
-                  }
-                />
-                <ErroDoCampo campo="history_token_window" erro={validation.history_token_window} />
-              </div>
-              <div className="col-span-2 space-y-1">
-                <Label htmlFor="reply_min_interval_ms">
-                  {t("Pausa entre uma resposta e a próxima (segundos)")}
-                </Label>
-                <Input
-                  id="reply_min_interval_ms"
-                  type="number"
-                  min={0}
-                  max={600}
-                  step={1}
-                  placeholder={t("Vazio = sem pausa")}
-                  value={
-                    form.reply_min_interval_ms === null
-                      ? ""
-                      : String(Math.round(form.reply_min_interval_ms / 1000))
-                  }
-                  onChange={(e) => {
-                    // A tela fala em SEGUNDOS; o banco e o worker, em ms. Vazio =
-                    // sem pausa (null). Teto de 600 s, o mesmo da validação.
-                    const raw = e.target.value;
-                    patch({
-                      reply_min_interval_ms:
-                        raw === "" ? null : Math.round(Math.max(0, Math.min(600, Number(raw))) * 1000),
-                    });
-                  }}
-                  disabled={disabled}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t(
-                    "Depois que a IA responde uma conversa, ela só responde de novo depois desse tempo. O que o cliente escrever nesse meio-tempo é respondido junto. Vazio ou 0 = sem pausa (máximo 600 segundos).",
-                  )}
-                </p>
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {/* COLUMN 2 */}
-        <div className="space-y-4">
-          {/* Prompt */}
-          <Card className="space-y-2 p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium">{t("As instruções dele")}</h3>
-              <div className="flex items-center gap-2">
-                {/* O contador é o aviso que chega ANTES do erro: quem cola um
-                    texto grande vê na hora que ele não vai caber, em vez de
-                    descobrir depois — ou nunca. */}
-                <span
-                  data-testid="contador-do-prompt"
-                  className={
-                    form.system_prompt.trim().length > 20000
-                      ? "text-xs text-destructive"
-                      : "text-xs text-muted-foreground"
-                  }
-                >
-                  {form.system_prompt.trim().length.toLocaleString("pt-BR")}/20.000
-                </span>
-                <TokenCounter
-                  text={form.system_prompt}
-                  contextWindow={modelMeta?.context_window ?? null}
-                  className="text-xs"
-                />
-              </div>
-            </div>
-            <Textarea
-              value={form.system_prompt}
-              onChange={(e) => patch({ system_prompt: e.target.value })}
-              disabled={disabled}
-              rows={12}
-              /**
-               * SEM `maxLength`, e é o conserto — não um esquecimento.
-               *
-               * O navegador aplica o atributo na COLAGEM, sem evento e sem
-               * aviso: o que passa do limite não entra no campo. Cinco versões
-               * de um agente em produção foram salvas com exatamente 19.999
-               * caracteres, a última cortada no meio de uma frase, e o aviso
-               * logo acima — "passaram de 20.000" — era inalcançável, porque o
-               * estado nunca podia exceder o teto que o atributo já impunha.
-               *
-               * Sem ele o texto inteiro entra, a validação dispara e o autor lê
-               * quanto precisa cortar. Limite que recusa é honesto; limite que
-               * corta em silêncio faz o autor publicar o que não escreveu.
-               */
-              spellCheck={false}
-              className="font-mono text-xs"
-              aria-label={t("As instruções dele")}
-              aria-invalid={!!validation.system_prompt}
-            />
-            {validation.system_prompt ? (
-              <p className="text-xs text-destructive">{validation.system_prompt}</p>
-            ) : null}
-          </Card>
-
-          {/* Estilo de resposta (split de mensagens — Onda 4) */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Estilo de resposta")}</h3>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="split_messages"
-                checked={form.split_messages}
-                onCheckedChange={(v) => patch({ split_messages: v })}
-                disabled={disabled}
-              />
-              <Label htmlFor="split_messages">
-                {t("Responder em várias mensagens curtas (como uma pessoa digita)")}
-              </Label>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                "Em vez de um bloco único, a resposta sai em bolhas separadas, espaçadas pelo mesmo ritmo anti-banimento do envio. O agente também é instruído a escrever em parágrafos curtos.",
-              )}
-            </p>
-            {form.split_messages ? (
-              <div className="space-y-1">
-                <Label htmlFor="split_max_chars">{t("Tamanho máximo por bolha (80–4000)")}</Label>
-                <Input
-                  id="split_max_chars"
-                  type="number"
-                  min={80}
-                  max={4000}
-                  step={20}
-                  value={form.split_max_chars}
-                  onChange={(e) => patch({ split_max_chars: Number(e.target.value) })}
-                  disabled={disabled}
-                  aria-invalid={!!validation.split_max_chars}
-                  aria-describedby={validation.split_max_chars ? "split_max_chars-erro" : undefined}
-                />
-                <ErroDoCampo campo="split_max_chars" erro={validation.split_max_chars} />
-              </div>
-            ) : null}
-          </Card>
-
-          {/* Capacidades */}
-          <Card className="space-y-2 p-4">
-            <h3 className="text-sm font-medium">{t("O que o agente pode fazer")}</h3>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                "Ligue por jornada de trabalho. O agente só consegue fazer o que estiver ligado aqui — e o que estiver ligado, ele fará sozinho durante o atendimento.",
-              )}
-            </p>
-            <ToolPicker
-              value={form.tool_ids}
-              onChange={(ids) => patch({ tool_ids: ids })}
-              disabled={disabled}
-            />
-            {validation.tool_ids ? (
-              <p className="text-xs text-destructive">{validation.tool_ids}</p>
-            ) : null}
-          </Card>
-
-          {/* O acervo que este assistente consulta (0181) */}
-          <BasesDoAgente
-            materiais={materiais}
-            value={form.knowledge_source_ids}
-            onChange={(ids) => patch({ knowledge_source_ids: ids })}
+          </p>
+          <ToolPicker
+            value={form.tool_ids}
+            onChange={(ids) => patch({ tool_ids: ids })}
             disabled={disabled}
           />
+          {validation.tool_ids ? (
+            <p className="text-xs text-destructive">{validation.tool_ids}</p>
+          ) : null}
+        </Sanfona>
 
-          {/* Triggers */}
-          <Card className="space-y-2 p-4">
-            <h3 className="text-sm font-medium">{t("Quando ele entra em ação")}</h3>
-            <TriggerEditor
-              value={form.trigger_config}
-              onChange={(v) => patch({ trigger_config: v })}
+        {/* O acervo que este assistente consulta (0181) */}
+        <BasesDoAgente
+          materiais={materiais}
+          value={form.knowledge_source_ids}
+          onChange={(ids) => patch({ knowledge_source_ids: ids })}
+          disabled={disabled}
+        />
+
+        {/* Triggers */}
+        <Sanfona titulo={t("Quando ele entra em ação")} aberta={true}>
+          <TriggerEditor
+            value={form.trigger_config}
+            onChange={(v) => patch({ trigger_config: v })}
+            disabled={disabled}
+          />
+        </Sanfona>
+
+        {/* Handoff */}
+        <Sanfona titulo={t("Passar para uma pessoa")} aberta={!isEdit}>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="handoff_tool_enabled"
+              checked={form.handoff_tool_enabled}
+              onCheckedChange={(v) => patch({ handoff_tool_enabled: v })}
               disabled={disabled}
             />
-          </Card>
+            <Label htmlFor="handoff_tool_enabled">
+              {t("Deixar o agente chamar uma pessoa quando perceber que não é caso dele")}
+            </Label>
+          </div>
+          <HandoffKeywordsInput
+            value={form.handoff_keywords}
+            onChange={(v) => patch({ handoff_keywords: v })}
+            disabled={disabled}
+          />
+        </Sanfona>
 
-          {/* Handoff */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Passar para uma pessoa")}</h3>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="handoff_tool_enabled"
-                checked={form.handoff_tool_enabled}
-                onCheckedChange={(v) => patch({ handoff_tool_enabled: v })}
-                disabled={disabled}
-              />
-              <Label htmlFor="handoff_tool_enabled">
-                {t("Deixar o agente chamar uma pessoa quando perceber que não é caso dele")}
-              </Label>
-            </div>
-            <HandoffKeywordsInput
-              value={form.handoff_keywords}
-              onChange={(v) => patch({ handoff_keywords: v })}
+        {/* Casos humanos */}
+        <Sanfona titulo={t("Pedir ajuda sem sair da conversa")} aberta={!isEdit}>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="cases_enabled"
+              checked={form.cases_enabled}
+              onCheckedChange={(v) => patch({ cases_enabled: v })}
               disabled={disabled}
             />
-          </Card>
+            <Label htmlFor="cases_enabled">
+              {t("Deixar o agente pedir uma tarefa a alguém e seguir conversando")}
+            </Label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t(
+              "Diferente de passar a conversa: aqui o agente continua atendendo. Quando esbarra em algo que só uma pessoa resolve — aprovar um desconto, por exemplo — ele abre um pedido interno e retoma assim que for respondido.",
+            )}
+          </p>
+        </Sanfona>
 
-          {/* Casos humanos */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Pedir ajuda sem sair da conversa")}</h3>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="cases_enabled"
-                checked={form.cases_enabled}
-                onCheckedChange={(v) => patch({ cases_enabled: v })}
-                disabled={disabled}
-              />
-              <Label htmlFor="cases_enabled">
-                {t("Deixar o agente pedir uma tarefa a alguém e seguir conversando")}
-              </Label>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                "Diferente de passar a conversa: aqui o agente continua atendendo. Quando esbarra em algo que só uma pessoa resolve — aprovar um desconto, por exemplo — ele abre um pedido interno e retoma assim que for respondido.",
-              )}
-            </p>
-          </Card>
-
-          {/* Follow-up */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Follow-up")}</h3>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                "Retomar sozinho quem parou de responder, para o interessado não sumir sem ninguém perceber.",
-              )}
-            </p>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="followup_enabled"
-                checked={form.followup.enabled}
-                onCheckedChange={(v) =>
-                  patch({ followup: { ...form.followup, enabled: v } })
-                }
-                disabled={disabled}
-              />
-              <Label htmlFor="followup_enabled">
-                {t("Habilitar gatilhos automáticos de follow-up")}
-              </Label>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                "Os fluxos abaixo só entram em ação para um cliente se este agente estiver publicado com follow-up habilitado.",
-              )}
-            </p>
-            <FollowupFlowPicker
-              value={form.followup.flow_pointer_ids}
-              onChange={(ids) =>
-                patch({ followup: { ...form.followup, flow_pointer_ids: ids } })
+        {/* Follow-up */}
+        <Sanfona titulo={t("Follow-up")} aberta={true}>
+          <p className="text-xs text-muted-foreground">
+            {t(
+              "Retomar sozinho quem parou de responder, para o interessado não sumir sem ninguém perceber.",
+            )}
+          </p>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="followup_enabled"
+              checked={form.followup.enabled}
+              onCheckedChange={(v) =>
+                patch({ followup: { ...form.followup, enabled: v } })
               }
               disabled={disabled}
             />
-          </Card>
-        </div>
+            <Label htmlFor="followup_enabled">
+              {t("Habilitar gatilhos automáticos de follow-up")}
+            </Label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t(
+              "Os fluxos abaixo só entram em ação para um cliente se este agente estiver publicado com follow-up habilitado.",
+            )}
+          </p>
+          <FollowupFlowPicker
+            value={form.followup.flow_pointer_ids}
+            onChange={(ids) =>
+              patch({ followup: { ...form.followup, flow_pointer_ids: ids } })
+            }
+            disabled={disabled}
+          />
+        </Sanfona>
+        {/* Estilo de resposta (split de mensagens — Onda 4) */}
+        <Sanfona titulo={t("Estilo de resposta")} aberta={!isEdit || !!validation.split_max_chars}>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="split_messages"
+              checked={form.split_messages}
+              onCheckedChange={(v) => patch({ split_messages: v })}
+              disabled={disabled}
+            />
+            <Label htmlFor="split_messages">
+              {t("Responder em várias mensagens curtas (como uma pessoa digita)")}
+            </Label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t(
+              "Em vez de um bloco único, a resposta sai em bolhas separadas, espaçadas pelo mesmo ritmo anti-banimento do envio. O agente também é instruído a escrever em parágrafos curtos.",
+            )}
+          </p>
+          {form.split_messages ? (
+            <div className="space-y-1">
+              <Label htmlFor="split_max_chars">{t("Tamanho máximo por bolha (80–4000)")}</Label>
+              <Input
+                id="split_max_chars"
+                type="number"
+                min={80}
+                max={4000}
+                step={20}
+                value={form.split_max_chars}
+                onChange={(e) => patch({ split_max_chars: Number(e.target.value) })}
+                disabled={disabled}
+                aria-invalid={!!validation.split_max_chars}
+                aria-describedby={validation.split_max_chars ? "split_max_chars-erro" : undefined}
+              />
+              <ErroDoCampo campo="split_max_chars" erro={validation.split_max_chars} />
+            </div>
+          ) : null}
+        </Sanfona>
+
+        {/* Limits */}
+        <Sanfona titulo={t("Freios de segurança")} aberta={!isEdit || FREIOS.some((c) => !!validation[c])}>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="max_steps">{t("Ações por atendimento (1 a 25)")}</Label>
+              <Input
+                id="max_steps"
+                type="number"
+                min={1}
+                max={25}
+                value={form.max_steps}
+                onChange={(e) => patch({ max_steps: Number(e.target.value) })}
+                disabled={disabled}
+                aria-invalid={!!validation.max_steps}
+                aria-describedby={validation.max_steps ? "max_steps-erro" : undefined}
+              />
+              <ErroDoCampo campo="max_steps" erro={validation.max_steps} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="token_budget">{t("Volume de texto por atendimento")}</Label>
+              <Input
+                id="token_budget"
+                type="number"
+                min={1000}
+                max={500000}
+                step={1000}
+                value={form.token_budget}
+                onChange={(e) => patch({ token_budget: Number(e.target.value) })}
+                disabled={disabled}
+                aria-invalid={!!validation.token_budget}
+                aria-describedby={validation.token_budget ? "token_budget-erro" : undefined}
+              />
+              <ErroDoCampo campo="token_budget" erro={validation.token_budget} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="cost_budget_cents">{t("Custo máximo por atendimento (centavos de dólar)")}</Label>
+              <Input
+                id="cost_budget_cents"
+                type="number"
+                min={1}
+                max={10000}
+                value={form.cost_budget_cents}
+                onChange={(e) => patch({ cost_budget_cents: Number(e.target.value) })}
+                disabled={disabled}
+                aria-invalid={!!validation.cost_budget_cents}
+                aria-describedby={validation.cost_budget_cents ? "cost_budget_cents-erro" : undefined}
+              />
+              {/* O provedor cobra em dólar: "50" eram US$ 0,50 e a tela não dizia. */}
+              <p className="text-xs text-muted-foreground" data-testid="custo-em-dolar">
+                = US$ {(form.cost_budget_cents / 100).toFixed(2).replace(".", ",")}
+              </p>
+              <ErroDoCampo campo="cost_budget_cents" erro={validation.cost_budget_cents} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="history_message_window">{t("Mensagens anteriores que ele lê")}</Label>
+              <Input
+                id="history_message_window"
+                type="number"
+                min={0}
+                max={200}
+                value={form.history_message_window}
+                onChange={(e) =>
+                  patch({ history_message_window: Number(e.target.value) })
+                }
+                disabled={disabled}
+                aria-invalid={!!validation.history_message_window}
+                aria-describedby={
+                  validation.history_message_window ? "history_message_window-erro" : undefined
+                }
+              />
+              <ErroDoCampo campo="history_message_window" erro={validation.history_message_window} />
+            </div>
+            <div className="col-span-2 space-y-1">
+              <Label htmlFor="history_token_window">{t("Tamanho máximo desse histórico")}</Label>
+              <Input
+                id="history_token_window"
+                type="number"
+                min={0}
+                max={50000}
+                step={500}
+                value={form.history_token_window}
+                onChange={(e) =>
+                  patch({ history_token_window: Number(e.target.value) })
+                }
+                disabled={disabled}
+                aria-invalid={!!validation.history_token_window}
+                aria-describedby={
+                  validation.history_token_window ? "history_token_window-erro" : undefined
+                }
+              />
+              <ErroDoCampo campo="history_token_window" erro={validation.history_token_window} />
+            </div>
+            <div className="col-span-2 space-y-1">
+              <Label htmlFor="reply_min_interval_ms">
+                {t("Pausa entre uma resposta e a próxima (segundos)")}
+              </Label>
+              <Input
+                id="reply_min_interval_ms"
+                type="number"
+                min={0}
+                max={600}
+                step={1}
+                placeholder={t("Vazio = sem pausa")}
+                value={
+                  form.reply_min_interval_ms === null
+                    ? ""
+                    : String(Math.round(form.reply_min_interval_ms / 1000))
+                }
+                onChange={(e) => {
+                  // A tela fala em SEGUNDOS; o banco e o worker, em ms. Vazio =
+                  // sem pausa (null). Teto de 600 s, o mesmo da validação.
+                  const raw = e.target.value;
+                  patch({
+                    reply_min_interval_ms:
+                      raw === "" ? null : Math.round(Math.max(0, Math.min(600, Number(raw))) * 1000),
+                  });
+                }}
+                disabled={disabled}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  "Depois que a IA responde uma conversa, ela só responde de novo depois desse tempo. O que o cliente escrever nesse meio-tempo é respondido junto. Vazio ou 0 = sem pausa (máximo 600 segundos).",
+                )}
+              </p>
+            </div>
+          </div>
+        </Sanfona>
       </div>
 
       {/* Publish dialog */}

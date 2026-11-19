@@ -40,7 +40,7 @@ export function HandoffKeywordsInput({ value, onChange, disabled }: Props) {
             key={kw}
             type="button"
             onClick={() => !disabled && remove(kw)}
-            className="group flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs hover:bg-destructive/15"
+            className="group flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs hover:bg-destructive/15 toque:min-h-11"
             disabled={disabled}
             aria-label={`${t("Remover")} ${kw}`}
           >
@@ -69,7 +69,7 @@ export function HandoffKeywordsInput({ value, onChange, disabled }: Props) {
         />
         <button
           type="button"
-          className="rounded-md border border-border/60 px-3 text-xs hover:bg-muted"
+          className="rounded-md border border-border/60 px-3 text-xs hover:bg-muted toque:min-h-11"
           onClick={() => add(draft)}
           disabled={disabled || draft.trim() === ""}
         >
@@ -83,7 +83,7 @@ export function HandoffKeywordsInput({ value, onChange, disabled }: Props) {
             type="button"
             onClick={() => add(d)}
             disabled={disabled}
-            className="rounded-md border border-dashed border-border/60 px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted"
+            className="rounded-md border border-dashed border-border/60 px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted toque:min-h-11"
           >
             + {d}
           </button>
