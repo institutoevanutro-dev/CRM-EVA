@@ -312,18 +312,19 @@ test.describe.serial("Inbox: enviar exame ao Prontuário", () => {
   test("o admin cria pela tela a chave só de mídia do Prontuário", async ({ page }) => {
     await entrar(page, pessoas.admin!.email);
     await page.goto("/app/settings/api-tokens");
-    await page.getByRole("button", { name: "Criar token" }).click();
-    const novo = page.getByRole("dialog", { name: "Criar novo token" });
+    await page.getByRole("button", { name: "Criar chave" }).click();
+    const novo = page.getByRole("dialog", { name: "Criar chave" });
     await novo.getByLabel("Nome", { exact: true }).fill(`${PREFIXO} Prontuário VPS exames WhatsApp`);
     const opcao = novo.getByRole("button", { name: /^prontuario:media:read —/ });
     await expect(opcao).toHaveAttribute("title", "Prontuário: baixar PDF e fotos que o paciente mandou pelo WhatsApp");
     await opcao.click();
     await novo.screenshot({ path: path.join(EVIDENCIA, "0-criar-chave.png") });
     await novo.getByRole("button", { name: "Criar", exact: true }).click();
-    const criado = page.getByRole("dialog", { name: "Token criado" });
+    const criado = page.getByRole("alertdialog", { name: "Chave criada" });
     chaveDeLeitura = (await criado.locator("code").innerText()).trim();
     expect(chaveDeLeitura).toMatch(/^dsk_/);
-    await page.keyboard.press("Escape");
+    await criado.getByRole("button", { name: "Já copiei" }).click();
+    await expect(criado).toHaveCount(0);
   });
 
   test("1 e 13: a recepção vê botão e dicas no lugar certo, com as medidas", async ({ page }) => {
