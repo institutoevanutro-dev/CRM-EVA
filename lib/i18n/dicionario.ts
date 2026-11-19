@@ -10808,7 +10808,10 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível copiar. Copie da barra do navegador.": {
     es: "No se pudo copiar. Cópialo desde la barra del navegador.",
   },
-  "Convite reenviado.": { es: "Invitación reenviada." },
+  "Convite reenviado por e-mail.": { es: "Invitación reenviada por correo." },
+  "Convite renovado, mas o e-mail não saiu. Copie o link e envie você.": {
+    es: "Invitación renovada, pero el correo no salió. Copia el enlace y envíalo tú.",
+  },
   "Convite revogado.": { es: "Invitación revocada." },
 
   // ─── issue #651 — tabelas de rótulo que só o guarda ampliado alcança ───
