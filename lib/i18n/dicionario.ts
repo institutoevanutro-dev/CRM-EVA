@@ -9865,6 +9865,12 @@ export const DICIONARIO: Traducoes = {
   },
   "Marcar como concluída": { es: "Marcar como completada" },
   "Reabrir a tarefa": { es: "Reabrir la tarea" },
+  "Reabrir mesmo assim": { es: "Reabrir de todos modos" },
+  "Se reabrir, ao concluir de novo a data de conclusão vira a de hoje e a tarefa passa a contar como atrasada no bônus.": {
+    es: "Si la reabres, al concluirla de nuevo la fecha de conclusión pasa a ser la de hoy y la tarea cuenta como atrasada en el bono.",
+  },
+  "Não foi possível apagar a tarefa.": { es: "No se pudo borrar la tarea." },
+  "Nova tarefa em {{dia}}": { es: "Nueva tarea el {{dia}}" },
   "Editar a tarefa": { es: "Editar la tarea" },
   "Apagar a tarefa": { es: "Eliminar la tarea" },
   "O que precisa ser feito": { es: "Qué hay que hacer" },

@@ -50,6 +50,9 @@ export function CalendarioDeTarefas({
   const hoje = new Date();
   const [ano, setAno] = useState(hoje.getFullYear());
   const [mes, setMes] = useState(hoje.getMonth());
+  // Dias com o "+N mais" aberto: a lista do dia inteira na própria célula.
+  const [diasAbertos, setDiasAbertos] = useState<ReadonlySet<string>>(new Set());
+  const nomeDoDia = new Intl.DateTimeFormat(tag, { day: "numeric", month: "long" });
 
   const grade = diasDaGrade(ano, mes);
   const diaDeHoje = diaLocalDoPrazo(hoje.toISOString());
@@ -119,7 +122,8 @@ export function CalendarioDeTarefas({
 
           const chave = diaLocalDoPrazo(dia.toISOString());
           const doDia = porDia.get(chave) ?? [];
-          const excedente = doDia.length - POR_DIA_VISIVEIS;
+          const aberto = diasAbertos.has(chave);
+          const excedente = aberto ? 0 : doDia.length - POR_DIA_VISIVEIS;
 
           return (
             <div
@@ -131,47 +135,74 @@ export function CalendarioDeTarefas({
               )}
               onClick={podeEditar ? () => aoClicarNoDia(chave) : undefined}
             >
-              <span
-                className={cn(
+              {/* O número do dia é o BOTÃO de criar nele (item 193): a célula
+                  inteira só respondia ao mouse; teclado e leitor de tela chegam aqui. */}
+              {(() => {
+                const classe = cn(
                   "flex h-6 w-6 items-center justify-center self-start rounded-full text-xs font-semibold",
-                  chave === diaDeHoje
-                    ? "bg-primary font-bold text-primary-foreground"
-                    : "text-muted-foreground",
-                )}
-              >
-                {dia.getDate()}
-              </span>
+                  chave === diaDeHoje ? "bg-primary font-bold text-primary-foreground" : "text-muted-foreground",
+                );
+                return podeEditar ? (
+                  <button
+                    type="button"
+                    className={cn(classe, "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring")}
+                    aria-label={t("Nova tarefa em {{dia}}").replace("{{dia}}", nomeDoDia.format(dia))}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      aoClicarNoDia(chave);
+                    }}
+                  >
+                    {dia.getDate()}
+                  </button>
+                ) : (
+                  <span className={classe}>{dia.getDate()}</span>
+                );
+              })()}
 
-              {doDia.slice(0, POR_DIA_VISIVEIS).map((tarefa) => (
-                <button
-                  key={tarefa.id}
-                  type="button"
-                  title={
-                    nomeDoResponsavel(tarefa.assigned_to)
-                      ? `${tarefa.title} — ${t(nomeDoResponsavel(tarefa.assigned_to)!)}`
-                      : tarefa.title
-                  }
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    aoAbrirTarefa(tarefa);
-                  }}
-                  className={cn(
-                    "w-full truncate rounded-md px-1.5 py-0.5 text-left text-[10px] font-medium",
-                    estaEncerrada(tarefa)
-                      ? "bg-muted text-muted-foreground line-through"
-                      : estaAtrasada(tarefa)
-                        ? "bg-destructive/15 font-semibold text-destructive"
-                        : "bg-primary/10 text-primary",
-                  )}
-                >
-                  {tarefa.title}
-                </button>
-              ))}
+              {(aberto ? doDia : doDia.slice(0, POR_DIA_VISIVEIS)).map((tarefa) => {
+                const titulo = nomeDoResponsavel(tarefa.assigned_to)
+                  ? `${tarefa.title} — ${t(nomeDoResponsavel(tarefa.assigned_to)!)}`
+                  : tarefa.title;
+                const cor = cn(
+                  "w-full truncate rounded-md px-1.5 py-0.5 text-left text-[10px] font-medium",
+                  estaEncerrada(tarefa)
+                    ? "bg-muted text-muted-foreground line-through"
+                    : estaAtrasada(tarefa)
+                      ? "bg-destructive/15 font-semibold text-destructive"
+                      : "bg-primary/10 text-primary",
+                );
+                // Quem só lê não abre a edição (item 193): o Salvar dava erro.
+                return podeEditar ? (
+                  <button
+                    key={tarefa.id}
+                    type="button"
+                    title={titulo}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      aoAbrirTarefa(tarefa);
+                    }}
+                    className={cor}
+                  >
+                    {tarefa.title}
+                  </button>
+                ) : (
+                  <span key={tarefa.id} title={titulo} className={cor}>
+                    {tarefa.title}
+                  </span>
+                );
+              })}
 
               {excedente > 0 ? (
-                <span className="pl-1 text-[10px] font-semibold text-muted-foreground">
+                <button
+                  type="button"
+                  className="self-start rounded-md pl-1 text-[10px] font-semibold text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDiasAbertos((atual) => new Set(atual).add(chave));
+                  }}
+                >
                   +{excedente} {t("mais")}
-                </span>
+                </button>
               ) : null}
             </div>
           );
