@@ -258,7 +258,8 @@ const envSchema = z.object({
   // Disjuntor do laço bot-com-bot (`agent/robo-do-outro-lado.ts`): a IA para de
   // responder e abre aviso na Central quando o contato manda a MESMA mensagem
   // (≥20 caracteres) N vezes na janela, ou quando a IA manda mais de
-  // BOT_LOOP_AI_BURST_MAX mensagens na janela sem nenhuma pessoa da equipe.
+  // BOT_LOOP_AI_BURST_MAX mensagens na janela sem nenhuma pessoa da equipe, ou
+  // quando chega a 2ª mensagem com cara de menu em 30 min (fixo, sem knob).
   // Para desligar um sinal, suba o número (ex.: 1000).
   BOT_LOOP_REPEAT_COUNT: z.coerce.number().int().min(2).default(3),
   BOT_LOOP_REPEAT_WINDOW_MS: z.coerce.number().int().positive().default(600_000),
