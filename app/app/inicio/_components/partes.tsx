@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronDown, type LucideIcon } from "lucide-react";
 
 import { useT } from "@/hooks/i18n/useT";
@@ -108,11 +108,12 @@ export function Secao({
   abertaPorPadrao?: boolean;
   children: ReactNode;
 }) {
-  const [aberta, setAberta] = useState(abertaPorPadrao);
-  useEffect(() => {
-    const guardada = lerAbertas()[id];
-    if (typeof guardada === "boolean") setAberta(guardada);
-  }, [id]);
+  // Lido já no primeiro render: o Início só monta as seções depois de a
+  // consulta voltar, no navegador — não há HTML do servidor a desencontrar.
+  const [aberta, setAberta] = useState(() => {
+    const guardada = typeof window === "undefined" ? undefined : lerAbertas()[id];
+    return typeof guardada === "boolean" ? guardada : abertaPorPadrao;
+  });
   const alternar = (valor: boolean) => {
     setAberta(valor);
     try {
