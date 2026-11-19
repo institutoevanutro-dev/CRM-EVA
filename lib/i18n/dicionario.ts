@@ -1105,7 +1105,6 @@ export const DICIONARIO: Traducoes = {
   "conversas selecionadas": { es: "conversaciones seleccionadas" },
   "Marcar como lida": { es: "Marcar como leída" },
   "Mais ações": { es: "Más acciones" },
-  "Pausar IA": { es: "Pausar IA" },
   "Transferir para…": { es: "Transferir a…" },
   "Transferir a conversa selecionada": { es: "Transferir la conversación seleccionada" },
   "Cada conversa é transferida pelo mesmo caminho de sempre, com evento e auditoria próprios.": {
@@ -11844,18 +11843,18 @@ export const DICIONARIO: Traducoes = {
   "Quem a equipe tirar do Inbox aparece aqui. As mensagens dessas pessoas continuam guardadas, e um gerente pode trazê-las de volta.": {
     es: "Quien el equipo saque del Inbox aparece aquí. Los mensajes de esas personas siguen guardados, y un gerente puede traerlas de vuelta.",
   },
-  "As conversas deste contato saem do Inbox, das contagens, da Fila, do radar e do Início. A IA não responde, follow-ups e automações não mandam mensagem e ele não ganha card novo no funil.": {
-    es: "Las conversaciones de este contacto salen del Inbox, de los conteos, de la Fila, del radar y del Inicio. La IA no responde, los seguimientos y automatizaciones no envían mensajes y no gana una tarjeta nueva en el embudo.",
+  "As conversas desta pessoa saem da Fila, das contagens e do Início. O automático não responde, nenhuma mensagem automática sai e ela não vira negócio novo no funil.": {
+    es: "Las conversaciones de esta persona salen de la Fila, de los conteos y del Inicio. El automático no responde, no sale ningún mensaje automático y no se convierte en un negocio nuevo en el embudo.",
   },
-  "Nada é apagado: as mensagens continuam guardadas. Um gerente pode trazê-lo de volta em Inbox › Mais › Ocultos.": {
-    es: "No se borra nada: los mensajes siguen guardados. Un gerente puede traerlo de vuelta en Inbox › Más › Ocultos.",
+  "Nada é apagado: as mensagens continuam guardadas. Um gestor pode trazê-la de volta em Mais › Ocultos.": {
+    es: "No se borra nada: los mensajes siguen guardados. Un gestor puede traerla de vuelta en Más › Ocultos.",
   },
   "Ocultar do Inbox o contato da conversa selecionada?": {
     es: "¿Ocultar del Inbox el contacto de la conversación seleccionada?",
   },
   "Ocultar do Inbox os contatos de": { es: "¿Ocultar del Inbox los contactos de" },
-  "As conversas desses contatos saem do Inbox, das contagens, da Fila, do radar e do Início. A IA não responde, follow-ups e automações não mandam mensagem, e as mensagens continuam guardadas. Um gerente pode trazê-los de volta em Inbox › Mais › Ocultos.": {
-    es: "Las conversaciones de esos contactos salen del Inbox, de los conteos, de la Fila, del radar y del Inicio. La IA no responde, los seguimientos y automatizaciones no envían mensajes, y los mensajes siguen guardados. Un gerente puede traerlos de vuelta en Inbox › Más › Ocultos.",
+  "As conversas dessas pessoas saem da Fila, das contagens e do Início. O automático não responde e nenhuma mensagem automática sai. Nada é apagado: as mensagens continuam guardadas, e um gestor pode trazê-las de volta em Mais › Ocultos.": {
+    es: "Las conversaciones de esas personas salen de la Fila, de los conteos y del Inicio. El automático no responde y no sale ningún mensaje automático. No se borra nada: los mensajes siguen guardados, y un gestor puede traerlas de vuelta en Más › Ocultos.",
   },
   "Conversa inválida.": { es: "Conversación inválida." },
   "Não foi possível mudar o contato no Inbox.": { es: "No fue posible cambiar el contacto en el Inbox." },

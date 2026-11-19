@@ -51,12 +51,12 @@ export type InboxTab =
 /**
  * UMA aba, um desenho — as três da fila e o "Mais" usam a mesma classe. A ativa
  * se distingue por TRÊS sinais, não só pela cor: sublinhado de 2px, peso da
- * letra e cor do texto. Altura fixa (32px) para a faixa não dançar quando a
+ * letra e cor do texto. Altura fixa (32px; 44px no toque, item 208) para a faixa não dançar quando a
  * contagem aparece ou some.
  */
 /** Abas em PÍLULA, como os filtros de um app de mensagem: a ativa no tom da marca. */
 const CLASSE_DA_ABA =
-  "h-8 shrink-0 gap-1 rounded-full bg-surface-elevated px-3 text-xs font-medium text-text-muted transition-colors hover:text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:bg-accent-soft data-[state=active]:font-semibold data-[state=active]:text-accent-hover data-[state=active]:shadow-none";
+  "h-8 pointer-coarse:h-11 shrink-0 gap-1 rounded-full bg-surface-elevated px-3 text-xs font-medium text-text-muted transition-colors hover:text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:bg-accent-soft data-[state=active]:font-semibold data-[state=active]:text-accent-hover data-[state=active]:shadow-none";
 
 /** A contagem da aba em pílula: número solto ao lado do rótulo parecia parte dele ("Fila6"). */
 function Contagem({ n }: { n: number }) {

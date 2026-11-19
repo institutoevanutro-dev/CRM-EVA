@@ -98,7 +98,7 @@ export function NoteCard({ note, onDelete }: Props) {
               className={
                 // Visível por padrão e escondida só onde EXISTE hover — no toque
                 // ela não sumia para sempre — e o foco do teclado a revela (I6).
-                "-m-1 rounded-sm p-1 transition-opacity hover:text-destructive " +
+                "-m-1 rounded-sm p-1 pointer-coarse:-m-4 pointer-coarse:p-4 transition-opacity hover:text-destructive " +
                 "opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
               }
               aria-label={t("Excluir nota")}

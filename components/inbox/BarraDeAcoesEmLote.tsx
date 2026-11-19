@@ -65,7 +65,7 @@ interface Props {
  * permanente ocuparia a única linha estreita da lista ensinando o olho a
  * ignorá-la, e é justamente a área onde moram as ações de risco.
  *
- * Fechar e Marcar como lida ficam na frente. Arquivar, Pausar IA e Transferir
+ * Fechar e Marcar como lida ficam na frente. Arquivar, Pausar o automático e Transferir
  * para... moram no "Mais ações": a coluna da lista é estreita. Devolver ao
  * automático NÃO existe em lote no fork (retomaria a IA com muitos pacientes
  * de uma vez).
@@ -155,7 +155,7 @@ export function BarraDeAcoesEmLote({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={onPausarIa} data-testid="lote-pausar-ia">
             <Pause size={14} className="mr-2" aria-hidden />
-            {t("Pausar IA")}
+            {t("Pausar o automático")}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setOcultarAberto(true)} data-testid="lote-ocultar">
             <EyeSlash size={14} className="mr-2" aria-hidden />
@@ -213,7 +213,7 @@ export function BarraDeAcoesEmLote({
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t(
-                "As conversas desses contatos saem do Inbox, das contagens, da Fila, do radar e do Início. A IA não responde, follow-ups e automações não mandam mensagem, e as mensagens continuam guardadas. Um gerente pode trazê-los de volta em Inbox › Mais › Ocultos.",
+                "As conversas dessas pessoas saem da Fila, das contagens e do Início. O automático não responde e nenhuma mensagem automática sai. Nada é apagado: as mensagens continuam guardadas, e um gestor pode trazê-las de volta em Mais › Ocultos.",
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
