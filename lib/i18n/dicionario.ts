@@ -5571,7 +5571,7 @@ export const DICIONARIO: Traducoes = {
   "Sua sessão terminou. Entre de novo para voltar à tela onde estava.": {
     es: "Tu sesión terminó. Inicia sesión de nuevo para volver a la pantalla donde estabas.",
   },
-  "Entrar com senha (administração)": { es: "Entrar con contraseña (administración)" },
+  "Entrar com senha": { es: "Entrar con contraseña" },
   "Se você entra pelo EvaLink, use o botão acima.": { es: "Si entras con EvaLink, usa el botón de arriba." },
   "Confirme seu e-mail pelo link que enviamos antes de entrar.": {
     es: "Confirma tu correo con el enlace que te enviamos antes de entrar.",
