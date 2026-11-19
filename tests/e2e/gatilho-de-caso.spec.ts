@@ -212,6 +212,8 @@ test.describe("gatilho de caso aberto", () => {
 
       // ---- 2. publica pela tela (o selo vira "Ativo"; não existe "Publicado") ----
       await page.getByRole("button", { name: /^Publicar$/ }).click();
+      // Publicar manda mensagem a paciente: a tela pergunta antes (lote 7).
+      await page.getByRole("alertdialog").getByRole("button", { name: "Publicar" }).click();
       await expect(page.getByText("Fluxo publicado.").first()).toBeVisible({ timeout: ESPERA });
       await page.screenshot({ path: path.join(ARTIFACTS_DIR, "caso-02-publicado.png"), fullPage: true });
 

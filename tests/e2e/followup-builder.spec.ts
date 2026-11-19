@@ -496,7 +496,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
     // 4. Publish INCOMPLETE — expect 422 anchored to the offending nodes.
     await page.getByTestId("publish-button").click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Publicar" }).click();
-    await expect(page.getByText(/reprovado na validação/i)).toBeVisible();
+    await expect(page.getByText(/O fluxo tem pendências/i)).toBeVisible();
     await expect(page.locator(`[data-testid="node-error-${waitId}"]`)).toBeVisible();
     await expect(page.locator(`[data-testid="node-error-${actionId}"]`)).toBeVisible();
     await expect(page.locator(`[data-testid="node-error-${endId}"]`)).toBeVisible();
@@ -805,7 +805,7 @@ test.describe("followup flow builder — editor de condição de aresta / ai_cla
     // has no `class_match` edge for either declared class and no `no_reply` edge.
     await page.getByTestId("publish-button").click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Publicar" }).click();
-    await expect(page.getByText(/reprovado na validação/i)).toBeVisible();
+    await expect(page.getByText(/O fluxo tem pendências/i)).toBeVisible();
     await expect(page.locator(`[data-testid="node-error-${classifyId}"]`)).toBeVisible();
     // Exactly one node carries an error — proves the failure is scoped to the classify
     // node's edge coverage, not some unrelated structural problem in the graph.

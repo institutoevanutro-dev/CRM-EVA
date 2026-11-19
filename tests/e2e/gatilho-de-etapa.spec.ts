@@ -271,6 +271,8 @@ test.describe("gatilho de etapa do funil", () => {
       // O rótulo é "Fluxo publicado." e o selo vira "Ativo" — não existe selo
       // "Publicado" nesta tela, e procurá-lo é vermelho garantido.
       await page.getByRole("button", { name: /^Publicar$/ }).click();
+      // Publicar manda mensagem a paciente: a tela pergunta antes (lote 7).
+      await page.getByRole("alertdialog").getByRole("button", { name: "Publicar" }).click();
       await expect(page.getByText("Fluxo publicado.").first()).toBeVisible({ timeout: ESPERA });
       const depoisDoPublish = await page.request.get(`/api/v1/ai/followup-flows/${flowId}`);
       expect(((await depoisDoPublish.json()) as { data: { status: string } }).data.status).toBe("active");
