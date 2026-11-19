@@ -7364,8 +7364,6 @@ export const DICIONARIO: Traducoes = {
   "Este link venceu ou não vale mais. Peça um novo convite a quem convidou você.": {
     es: "Este enlace venció o ya no es válido. Pide una nueva invitación a quien te invitó.",
   },
-  // Fragmento "em <nome da empresa>" das frases do convite.
-  "em": { es: "en" },
   "Você foi convidado": { es: "Fuiste invitado" },
   "Para aceitar o convite como": { es: "Para aceptar la invitación como" },
   "faça login com o email": { es: "inicia sesión con el correo" },

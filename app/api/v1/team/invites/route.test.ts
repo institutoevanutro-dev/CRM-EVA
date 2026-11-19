@@ -50,9 +50,9 @@ describe("GET /api/v1/team/invites — link de aceite", () => {
     const body = (await res.json()) as { data: Array<{ id: string; status: string; accept_url: string | null }> };
     const porId = Object.fromEntries(body.data.map((c) => [c.id, c]));
 
-    expect(porId.pendente.status).toBe("pendente");
-    expect(porId.pendente.accept_url).toContain("/team/accept-invite/pendente");
-    expect(porId.vencido.status).toBe("expirado");
-    expect(porId.vencido.accept_url).toBeNull();
+    expect(porId.pendente?.status).toBe("pendente");
+    expect(porId.pendente?.accept_url).toContain("/team/accept-invite/pendente");
+    expect(porId.vencido?.status).toBe("expirado");
+    expect(porId.vencido?.accept_url).toBeNull();
   });
 });
