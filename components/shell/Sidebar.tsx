@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { CaretDown, Gear, House, SignOut } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
+import { ROTULO_DO_PAPEL } from "@/lib/auth/types";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { ConnectionHealthDot } from "@/components/connections/ConnectionHealthDot";
 import { SearchTrigger } from "@/components/shell/SearchTrigger";
@@ -82,8 +83,9 @@ export function SidebarContent({
   }
   const alternar = (id: string) => setAberto((a) => (a === id ? null : id));
 
-  const papeis: Record<string, string> = { admin: t("Administrador"), manager: t("Gestor"), agent: t("Atendente"), viewer: t("Leitura") };
-  const papel = papeis[activeOrg?.role ?? ""];
+  // Mesmo rótulo da Equipe e do convite (item 242): uma fonte só, ROTULO_DO_PAPEL.
+  const rotulo = (ROTULO_DO_PAPEL as Record<string, string>)[activeOrg?.role ?? ""];
+  const papel = rotulo ? t(rotulo) : undefined;
 
   const brand = useMarcaDaInstalacao();
   const nome = activeOrg?.marca?.nome ?? brand.name;

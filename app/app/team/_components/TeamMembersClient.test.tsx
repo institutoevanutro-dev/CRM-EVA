@@ -94,7 +94,7 @@ describe("TeamMembersClient — seletor de papel (G2-02)", () => {
     renderClient({ canManage: false });
     expect(await screen.findByText("agente@example.com")).toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-    expect(screen.getByText("Colaborador")).toBeInTheDocument();
+    expect(screen.getByText("Atendente")).toBeInTheDocument();
     expect(screen.queryByText(/^agent$/)).not.toBeInTheDocument();
     expect(screen.getByText("Personalizada")).toBeInTheDocument();
   });
@@ -109,10 +109,10 @@ describe("TeamMembersClient — seletor de papel (G2-02)", () => {
     renderClient();
 
     const trigger = await screen.findByRole("combobox", { name: /Papel de Agente/i });
-    expect(trigger).toHaveTextContent("Colaborador");
+    expect(trigger).toHaveTextContent("Atendente");
     await user.click(trigger);
     expect(await screen.findByRole("option", { name: "Prestador de serviço" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Colaborador" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Atendente" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Gerente" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Administrador" })).toBeInTheDocument();
     await user.click(screen.getByRole("option", { name: "Gerente" }));
@@ -146,7 +146,7 @@ describe("TeamMembersClient — seletor de papel (G2-02)", () => {
     await user.click(await screen.findByRole("option", { name: "Prestador de serviço" }));
 
     // Rollback: volta ao papel original após o erro.
-    await waitFor(() => expect(trigger).toHaveTextContent("Colaborador"));
+    await waitFor(() => expect(trigger).toHaveTextContent("Atendente"));
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(toast.success).not.toHaveBeenCalled();
   });

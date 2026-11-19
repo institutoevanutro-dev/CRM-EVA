@@ -6733,6 +6733,7 @@ export const DICIONARIO: Traducoes = {
   // ─── Onboarding: invite-team — ROTULO_DO_PAPEL (lib/auth/types.ts) ───
   "Somente leitura": { es: "Solo lectura" },
   "Gerente": { es: "Gerente" },
+  "Prestador de serviço": { es: "Prestador de servicios" },
   "Administrador": { es: "Administrador" },
 
   // ─── Onboarding: funil — EXPLICACAO_DO_PASSO (lib/leads/agent-mapping.ts) ───

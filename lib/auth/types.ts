@@ -80,7 +80,7 @@ export const PAPEIS_HUMANOS: ReadonlyArray<Role> = [
 export const ROTULO_DO_PAPEL: Record<Role, string> = {
   viewer: "Somente leitura",
   provider: "Prestador de serviço",
-  agent: "Colaborador",
+  agent: "Atendente",
   ai_operator: "Assistente com autonomia de operação",
   manager: "Gerente",
   admin: "Administrador",
