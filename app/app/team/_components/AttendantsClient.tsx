@@ -424,7 +424,7 @@ function RoutingCard({ canManage }: { canManage: boolean }) {
       <CardContent className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
-            <Label>Modo</Label>
+            <Label>{t("Modo")}</Label>
             <Select
               value={current.mode}
               disabled={!canManage}
@@ -447,7 +447,7 @@ function RoutingCard({ canManage }: { canManage: boolean }) {
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="max_retries">{t("Tentativas máx.")}</Label>
+            <Label htmlFor="max_retries">{t("Tentativas antes de desistir")}</Label>
             <Input
               id="max_retries"
               type="number"
@@ -459,7 +459,7 @@ function RoutingCard({ canManage }: { canManage: boolean }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="backoff">Backoff (s)</Label>
+            <Label htmlFor="backoff">{t("Espera entre tentativas (segundos)")}</Label>
             <Input
               id="backoff"
               type="number"
@@ -612,15 +612,17 @@ export function AttendantsClient({ canManage }: Props) {
                       <div className="flex items-center gap-2">
                         <span>{summarizeSchedule(windows, t)}</span>
                         {canManage ? (
+                          // Era `size="icon"` (28 px) com texto dentro: transbordava no
+                          // computador e ficava pequeno demais para o toque no celular.
                           <Button
                             variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
+                            size="sm"
+                            className="gap-1"
                             aria-label={`Editar horário de ${a.name}`}
                             onClick={() => setScheduleFor(a)}
                           >
                             <Clock size={16} />
-                            <span className="ml-1 hidden lg:inline">{t("Editar")}</span>
+                            {t("Editar")}
                           </Button>
                         ) : null}
                       </div>

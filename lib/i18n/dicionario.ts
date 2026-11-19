@@ -7561,8 +7561,8 @@ export const DICIONARIO: Traducoes = {
   "Aceito": { es: "Aceptado" },
   "Revogar acesso": { es: "Revocar acceso" },
   "você": { es: "tú" },
-  "perderá acesso ao tenant. Esta ação pode ser desfeita reconvidando o membro.": {
-    es: "perderá acceso al tenant. Esta acción se puede deshacer reinvitando al miembro.",
+  "perderá o acesso. Dá para devolver depois pelo menu da pessoa.": {
+    es: "perderá el acceso. Se puede devolver después desde el menú de la persona.",
   },
   "Acesso revogado.": { es: "Acceso revocado." },
   "Manual (atendente puxa da fila)": { es: "Manual (el agente toma de la cola)" },
@@ -7584,7 +7584,6 @@ export const DICIONARIO: Traducoes = {
   },
   "Modo": { es: "Modo" },
   "Balanceamento por carga (em breve)": { es: "Balanceo por carga (próximamente)" },
-  "Tentativas máx.": { es: "Intentos máx." },
   "Backoff (s)": { es: "Backoff (s)" },
   "Atendentes": { es: "Agentes" },
   "Status, carga atual e capacidade de cada atendente da organização.": {
