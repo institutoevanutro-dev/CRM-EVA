@@ -69,6 +69,98 @@ const LOCAIS = LOCAIS_DE_ATENDIMENTO;
 const rotuloDe = (lista: ReadonlyArray<{ valor: string; rotulo: string }>, valor: string) =>
   lista.find((c) => c.valor === valor)?.rotulo ?? valor;
 
+type Produto = { id: string; nome: string; duracao: number | null };
+
+/**
+ * TIPO LIGADO A SERVIÇO DURA O QUE O SERVIÇO DURA (item 125).
+ *
+ * `resolverDuracaoDoTipo` (lib/agenda/consulta.ts) ignora `duration_minutes`
+ * quando há `catalog_product_id`, e sem duração no serviço a agenda não oferece
+ * horário. A tela mostrava e deixava editar a duração do tipo — "Tipo alterado"
+ * sobre um número que não vale. Aqui a tela diz a regra que o motor aplica.
+ */
+export function avisoDoServico(
+  produtoId: string | null | undefined,
+  produtos: Produto[],
+  t: (s: string) => string,
+): { texto: string; alerta: boolean } | null {
+  if (!produtoId) return null;
+  const p = produtos.find((x) => x.id === produtoId);
+  if (!p) return { texto: t("Vale a duração do serviço vinculado."), alerta: false };
+  if (p.duracao === null) {
+    return { texto: `${p.nome}: ${t("serviço sem duração no catálogo — a agenda não oferece horário.")}`, alerta: true };
+  }
+  return { texto: `${t("dura")} ${p.duracao} min (${t("do serviço")} ${p.nome})`, alerta: false };
+}
+
+/** Serviço + duração no Editar: com serviço, a duração do tipo sai do formulário. */
+function ServicoEDuracao({ tipo, produtos }: { tipo: TipoRow; produtos: Produto[] }) {
+  const t = useT();
+  const [servico, setServico] = React.useState(tipo.catalog_product_id ?? "");
+  const aviso = avisoDoServico(servico, produtos, t);
+  return (
+    <>
+      <label className="flex flex-col gap-1 text-xs text-text-muted">
+        {t("Serviço do catálogo")}
+        <select
+          name="catalog_product_id"
+          value={servico}
+          onChange={(e) => setServico(e.target.value)}
+          data-testid={`editar-servico-${tipo.id}`}
+          className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+        >
+          <option value="">{t("Sem vínculo")}</option>
+          {produtos.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nome}
+              {p.duracao ? ` · ${p.duracao} min` : ` · ${t("sem duração")}`}
+            </option>
+          ))}
+        </select>
+      </label>
+      {aviso ? (
+        <p
+          data-testid={`editar-duracao-do-servico-${tipo.id}`}
+          className={`self-end pb-2 text-xs ${aviso.alerta ? "text-warning-fg" : "text-text-muted"}`}
+        >
+          {aviso.texto}
+        </p>
+      ) : (
+        <label className="flex flex-col gap-1 text-xs text-text-muted">
+          {t("Duração")}
+          <input
+            name="duration_minutes"
+            type="number"
+            min={5}
+            max={1440}
+            defaultValue={tipo.duration_minutes}
+            data-testid={`editar-duracao-${tipo.id}`}
+            className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+          />
+        </label>
+      )}
+    </>
+  );
+}
+
+/**
+ * Sanfona fechada (regra do André, 14/11). O título fica no `summary`; o `h2`
+ * do bloco de dentro vira só leitor de tela para não aparecer duas vezes.
+ */
+export function Sanfona({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <details className="group/sanfona rounded-lg border border-border bg-surface">
+      <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 px-4 py-2 text-sm font-semibold text-text">
+        {titulo}
+        <span aria-hidden className="text-text-muted transition-transform group-open/sanfona:rotate-180">
+          ▾
+        </span>
+      </summary>
+      <div className="px-2 pb-2 [&_h2]:sr-only">{children}</div>
+    </details>
+  );
+}
+
 interface Rascunho {
   name: string;
   category: string;
@@ -271,7 +363,7 @@ export function TiposDeAgendamentoClient({
 }: {
   tiposIniciais: TipoRow[];
   pessoas: Array<{ id: string; papel: string; nome: string }>;
-  produtos: Array<{ id: string; nome: string; duracao: number | null }>;
+  produtos: Produto[];
   podeEditar: boolean;
   usuarioAtualId: string;
   podeConfigurarGoogle: boolean;
@@ -329,26 +421,6 @@ export function TiposDeAgendamentoClient({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4" data-testid="tipos-de-agendamento-config">
-      {podeConfigurarGoogle && <AgendasConectadas />}
-      <PrazosDePresenca podeEditar={podeEditar}/>
-      <ClientePelaAgenda
-        ligadoInicial={clientePelaAgendaLigado}
-        podeLigar={podeLigarClientePelaAgenda}
-      />
-      {/* Mesmo papel (`admin`) da regra de cima: as duas decidem o funil de clientes. */}
-      <PacientePeloCadastro
-        ligadoInicial={pacientePeloCadastroLigado}
-        podeLigar={podeLigarClientePelaAgenda}
-      />
-      <DiasBloqueados
-        // Fechar a PRÓPRIA agenda é de quem atende (agent+, o piso da rota);
-        // fechar a de outra pessoa é de quem gerencia, a régua da RLS de escrita.
-        podeEditar={podeEditar || podeConfigurarGoogle}
-        podeEscolherQuem={podeEditar}
-        euId={usuarioAtualId}
-        // `viewer` só acompanha e não tem agenda para fechar.
-        pessoas={pessoas.filter((p) => p.papel !== "viewer")}
-      />
       {podeEditar ? (
         <div>
           {criando ? (
@@ -376,7 +448,9 @@ export function TiposDeAgendamentoClient({
                 );
                 if (feito) {
                   setCriando(false);
-                  setRascunho(VAZIO);
+                  // O próximo tipo da mesma visita nasce com o mesmo responsável
+                  // que o primeiro (item 127): `VAZIO` puro o deixava sem dono.
+                  setRascunho({ ...VAZIO, default_owner_user_id: usuarioAtualId });
                 }
               }}
             >
@@ -407,6 +481,14 @@ export function TiposDeAgendamentoClient({
                   ))}
                 </select>
               </label>
+              {rascunho.catalog_product_id ? (
+                <p
+                  data-testid="novo-tipo-duracao-do-servico"
+                  className={`self-end pb-2 text-xs ${avisoDoServico(rascunho.catalog_product_id, produtos, t)?.alerta ? "text-warning-fg" : "text-text-muted"}`}
+                >
+                  {avisoDoServico(rascunho.catalog_product_id, produtos, t)?.texto}
+                </p>
+              ) : (
               <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
                 {t("Duração (minutos)")}
                 <input
@@ -421,6 +503,7 @@ export function TiposDeAgendamentoClient({
                   className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text outline-hidden focus:border-border-strong"
                 />
               </label>
+              )}
               <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
                 {t("Onde acontece")}
                 <select
@@ -545,7 +628,21 @@ export function TiposDeAgendamentoClient({
               <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-text-muted">
                 {t(rotuloDe(CATEGORIAS, tipo.category))}
               </span>
-              <span className="text-xs tabular-nums text-text-muted">{tipo.duration_minutes} min</span>
+              {(() => {
+                const aviso = avisoDoServico(tipo.catalog_product_id, produtos, t);
+                return aviso ? (
+                  <span
+                    data-testid={`duracao-${tipo.id}`}
+                    className={`text-xs tabular-nums ${aviso.alerta ? "text-warning-fg" : "text-text-muted"}`}
+                  >
+                    {aviso.texto}
+                  </span>
+                ) : (
+                  <span data-testid={`duracao-${tipo.id}`} className="text-xs tabular-nums text-text-muted">
+                    {tipo.duration_minutes} min
+                  </span>
+                );
+              })()}
               <span className="text-xs text-text-muted">{t(rotuloDe(LOCAIS, tipo.location_kind))}</span>
               {!tipo.default_owner_user_id ? (
                 // O aviso existe porque o sintoma é MUDO: sem dono, a tela de
@@ -663,7 +760,14 @@ export function TiposDeAgendamentoClient({
                         id: tipo.id,
                         name: String(dados.get("name") ?? "").trim(),
                         category: String(dados.get("category") ?? tipo.category),
+                        // Com serviço vinculado o campo não existe no formulário
+                        // e a duração guardada fica como está (não vale mesmo).
                         duration_minutes: Number(dados.get("duration_minutes") ?? tipo.duration_minutes),
+                        location_kind: String(dados.get("location_kind") ?? tipo.location_kind),
+                        catalog_product_id: String(dados.get("catalog_product_id") ?? "") || null,
+                        required_room_kind:
+                          (String(dados.get("required_room_kind") ?? "") || null) as TipoRow["required_room_kind"],
+                        concurrency_key: String(dados.get("concurrency_key") ?? "").trim() || null,
                         // `|| null`, e NÃO omitir quando vazio.
                         //
                         // A tela oferece `<option value="">{t("Sem responsável")}</option>`
@@ -721,14 +825,57 @@ export function TiposDeAgendamentoClient({
                   />
                 </label>
                 <label className="flex flex-col gap-1 text-xs text-text-muted">
-                  {t("Duração")}
+                  {t("Categoria")}
+                  <select
+                    name="category"
+                    defaultValue={tipo.category}
+                    data-testid={`editar-categoria-${tipo.id}`}
+                    className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+                  >
+                    {CATEGORIAS.map((c) => (
+                      <option key={c.valor} value={c.valor}>
+                        {t(c.rotulo)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <ServicoEDuracao tipo={tipo} produtos={produtos} />
+                <label className="flex flex-col gap-1 text-xs text-text-muted">
+                  {t("Onde acontece")}
+                  <select
+                    name="location_kind"
+                    defaultValue={tipo.location_kind}
+                    data-testid={`editar-local-${tipo.id}`}
+                    className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+                  >
+                    {LOCAIS.map((l) => (
+                      <option key={l.valor} value={l.valor}>
+                        {t(l.rotulo)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-text-muted">
+                  {t("Sala necessária")}
+                  <select
+                    name="required_room_kind"
+                    defaultValue={tipo.required_room_kind ?? ""}
+                    data-testid={`editar-sala-${tipo.id}`}
+                    className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+                  >
+                    <option value="">{t("Nenhuma")}</option>
+                    <option value="consultation">{t("Atendimento")}</option>
+                    <option value="application">{t("Aplicação")}</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-text-muted">
+                  {t("Chave de simultaneidade")}
                   <input
-                    name="duration_minutes"
-                    type="number"
-                    min={5}
-                    max={1440}
-                    defaultValue={tipo.duration_minutes}
-                    data-testid={`editar-duracao-${tipo.id}`}
+                    name="concurrency_key"
+                    defaultValue={tipo.concurrency_key ?? ""}
+                    maxLength={80}
+                    placeholder={t("Ex.: iv ou im")}
+                    data-testid={`editar-simultaneidade-${tipo.id}`}
                     className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
                   />
                 </label>
@@ -773,6 +920,34 @@ export function TiposDeAgendamentoClient({
           </li>
         ))}
       </ul>
+      {/* Item 126: a lista é o que se procura aqui; ela vem primeiro e o resto
+          fica em sanfonas fechadas (no iPhone eram várias telas até a lista). */}
+      {podeConfigurarGoogle && (
+        <Sanfona titulo={t("Suas agendas Google")}>
+          <AgendasConectadas />
+        </Sanfona>
+      )}
+      <Sanfona titulo={t("Confirmação de presença")}>
+        <PrazosDePresenca podeEditar={podeEditar} />
+      </Sanfona>
+      <Sanfona titulo={t("Clientes pela agenda")}>
+        <ClientePelaAgenda ligadoInicial={clientePelaAgendaLigado} podeLigar={podeLigarClientePelaAgenda} />
+      </Sanfona>
+      {/* Mesmo papel (`admin`) da regra de cima: as duas decidem o funil de clientes. */}
+      <Sanfona titulo={t("Pacientes pelo cadastro")}>
+        <PacientePeloCadastro ligadoInicial={pacientePeloCadastroLigado} podeLigar={podeLigarClientePelaAgenda} />
+      </Sanfona>
+      <Sanfona titulo={t("Dias fora da rotina")}>
+        <DiasBloqueados
+          // Fechar a PRÓPRIA agenda é de quem atende (agent+, o piso da rota);
+          // fechar a de outra pessoa é de quem gerencia, a régua da RLS de escrita.
+          podeEditar={podeEditar || podeConfigurarGoogle}
+          podeEscolherQuem={podeEditar}
+          euId={usuarioAtualId}
+          // `viewer` só acompanha e não tem agenda para fechar.
+          pessoas={pessoas.filter((p) => p.papel !== "viewer")}
+        />
+      </Sanfona>
     </div>
   );
 }
