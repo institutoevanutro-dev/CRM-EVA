@@ -278,7 +278,14 @@ test.describe("Relatório de atividades — o período, pela tela", () => {
   test("a porta existe na barra lateral, no grupo Análise, e leva à tela", async ({ page }) => {
     const errosDeConsole: string[] = [];
     page.on("console", (m) => {
-      if (m.type() === "error") errosDeConsole.push(m.text());
+      // O login cai no Início, que pergunta a `/api/v1/health` como está o sistema
+      // (só para quem gerencia). No CI não há WAHA, e a rota responde 503 —
+      // é o contrato dela com o monitor, não erro desta tela. Quando a resposta
+      // chega antes de sairmos do Início, o navegador escreve "Failed to load
+      // resource" no console; por isso o teste ficava vermelho só às vezes.
+      if (m.type() === "error" && !m.location().url.includes("/api/v1/health")) {
+        errosDeConsole.push(m.text());
+      }
     });
 
     await login(page, creds.users.manager!.email, creds.password);
