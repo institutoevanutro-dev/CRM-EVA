@@ -1125,8 +1125,8 @@ export const DICIONARIO: Traducoes = {
   "Os atendimentos terminam. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.": {
     es: "Las atenciones terminan. Si el paciente vuelve a escribir, la conversación vuelve a la cola y el automático puede responder.",
   },
-  "As letras valem com o cursor na lista de conversas.": {
-    es: "Las letras funcionan con el cursor en la lista de conversaciones.",
+  "O r vale com o cursor na lista de conversas.": {
+    es: "La r funciona con el cursor en la lista de conversaciones.",
   },
   "Selecionar todas as conversas visíveis": { es: "Seleccionar todas las conversaciones visibles" },
   Máximo: { es: "Máximo" },
@@ -5926,8 +5926,6 @@ export const DICIONARIO: Traducoes = {
   "Transferindo…": { es: "Transfiriendo…" },
   Gestor: { es: "Gestor" },
   "Atalhos de teclado": { es: "Atajos de teclado" },
-  "Próxima conversa": { es: "Siguiente conversación" },
-  "Conversa anterior": { es: "Conversación anterior" },
   "Focar resposta": { es: "Enfocar respuesta" },
   "Enviar a mensagem": { es: "Enviar el mensaje" },
   "Quebrar linha sem enviar": { es: "Salto de línea sin enviar" },
