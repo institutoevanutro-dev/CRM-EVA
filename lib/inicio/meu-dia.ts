@@ -268,13 +268,45 @@ export async function esperandoResposta(db: Db, ctx: ContextoDoInicio): Promise<
   };
 }
 
-export async function agendaDeHoje(db: Db, ctx: ContextoDoInicio): Promise<Bloco> {
-  const { inicio, fim } = janelaDeHoje(ctx.agora, ctx.fuso);
+/** Até quantos dias para trás e para a frente um compromisso marca a pessoa como profissional. */
+const DIAS_QUE_MARCAM_PROFISSIONAL = 30;
+
+/**
+ * QUEM É PROFISSIONAL, para a agenda do Início (resposta 10 do dono, 18/11):
+ * o Prestador sempre; os demais quando atendem — têm compromisso próprio
+ * nos últimos ou nos próximos 30 dias. Não há coluna "profissional" no schema;
+ * quem atende é quem é dono de compromisso (`owner_user_id`).
+ */
+async function ehProfissional(db: Db, ctx: ContextoDoInicio): Promise<boolean> {
+  if (ctx.papel === "provider") return true;
+  const dia = DIAS_QUE_MARCAM_PROFISSIONAL * 24 * 60 * 60 * 1000;
   const { data, error } = await db
     .from("calendar_appointments")
-    .select("id,title,starts_at,status")
+    .select("id")
     .eq("organization_id", ctx.orgId)
     .eq("owner_user_id", ctx.userId)
+    .is("excluded_at", null)
+    .gte("starts_at", new Date(ctx.agora.getTime() - dia).toISOString())
+    .lt("starts_at", new Date(ctx.agora.getTime() + dia).toISOString())
+    .limit(1);
+  if (error) throw new Error(error.message);
+  return (data ?? []).length > 0;
+}
+
+/**
+ * A agenda de hoje: a da profissional é só a dela; recepção e gerência (quem
+ * não atende) veem a do dia da clínica inteira — antes viam sempre "nenhum".
+ * `daClinica` diz à tela qual das duas veio, para o título não mentir.
+ */
+export async function agendaDeHoje(db: Db, ctx: ContextoDoInicio): Promise<Bloco & { daClinica?: boolean }> {
+  const { inicio, fim } = janelaDeHoje(ctx.agora, ctx.fuso);
+  const daClinica = !(await ehProfissional(db, ctx));
+  let consulta = db
+    .from("calendar_appointments")
+    .select("id,title,starts_at,status")
+    .eq("organization_id", ctx.orgId);
+  if (!daClinica) consulta = consulta.eq("owner_user_id", ctx.userId);
+  const { data, error } = await consulta
     .neq("status", "cancelled")
     // Lançado por engano ou de teste some da agenda (migration 0364).
     .is("excluded_at", null)
@@ -286,12 +318,14 @@ export async function agendaDeHoje(db: Db, ctx: ContextoDoInicio): Promise<Bloco
   const linhas = data ?? [];
   return {
     ok: true,
+    daClinica,
     total: linhas.length,
     itens: linhas.slice(0, LIMITE_DE_ITENS).map((a) => ({
       id: String(a.id),
       titulo: String(a.title ?? ""),
       detalhe: horaNoFuso(String(a.starts_at), ctx),
-      href: "/app/agenda",
+      // A Agenda abre o compromisso pelo `?compromisso=` (EntradaDaAgenda).
+      href: `/app/agenda?compromisso=${encodeURIComponent(String(a.id))}`,
     })),
   };
 }

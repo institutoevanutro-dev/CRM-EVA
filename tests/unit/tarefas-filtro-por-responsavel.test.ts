@@ -121,3 +121,29 @@ describe("o filtro da tela → o parâmetro da rota", () => {
     expect(hook).toMatch(/params\.set\("assigned_to", filtros\.assigned_to\)/);
   });
 });
+
+describe("GET /api/v1/tasks — ordem das encerradas (item 192)", () => {
+  function ordens() {
+    const anotadas: Array<[string, boolean | undefined]> = [];
+    const elo: Record<string, unknown> = {};
+    for (const metodo of ["select", "limit", "in", "gte", "lte", "eq", "is"]) elo[metodo] = () => elo;
+    elo.order = (coluna: string, o?: { ascending?: boolean }) => (anotadas.push([coluna, o?.ascending]), elo);
+    elo.then = (res: (v: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(res);
+    vi.mocked(createClient).mockResolvedValue({ from: () => elo } as never);
+    return anotadas;
+  }
+
+  it("concluídas vêm das mais recentes, não das de prazo mais antigo", async () => {
+    sessao();
+    const anotadas = ordens();
+    await listar("?status=done");
+    expect(anotadas[0]).toEqual(["updated_at", false]);
+  });
+
+  it("em aberto segue pelo prazo mais próximo", async () => {
+    sessao();
+    const anotadas = ordens();
+    await listar("?aberto=true");
+    expect(anotadas[0]).toEqual(["due_date", true]);
+  });
+});

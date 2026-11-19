@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
-import type { ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { ChevronDown, type LucideIcon } from "lucide-react";
 
 import { useT } from "@/hooks/i18n/useT";
 
@@ -79,14 +79,65 @@ export function Esqueleto({ quantos, altura = "h-44", colunas = "md:grid-cols-2"
   );
 }
 
-export function CabecalhoDaSecao({ id, titulo, descricao }: { id: string; titulo: string; descricao: string }) {
-  return (
-    <div className="mb-4">
-      <h2 id={id} className="font-titulo text-2xl font-semibold text-text">
-        {titulo}
-      </h2>
-      <p className="mt-0.5 text-sm text-text-muted">{descricao}</p>
-    </div>
-  );
+/** A chave do localStorage onde fica o que a pessoa deixou aberto no Início. */
+const CHAVE_DAS_SECOES = "inicio:secoes-abertas";
+
+function lerAbertas(): Record<string, boolean> {
+  try {
+    return JSON.parse(window.localStorage.getItem(CHAVE_DAS_SECOES) ?? "{}") as Record<string, boolean>;
+  } catch {
+    return {};
+  }
 }
 
+/**
+ * Seção do Início em sanfona (item 187): só o "Meu dia" nasce aberto, e a tela
+ * lembra o que a pessoa abriu ou fechou. Fechada, o conteúdo nem é montado —
+ * a "Visão da clínica" não busca nada enquanto ninguém a abre.
+ */
+export function Secao({
+  id,
+  titulo,
+  descricao,
+  abertaPorPadrao = false,
+  children,
+}: {
+  id: string;
+  titulo: string;
+  descricao: string;
+  abertaPorPadrao?: boolean;
+  children: ReactNode;
+}) {
+  // Lido já no primeiro render: o Início só monta as seções depois de a
+  // consulta voltar, no navegador — não há HTML do servidor a desencontrar.
+  const [aberta, setAberta] = useState(() => {
+    const guardada = typeof window === "undefined" ? undefined : lerAbertas()[id];
+    return typeof guardada === "boolean" ? guardada : abertaPorPadrao;
+  });
+  const alternar = (valor: boolean) => {
+    setAberta(valor);
+    try {
+      window.localStorage.setItem(CHAVE_DAS_SECOES, JSON.stringify({ ...lerAbertas(), [id]: valor }));
+    } catch {
+      // Sem localStorage (aba privada): a sanfona funciona, só não lembra.
+    }
+  };
+  return (
+    <section aria-labelledby={id}>
+      <details open={aberta} onToggle={(e) => alternar(e.currentTarget.open)} className="group">
+        <summary
+          className={`mb-4 flex min-h-11 cursor-pointer list-none items-start justify-between gap-3 rounded-md [&::-webkit-details-marker]:hidden ${FOCO}`}
+        >
+          <div className="min-w-0">
+            <h2 id={id} className="font-titulo text-2xl font-semibold text-text">
+              {titulo}
+            </h2>
+            <p className="mt-0.5 text-sm text-text-muted">{descricao}</p>
+          </div>
+          <ChevronDown aria-hidden className="mt-2 size-5 shrink-0 text-text-muted transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+        </summary>
+        {aberta ? children : null}
+      </details>
+    </section>
+  );
+}

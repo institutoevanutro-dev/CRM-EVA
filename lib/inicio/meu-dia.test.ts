@@ -273,6 +273,33 @@ describe("agendaDeHoje", () => {
     });
     const b = ok(await agendaDeHoje(db, ctx));
     expect(b.itens[0]!.detalhe).toBe("10:00");
+    // Clicar abre o compromisso, não só a Agenda.
+    expect(b.itens[0]!.href).toBe("/app/agenda?compromisso=h1");
+  });
+
+  // Resposta 10 do dono (18/11): quem não atende vê a agenda do dia da clínica.
+  const daOutra = { id: "x1", organization_id: ORG, owner_user_id: OUTRO, status: "confirmed", title: "Consulta", starts_at: "2026-09-21T13:00:00Z" };
+  const deOutraOrg = { ...daOutra, id: "x2", organization_id: OUTRA };
+
+  it("recepção sem compromisso próprio vê a agenda de hoje da clínica (só da própria organização)", async () => {
+    const { db } = fakeDb({ calendar_appointments: [daOutra, deOutraOrg] });
+    const b = await agendaDeHoje(db, ctx);
+    expect(ok(b).itens.map((i) => i.id)).toEqual(["x1"]);
+    expect(b).toMatchObject({ daClinica: true });
+  });
+
+  it("profissional (tem compromisso no mês) continua vendo só a dela", async () => {
+    const minhaDaSemanaPassada = { ...daOutra, id: "m1", owner_user_id: EU, starts_at: "2026-09-14T13:00:00Z" };
+    const { db } = fakeDb({ calendar_appointments: [daOutra, minhaDaSemanaPassada] });
+    const b = await agendaDeHoje(db, ctx);
+    expect(ok(b).total).toBe(0);
+    expect(b).toMatchObject({ daClinica: false });
+  });
+
+  it("o Prestador vê só a dele mesmo sem compromisso nenhum", async () => {
+    const { db } = fakeDb({ calendar_appointments: [daOutra] });
+    const b = await agendaDeHoje(db, { ...ctx, papel: "provider" });
+    expect(ok(b).total).toBe(0);
   });
 });
 
