@@ -28,7 +28,7 @@ it("bloqueia credencial inválida antes de ler o banco", async () => {
 it("lê só a organização configurada, nunca uma vinda do pedido", async () => {
   const r = await GET(new NextRequest(`https://crm.eva.test/x?de=2026-10-01&ate=2026-10-07&organization_id=20000000-0000-4000-8000-000000000002`, { headers: { "x-integracao-token": segredo } }));
   expect(r.status).toBe(200);
-  expect(m.consulta).toHaveBeenCalledWith(expect.anything(), org, "2026-10-01", "2026-10-07");
+  expect(m.consulta).toHaveBeenCalledWith(expect.anything(), org, "2026-10-01", "2026-10-07", undefined);
   expect((await r.json()).data).toEqual(RESUMO);
   expect(r.headers.get("cache-control")).toBe("no-store");
 });
