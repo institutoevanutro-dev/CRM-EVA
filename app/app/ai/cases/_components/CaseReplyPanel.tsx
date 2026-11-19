@@ -29,13 +29,22 @@ import { useT } from "@/hooks/i18n/useT";
  * quer fazer com este caso?"), mas o envio vai para outra rota e o corpo é outro
  * (`{note}` em vez de `{action, body}`) — daí o desvio no `handleSubmit`.
  */
+// Rascunho por caso, só na memória da aba: trocar de caso e voltar não apaga o
+// que foi digitado, e o texto de um caso nunca aparece no outro.
+const rascunhos = new Map<string, string>();
+
 export function CaseReplyPanel({ caseId, status }: { caseId: string; status: CaseStatus }) {
   const t = useT();
   // Sem pré-seleção de propósito: as ações têm efeitos muito diferentes (duas
   // delas FECHAM o caso) e não há desfazer. Um default marcado faria quem digitou
   // pensando em "pedir info ao cliente" encerrar o caso sem perceber.
   const [action, setAction] = useState<CasePanelAction | null>(null);
-  const [body, setBody] = useState("");
+  const [body, setBodyState] = useState(() => rascunhos.get(caseId) ?? "");
+  function setBody(v: string) {
+    setBodyState(v);
+    if (v) rascunhos.set(caseId, v);
+    else rascunhos.delete(caseId);
+  }
   const reply = useReplyCase();
   const encerrar = useCloseCaseWithoutReply();
 

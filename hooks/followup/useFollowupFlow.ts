@@ -197,7 +197,7 @@ export function useUpdateHandoffPolicy(id: string) {
       qc.setQueryData<FollowupFlowDetailRow>(followupFlowQueryKey(id), (prev) =>
         prev ? { ...prev, ...updated } : prev,
       );
-      toast.success(t("Política de handoff atualizada."));
+      toast.success(t("Regra de quando a equipe assume atualizada."));
     },
     onError: (err) => showApiError(err),
   });

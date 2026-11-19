@@ -28,7 +28,7 @@ export function NodePalette({ onAdd, variant = "desktop" }: Props) {
       data-testid="node-palette"
     >
       <h2 className="rotulo-secao px-1 pb-1 text-text-muted">
-        {t("Adicionar nó")}
+        {t("Adicionar bloco")}
       </h2>
       {NODE_VISUAL_LIST.map((visual) => {
         const Icon = visual.icon;

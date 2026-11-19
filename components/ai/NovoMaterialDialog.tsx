@@ -71,6 +71,15 @@ interface Props {
   podeIndexar: boolean;
 }
 
+/** Mesmas regras de `app/api/v1/ai/knowledge/sources/upload` (20 MB; PDF, .md, .txt). */
+function motivoDeRecusa(f: File): string | null {
+  if (f.size > 20 * 1024 * 1024) return "O arquivo passa de 20 MB.";
+  const porTipo = ["application/pdf", "text/markdown", "text/x-markdown", "text/plain"].includes(f.type);
+  if (!/\.(pdf|md|txt)$/i.test(f.name) && !porTipo)
+    return "Não sei ler esse tipo de arquivo. Envie PDF, Markdown (.md) ou texto (.txt).";
+  return null;
+}
+
 export function NovoMaterialDialog({ aberto, onFechar, onCriado, podeIndexar }: Props) {
   const t = useT();
   const [tipo, setTipo] = useState<TipoDeFonteId>("faq");
@@ -208,7 +217,18 @@ export function NovoMaterialDialog({ aberto, onFechar, onCriado, podeIndexar }: 
                 ref={inputArquivo}
                 type="file"
                 accept=".pdf,.md,.txt"
-                onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  // Conferir ANTES de subir: o servidor só recusava depois do envio inteiro.
+                  const f = e.target.files?.[0] ?? null;
+                  const motivo = f ? motivoDeRecusa(f) : null;
+                  if (motivo) {
+                    toast.error(t(motivo));
+                    e.target.value = "";
+                    setArquivo(null);
+                    return;
+                  }
+                  setArquivo(f);
+                }}
                 disabled={enviando}
               />
               <p className="text-xs text-text-muted">

@@ -94,7 +94,7 @@ describe("PublishBar — excluir a seleção pede confirmação", () => {
     await usuario().click(screen.getByTestId("delete-selection"));
 
     const dialogo = await screen.findByRole("alertdialog");
-    expect(dialogo).toHaveTextContent("Excluir este nó?");
+    expect(dialogo).toHaveTextContent("Excluir este bloco?");
     expect(dialogo).toHaveTextContent("Não é possível desfazer");
     expect(onDeleteSelection).not.toHaveBeenCalled();
   });
@@ -130,8 +130,8 @@ describe("PublishBar — excluir a seleção pede confirmação", () => {
     await user.click(screen.getByTestId("delete-selection"));
     const dialogo = await screen.findByRole("alertdialog");
 
-    expect(dialogo).toHaveTextContent("Excluir esta aresta?");
-    expect(dialogo).not.toHaveTextContent("Excluir este nó?");
+    expect(dialogo).toHaveTextContent("Excluir esta ligação?");
+    expect(dialogo).not.toHaveTextContent("Excluir este bloco?");
 
     await user.click(within(dialogo).getByRole("button", { name: "Excluir" }));
     expect(onDeleteSelection).toHaveBeenCalledTimes(1);
@@ -151,7 +151,12 @@ describe("PublishBar — aviso de mídia ao publicar", () => {
     const onPublishSuccess = vi.fn();
     montar(null, onPublishSuccess);
 
-    await usuario().click(screen.getByTestId("publish-button"));
+    const user = usuario();
+    await user.click(screen.getByTestId("publish-button"));
+    // Publicar manda mensagem a paciente: pede confirmação antes.
+    const dialogo = await screen.findByRole("alertdialog");
+    expect(onPublishSuccess).not.toHaveBeenCalled();
+    await user.click(within(dialogo).getByRole("button", { name: "Publicar" }));
 
     await waitFor(() => expect(onPublishSuccess).toHaveBeenCalledTimes(1));
     expect(toast.warning).toHaveBeenCalledWith(

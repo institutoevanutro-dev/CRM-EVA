@@ -175,11 +175,11 @@ export function describeNodeConfig(
     }
     case "ai_classify": {
       const c = config as ConfigOf<"ai_classify">;
-      return `${c.classes.length} ${t("classes · grace")} ${Math.round(c.grace_timeout_ms / 60_000)}min`;
+      return `${c.classes.length} ${t("classes · espera de")} ${Math.round(c.grace_timeout_ms / 60_000)} min`;
     }
     case "match_reply": {
       const c = config as ConfigOf<"match_reply">;
-      return `${c.branches.length} ${t("regras · grace")} ${Math.round(c.grace_timeout_ms / 60_000)}min${
+      return `${c.branches.length} ${t("regras · espera de")} ${Math.round(c.grace_timeout_ms / 60_000)} min${
         c.save_to
           ? ` · ${t("grava resposta")}${c.if_exists === "skip" ? ` · ${t("pula se já existir")}` : c.if_exists === "confirm" ? ` · ${t("confirma se já existir")}` : ""}`
           : ""

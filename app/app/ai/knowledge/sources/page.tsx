@@ -86,6 +86,10 @@ export default async function AcervoPage() {
         titulo={t("O que o agente sabe")}
         descricao={t(
             "O material do seu negócio que os assistentes consultam antes de responder. Cada assistente escolhe, na tela dele, o que pode ler daqui.",
+          ) +
+          " " +
+          t(
+            "Aqui a IA lê o material e responde com as palavras dela; para uma resposta que sai igual, sem IA, use Perguntas frequentes.",
           )}
       />
 

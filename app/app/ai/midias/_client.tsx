@@ -23,6 +23,8 @@ import {
 import { useT } from "@/hooks/i18n/useT";
 import { EmptyState } from "@/components/empty/EmptyState";
 import { ImageSquare } from "@/lib/ui/icons";
+import { ConfirmarNaTela } from "@/components/inbox/ConfirmarNaTela";
+import { MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
 import type { SituacaoDaMidia } from "@/lib/midias/termo";
 
 const ACEITA = "image/jpeg,image/png,image/webp,video/mp4,video/3gpp";
@@ -228,6 +230,7 @@ function CartaoDaMidia({ item }: { item: MidiaItem }) {
   const editar = useEditarMidia();
   const apagar = useApagarMidia();
   const [erro, setErro] = React.useState<string | null>(null);
+  const [tirando, setTirando] = React.useState<"A" | "B" | null>(null);
   const [edicao, setEdicao] = React.useState<CamposEditaveis | null>(null);
   const [erroEdicao, setErroEdicao] = React.useState<string | null>(null);
   const selo = SELO[item.situacao];
@@ -235,6 +238,15 @@ function CartaoDaMidia({ item }: { item: MidiaItem }) {
   async function enviar(variante: "A" | "B", arquivo: File | undefined) {
     if (!arquivo) return;
     setErro(null);
+    // Conferir ANTES de subir: o servidor só recusava depois do envio inteiro.
+    if (!ACEITA.split(",").includes(arquivo.type)) {
+      setErro(t("Tipo de arquivo não aceito. Envie JPG, PNG, WEBP ou vídeo MP4."));
+      return;
+    }
+    if (arquivo.size > MAX_MEDIA_BYTES) {
+      setErro(t("O arquivo pode ter no máximo 50 MB."));
+      return;
+    }
     try {
       await subir.mutateAsync({ id: item.id, variante, arquivo });
     } catch (err) {
@@ -288,6 +300,9 @@ function CartaoDaMidia({ item }: { item: MidiaItem }) {
         <Badge data-testid="midia-situacao" variant={selo.variant}>{t(selo.texto)}</Badge>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        <p className="text-xs text-muted-foreground">
+          {t("Arquivo A e Arquivo B são duas versões da mesma mídia: cada paciente recebe sempre a mesma. Uma só já basta.")}
+        </p>
         <div className="grid gap-3 sm:grid-cols-2">
           {(["A", "B"] as const).map((chave) => {
             const v = item.variantes.find((x) => x.key === chave);
@@ -317,7 +332,7 @@ function CartaoDaMidia({ item }: { item: MidiaItem }) {
                   }}
                 />
                 {v && (
-                  <Button variant="outline" size="sm" className="self-start" disabled={subir.isPending || remover.isPending} onClick={() => void tirar(chave)}>
+                  <Button variant="outline" size="sm" className="self-start" disabled={subir.isPending || remover.isPending} onClick={() => setTirando(chave)}>
                     {t("Tirar este arquivo")}
                   </Button>
                 )}
@@ -325,6 +340,15 @@ function CartaoDaMidia({ item }: { item: MidiaItem }) {
             );
           })}
         </div>
+        <ConfirmarNaTela
+          aberto={tirando !== null}
+          onAbertoChange={(v) => !v && setTirando(null)}
+          titulo={`${t("Tirar o")} ${t("Arquivo")} ${tirando ?? ""}?`}
+          descricao={t("A IA deixa de enviar este arquivo. Para voltar, é preciso subir de novo.")}
+          acao={t("Tirar este arquivo")}
+          destrutiva
+          onConfirmar={() => tirando && void tirar(tirando)}
+        />
         {erro && <p role="alert" className="text-sm text-destructive">{erro}</p>}
 
         {item.contains_person && (

@@ -42,6 +42,7 @@ import {
 import { rotuloDoRamo } from "@/lib/followup/rotulo-do-ramo";
 import { useFollowupFlow, type FollowupFlowDetailRow } from "@/hooks/followup/useFollowupFlow";
 import { useT } from "@/hooks/i18n/useT";
+import { useAvisoAoSairSemSalvar } from "@/hooks/ui/useAvisoAoSairSemSalvar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Plus, X } from "@/lib/ui/icons";
@@ -111,6 +112,8 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
 
   const liveGraph = useMemo(() => fromReactFlow(nodes, edges), [nodes, edges]);
   const dirty = useMemo(() => !graphsEqual(liveGraph, savedGraph), [liveGraph, savedGraph]);
+  // Sair da tela com o fluxo editado e não salvo perdia tudo sem aviso.
+  useAvisoAoSairSemSalvar(dirty, t("Sair sem salvar? O que você mudou neste fluxo será perdido."));
 
   const markNodeErrors = useCallback(
     (errorsByNode: Record<string, string[]>) => {
@@ -166,15 +169,17 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
       edges.map((e) => {
         const condition = e.data?.condition ?? { type: "always" as const };
         const source = nodes.find((n) => n.id === e.source);
+        const ramos = source ? nodeBranches(toFlowNode(source)) : [];
         const branch = source
-          ? nodeBranches(toFlowNode(source)).find(
-              (b) => b.id === branchIdForCondition(toFlowNode(source), condition),
-            )
+          ? ramos.find((b) => b.id === branchIdForCondition(toFlowNode(source), condition))
           : undefined;
+        // Bloco de saída única: o "Sempre" não informa nada e, empilhado em
+        // ligações próximas, um rótulo cobria o outro.
+        const semEscolha = condition.type === "always" && ramos.length === 0;
         return {
           ...e,
           type: "smoothstep" as const,
-          label: branch ? t(rotuloDoRamo(branch)) : t(conditionLabel(condition)),
+          label: semEscolha ? undefined : branch ? t(rotuloDoRamo(branch)) : t(conditionLabel(condition)),
           selected: e.id === selectedEdgeId,
         };
       }),
@@ -323,7 +328,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
             vira um drawer, disparado por este botão flutuante. */}
         <Sheet open={paletteOpen} onOpenChange={setPaletteOpen}>
           <SheetContent side="left" className="w-72 max-w-[85vw] gap-0 p-0 lg:hidden">
-            <SheetTitle className="sr-only">{t("Adicionar nó")}</SheetTitle>
+            <SheetTitle className="sr-only">{t("Adicionar bloco")}</SheetTitle>
             <NodePalette
               variant="mobile"
               onAdd={(type) => {
@@ -348,6 +353,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
             defaultEdgeOptions={{ type: "smoothstep" }}
             connectionLineType={ConnectionLineType.SmoothStep}
             fitView
+            proOptions={{ hideAttribution: true }}
           >
             <Background />
             <Controls />
@@ -359,7 +365,7 @@ function FlowCanvasInner({ flowId, initialData }: Props) {
             className="absolute bottom-4 left-4 z-10 shadow-md lg:hidden"
             onClick={() => setPaletteOpen(true)}
           >
-            <Plus size={14} aria-hidden /> {t("Adicionar nó")}
+            <Plus size={14} aria-hidden /> {t("Adicionar bloco")}
           </Button>
         </div>
 

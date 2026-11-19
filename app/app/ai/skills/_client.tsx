@@ -18,6 +18,8 @@ import {
   type SkillsState,
 } from "@/hooks/ai/useSkills";
 import { useT } from "@/hooks/i18n/useT";
+import { FUSO_PADRAO } from "@/lib/tempo/fusos";
+import { ConfirmarNaTela } from "@/components/inbox/ConfirmarNaTela";
 
 interface Props {
   initialState: SkillsState;
@@ -30,6 +32,9 @@ function formatDate(iso: string, idioma: string): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    // Fuso fixo: renderizada no servidor (UTC), a hora saía errada e diferente
+    // da do navegador (erro de hidratação).
+    timeZone: FUSO_PADRAO,
   });
 }
 
@@ -46,6 +51,7 @@ export function SkillsClient({ initialState }: Props) {
   const importSkill = useImportSkill();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [pendingName, setPendingName] = React.useState<string | null>(null);
+  const [desinstalando, setDesinstalando] = React.useState<string | null>(null);
 
   function handleInstall(name: string) {
     setPendingName(name);
@@ -150,7 +156,7 @@ export function SkillsClient({ initialState }: Props) {
                         variant="ghost"
                         size="sm"
                         disabled={uninstall.isPending && pendingName === skill.name}
-                        onClick={() => handleUninstall(skill.name)}
+                        onClick={() => setDesinstalando(skill.name)}
                         className="w-full sm:w-auto"
                       >
                         <Trash /> {t("Desinstalar")}
@@ -161,6 +167,15 @@ export function SkillsClient({ initialState }: Props) {
               ))}
             </ul>
           )}
+          <ConfirmarNaTela
+            aberto={desinstalando !== null}
+            onAbertoChange={(v) => !v && setDesinstalando(null)}
+            titulo={`${t("Desinstalar")} "${desinstalando ?? ""}"?`}
+            descricao={t("Os agentes deixam de usar esta habilidade na hora. Para voltar, é preciso instalar de novo.")}
+            acao={t("Desinstalar")}
+            destrutiva
+            onConfirmar={() => desinstalando && handleUninstall(desinstalando)}
+          />
 
           <div className="flex items-start gap-2 rounded-md bg-accent-soft p-3 text-xs text-text-muted">
             <Info className="mt-0.5 shrink-0" aria-hidden />
