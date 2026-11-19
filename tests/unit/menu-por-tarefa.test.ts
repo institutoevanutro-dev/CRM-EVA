@@ -5,8 +5,8 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { FORA_DO_MENU, MENU, MINHA_CONTA, gruposDoMenu, ondeNoMenu, telasDaConta, veInicio } from "@/lib/navigation/menu";
-import { NAV_DESTINATIONS } from "@/lib/navigation/registry";
+import { FORA_DO_MENU, MENU, atalhosDoMenu, MINHA_CONTA, gruposDoMenu, ondeNoMenu, telasDaConta, veInicio } from "@/lib/navigation/menu";
+import { NAV_DESTINATIONS, hubSections, searchable } from "@/lib/navigation/registry";
 
 const noMenu = MENU.flatMap((g) => g.hrefs);
 const todos = [...noMenu, ...MINHA_CONTA, ...FORA_DO_MENU, "/app/inicio"];
@@ -37,8 +37,25 @@ describe("menu por tarefa", () => {
     const g = gruposDoMenu(false, "viewer");
     expect(g.map((x) => x.id)).not.toContain("assistente");
     expect(g.map((x) => x.id)).not.toContain("integracoes");
-    expect(g.find((x) => x.id === "atendimento")!.itens.map((d) => d.label)).toEqual(["Inbox", "Radar", "Agenda", "Respostas rápidas", "Alertas", "Propostas"]);
+    expect(g.find((x) => x.id === "atendimento")!.itens.map((d) => d.label)).toEqual(["Conversas", "Radar", "Agenda", "Respostas rápidas", "Central de avisos", "Propostas"]);
     expect(veInicio(false, "viewer")).toBe(true);
+  });
+
+  it("Campanhas só para gerente: a API delas só responde a gerente (item 232)", () => {
+    const vendas = (role: "agent" | "manager") => gruposDoMenu(false, role).find((x) => x.id === "vendas")!.itens.map((d) => d.href);
+    expect(vendas("agent")).not.toContain("/app/campaigns");
+    expect(vendas("manager")).toContain("/app/campaigns");
+  });
+
+  it("a página de Configurações respeita o que saiu do menu, e a busca continua achando (item 231)", () => {
+    const hub = hubSections("organizacao", false, "admin").flatMap((s) => s.items.map((i) => i.href));
+    for (const h of FORA_DO_MENU) expect(hub).not.toContain(h);
+    const busca = searchable(false, "admin").map((d) => d.href);
+    for (const h of FORA_DO_MENU) expect(busca).toContain(h);
+  });
+
+  it("recolhido, os atalhos do dia seguem o papel (item 228)", () => {
+    expect(atalhosDoMenu(false, "admin").map((d) => d.href)).toEqual(["/app/agenda", "/app/inbox", "/app/contacts", "/app/ai/inbox"]);
   });
 
   it("Minha conta abre Perfil, Segurança e Notificações, e não está em grupo nenhum", () => {
