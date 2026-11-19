@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.26.0] — 2026-11-19
+
+### Adicionado
+
+- **Vendido do Financeiro por anúncio no resumo do Marketing** Com o Financeiro ligado, o resumo que o painel Marketing lê passa a trazer, para cada anúncio da Meta,
+  o valor vendido no período e quantos pacientes daquele anúncio compraram. É o que permite mostrar o
+  ROAS de cada vídeo. Sem o Financeiro, o resumo continua como antes.
+
 ## [5.25.0] — 2026-11-19
 
 ### Alterado
@@ -9596,7 +9604,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.25.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.0...HEAD
+[5.26.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.25.0...v5.26.0
 [5.25.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.24.0...v5.25.0
 [5.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.23.0...v5.24.0
 [5.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.22.1...v5.23.0
