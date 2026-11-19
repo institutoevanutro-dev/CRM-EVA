@@ -196,10 +196,10 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
     // fixture: a ingestão carimba `external_device` nos dois sentidos, e quem
     // separa o cliente do atendente é a DIREÇÃO. Por isso o controle negativo
     // lá embaixo é forte — se o componente parasse de olhar `direction`, toda
-    // mensagem recebida passaria a dizer "Celular" para o dono.
+    // mensagem recebida passaria a dizer "WhatsApp (fora do CRM)" para o dono.
     //
     // O corpo de cada uma é único e sem acento: ele é a ÂNCORA que amarra o
-    // rótulo ao balão certo. Sem isso, `getByText("Celular")` casaria com o
+    // rótulo ao balão certo. Sem isso, `getByText("WhatsApp (fora do CRM)")` casaria com o
     // rótulo de qualquer bolha da conversa e o teste passaria com os rótulos
     // trocados entre si.
     const base = {
@@ -274,7 +274,7 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
       page.getByText(corpo, { exact: true }).locator("xpath=..");
 
     const esperado: Array<[string, string]> = [
-      ["RESPOSTA PELO CELULAR", "Celular"],
+      ["RESPOSTA PELO CELULAR", "WhatsApp (fora do CRM)"],
       ["RESPOSTA DO AGENTE", "Automático"],
       ["RESPOSTA DIGITADA POR MIM", "Você"],
       ["RESPOSTA DIGITADA PELO COLEGA", "Atendente"],
@@ -326,10 +326,10 @@ test.describe("Inbox — o balão diz de onde saiu a mensagem", () => {
 
     // O CONTROLE NEGATIVO, e ele é o que separa "rotula certo" de "rotula
     // tudo": a mensagem RECEBIDA não leva rótulo de origem nenhum. Sem ele,
-    // um componente que carimbasse "Celular" em toda bolha passaria nos
+    // um componente que carimbasse "WhatsApp (fora do CRM)" em toda bolha passaria nos
     // casos acima.
     const bolhaDoCliente = balaoCom("PERGUNTA DO CLIENTE");
-    for (const rotulo of ["Celular", "Automático", "Você", "Atendente", "Resposta pronta"]) {
+    for (const rotulo of ["WhatsApp (fora do CRM)", "Automático", "Você", "Atendente", "Resposta pronta"]) {
       await expect(
         bolhaDoCliente,
         `a mensagem do cliente não pode levar o rótulo "${rotulo}"`,

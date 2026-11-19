@@ -306,7 +306,7 @@ export const MessageBubble = memo(function MessageBubble({
       // dono da conversa (OwnerBadge) — uma palavra por coisa.
       return typeof message.metadata?.resposta_pronta_id === "string" ? "Resposta pronta" : "Automático";
     }
-    if (message.sent_via === "external_device") return "Celular";
+    if (message.sent_via === "external_device") return "WhatsApp (fora do CRM)";
     if (message.sent_via === "user" || message.sent_via === "crm") {
       // "Você" exige as DUAS pontas: saber quem lê e saber quem enviou. Falta
       // qualquer uma, o rótulo cai para "Atendente" — que continua dizendo o

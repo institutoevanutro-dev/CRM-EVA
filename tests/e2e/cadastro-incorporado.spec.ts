@@ -246,7 +246,7 @@ test("[P0] histórico do celular entra encerrado, sem não-lida, e a barra mostr
   // prazo que os outros passos deste teste já usam.
   await expect(conversa.getByText("oi", { exact: true }).first()).toBeVisible({ timeout: 20_000 });
   await expect(conversa.getByText("olá", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Celular", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("WhatsApp (fora do CRM)", { exact: true }).first()).toBeVisible();
   await page.screenshot({ path: path.join(EVIDENCIA, "historico.png"), fullPage: true });
 });
 
