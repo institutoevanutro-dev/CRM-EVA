@@ -9,6 +9,7 @@ import {
 } from "@/app/actions/settings/atualizarLembreteDeCasoParado";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -69,37 +70,47 @@ export function LembreteDeCasoParado({ inicial }: { inicial: Lembrete }) {
         <Switch checked={valor.ligado} onCheckedChange={(ligado) => setValor({ ...valor, ligado })} />
         <span>{t("Lembrar a equipe dos casos parados")}</span>
       </label>
+      {/* Select do sistema, e não `<select>` nativo: o Safari desenha o nativo
+          de outro jeito (item 240). */}
       <div className="flex flex-wrap gap-3">
-        <label className="text-sm max-md:w-full">
-          {t("Lembrar a cada")}{" "}
-          <select
-            className="ml-2 rounded-md border bg-background p-2 max-md:mt-1 max-md:ml-0 max-md:block max-md:w-full max-md:min-h-11"
-            value={valor.intervaloHoras}
+        <div className="space-y-1 text-sm max-md:w-full">
+          <span id="lembrete-intervalo">{t("Lembrar a cada")}</span>
+          <Select
+            value={String(valor.intervaloHoras)}
             disabled={!valor.ligado}
-            onChange={(e) => setValor({ ...valor, intervaloHoras: Number(e.target.value) })}
+            onValueChange={(v) => setValor({ ...valor, intervaloHoras: Number(v) })}
           >
-            {comOGravado(INTERVALOS_EM_HORAS, valor.intervaloHoras).map((h) => (
-              <option key={h} value={h}>
-                {intervaloEmPalavras(h)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm max-md:w-full">
-          {t("Avisos por espera")}{" "}
-          <select
-            className="ml-2 rounded-md border bg-background p-2 max-md:mt-1 max-md:ml-0 max-md:block max-md:w-full max-md:min-h-11"
-            value={valor.teto}
+            <SelectTrigger aria-labelledby="lembrete-intervalo" className="w-40 max-md:w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {comOGravado(INTERVALOS_EM_HORAS, valor.intervaloHoras).map((h) => (
+                <SelectItem key={h} value={String(h)}>
+                  {intervaloEmPalavras(h)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1 text-sm max-md:w-full">
+          <span id="lembrete-teto">{t("Avisos por espera")}</span>
+          <Select
+            value={String(valor.teto)}
             disabled={!valor.ligado}
-            onChange={(e) => setValor({ ...valor, teto: Number(e.target.value) })}
+            onValueChange={(v) => setValor({ ...valor, teto: Number(v) })}
           >
-            {comOGravado(TETOS, valor.teto).map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger aria-labelledby="lembrete-teto" className="w-40 max-md:w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {comOGravado(TETOS, valor.teto).map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <Button type="button" size="sm" disabled={isPending} onClick={salvar}>
         {t("Salvar lembrete")}
