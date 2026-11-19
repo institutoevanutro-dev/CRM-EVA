@@ -8,6 +8,109 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.24.0] — 2026-11-19
+
+### Adicionado
+
+- **Dados de cadastro ditos ao assistente podem entrar sozinhos na ficha vazia** Nova opção em Configurações › Distribuição de atendimento, ao lado da do telefone: quando o
+  cliente diz ao assistente o nome completo, o CPF, o e-mail, a data de nascimento ou o endereço, o
+  dado é gravado na hora se aquele campo da ficha estiver vazio, e aparece na linha do tempo do
+  contato. O que já está preenchido nunca é trocado: continua como sugestão para alguém conferir.
+  Vem desligada; quem não ligar não vê mudança nenhuma.
+
+### Alterado
+
+- **Ficha do paciente com "Marcar consulta" e as consultas no topo** A ficha do paciente mostra as próximas e as últimas consultas logo no topo, e a ação principal é
+  "Marcar consulta" (abre a Agenda com o paciente já escolhido). "Conversar" fica ao lado; Editar,
+  Juntar, Sempre humano, Reiniciar teste e Ocultar do Inbox foram para "Mais". A ficha fala português
+  ("Linha do tempo", "E-mail", origem legível) e mostra as etiquetas num lugar só. A nota da linha do
+  tempo mostra 3 linhas com "Ver mais". No Financeiro do contato, propostas mostram "vale até", vendas
+  "Vendida em", proposta enviada e vencida aparece "Vencida", venda atrasada fica em destaque e
+  "Atualizar" não apaga o quadro. Na lista de Contatos, o celular vê cartões em vez de tabela, a linha
+  inteira abre a ficha, os botões têm 44 px no toque e o telefone aparece como "(27) 99981-0001" (também
+  no painel do inbox). No funil, limpar o filtro não traz de volta cartões desmarcados, a caixa de
+  seleção tem 44 px no toque e os avisos não dizem mais "lead" nem "pipeline".
+
+### Corrigido
+
+- **Bônus da equipe — meta vazia não paga, mês do placar e campos no Safari** Critério sem meta deixa de contar como meta batida (meta alta 0 nunca paga). O placar mostra o mês
+  e tem setas para os anteriores. O mês da meta vira lista (funciona no Safari), valores aceitam
+  "1.500,00", trocar de aba não apaga a configuração, feriados por calendário, e os stories mostram
+  o número que um novo lançamento substitui. No iPhone, botão "Ligar" maior e placar em cartões.
+
+- **IA mais segura em Casos, Conhecimento, Follow-ups e Roteador** Casos: lista em cima e caso na largura toda; o texto de um caso não vai mais
+  para o paciente de outro. Conhecimento: arquivar pede confirmação dizendo quem
+  deixa de consultar, e agora dá para desarquivar; a edição da FAQ não abre vazia
+  se a leitura falhar. Follow-ups: Publicar, Desativar, Voltar à versão anterior e
+  Excluir bloco pedem confirmação; sair sem salvar pergunta antes; textos sem
+  jargão. Roteador: o interruptor grava na hora (com confirmação). Perguntas
+  frequentes: o interruptor grava na hora e o rigor virou "mais solto / mais
+  rígido". Uso de IA mostra erro com "Tentar de novo". Cartão do Jev escondido.
+
+- **Configurações gerais pedem confirmação antes do que não tem volta e salvam do mesmo jeito** Revogar uma chave de integração, desconectar a Meta Ads, excluir um funil de vez e salvar um número
+  sem responsáveis agora pedem confirmação. Os interruptores de Conversões, da pausa da IA e da limpeza
+  de mídia salvam no toque; o texto em edição mostra "Há mudanças não salvas". Distribuição e
+  Conversões vêm em sanfonas fechadas. A janela da chave nova só fecha em "Já copiei", e a lista mostra
+  o último uso. Também: digitar a chave de um campo do lead não perde mais o foco, dois Enter não criam
+  duas etapas, fuso aparece como "Brasília", Perfil e Organização ficam em uma coluna no celular, e a
+  hora dos avisos de conversão sai no fuso da clínica.
+
+- **"Webhooks" vira "Formulários e automações", e o lead de teste não dispara nada** A tela "Webhooks" passa a se chamar "Formulários e automações" no menu e no título (o endereço
+  continua o mesmo). "Enviar lead de teste" cria o lead com a etiqueta "teste" e sem disparar
+  automação nem mensagem. O interruptor "Fonte ativa" segue o que o servidor gravou; com a assinatura
+  ligada, o formulário pronto some e ligar a assinatura avisa antes. Formulário sem página de
+  agradecimento mostra uma página simples em vez de código. A condição "etapa" das automações mostra
+  as etapas de todos os funis, os erros ao salvar dizem o campo em português, a Atividade ganhou
+  "Carregar mais" e a tela ficou acessível pelo teclado.
+
+- **Conexões do WhatsApp avisam o que antes ficava calado** Fechar o QR de um número novo sem escanear pergunta "Cancelar esta conexão?" e apaga o pendente,
+  em vez de deixá-lo na lista acendendo a faixa vermelha. Celular já ligado em outro número e
+  verificação de saúde que falha agora avisam. "Gerar novo QR" virou "Desconectar e gerar novo QR",
+  com aviso. Quando uma aba não carrega (API Oficial, Provedor parceiro, Instagram, Templates),
+  aparece o erro com "Tentar de novo". Estados e nomes técnicos foram traduzidos, e os nomes das
+  variáveis do servidor só aparecem para quem administra a instalação. Na API Oficial já conectada,
+  o recebimento e a troca de credencial ficam em sanfonas fechadas, com os IDs preenchidos. No
+  "Teto diário", vazio mantém o teto atual, e isso está escrito.
+
+- **Tipos de agendamento mostram a duração do serviço e a lista vem primeiro** Tipo ligado a serviço do catálogo mostra "dura X min (do serviço Y)" e avisa quando o serviço não tem duração; o Editar agora troca serviço, sala, categoria, local e chave de simultaneidade. A lista de tipos fica no topo e os outros blocos em sanfonas fechadas. O segundo tipo criado na mesma visita também nasce com responsável. Em "Dias fora da rotina", um dia aberto mostra "Cancelar abertura" com confirmação, e uma repetição que falha no meio não duplica ao tentar de novo. Unidades e salas ganham Renomear e Desativar, rótulos nos campos e atualização sem recarregar a página.
+
+- **Agenda no celular rola com o dedo e abre com um aviso só** No celular, deslizar o dedo sobre uma consulta rola a agenda; para arrastar, segure a consulta um
+  instante. Ao abrir, a agenda mostra um aviso só quando os horários não carregam (sem o aviso vermelho
+  com "ID"), com "Configurar horários" para quem marca. O cartão do Google sem credenciais aparece só
+  para quem administra, recolhido. "Próximos" quebra em duas linhas no celular, "Semana" sai do celular
+  (lá a grade mostra um dia), o filtro de profissionais mostra os nomes (até 5) sem sobrepor, e os
+  botões de visão e de procedimento têm 44 px no toque. Arrastar a consulta de outra agenda oferece
+  "Remarcar" na própria recusa, e a janela de horas não pula ao trocar o filtro de pessoas.
+
+- **LGPD — pedido concluído para o relógio, nome do titular e filtro de prazo certo** Pedido concluído não aparece mais "Vencido": a lista mostra "Concluído em dd/mm" e a linha do
+  tempo para. O pedido mostra de quem é, e apagar dados pede a mesma confirmação da ficha
+  (justificativa + digitar ANONIMIZAR). Depois de aprovar, a tela se atualiza sozinha e o erro diz o
+  motivo. O filtro de prazo e o aviso do topo contam todos os pedidos abertos, não só a página.
+  Textos simples ("Prazo", "Situação", "Apagar dados do paciente"), cores do tema e cartões no celular.
+
+- **Relatórios e Histórico de alterações mais fáceis de ler** O Histórico de alterações mostra o nome de quem fez e uma frase ("Ana criou um negócio"), com
+  filtros por lista (Quem, O quê) e "Exportar CSV" que avisa quando falha. Tempo e porcentagem saem
+  iguais em todos os relatórios ("2 h 5 min", "60,0%"), sem jargão ("assistente (IA)" e
+  "atendente", nomes de colunas da Meta em português com a sigla ao lado). Meta Ads conta "ontem"
+  no fuso da clínica e mostra datas em dd/mm/aaaa. Atividades escreve o número de cada dia no
+  gráfico, os erros têm "Tentar de novo" e o Painel do funil fica em duas colunas no celular, com a
+  explicação de cada número recolhida.
+
+- **Convite da equipe vale 7 dias e diz a verdade sobre o e-mail** O convite passou a valer 7 dias (eram 24 horas). Quem abre o convite logado com outra conta
+  agora consegue sair e volta direto para o convite depois do login (antes caía numa página que não
+  existia). O convite mostra o papel em português e o nome da empresa. Convite vencido não oferece
+  mais "Copiar link" de um link morto: "Reenviar" renova o prazo e avisa se o e-mail saiu ou se é
+  preciso copiar o link. A tela de convidar ficou em uma coluna, com botão "Copiar link", aponta qual
+  e-mail está errado antes de enviar e não mostra aviso verde quando nada saiu. No celular, as
+  tabelas de membros e convites mostram só o essencial, com o menu de ações à vista. Em
+  Atendimento, "Editar horário" tem tamanho de botão e os campos de distribuição usam nomes simples.
+
+- **Assistente da clínica nova e login com o EvaLink** O assistente de primeiro acesso conclui sozinho ao fim do último passo, e quem é da equipe não cai
+  mais nele enquanto o dono termina. Os erros viram frases simples, os "Pular" avisam quando falham,
+  os passos feitos viram links para voltar e o assistente ganhou "Sair". Com o EvaLink ligado, o
+  login por senha fica recolhido em "Entrar com senha", embaixo do botão do EvaLink
+  (`EVALINK_SENHA_ABERTA=1` deixa aberto).
+
 ## [5.23.0] — 2026-11-19
 
 ### Adicionado
@@ -9443,7 +9546,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.23.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.24.0...HEAD
+[5.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.23.0...v5.24.0
 [5.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.22.1...v5.23.0
 [5.22.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.22.0...v5.22.1
 [5.22.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.21.0...v5.22.0
