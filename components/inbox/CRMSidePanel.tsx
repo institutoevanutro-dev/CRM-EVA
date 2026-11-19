@@ -33,7 +33,7 @@ import { useBulkAction } from "@/hooks/kanban/useBulkAction";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
-import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import { telefoneLegivel } from "@/lib/channels/phone-variants";
 
 interface Props {
   conversation: ConversationWithContact | null;
@@ -970,7 +970,7 @@ function PainelDoContato({ conversation, onAlternarRecolhido }: Omit<Props, "rec
         <Card className="mt-2 space-y-2 p-3 text-sm">
           <div className="font-medium">{displayName}</div>
           {contact?.phone_number && (
-            <div className="text-xs text-muted-foreground">{phoneForDisplay(contact.phone_number)}</div>
+            <div className="text-xs text-muted-foreground">{telefoneLegivel(contact.phone_number)}</div>
           )}
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1">

@@ -14,7 +14,12 @@ vi.mock("@/hooks/contacts/useContact", () => ({
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
-    data: { data: { id: "c1", tags: [], is_blocked: false, is_anonymized: false, phone_number: "+5541999953255", custom_fields: {}, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z" } },
+    data: { data: { id: "c1", tags: [], is_blocked: false, is_anonymized: false, phone_number: "+5541999953255", custom_fields: {}, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+      conversa: { id: "v1", preview: null, last_message_at: null, unread: 2 },
+      consultas: [
+        { id: "a1", title: "Avaliação", starts_at: "2099-01-10T13:00:00Z", status: "confirmed" },
+        { id: "a2", title: "Retorno", starts_at: "2020-01-10T13:00:00Z", status: "no_show" },
+      ] } },
   }),
 }));
 vi.mock("@/hooks/contacts/useUnblockContact", () => ({ useUnblockContact: () => ({ mutate: vi.fn(), isPending: false }) }));
@@ -44,9 +49,11 @@ vi.mock("@/components/contacts/JuntarComOutraFicha", () => ({ JuntarComOutraFich
 describe("botão Reiniciar teste", () => {
   beforeEach(() => mutate.mockClear());
 
-  it("aparece para manager e confirmar chama o hook", () => {
+  it("aparece para manager, no menu Mais, e confirmar chama o hook", () => {
     role = "manager";
     render(<ContactDetailClient contactId="c1" />);
+    expect(screen.queryByRole("button", { name: "Reiniciar teste" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Mais" }));
     fireEvent.click(screen.getByRole("button", { name: "Reiniciar teste" }));
     fireEvent.click(screen.getAllByRole("button", { name: "Reiniciar teste" }).at(-1)!);
     expect(mutate).toHaveBeenCalledTimes(1);
@@ -55,6 +62,36 @@ describe("botão Reiniciar teste", () => {
   it("some para agent", () => {
     role = "agent";
     render(<ContactDetailClient contactId="c1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Mais" }));
     expect(screen.queryByRole("button", { name: "Reiniciar teste" })).toBeNull();
+  });
+});
+
+describe("ação principal e consultas no topo (item 140)", () => {
+  it("Marcar consulta é o link principal e leva o contato e a conversa à Agenda", () => {
+    role = "agent";
+    render(<ContactDetailClient contactId="c1" />);
+    expect(screen.getByRole("link", { name: "Marcar consulta" })).toHaveAttribute(
+      "href",
+      "/app/agenda?contato=c1&conversa=v1",
+    );
+    expect(screen.getByRole("link", { name: /Conversar/ })).toHaveAttribute("href", "/app/inbox?id=v1");
+  });
+
+  it("viewer não ganha o Marcar consulta", () => {
+    role = "viewer";
+    render(<ContactDetailClient contactId="c1" />);
+    expect(screen.queryByRole("link", { name: "Marcar consulta" })).toBeNull();
+  });
+
+  it("mostra próximas e últimas, cada uma abrindo o compromisso", () => {
+    role = "agent";
+    render(<ContactDetailClient contactId="c1" />);
+    const bloco = screen.getByTestId("consultas-do-contato");
+    expect(bloco).toHaveTextContent("Próximas");
+    expect(bloco).toHaveTextContent("Avaliação");
+    expect(bloco).toHaveTextContent("Últimas");
+    expect(bloco).toHaveTextContent("Não compareceu");
+    expect(screen.getByRole("link", { name: /Avaliação/ })).toHaveAttribute("href", "/app/agenda?compromisso=a1");
   });
 });

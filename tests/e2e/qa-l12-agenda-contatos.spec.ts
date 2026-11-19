@@ -286,6 +286,7 @@ test.describe("Lote 12 — #907 o nome editado vence o nome do perfil do WhatsAp
     await captura(page, "907-05-ficha-com-nome-do-whatsapp");
 
     // Editar PELA TELA — nada de PATCH direto.
+    await page.getByRole("button", { name: "Mais", exact: true }).click();
     await page.getByRole("button", { name: "Editar", exact: true }).first().click();
     await expect(page.locator("#ec-name")).toBeVisible({ timeout: 30_000 });
     await page.locator("#ec-name").fill(`Maria Silva ${S}`);

@@ -239,7 +239,10 @@ export function KanbanCard({
                   Só some onde HÁ hover (achado 30) — o mesmo padrão do "⋯".
                   Em iPhone e iPad não existe "passar o mouse", e a caixa
                   invisível escondia a ação em lote inteira. `focus:opacity-100`:
-                  uma caixa invisível e tabulável seria armadilha de teclado. */}
+                  uma caixa invisível e tabulável seria armadilha de teclado.
+                  O `label` dá 44 px de toque (14 px de cada lado) sem mudar o
+                  desenho; o clique nele também não pode abrir o dossiê. */}
+              <label className="flex shrink-0 items-center toque:-m-3.5 toque:p-3.5" onClick={(e) => e.stopPropagation()}>
               <input
                 type="checkbox"
                 checked={Boolean(isSelected)}
@@ -261,6 +264,7 @@ export function KanbanCard({
                     "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100",
                 )}
               />
+              </label>
               <KanbanCardActions lead={lead} pipelineId={pipelineId} stages={stages} />
             </div>
           </div>
