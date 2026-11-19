@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   detectarRoboDoOutroLado,
+  ehMenuDeRobo,
   ROBO_KNOBS_PADRAO,
   TITULO_DO_AVISO_DE_ROBO,
   type MensagemRecente,
@@ -66,6 +67,55 @@ describe('detectarRoboDoOutroLado — assinatura B (rajada da IA sem pessoa)', (
   });
   it('uma pessoa da equipe falou na janela → não é laço de robô', () => {
     expect(detectarRoboDoOutroLado([...rajada(25), sai('crm', 1)], AGORA).robo).toBe(false);
+  });
+});
+
+describe('detectarRoboDoOutroLado — assinatura C (menu de robô repetido)', () => {
+  // O caso de 19/11/2026, anonimizado: propaganda de operadora e depois só o menu.
+  const PROPAGANDA = 'Conheça os planos da Operadora Exemplo com carência reduzida! Fale com a gente.';
+  const MENU = 'Por favor, selecione uma das opções.';
+
+  it('⭐ o caso real: propaganda, menu, IA respondeu, menu de novo → robô antes da 3ª resposta', () => {
+    const msgs = [entra(PROPAGANDA, 20), sai('ai', 19), entra(MENU, 15), sai('ai', 14), entra(MENU, 1)];
+    expect(detectarRoboDoOutroLado(msgs, AGORA)).toEqual({ robo: true, sinal: 'menu_repetido', contagem: 2 });
+  });
+
+  it('menus diferentes também contam ("opção inválida" depois de lista numerada)', () => {
+    const msgs = [entra('Escolha:\n1 - Planos\n2 - Boleto\n3 - Rede credenciada', 8), sai('ai', 7), entra('Opção inválida. Tente novamente.', 1)];
+    expect(detectarRoboDoOutroLado(msgs, AGORA)).toMatchObject({ robo: true, sinal: 'menu_repetido' });
+  });
+
+  it('UM menu só não dispara', () => {
+    expect(detectarRoboDoOutroLado([entra(PROPAGANDA, 5), sai('ai', 4), entra(MENU, 1)], AGORA).robo).toBe(false);
+  });
+
+  it('paciente que numera as dúvidas UMA vez não é robô', () => {
+    const msgs = [entra('Oi, estou com 1 - dor de cabeça 2 - febre', 3), sai('ai', 2), entra('Desde ontem à noite, doutora', 1)];
+    expect(detectarRoboDoOutroLado(msgs, AGORA).robo).toBe(false);
+  });
+
+  it('a última recebida não é menu → não dispara', () => {
+    const msgs = [entra(MENU, 10), sai('ai', 9), entra(MENU, 5), sai('ai', 4), entra('Quero marcar uma consulta', 1)];
+    expect(detectarRoboDoOutroLado(msgs, AGORA).robo).toBe(false);
+  });
+
+  it('menus fora da janela de 30 min não contam', () => {
+    expect(detectarRoboDoOutroLado([entra(MENU, 45), sai('ai', 44), entra(MENU, 1)], AGORA).robo).toBe(false);
+  });
+
+  it('ehMenuDeRobo: frases de URA sim; fala de paciente não', () => {
+    expect(ehMenuDeRobo(MENU)).toBe(true);
+    expect(ehMenuDeRobo('Opção inválida')).toBe(true);
+    expect(ehMenuDeRobo('Digite o número da opção desejada')).toBe(true);
+    expect(ehMenuDeRobo('selecione o melhor horário pra mim')).toBe(false);
+    expect(ehMenuDeRobo('Qual a melhor opção pra mim, doutora?')).toBe(false);
+    expect(ehMenuDeRobo('Tenho duas opções de horário: terça ou quinta')).toBe(false);
+    expect(ehMenuDeRobo(null)).toBe(false);
+  });
+
+  it('"selecione o melhor horário pra mim" repetido 2x não é robô', () => {
+    const t = 'selecione o melhor horário pra mim';
+    expect(detectarRoboDoOutroLado([entra(t, 5), sai('ai', 4), entra(t, 1)], AGORA).robo).toBe(false);
   });
 });
 

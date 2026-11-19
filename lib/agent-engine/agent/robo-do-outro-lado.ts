@@ -30,6 +30,16 @@
  *    rápida troca 5–7 mensagens em 5 min — 6, o número sugerido no incidente,
  *    calaria conversa real. No incidente o ritmo foi ~26 envios por 5 min.
  *
+ * C. **Menu de robô recebido 2 vezes** (janela de `JANELA_MENU_MS`, 30 min).
+ *    Produção, 19/11/2026: o robô de uma operadora mandou propaganda e depois só
+ *    devolvia "Por favor, selecione uma das opções"; a IA respondeu 19 vezes. A
+ *    frase é curta e o ritmo do robô acompanhava o da IA (que o freio do número
+ *    segurava), então A não chegava a 3 cópias na janela. Aqui basta a 2ª
+ *    mensagem com cara de menu ("selecione uma das opções", "opção inválida",
+ *    "digite o número", lista "1 - … 2 - …") se a ÚLTIMA recebida for menu: a IA
+ *    respondeu no máximo duas vezes. UMA lista numerada de paciente ("1 - dor de
+ *    cabeça 2 - febre") não dispara sozinha — é a combinação que conta.
+ *
  * ## O corte da janela
  *
  * A janela começa no que for mais recente: `agora - janela` ou
@@ -57,7 +67,7 @@ import type pg from 'pg';
 
 import type { Logger } from '../obs/logger';
 import { jaccard, normalizeCopy, tokens } from '../spinning/engine';
-import { isLeadInHandoff, performHumanHandoff } from './human-handoff';
+import { ehMenuDeOpcoesNumeradas, isLeadInHandoff, performHumanHandoff } from './human-handoff';
 
 export interface RoboKnobs {
   repeticoes: number;
@@ -78,6 +88,25 @@ export const ROBO_KNOBS_PADRAO: RoboKnobs = {
 export const MIN_CARACTERES = 20;
 const SIMILARIDADE_MINIMA = 0.9;
 
+/** Janela da assinatura C (menu repetido): robô lento, que só responde quando a IA fala. */
+export const JANELA_MENU_MS = 30 * 60_000;
+
+/**
+ * O que robô de URA escreve e `ehMenuDeOpcoesNumeradas` não pega (plural, opção
+ * inválida). Sem acento. "Selecione o melhor horário pra mim" não casa.
+ */
+const FRASES_DE_MENU: readonly RegExp[] = [
+  /\b(?:selecione|seleciona|escolha|escolhe|digite|informe)\s+(?:uma\s+)?(?:das\s+)?opcoes\b/,
+  /\bopcao\s+(?:invalida|incorreta|nao\s+reconhecida)\b/,
+];
+
+/** A mensagem tem cara de menu de atendimento automático? Sozinha não prova robô (ver assinatura C). */
+export function ehMenuDeRobo(texto: string | null): boolean {
+  if (texto === null || texto.trim() === '') return false;
+  const normalizado = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/gu, '');
+  return ehMenuDeOpcoesNumeradas(texto) || FRASES_DE_MENU.some((re) => re.test(normalizado));
+}
+
 /** Envio de PESSOA da equipe (tela, API de usuário, celular). */
 const ENVIO_HUMANO = new Set(['crm', 'user', 'external_device']);
 
@@ -90,7 +119,7 @@ export interface MensagemRecente {
 
 export type SinalDeRobo =
   | { robo: false }
-  | { robo: true; sinal: 'inbound_repetido' | 'rajada_da_ia'; contagem: number };
+  | { robo: true; sinal: 'inbound_repetido' | 'menu_repetido' | 'rajada_da_ia'; contagem: number };
 
 export function detectarRoboDoOutroLado(
   mensagens: readonly MensagemRecente[],
@@ -112,6 +141,13 @@ export function detectarRoboDoOutroLado(
     const alvoTokens = tokens(alvo);
     const iguais = recebidas.filter((t) => t === alvo || jaccard(alvoTokens, tokens(t)) >= SIMILARIDADE_MINIMA).length;
     if (iguais >= knobs.repeticoes) return { robo: true, sinal: 'inbound_repetido', contagem: iguais };
+  }
+
+  // C — a última recebida é menu, e não é o primeiro menu da janela.
+  if (ehMenuDeRobo(ultimaRecebida?.body ?? null)) {
+    const menus = desde(Math.max(knobs.janelaRepeticaoMs, JANELA_MENU_MS))
+      .filter((m) => m.direction === 'inbound' && ehMenuDeRobo(m.body)).length;
+    if (menus >= 2) return { robo: true, sinal: 'menu_repetido', contagem: menus };
   }
 
   // B — a IA falando sozinha com alguém que responde rápido demais.
@@ -139,7 +175,7 @@ export async function pararSeForRoboDoOutroLado(
   const knobs = opts.knobs ?? ROBO_KNOBS_PADRAO;
   let sinal: SinalDeRobo;
   try {
-    const janelaMs = Math.max(knobs.janelaRepeticaoMs, knobs.janelaRajadaMs);
+    const janelaMs = Math.max(knobs.janelaRepeticaoMs, knobs.janelaRajadaMs, JANELA_MENU_MS);
     const { rows } = await pool.query<MensagemRecente>(
       `select m.direction, m.sent_via, m.body, m.sent_at
          from messages m
@@ -168,7 +204,9 @@ export async function pararSeForRoboDoOutroLado(
   const porque =
     sinal.sinal === 'inbound_repetido'
       ? `o contato mandou a mesma mensagem ${sinal.contagem}x em ${Math.round(knobs.janelaRepeticaoMs / 60_000)} min`
-      : `a IA mandou ${sinal.contagem} mensagens em ${Math.round(knobs.janelaRajadaMs / 60_000)} min sem nenhuma pessoa da equipe na conversa`;
+      : sinal.sinal === 'menu_repetido'
+        ? `o contato mandou ${sinal.contagem} mensagens com cara de menu automático ("selecione uma opção") em ${Math.round(Math.max(knobs.janelaRepeticaoMs, JANELA_MENU_MS) / 60_000)} min`
+        : `a IA mandou ${sinal.contagem} mensagens em ${Math.round(knobs.janelaRajadaMs / 60_000)} min sem nenhuma pessoa da equipe na conversa`;
   await performHumanHandoff(pool, ids, {
     reason: 'suspected_bot_loop',
     inboxTitle: TITULO_DO_AVISO_DE_ROBO,
