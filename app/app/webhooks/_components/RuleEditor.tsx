@@ -15,7 +15,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -32,8 +34,14 @@ import {
   useUpdateAutomationRule,
   type AutomationRuleRow,
 } from "@/hooks/webhooks/useAutomationRules";
-import { usePipelines, usePipelineStages } from "@/hooks/webhooks/useWebhookSources";
-import { TRIGGER_LABELS, ACTION_LABELS, type TriggerEvent, type ActionType } from "./labels";
+import { useEtapasPorFunil } from "@/hooks/webhooks/useWebhookSources";
+import {
+  TRIGGER_LABELS,
+  ACTION_LABELS,
+  mensagemDoErroDaAutomacao,
+  type TriggerEvent,
+  type ActionType,
+} from "./labels";
 import { ActionConfigForm, defaultActionConfig, type ActionItem } from "./ActionConfigForm";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -69,14 +77,14 @@ export interface CuratedField {
    * O campo guarda uma LISTA (tags). Em lista, `contains` é pertinência — a tag
    * inteira, sem diferenciar caixa (decisão do dono, #956) —, e chamar isso de
    * "contém" na tela promete o que o motor não faz: quem lê "contém Google"
-   * espera pegar `Google Ads`. O rótulo vira "tem a tag" só nesses campos.
+   * espera pegar `Google Ads`. O rótulo vira "tem a etiqueta" só nesses campos.
    */
   lista?: true;
 }
 
 const LEAD_FIELDS: CuratedField[] = [
   { value: "lead.title", label: "Nome do lead", op: "eq" },
-  { value: "lead.tags", label: "Tags do lead", op: "contains", lista: true },
+  { value: "lead.tags", label: "Etiquetas do lead", op: "contains", lista: true },
   // utm_* entram pelo webhook em source_metadata (decisão da rota inbound),
   // não em custom_fields — o path aqui tem que apontar pra onde o dado mora.
   { value: "lead.source_metadata.utm_source", label: "Origem (utm_source)", op: "eq" },
@@ -89,15 +97,15 @@ const STAGE_FIELD: CuratedField = {
 };
 const MESSAGE_FIELDS: CuratedField[] = [
   { value: "event.body_preview", label: "Texto da mensagem", op: "contains" },
-  { value: "contact.tags", label: "Tags do contato", op: "contains", lista: true },
+  { value: "contact.tags", label: "Etiquetas do contato", op: "contains", lista: true },
 ];
 const CONTACT_FIELDS: CuratedField[] = [
-  { value: "contact.tags", label: "Tags do contato", op: "contains", lista: true },
+  { value: "contact.tags", label: "Etiquetas do contato", op: "contains", lista: true },
   { value: "contact.name", label: "Nome do contato", op: "contains" },
 ];
 const TAG_ADDED_FIELD: CuratedField = {
   value: "event.added_tags",
-  label: "Tag adicionada",
+  label: "Etiqueta adicionada",
   op: "contains",
   lista: true,
 };
@@ -110,12 +118,9 @@ const TAG_ADDED_FIELD: CuratedField = {
  */
 const AGENDAMENTO_FIELDS: CuratedField[] = [
   { value: "event.event_type_name", label: "Tipo de atendimento", op: "contains" },
-  { value: "contact.tags", label: "Tags do contato", op: "contains", lista: true },
+  { value: "contact.tags", label: "Etiquetas do contato", op: "contains", lista: true },
 ];
 
-// ponytail: etapa de destino usa o funil default (cobre o caso comum de 1
-// funil); se o produto ganhar múltiplos funis relevantes aqui, trocar por um
-// seletor de funil antes do de etapa.
 const CURATED_FIELDS: Record<TriggerEvent, CuratedField[]> = {
   "lead.created": LEAD_FIELDS,
   "lead.stage_changed": [...LEAD_FIELDS, STAGE_FIELD],
@@ -178,11 +183,9 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
   const update = useUpdateAutomationRule();
   const saving = create.isPending || update.isPending;
 
-  const { data: pipelinesRes } = usePipelines();
-  const defaultPipeline =
-    pipelinesRes?.data?.find((p) => p.is_default) ?? pipelinesRes?.data?.[0] ?? null;
-  const { data: boardRes } = usePipelineStages(defaultPipeline?.id ?? null);
-  const stages = boardRes?.data?.stages ?? [];
+  // Etapas de todos os funis, agrupadas: antes só o funil padrão aparecia, e a
+  // regra com etapa de outro funil abria com a condição em branco.
+  const etapasPorFunil = useEtapasPorFunil();
 
   React.useEffect(() => {
     if (!open) return;
@@ -262,7 +265,9 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
     };
     const parsed = createAutomationRuleSchema.safeParse(payload);
     if (!parsed.success) {
-      toast.error(t(parsed.error.issues[0]?.message ?? "Revise os campos da automação."));
+      // A mensagem do Zod é técnica e em inglês ("Too small…", "Invalid UUID");
+      // quem monta a regra precisa saber QUAL campo falta.
+      toast.error(t(mensagemDoErroDaAutomacao(parsed.error.issues[0])));
       return;
     }
     try {
@@ -315,7 +320,7 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
               }}
             >
               <SelectTrigger>
-                <SelectValue placeholder={t("Escolha o gatilho")} />
+                <SelectValue placeholder={t("Escolha quando a automação roda")} />
               </SelectTrigger>
               <SelectContent>
                 {TRIGGER_EVENTS.map((ev) => (
@@ -402,7 +407,7 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                                 rótulo diz o que o motor faz. No modo avançado
                                 (path digitado à mão) não há campo curado, então
                                 o rótulo genérico continua. */}
-                            {t(curated?.lista && op === "contains" ? "tem a tag" : OP_LABELS[op])}
+                            {t(curated?.lista && op === "contains" ? "tem a etiqueta" : OP_LABELS[op])}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -416,10 +421,15 @@ export function RuleEditor({ open, onOpenChange, rule }: Props) {
                           <SelectValue placeholder={t("Etapa")} />
                         </SelectTrigger>
                         <SelectContent>
-                          {stages.map((s) => (
-                            <SelectItem key={s.id} value={s.id}>
-                              {s.name}
-                            </SelectItem>
+                          {etapasPorFunil.map(({ pipeline, stages }) => (
+                            <SelectGroup key={pipeline.id}>
+                              <SelectLabel>{pipeline.name}</SelectLabel>
+                              {stages.map((s) => (
+                                <SelectItem key={s.id} value={s.id}>
+                                  {s.name}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
                           ))}
                         </SelectContent>
                       </Select>

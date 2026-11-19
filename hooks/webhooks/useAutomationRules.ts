@@ -1,5 +1,5 @@
 "use client";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type {
@@ -93,11 +93,25 @@ export interface AutomationRuleRunRow {
 
 const RUNS_KEY = ["automation-rule-runs"];
 
+interface PaginaDeRuns {
+  data: AutomationRuleRunRow[];
+  meta?: { has_more?: boolean; cursor?: string | null };
+}
+
+/**
+ * Páginas de 50, com "Carregar mais" (`fetchNextPage`). O `select` achata as
+ * páginas de volta em `{ data }`, a forma que a aba Atividade já lia.
+ */
 export function useAutomationRuns() {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: RUNS_KEY,
-    queryFn: async () =>
-      apiClient.get<{ data: AutomationRuleRunRow[] }>("/api/v1/automation-rules/runs?limit=50"),
+    queryFn: async ({ pageParam }) =>
+      apiClient.get<PaginaDeRuns>(
+        `/api/v1/automation-rules/runs?limit=50${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
+      ),
+    initialPageParam: null as string | null,
+    getNextPageParam: (ultima) => (ultima.meta?.has_more ? (ultima.meta.cursor ?? null) : null),
+    select: (dados) => ({ data: dados.pages.flatMap((p) => p.data) }),
     staleTime: 15_000,
   });
 }

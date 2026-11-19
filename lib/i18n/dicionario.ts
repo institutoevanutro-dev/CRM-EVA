@@ -1048,6 +1048,7 @@ export const DICIONARIO: Traducoes = {
   "Ver tudo em Análise": { es: "Ver todo en Análisis" },
   Conexões: { es: "Conexiones" },
   Webhooks: { es: "Webhooks" },
+  "Formulários e automações": { es: "Formularios y automatizaciones" },
   Desempenho: { es: "Rendimiento" },
   "Evolução da IA": { es: "Evolución de la IA" },
   "Audit Log": { es: "Registro de auditoría" },
@@ -4180,8 +4181,8 @@ export const DICIONARIO: Traducoes = {
   "Aparência clara": { es: "Apariencia clara" },
   "Aparência escura": { es: "Apariencia oscura" },
   // ─── Webhooks ───
-  "Receba contatos de fora (landing pages, formulários) e crie automações que agem sozinhas.": {
-    es: "Recibe contactos de afuera (landing pages, formularios) y crea automatizaciones que actúan solas.",
+  "Receba contatos dos formulários do seu site e crie automações que agem sozinhas.": {
+    es: "Recibe contactos de los formularios de tu sitio y crea automatizaciones que actúan solas.",
   },
   "Receber dados": { es: "Recibir datos" },
   "Leads recebidos": { es: "Leads recibidos" },
@@ -4266,7 +4267,7 @@ export const DICIONARIO: Traducoes = {
   "Ninguém preencheu seus formulários ainda. Assim que o primeiro envio chegar, ele aparece aqui — com os dados, o horário e a origem.": {
     es: "Todavía nadie completó tus formularios. En cuanto llegue el primer envío, aparece aquí — con los datos, el horario y el origen.",
   },
-  "Escolha o funil e o estágio de entrada.": { es: "Elige el embudo y la etapa de entrada." },
+  "Escolha o funil e a etapa de entrada.": { es: "Elige el embudo y la etapa de entrada." },
   "Fonte criada. Agora é só conectar seu site.": {
     es: "Fuente creada. Ahora solo falta conectar tu sitio.",
   },
@@ -4276,11 +4277,10 @@ export const DICIONARIO: Traducoes = {
   },
   "Landing page de Black Friday": { es: "Landing page de Black Friday" },
   "Funil de entrada": { es: "Embudo de entrada" },
-  "Estágio de entrada": { es: "Etapa de entrada" },
-  "Escolha o estágio": { es: "Elige la etapa" },
-  "URL de obrigado (opcional)": { es: "URL de agradecimiento (opcional)" },
-  "Para onde enviar a pessoa depois que ela preencher seu formulário.": {
-    es: "A dónde enviar a la persona después de que complete tu formulario.",
+  "Etapa de entrada": { es: "Etapa de entrada" },
+  "Página de agradecimento (opcional)": { es: "Página de agradecimiento (opcional)" },
+  "Para onde a pessoa vai depois de enviar. Vazio: mostramos uma página de agradecimento padrão.": {
+    es: "A dónde va la persona después de enviar. Vacío: mostramos una página de agradecimiento estándar.",
   },
   "Automação atualizada.": { es: "Automatización actualizada." },
   "Automação criada — ligue quando estiver pronta.": {
@@ -4294,7 +4294,7 @@ export const DICIONARIO: Traducoes = {
   "Nome da automação": { es: "Nombre de la automatización" },
   "Boas-vindas a contato novo": { es: "Bienvenida a contacto nuevo" },
   QUANDO: { es: "CUANDO" },
-  "Escolha o gatilho": { es: "Elige el disparador" },
+  "Escolha quando a automação roda": { es: "Elige cuándo se ejecuta la automatización" },
   "SE (opcional)": { es: "SI (opcional)" },
   "ex: lead.custom_fields.minha_chave": { es: "ej: lead.custom_fields.mi_clave" },
   "usar campo da lista": { es: "usar campo de la lista" },
@@ -4330,8 +4330,8 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível copiar — selecione e copie manualmente.": {
     es: "No se pudo copiar — selecciona y copia manualmente.",
   },
-  "Funcionou! Um lead de teste entrou no seu funil.": {
-    es: "¡Funcionó! Un lead de prueba entró en tu embudo.",
+  "Funcionou! Um lead marcado como teste entrou no funil, sem disparar automação nem mensagem.": {
+    es: "¡Funcionó! Un lead marcado como prueba entró en el embudo, sin disparar automatizaciones ni mensajes.",
   },
   "Não conseguimos falar com o endereço. Confira sua internet e tente de novo.": {
     es: "No pudimos comunicarnos con la dirección. Revisa tu conexión e intenta de nuevo.",
@@ -4341,6 +4341,11 @@ export const DICIONARIO: Traducoes = {
   },
   "Endereço da fonte": { es: "Dirección de la fuente" },
   "Endereço copiado.": { es: "Dirección copiada." },
+  "Copiar endereço": { es: "Copiar dirección" },
+  "Abrir fonte": { es: "Abrir fuente" },
+  "Com a assinatura ligada, formulário de site (HTML, WordPress, Elementor) não consegue enviar. Só sistemas que assinam cada envio, como Zapier, n8n ou código próprio.": {
+    es: "Con la firma activada, un formulario de sitio (HTML, WordPress, Elementor) no puede enviar. Solo sistemas que firman cada envío, como Zapier, n8n o código propio.",
+  },
   "Formulário pronto para colar no seu site": { es: "Formulario listo para pegar en tu sitio" },
   "Formulário copiado.": { es: "Formulario copiado." },
   "Copiar formulário": { es: "Copiar formulario" },
@@ -4356,23 +4361,27 @@ export const DICIONARIO: Traducoes = {
   "Ainda não chegou nada por aqui.": { es: "Todavía no llegó nada por aquí." },
   "assinatura inválida": { es: "firma inválida" },
   // Assinatura HMAC da fonte de captação, na tela de detalhe da fonte.
-  "Assinatura (HMAC)": { es: "Firma (HMAC)" },
+  "Assinatura de segurança": { es: "Firma de seguridad" },
   "Com assinatura ativa, teste a partir do sistema que envia os dados.": {
     es: "Con la firma activa, prueba desde el sistema que envía los datos.",
   },
   // O NOME do cabeçalho não entra na frase: ele é contrato de fio e sai da
   // constante de lib/webhooks/assinatura.ts, renderizada ao lado deste texto.
-  "Sem assinatura, quem descobrir o endereço consegue criar leads. Com ela, quem envia assina o corpo cru da requisição com HMAC-SHA256 e manda o resultado em hexadecimal — hex puro, sem prefixo — neste cabeçalho:":
-    {
-      es: "Sin firma, quien descubra la dirección puede crear leads. Con ella, quien envía firma el cuerpo crudo de la solicitud con HMAC-SHA256 y manda el resultado en hexadecimal — hex puro, sin prefijo — en esta cabecera:",
-    },
+  "Sem assinatura, quem descobrir o endereço consegue criar leads. Com ela, só aceita envio assinado. Para quem programa: HMAC-SHA256 do corpo, em hex, neste cabeçalho:": {
+    es: "Sin firma, quien descubra la dirección puede crear leads. Con ella, solo acepta envíos firmados. Para quien programa: HMAC-SHA256 del cuerpo, en hex, en esta cabecera:",
+  },
   "<HMAC-SHA256 do corpo, em hex, com o seu segredo>": {
     es: "<HMAC-SHA256 del cuerpo, en hex, con tu secreto>",
   },
   "Gerar segredo": { es: "Generar secreto" },
+  "Ligar a assinatura?": { es: "¿Activar la firma?" },
+  "Formulários de site (HTML, WordPress, Elementor) param de funcionar: cada envio deles será recusado. Ligue só se quem envia é um sistema que assina, como Zapier, n8n ou código próprio.": {
+    es: "Los formularios de sitio (HTML, WordPress, Elementor) dejan de funcionar: cada envío será rechazado. Actívala solo si quien envía es un sistema que firma, como Zapier, n8n o código propio.",
+  },
   "Trocar segredo": { es: "Cambiar secreto" },
   "Remover segredo": { es: "Quitar secreto" },
   "Segredo copiado.": { es: "Secreto copiado." },
+  "Copiar segredo": { es: "Copiar secreto" },
   "Trocar": { es: "Cambiar" },
   "Guarde agora. Ele não será mostrado de novo.": {
     es: "Guárdalo ahora. No se mostrará de nuevo.",
@@ -4572,7 +4581,7 @@ export const DICIONARIO: Traducoes = {
     },
   "Título do lead": { es: "Título del lead" },
   "Nome do lead": { es: "Nombre del lead" },
-  "Tags do lead": { es: "Etiquetas del lead" },
+  "Etiquetas do lead": { es: "Etiquetas del lead" },
   "Origem (utm_source)": { es: "Origen (utm_source)" },
   "Etapa de destino": { es: "Etapa de destino" },
   // Ações sem mensagem do follow-up (portado do original, DeskcommCRM PR #2181)
@@ -4615,9 +4624,8 @@ export const DICIONARIO: Traducoes = {
     es: "La tarjeta va a esta etapa del mismo embudo: cambiar de embudo se rechaza, igual que en el tablero.",
   },
   "Texto da mensagem": { es: "Texto del mensaje" },
-  "Tags do contato": { es: "Etiquetas del contacto" },
   "Etiquetas do contato": { es: "Etiquetas del contacto" },
-  "Tag adicionada": { es: "Etiqueta agregada" },
+  "Etiqueta adicionada": { es: "Etiqueta agregada" },
   "Quando entrar um contato novo (webhook)": { es: "Cuando entre un contacto nuevo (webhook)" },
   "Quando um lead mudar de etapa": { es: "Cuando un lead cambie de etapa" },
   "Quando chegar mensagem no WhatsApp": { es: "Cuando llegue un mensaje por WhatsApp" },
@@ -4628,8 +4636,26 @@ export const DICIONARIO: Traducoes = {
   "alterado automaticamente pelo sistema": { es: "cambiado automáticamente por el sistema" },
   é: { es: "es" },
   "Revise os campos da automação.": { es: "Revisa los campos de la automatización." },
-  "Não funcionou. Confira se a fonte está ativa e se o funil/estágio ainda existem.": {
-    es: "No funcionó. Revisa si la fuente está activa y si el embudo/etapa todavía existen.",
+  "Dê um nome à automação.": { es: "Ponle un nombre a la automatización." },
+  "Escolha quando a automação roda.": { es: "Elige cuándo se ejecuta la automatización." },
+  "Revise as condições: escolha o campo e preencha o valor.": { es: "Revisa las condiciones: elige el campo y completa el valor." },
+  "Escolha o funil na ação.": { es: "Elige el embudo en la acción." },
+  "Escolha a etapa na ação.": { es: "Elige la etapa en la acción." },
+  "Escolha o número de WhatsApp na ação.": { es: "Elige el número de WhatsApp en la acción." },
+  "Escreva a mensagem da ação.": { es: "Escribe el mensaje de la acción." },
+  "Escolha o agente na ação.": { es: "Elige el agente en la acción." },
+  "Escreva a instrução para a IA.": { es: "Escribe la instrucción para la IA." },
+  "Escolha o atendente na ação.": { es: "Elige el agente de atención en la acción." },
+  "Preencha o endereço (https://…) do outro sistema.": { es: "Completa la dirección (https://…) del otro sistema." },
+  "Escolha o fluxo de mensagem na ação.": { es: "Elige el flujo de mensaje en la acción." },
+  "Escreva o assunto do e-mail.": { es: "Escribe el asunto del correo." },
+  "Escreva o texto do e-mail.": { es: "Escribe el texto del correo." },
+  "Confira o e-mail que recebe os envios.": { es: "Revisa el correo que recibe los envíos." },
+  "Use no máximo 10 ações.": { es: "Usa como máximo 10 acciones." },
+  "Adicione pelo menos uma ação.": { es: "Agrega al menos una acción." },
+  "Um dos campos passou do tamanho máximo.": { es: "Uno de los campos superó el tamaño máximo." },
+  "Não funcionou. Confira se a fonte está ativa e se o funil e a etapa ainda existem.": {
+    es: "No funcionó. Revisa si la fuente está activa y si el embudo y la etapa todavía existen.",
   },
   // ─── Conexões / Integrações ───
   "Por onde seu negócio fala com o cliente. Conecte números por QR ou o número oficial da Meta, e acompanhe a saúde de cada um.": {
@@ -10867,7 +10893,7 @@ export const DICIONARIO: Traducoes = {
   "As colunas de cada funil, o vocabulário do negócio e os motivos de perda.": { es: "Las columnas de cada embudo, el vocabulario del negocio y los motivos de pérdida." },
   "As conversas de WhatsApp, com você e a IA atendendo lado a lado.": { es: "Las conversaciones de WhatsApp, contigo y la IA atendiendo lado a lado." },
   "As pessoas do outro lado da conversa e seu histórico.": { es: "Las personas del otro lado de la conversación y su historial." },
-  "Avise outros sistemas quando algo acontecer aqui dentro.": { es: "Avisa a otros sistemas cuando algo ocurra aquí dentro." },
+  "Receba contatos dos formulários do site e crie automações.": { es: "Recibe contactos de los formularios del sitio y crea automatizaciones." },
   "Conectar a conta de anúncios para ler o desempenho das campanhas.": { es: "Conectar la cuenta de anuncios para leer el rendimiento de las campañas." },
   "Conecte a loja para trazer pedidos e clientes para dentro do CRM.": { es: "Conecta la tienda para traer pedidos y clientes al CRM." },
   "Devolver ao anúncio as vendas que ele trouxe, para ele aprender a procurar mais clientes parecidos.": { es: "Devolver al anuncio las ventas que trajo, para que aprenda a buscar más clientes parecidos." },

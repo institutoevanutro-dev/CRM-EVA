@@ -64,7 +64,7 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pipelineId || !stageId) {
-      toast.error(t("Escolha o funil e o estágio de entrada."));
+      toast.error(t("Escolha o funil e a etapa de entrada."));
       return;
     }
     try {
@@ -122,7 +122,7 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>{t("Estágio de entrada")}</Label>
+            <Label>{t("Etapa de entrada")}</Label>
             <Select
               value={stageId}
               onValueChange={setStageId}
@@ -130,7 +130,7 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
             >
               <SelectTrigger>
                 <SelectValue
-                  placeholder={pipelineId ? t("Escolha o estágio") : t("Escolha o funil primeiro")}
+                  placeholder={pipelineId ? t("Escolha a etapa") : t("Escolha o funil primeiro")}
                 />
               </SelectTrigger>
               <SelectContent>
@@ -143,16 +143,16 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="src-redirect">{t("URL de obrigado (opcional)")}</Label>
+            <Label htmlFor="src-redirect">{t("Página de agradecimento (opcional)")}</Label>
             <Input
               id="src-redirect"
               type="url"
               value={redirectTo}
               onChange={(e) => setRedirectTo(e.target.value)}
-              placeholder="https://tusitio.com/gracias"
+              placeholder="https://seusite.com.br/obrigado"
             />
             <p className="text-xs text-muted-foreground">
-              {t("Para onde enviar a pessoa depois que ela preencher seu formulário.")}
+              {t("Para onde a pessoa vai depois de enviar. Vazio: mostramos uma página de agradecimento padrão.")}
             </p>
           </div>
           <DialogFooter>

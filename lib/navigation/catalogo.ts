@@ -516,8 +516,12 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/webhooks",
-    label: "Webhooks",
-    description: "Avise outros sistemas quando algo acontecer aqui dentro.",
+    // "Webhooks" era jargão e escondia as automações da clínica (aniversário,
+    // lembretes): quem procurava "Automações" não achava. Decisão do dono,
+    // 18/11/2026. A rota segue `/app/webhooks` — renomear a URL quebraria
+    // favoritos e o endereço que já está colado nos sites.
+    label: "Formulários e automações",
+    description: "Receba contatos dos formulários do site e crie automações.",
     icon: "WebhooksLogo",
     group: "organizacao",
     section: "Canais",

@@ -22,6 +22,7 @@ import type { ActionResultDetail } from "@/lib/automation/types";
 import { audit } from "@/lib/audit";
 import { ENTIDADE_ESPERADA_POR_GATILHO } from "@/lib/schemas/webhooks";
 import { logger } from "@/lib/logger";
+import { ehRequestDeTeste } from "@/lib/webhooks/lead-de-teste";
 
 export const AUTOMATION_CONSUMER_KEY = "automation-rules";
 
@@ -162,6 +163,11 @@ export async function runAutomationForEvent(
     Boolean(row.metadata?.caused_by_rule) || (typeof requestId === "string" && requestId.startsWith("rule:"));
   if (causedByRule) {
     return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "skipped", detail: "caused_by_rule" };
+  }
+  // "Enviar lead de teste" da tela de formulários: o lead entra, nada dispara
+  // (lib/webhooks/lead-de-teste.ts).
+  if (ehRequestDeTeste(requestId)) {
+    return { consumer_key: AUTOMATION_CONSUMER_KEY, status: "skipped", detail: "lead_de_teste" };
   }
 
   const expectedKind = EXPECTED_ENTITY_KIND[row.event_type];

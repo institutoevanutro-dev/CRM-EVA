@@ -109,7 +109,7 @@ test.describe("J6.8 — anti-SSRF do outbound call_webhook (real, ponta a ponta)
       await abrirMenuLateral(page);
       await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("button", { name: /^Integrações/ }).click();
       await abrirMenuLateral(page);
-      await page.getByRole("navigation", { name: "Telas de Integrações" }).getByRole("link", { name: "Webhooks" }).click();
+      await page.getByRole("navigation", { name: "Telas de Integrações" }).getByRole("link", { name: "Formulários e automações" }).click();
       await page.waitForURL(/\/app\/webhooks/);
       await page.getByRole("button", { name: /Nova fonte|Criar primeira fonte/ }).click();
       await page.locator("#src-name").fill(SOURCE_NAME);

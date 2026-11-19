@@ -132,7 +132,7 @@ test.describe("webhooks & automações — fluxo completo", () => {
       await abrirMenuLateral(page);
       await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("button", { name: /^Integrações/ }).click();
       await abrirMenuLateral(page);
-      await page.getByRole("navigation", { name: "Telas de Integrações" }).getByRole("link", { name: "Webhooks" }).click();
+      await page.getByRole("navigation", { name: "Telas de Integrações" }).getByRole("link", { name: "Formulários e automações" }).click();
       await page.waitForURL(/\/app\/webhooks/);
 
       // --- Step 2: aba "Receber dados" — criar fonte ---
@@ -169,7 +169,10 @@ test.describe("webhooks & automações — fluxo completo", () => {
       const sheet = page.getByRole("dialog").filter({ hasText: SOURCE_NAME });
       await expect(sheet.locator("code", { hasText: "/api/v1/webhooks/in/" }).first()).toBeVisible();
       await sheet.getByRole("button", { name: "Enviar lead de teste" }).click();
-      await expectToast(page, "Funcionou! Um lead de teste entrou no seu funil.");
+      await expectToast(
+        page,
+        "Funcionou! Um lead marcado como teste entrou no funil, sem disparar automação nem mensagem.",
+      );
       await page.keyboard.press("Escape");
 
       // --- Step 4: aba Automações — criar regra + ligar ---
@@ -292,9 +295,9 @@ test.describe("webhooks & automações — fluxo completo", () => {
       );
 
       // --- Step 7: aba Atividade mostra a run com sucesso ---
-      // A regra não tem condição — dispara tanto pro "Lead de Teste" (passo 3)
-      // quanto pro lead real (passo 5), logo pode haver 2 cards com esse nome;
-      // .first() basta pra confirmar que a automação rodou com sucesso.
+      // A regra não tem condição, mas o "Lead de Teste" (passo 3) é teste de
+      // verdade e não dispara automação (lib/webhooks/lead-de-teste.ts): o
+      // card é o do lead real (passo 5). .first() continua por segurança.
       await page.getByRole("tab", { name: "Atividade" }).click();
       const runTitle = page.getByText(RULE_NAME, { exact: true }).first();
       const runCard = cardOf(runTitle);
@@ -350,12 +353,12 @@ test.describe("webhooks & automações — fluxo completo", () => {
       );
       await expect(leadCard).toHaveAttribute("title", new RegExp(`Tags:.*${TAG}`));
 
-      // --- Step 9: AGENT não vê "Webhooks" e é redirecionado ---
+      // --- Step 9: AGENT não vê "Formulários e automações" e é redirecionado ---
       const agentContext = await browser.newContext();
       const agentPage = await agentContext.newPage();
       try {
         await login(agentPage, creds.users.agent!.email);
-        await expect(agentPage.getByRole("link", { name: "Webhooks" })).toHaveCount(0);
+        await expect(agentPage.getByRole("link", { name: "Formulários e automações" })).toHaveCount(0);
         await agentPage.goto(`${APP_URL}/app/webhooks`);
         await agentPage.waitForURL(/\/app\/inbox/);
         expect(agentPage.url()).toMatch(/\/app\/inbox/);

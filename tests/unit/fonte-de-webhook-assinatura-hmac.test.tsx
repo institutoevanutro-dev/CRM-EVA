@@ -81,6 +81,12 @@ function renderPainel(fonte: Partial<WebhookSourceRow> = {}) {
  * Lê a PRIMEIRA chamada: todo caso aqui dispara um PATCH só. Um caso futuro que
  * dispare dois leria o primeiro em silêncio — se precisar, receba o índice.
  */
+/** "Gerar segredo" abre o aviso (formulário de site para de funcionar); "Ligar" confirma. */
+async function gerarSegredo(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByRole("button", { name: "Gerar segredo" }));
+  await user.click(await screen.findByRole("button", { name: "Ligar" }));
+}
+
 function segredoEnviado(): string {
   const corpo = patch.mock.calls[0]?.[1] as { secret?: string } | undefined;
   return corpo?.secret ?? "";
@@ -114,7 +120,7 @@ describe("fonte de webhook — assinatura (HMAC)", () => {
     const user = userEvent.setup();
     renderPainel({ has_secret: false });
 
-    await user.click(screen.getByRole("button", { name: "Gerar segredo" }));
+    await gerarSegredo(user);
     await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
 
     expect(patch.mock.calls[0]?.[0]).toBe("/api/v1/webhook-sources/src-1");
@@ -133,7 +139,7 @@ describe("fonte de webhook — assinatura (HMAC)", () => {
     const user = userEvent.setup();
     renderPainel({ has_secret: false });
 
-    await user.click(screen.getByRole("button", { name: "Gerar segredo" }));
+    await gerarSegredo(user);
     await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
 
     const valor = segredoEnviado();
@@ -148,7 +154,7 @@ describe("fonte de webhook — assinatura (HMAC)", () => {
     const user = userEvent.setup();
     renderPainel({ has_secret: false });
 
-    await user.click(screen.getByRole("button", { name: "Gerar segredo" }));
+    await gerarSegredo(user);
     // Pelo `screen`, e não pelo `container` do render: o Sheet do Radix vai
     // para um portal no <body>, fora da árvore que o render devolve.
     const codigo = await screen.findByText(segredoEnviado());
@@ -173,7 +179,7 @@ describe("fonte de webhook — assinatura (HMAC)", () => {
     // é portal, e o `container` volta VAZIO. Um `not.toMatch` contra o vazio
     // passa sempre — foi o que esta asserção media antes de olharem para ela.
     expect(document.body.textContent ?? "").not.toMatch(/[0-9a-f]{64}/);
-    expect(document.body.textContent).toContain("Assinatura (HMAC)");
+    expect(document.body.textContent).toContain("Assinatura de segurança");
   });
 
   it("⭐ com assinatura ligada, o teste sem assinatura não é oferecido", () => {
@@ -235,7 +241,7 @@ describe("fonte de webhook — assinatura (HMAC)", () => {
     const user = userEvent.setup();
     renderPainel({ has_secret: false });
 
-    await user.click(screen.getByRole("button", { name: "Gerar segredo" }));
+    await gerarSegredo(user);
     await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
 
     expect(screen.getByText("Desligada")).toBeTruthy();
@@ -267,5 +273,60 @@ describe("fonte de webhook — assinatura (HMAC)", () => {
     expect(screen.queryByRole("button", { name: "Trocar segredo" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Remover segredo" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Gerar segredo" })).toBeNull();
+  });
+
+  it("⭐ gerar avisa antes que o formulário de site para de funcionar", async () => {
+    const user = userEvent.setup();
+    renderPainel({ has_secret: false });
+
+    await user.click(screen.getByRole("button", { name: "Gerar segredo" }));
+    expect(await screen.findByText(/Formulários de site \(HTML, WordPress, Elementor\) param de funcionar/)).toBeTruthy();
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it("⭐ com assinatura ligada, o formulário pronto some e o aviso aparece", () => {
+    const { unmount } = renderPainel({ has_secret: false });
+    expect(screen.getByRole("button", { name: /Copiar formulário/ })).toBeTruthy();
+    unmount();
+
+    renderPainel({ has_secret: true });
+    expect(screen.queryByRole("button", { name: /Copiar formulário/ })).toBeNull();
+    expect(document.body.textContent).not.toContain("WordPress / Elementor");
+    expect(document.body.textContent).toContain("formulário de site (HTML, WordPress, Elementor) não consegue enviar");
+  });
+});
+
+describe("fonte de webhook — painel segue o servidor", () => {
+  it("⭐ pausar: interruptor e selo seguem a resposta do PATCH", async () => {
+    patch.mockResolvedValue({ data: { ...FONTE, is_active: false } });
+    const user = userEvent.setup();
+    renderPainel({ is_active: true });
+
+    const interruptor = screen.getByRole("switch", { name: "Fonte ativa" });
+    await user.click(interruptor);
+
+    await waitFor(() => expect(interruptor.getAttribute("aria-checked")).toBe("false"));
+    expect(screen.getByText("Pausada")).toBeTruthy();
+    expect(toastSuccess).toHaveBeenCalledWith("Fonte pausada.");
+  });
+
+  it("botões de copiar têm nome", () => {
+    renderPainel();
+    expect(screen.getByRole("button", { name: "Copiar endereço" })).toBeTruthy();
+  });
+
+  it("⭐ o lead de teste vai com o cabeçalho de teste (sem automação nem mensagem)", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: { lead_id: "l-1" } }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderPainel();
+
+    await user.click(screen.getByRole("button", { name: "Enviar lead de teste" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/v1/webhooks/in/tok-abc");
+    expect((init.headers as Record<string, string>)["x-lead-de-teste"]).toBe("1");
+    vi.unstubAllGlobals();
   });
 });
