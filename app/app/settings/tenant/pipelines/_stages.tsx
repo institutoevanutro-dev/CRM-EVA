@@ -218,6 +218,7 @@ export function StagesSection({
   const t = useT();
   const consulta = useAgentMapping(pipelineId);
   const criar = useCriarEtapa(pipelineId);
+  const enviandoEtapa = useRef(false);
   const editar = useEditarEtapa(pipelineId);
   const arquivar = useArquivarEtapa(pipelineId);
 
@@ -317,9 +318,15 @@ export function StagesSection({
 
   function criarEtapa() {
     const nome = (nova ?? "").trim();
-    if (!nome) return;
+    // Trava síncrona: o `isPending` só muda no render seguinte, e dois Enter
+    // seguidos criavam duas etapas.
+    if (!nome || enviandoEtapa.current) return;
+    enviandoEtapa.current = true;
     setErro(null);
     criar.mutate({ name: nome, color: corDaNova }, {
+      onSettled: () => {
+        enviandoEtapa.current = false;
+      },
       onSuccess: () => {
         setNova(null);
         setCorDaNova(null);

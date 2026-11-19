@@ -174,3 +174,24 @@ describe("o erro da linha", () => {
     expect(daGaveta).not.toBe(screen.getByTestId(`erro-${ARQUIVADO.id}`));
   });
 });
+
+describe("o «Excluir de vez» da lista viva (item 104)", () => {
+  it("pede a mesma confirmação da gaveta antes de ir ao servidor", async () => {
+    const user = userEvent.setup();
+    render(comQuery(<FunisClient funis={[ARQUIVADO]} arquivados={[]} podeGerenciar podeImportar />));
+
+    await user.click(screen.getByTestId(`acoes-${ARQUIVADO.id}`));
+    await user.click(await screen.findByTestId(`arquivar-${ARQUIVADO.id}`));
+    await user.click(screen.getByTestId(`excluir-${ARQUIVADO.id}`));
+
+    // Um toque só abre a pergunta; nada foi excluído ainda.
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("Isso não tem volta");
+    expect(mocks.arquivar).not.toHaveBeenCalled();
+
+    await user.click(screen.getByTestId(`excluir-vivo-confirmar-${ARQUIVADO.id}`));
+    expect(mocks.arquivar).toHaveBeenCalledWith(
+      { id: ARQUIVADO.id, definitivo: true },
+      expect.anything(),
+    );
+  });
+});

@@ -15,20 +15,12 @@ import {
 } from "@/components/ui/select";
 import { updateProfile } from "@/app/actions/settings/updateProfile";
 import { useT } from "@/hooks/i18n/useT";
+import { FUSOS_OFERECIDOS } from "@/lib/tempo/fusos";
 import {
   profileSchema,
   SEM_PREFERENCIA_DE_IDIOMA,
   type Locale,
 } from "@/lib/schemas/settings";
-
-const TIMEZONES = [
-  "America/Sao_Paulo",
-  "America/Manaus",
-  "America/Belem",
-  "America/Recife",
-  "America/Fortaleza",
-  "UTC",
-];
 
 interface Props {
   email: string;
@@ -90,7 +82,7 @@ export function ProfileForm({
             maxLength={120}
           />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="locale">{t("Idioma")}</Label>
             <Select value={locale} onValueChange={(v) => setLocale(v as Locale)}>
@@ -118,9 +110,14 @@ export function ProfileForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {TIMEZONES.map((tz) => (
-                  <SelectItem key={tz} value={tz}>
-                    {tz}
+                {/* Nome de cidade, não o código cru ("America/Sao_Paulo"). Um
+                    fuso gravado fora da lista continua aparecendo, pelo código. */}
+                {timezone && !FUSOS_OFERECIDOS.some((f) => f.codigo === timezone) && (
+                  <SelectItem value={timezone}>{timezone}</SelectItem>
+                )}
+                {FUSOS_OFERECIDOS.map((f) => (
+                  <SelectItem key={f.codigo} value={f.codigo}>
+                    {t(f.rotulo)}
                   </SelectItem>
                 ))}
               </SelectContent>

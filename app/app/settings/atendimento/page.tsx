@@ -40,6 +40,7 @@ import { PausaDaIaForm } from "./_pausa-form";
 import { ExtracaoSilenciosa } from "./_extracaoSilenciosa";
 import { TelefoneDeFichaVazia } from "./_telefoneDeFichaVazia";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { Sanfona } from "@/components/ui/sanfona";
 
 export const dynamic = "force-dynamic";
 
@@ -96,17 +97,28 @@ export default async function AtendimentoSettingsPage() {
         <ErroDeLeitura texto={traduzir("Não foi possível carregar a configuração. Recarregue a página antes de mudar algo.", idioma)} />
       ) : (
         <>
-          <AtendimentoForm
-            initial={{ ...routing, visibility_mode: settings.visibility_mode ?? DEFAULT_VISIBILITY_MODE }}
-          />
-          <PausaDaIaForm
-            initial={lerPausaPorRespostaHumanaMin(data?.settings)}
-            initialEspera={lerClienteSemRespostaMin(data?.settings)}
-            initialMaxHoras={lerClienteSemRespostaMaxHoras(data?.settings)}
-            initialFimDoDiaSeguinte={lerIaVoltaAposEquipe(data?.settings) !== null}
-          />
-          <ChannelRoutingForm initial={channels} />
-          <AssinaturaForm initial={{ humanos: assinatura.humanos, ia: assinatura.ia, nome_ia: assinatura.nomeIa }} />
+          {/* Cada bloco numa sanfona fechada: eram seis cartões abertos, um
+              embaixo do outro, cada um com o seu Salvar. */}
+          <Sanfona titulo={traduzir("Quem recebe o cliente novo e o que cada atendente enxerga", idioma)}>
+            <AtendimentoForm
+              initial={{ ...routing, visibility_mode: settings.visibility_mode ?? DEFAULT_VISIBILITY_MODE }}
+            />
+          </Sanfona>
+          <Sanfona titulo={traduzir("Quando uma pessoa responde o cliente", idioma)}>
+            <PausaDaIaForm
+              initial={lerPausaPorRespostaHumanaMin(data?.settings)}
+              initialEspera={lerClienteSemRespostaMin(data?.settings)}
+              initialMaxHoras={lerClienteSemRespostaMaxHoras(data?.settings)}
+              initialFimDoDiaSeguinte={lerIaVoltaAposEquipe(data?.settings) !== null}
+            />
+          </Sanfona>
+          <Sanfona titulo={traduzir("Responsáveis por número", idioma)}>
+            <ChannelRoutingForm initial={channels} />
+          </Sanfona>
+          <Sanfona titulo={traduzir("Quem fala aparece na mensagem?", idioma)}>
+            <AssinaturaForm initial={{ humanos: assinatura.humanos, ia: assinatura.ia, nome_ia: assinatura.nomeIa }} />
+          </Sanfona>
+          <Sanfona titulo={traduzir("Dados que o cliente manda na conversa", idioma)}>
           <TelefoneDeFichaVazia
             ligada={telefoneDeFichaVazia}
             idioma={idioma}
@@ -117,6 +129,7 @@ export default async function AtendimentoSettingsPage() {
             idioma={idioma}
             podeMudar={podeAdministrarEmpresa(user, activeOrg)}
           />
+          </Sanfona>
         </>
       )}
     </div>

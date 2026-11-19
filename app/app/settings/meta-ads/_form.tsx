@@ -8,7 +8,18 @@ import {
   disconnectAdInsights,
   updateAdInsightsConnection,
 } from "@/app/actions/settings/updateAdInsightsConnection";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -131,14 +142,29 @@ export function FormularioDeMetaAds({
           </Button>
 
           {conectada && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isPending}
-              onClick={desconectar}
-            >
-              {t("Desconectar")}
-            </Button>
+            // Desconectar apaga o token guardado: pergunta antes, porque voltar
+            // exige colar o token de novo.
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button type="button" variant="outline" disabled={isPending}>
+                  {t("Desconectar")}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>{t("Desconectar a conta de anúncios?")}</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {t("A tela de anúncios para até você colar o token de novo.")}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+                  <AlertDialogAction className={buttonVariants({ variant: "destructive" })} onClick={desconectar}>
+                    {t("Desconectar")}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
 
           {!podeSalvar && (

@@ -16,7 +16,17 @@ import {
 } from "@/hooks/team/useApiTokens";
 import { copyToClipboard } from "@/lib/clipboard";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -98,7 +108,7 @@ export function ApiTokensClient() {
   const onCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (scopes.length === 0) {
-      toast.error(t("Selecione ao menos um escopo."));
+      toast.error(t("Escolha ao menos uma permissão."));
       return;
     }
     try {
@@ -127,7 +137,7 @@ export function ApiTokensClient() {
     <>
       <div className="flex sm:justify-end">
         <Button onClick={() => setCreateOpen(true)} className="w-full sm:w-auto">
-          {t("Criar token")}
+          {t("Criar chave")}
         </Button>
       </div>
 
@@ -139,15 +149,15 @@ export function ApiTokensClient() {
       ) : tokens.length === 0 ? (
         <EmptyState
           icon={Key}
-          headline={t("Nenhum token criado ainda.")}
-          subcopy={t("Um token deixa outro sistema ler ou gravar no CRM sem a sua senha.")}
+          headline={t("Nenhuma chave criada ainda.")}
+          subcopy={t("Uma chave deixa outro sistema ler ou gravar no CRM sem a sua senha.")}
         />
       ) : (
         <TabelaDeChaves
           tokens={tokens}
           onRevogar={async (id) => {
             await revoke.mutateAsync(id);
-            toast.success(t("Token revogado."));
+            toast.success(t("Chave desligada."));
           }}
           revogando={revoke.isPending}
         />
@@ -179,9 +189,9 @@ export function ApiTokensClient() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("Criar novo token")}</DialogTitle>
+            <DialogTitle>{t("Criar chave")}</DialogTitle>
             <DialogDescription>
-              {t("O plaintext será mostrado apenas uma vez.")}
+              {t("A chave aparece uma vez só, logo depois de criada.")}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onCreate} className="space-y-4">
@@ -191,14 +201,14 @@ export function ApiTokensClient() {
                 id="t-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={t("Worker de import")}
+                placeholder={t("Ex.: Prontuário")}
                 minLength={2}
                 maxLength={100}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label>{t("Escopos")}</Label>
+              <Label>{t("O que a chave pode fazer")}</Label>
               <div className="flex flex-wrap gap-2">
                 {SCOPES.map((s) => (
                   <button
@@ -211,14 +221,14 @@ export function ApiTokensClient() {
                       scopes.includes(s.id) ? "border-primary bg-primary/10" : "border-border"
                     }`}
                   >
-                    {s.id}
-                    <span className="ml-1 text-muted-foreground">· {t(s.label)}</span>
+                    {t(s.label)}
+                    <code className="ml-1 text-muted-foreground">{s.id}</code>
                   </button>
                 ))}
               </div>
               {faltaOperador && (
                 <p className="text-xs text-warning-fg" role="alert">
-                  {t("Remarcar e marcar como realizado só funcionam com o escopo role:ai_operator (Operador de agenda). Marque-o também.")}
+                  {t("Remarcar e marcar como realizado só funcionam com a permissão Operador de agenda (role:ai_operator). Marque-a também.")}
                 </p>
               )}
             </div>
@@ -246,14 +256,16 @@ export function ApiTokensClient() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!created} onOpenChange={(o) => !o && setCreated(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("Token criado")}</DialogTitle>
-            <DialogDescription>
-              {t("Copie e guarde agora — não conseguiremos exibir novamente.")}
-            </DialogDescription>
-          </DialogHeader>
+      {/* AlertDialog, sem X nem toque fora: a chave não aparece de novo, então
+          só fecha pelo "Já copiei". */}
+      <AlertDialog open={!!created}>
+        <AlertDialogContent onEscapeKeyDown={(e) => e.preventDefault()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("Chave criada")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("Copie e guarde agora: ela não aparece de novo.")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
           {created ? (
             <div className="space-y-3">
               <code className="block break-all rounded-md border bg-muted p-3 text-sm">
@@ -264,21 +276,20 @@ export function ApiTokensClient() {
                 variant="secondary"
                 onClick={() => {
                   void copyToClipboard(created.plaintext).then((ok) => {
-                    if (ok) toast.success(t("Token copiado."));
-                    else toast.error(t("Não foi possível copiar — selecione o token acima."));
+                    if (ok) toast.success(t("Chave copiada."));
+                    else toast.error(t("Não foi possível copiar. Selecione a chave acima."));
                   });
                 }}
               >
-                {t("Copiar para clipboard")}
+                {t("Copiar chave")}
               </Button>
-              <p className="text-xs text-muted-foreground">{created._warning}</p>
             </div>
           ) : null}
-          <DialogFooter>
-            <Button onClick={() => setCreated(null)}>{t("Fechar")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setCreated(null)}>{t("Já copiei")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -297,6 +308,7 @@ function TabelaDeChaves({
 }) {
   const tagDoIdioma = useTagDeIdioma();
   const t = useT();
+  const [revogar, setRevogar] = useState<ApiTokenRow | null>(null);
   return (
     <div className="rounded-md border">
       <Table>
@@ -304,8 +316,9 @@ function TabelaDeChaves({
           <TableRow>
             <TableHead>{t("Nome")}</TableHead>
             <TableHead>{t("Prefixo")}</TableHead>
-            <TableHead>{t("Escopos")}</TableHead>
+            <TableHead>{t("Permissões")}</TableHead>
             <TableHead>{t("Situação")}</TableHead>
+            <TableHead>{t("Último uso")}</TableHead>
             <TableHead>{t("Expira")}</TableHead>
             <TableHead className="w-[120px]" />
           </TableRow>
@@ -334,6 +347,9 @@ function TabelaDeChaves({
                 )}
               </TableCell>
               <TableCell className="text-sm text-muted-foreground">
+                {tok.last_used_at ? new Date(tok.last_used_at).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" }) : t("Nunca")}
+              </TableCell>
+              <TableCell className="text-sm text-muted-foreground">
                 {tok.expires_at ? new Date(tok.expires_at).toLocaleDateString(tagDoIdioma) : "—"}
               </TableCell>
               <TableCell>
@@ -342,7 +358,7 @@ function TabelaDeChaves({
                     variant="ghost"
                     size="sm"
                     disabled={revogando}
-                    onClick={() => void onRevogar(tok.id)}
+                    onClick={() => setRevogar(tok)}
                   >
                     {t("Revogar")}
                   </Button>
@@ -352,6 +368,30 @@ function TabelaDeChaves({
           ))}
         </TableBody>
       </Table>
+      <AlertDialog open={revogar !== null} onOpenChange={(aberto) => !aberto && setRevogar(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("Revogar a chave")} «{revogar?.name}»?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("O sistema que usa esta chave para de funcionar na hora, e isso não tem volta: será preciso criar outra.")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: "destructive" })}
+              disabled={revogando}
+              onClick={() => {
+                if (revogar && onRevogar) void onRevogar(revogar.id);
+              }}
+            >
+              {t("Revogar")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

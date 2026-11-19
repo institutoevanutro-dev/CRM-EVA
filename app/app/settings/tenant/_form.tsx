@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { updateTenant } from "@/app/actions/settings/updateTenant";
 import { useT } from "@/hooks/i18n/useT";
+import { FUSOS_OFERECIDOS } from "@/lib/tempo/fusos";
 import { MOEDAS_SERVIDAS, simboloDaMoeda, type MoedaServida } from "@/lib/money";
 import { tenantSchema, type Locale, type TenantInput } from "@/lib/schemas/settings";
 
@@ -23,18 +24,21 @@ interface Props {
   initial: TenantInput;
 }
 
-const TIMEZONES = [
-  "America/Sao_Paulo",
-  "America/Manaus",
-  "America/Belem",
-  "America/Recife",
-  "America/Fortaleza",
-  "UTC",
-];
+/** O código da action vira frase; o resto (erro cru do banco) não vai à tela. */
+const ERRO_DO_SALVAR: Record<string, string> = {
+  validation_failed: "Confira os campos: algum valor não está no formato esperado.",
+  unauthenticated: "Sua sessão expirou. Entre de novo.",
+  forbidden: "Este acesso é só de leitura.",
+  forbidden_tenant: "Você não está em nenhuma organização ativa.",
+  forbidden_role: "Só um administrador da organização pode mudar estes dados.",
+};
 
 export function TenantForm({ initial }: Props) {
   const t = useT();
   const [form, setForm] = useState<TenantInput>(initial);
+  // O último estado gravado: o interruptor salva no toque a partir dele, sem
+  // levar junto o texto que ainda não foi salvo.
+  const [salvo, setSalvo] = useState<TenantInput>(initial);
   const [reasonsText, setReasonsText] = useState(
     (initial.lost_reasons_extra ?? []).join(", "),
   );
@@ -58,15 +62,46 @@ export function TenantForm({ initial }: Props) {
     }
     startTransition(async () => {
       const r = await updateTenant(parsed.data);
-      if (r.ok) toast.success(t("Organização atualizada."));
-      else toast.error(`${t("Erro")}: ${r.error}`);
+      if (r.ok) {
+        setSalvo(parsed.data);
+        toast.success(t("Organização atualizada."));
+      } else toast.error(t(ERRO_DO_SALVAR[r.error] ?? "Não consegui salvar agora."));
     });
   }
+
+  function mudarLimpeza(ligar: boolean) {
+    if (
+      ligar &&
+      !window.confirm(
+        t("Ao ligar, a mídia de mensagem com mais de {n} dias passa a ser apagada na próxima limpeza.").replace(
+          "{n}",
+          String(salvo.media_retention_days),
+        ),
+      )
+    ) {
+      return;
+    }
+    const proximo = { ...salvo, media_retention_enforced: ligar };
+    startTransition(async () => {
+      const r = await updateTenant(proximo);
+      if (r.ok) {
+        setSalvo(proximo);
+        set("media_retention_enforced", ligar);
+        toast.success(t("Opção salva."));
+      } else toast.error(t(ERRO_DO_SALVAR[r.error] ?? "Não consegui salvar agora."));
+    });
+  }
+
+  // O interruptor fica de fora: ele já salvou no toque.
+  const haMudancas =
+    JSON.stringify({ ...form, media_retention_enforced: false, lost_reasons_extra: [] }) !==
+      JSON.stringify({ ...salvo, media_retention_enforced: false, lost_reasons_extra: [] }) ||
+    reasonsText !== (salvo.lost_reasons_extra ?? []).join(", ");
 
   return (
     <form onSubmit={handleSubmit} className="max-w-2xl">
       <Card className="space-y-4 p-6">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="display_name">{t("Nome de exibição")}</Label>
             <Input
@@ -94,7 +129,7 @@ export function TenantForm({ initial }: Props) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="dpo_email">{t("DPO email")}</Label>
+            <Label htmlFor="dpo_email">{t("E-mail do encarregado de dados (DPO)")}</Label>
             <Input
               id="dpo_email"
               type="email"
@@ -109,9 +144,12 @@ export function TenantForm({ initial }: Props) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {TIMEZONES.map((tz) => (
-                  <SelectItem key={tz} value={tz}>
-                    {tz}
+                {form.timezone && !FUSOS_OFERECIDOS.some((f) => f.codigo === form.timezone) && (
+                  <SelectItem value={form.timezone}>{form.timezone}</SelectItem>
+                )}
+                {FUSOS_OFERECIDOS.map((f) => (
+                  <SelectItem key={f.codigo} value={f.codigo}>
+                    {t(f.rotulo)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -173,7 +211,7 @@ export function TenantForm({ initial }: Props) {
                 {form.media_retention_enforced
                   ? t("Ligado: apaga a mídia com mais de {n} dias.").replace(
                       "{n}",
-                      String(form.media_retention_days),
+                      String(salvo.media_retention_days),
                     )
                   : t("Desligado: a mídia das conversas não é apagada por idade.")}
               </p>
@@ -181,15 +219,8 @@ export function TenantForm({ initial }: Props) {
             <Switch
               id="media_retention_enforced"
               checked={form.media_retention_enforced}
-              onCheckedChange={(v) => {
-                if (v && !form.media_retention_enforced) {
-                  if (window.confirm(t("Ao ligar, a mídia de mensagem com mais de {n} dias começará a ser apagada.").replace("{n}", String(form.media_retention_days)))) {
-                    set("media_retention_enforced", true);
-                  }
-                } else {
-                  set("media_retention_enforced", v);
-                }
-              }}
+              disabled={isPending}
+              onCheckedChange={mudarLimpeza}
             />
           </div>
           <div className="space-y-2">
@@ -212,11 +243,16 @@ export function TenantForm({ initial }: Props) {
             placeholder={t("ex: Sem orçamento, Concorrente")}
           />
           <p className="text-xs text-muted-foreground">
-            {t("Adicionados ao set padrão. Cada pipeline pode ter seus próprios motivos.")}
+            {t("Somam-se aos motivos padrão. Cada funil pode ter os seus.")}
           </p>
         </div>
 
-        <div className="flex sm:justify-end">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+          {haMudancas && (
+            <span className="text-sm text-muted-foreground" role="status">
+              {t("Há mudanças não salvas")}
+            </span>
+          )}
           <Button type="submit" disabled={isPending} className="w-full sm:w-auto">
             {isPending ? t("Salvando…") : t("Salvar")}
           </Button>

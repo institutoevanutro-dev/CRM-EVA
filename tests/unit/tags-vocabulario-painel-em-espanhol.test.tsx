@@ -84,9 +84,12 @@ describe("painel de etiquetas com idioma espanhol", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "Renombrar" })[0]!);
     expect(frase("Renombrar vip a:")).toBeTruthy();
+    // A confirmação é um diálogo (item 95 do lote 8): fecha antes da próxima ação.
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
 
     fireEvent.click(screen.getAllByRole("button", { name: "Juntar" })[0]!);
     expect(frase("Juntar vip en otra etiqueta existente:")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
 
     fireEvent.click(screen.getAllByRole("button", { name: "Eliminar" })[0]!);
     expect(frase("Eliminar vip de 3 contacto(s), 2 lead(s) y 1 conversación(es).")).toBeTruthy();
@@ -136,6 +139,8 @@ describe("painel de etiquetas com idioma espanhol", () => {
       fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
       await waitFor(() => expect(toast.error, codigo).toHaveBeenCalledTimes(1));
       expect(toast.error.mock.calls[0]?.[0], codigo).toBe(frase);
+      // A recusa deixa o diálogo aberto; fecha para a próxima rodada.
+      fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     }
   });
 
