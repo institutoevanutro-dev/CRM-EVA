@@ -28,6 +28,8 @@ import {
 } from "@/lib/conversoes/estado-da-conexao";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
+import { Sanfona } from "@/components/ui/sanfona";
 
 import { EVENTO_AGENDOU } from "@/lib/plataformas-de-anuncio/types";
 
@@ -70,6 +72,9 @@ export default async function ConversoesPage() {
     .map((e) => ({ id: e.id, nome: e.name, funil: nomeDoFunil.get(e.pipeline_id) ?? "" }));
   const idioma = user.idioma;
   const t = (texto: string) => traduzir(texto, idioma);
+  // A hora no fuso da clínica: sem isto, o servidor (UTC) mostrava 3 h a mais.
+  const fuso = fusoUtilizavel(activeOrg.timezone);
+  const situacao = (ligado: boolean) => (ligado ? t("Ligado") : t("Desligado"));
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto">
@@ -82,7 +87,8 @@ export default async function ConversoesPage() {
         </p>
       </header>
 
-      <section className="grid max-w-3xl gap-3 rounded-md border p-4 text-sm sm:grid-cols-2">
+      <Sanfona titulo={t("O que sai e o que nunca sai")}>
+      <section className="grid gap-3 p-2 text-sm sm:grid-cols-2">
         <div>
           <h2 className="mb-1 font-semibold">{t("O que sai")}</h2>
           <ul className="list-disc pl-5 text-muted-foreground">
@@ -102,9 +108,14 @@ export default async function ConversoesPage() {
           </ul>
         </div>
       </section>
+      </Sanfona>
 
-      <PreferenciaDeOrigem somenteDeAnuncio={estado.preferencias.somenteDeAnuncio} idioma={idioma} />
-      <EtapasDeSinalPago etapas={etapas} marcadas={estado.preferencias.etapasDeSinalPago} idioma={idioma} />
+      <Sanfona titulo={t("Só pacientes que vieram de anúncio")}>
+        <PreferenciaDeOrigem somenteDeAnuncio={estado.preferencias.somenteDeAnuncio} idioma={idioma} />
+      </Sanfona>
+      <Sanfona titulo={t("Etapas que querem dizer sinal pago")}>
+        <EtapasDeSinalPago etapas={etapas} marcadas={estado.preferencias.etapasDeSinalPago} idioma={idioma} />
+      </Sanfona>
 
       {estado.meta.testEventCode && (
         <div className="rounded-md border border-info/40 bg-info/10 p-4 text-sm">
@@ -112,13 +123,19 @@ export default async function ConversoesPage() {
         </div>
       )}
 
-      <FormularioMeta estado={estado.meta} idioma={idioma} />
-      <IdentidadeDaMeta
-        paginaMeta={estado.preferencias.paginaMeta}
-        wabaMeta={estado.preferencias.wabaMeta}
-        idioma={idioma}
-      />
-      <FormularioGoogle estado={estado.google} idioma={idioma} />
+      <Sanfona titulo={`Meta · ${situacao(estado.meta.habilitada)}`}>
+        <FormularioMeta estado={estado.meta} idioma={idioma} />
+      </Sanfona>
+      <Sanfona titulo={t("Página do anúncio clique-para-WhatsApp")}>
+        <IdentidadeDaMeta
+          paginaMeta={estado.preferencias.paginaMeta}
+          wabaMeta={estado.preferencias.wabaMeta}
+          idioma={idioma}
+        />
+      </Sanfona>
+      <Sanfona titulo={`Google Ads · ${situacao(estado.google.habilitada)}`}>
+        <FormularioGoogle estado={estado.google} idioma={idioma} />
+      </Sanfona>
 
       <p className="max-w-3xl text-xs text-muted-foreground">
         {t(
@@ -171,7 +188,7 @@ export default async function ConversoesPage() {
                       )}
                     </td>
                     <td className="p-3 whitespace-nowrap text-muted-foreground">
-                      {new Date(e.tentadoEm).toLocaleString(idioma, { dateStyle: "short", timeStyle: "short" })}
+                      {new Date(e.tentadoEm).toLocaleString(idioma, { dateStyle: "short", timeStyle: "short", timeZone: fuso })}
                     </td>
                   </tr>
                 ))}

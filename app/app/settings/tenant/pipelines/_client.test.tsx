@@ -221,3 +221,15 @@ describe("escreveMostrarQuando: o item 'ainda não escolhi' não vira valor (por
     expect(normalizaMostrarQuando(meio)).toBeUndefined();
   });
 });
+
+describe("chave do campo (item 92 do lote 8)", () => {
+  it("digitar a chave não remonta a linha: o mesmo input continua focado", () => {
+    render(<PipelinesClient pipelines={[FUNIL_SEM_OPCOES]} podeEditarConfig />);
+    const chave = screen.getByLabelText("Chave do campo 1") as HTMLInputElement;
+    chave.focus();
+    fireEvent.change(chave, { target: { value: `${chave.value}x` } });
+    fireEvent.change(chave, { target: { value: `${chave.value}y` } });
+    expect(screen.getByLabelText("Chave do campo 1")).toBe(chave);
+    expect(document.activeElement).toBe(chave);
+  });
+});

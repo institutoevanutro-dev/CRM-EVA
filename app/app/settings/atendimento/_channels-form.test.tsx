@@ -4,7 +4,7 @@ import { ChannelRoutingForm } from "./_channels-form";
 vi.mock("next/navigation",()=>({useRouter:()=>({refresh:vi.fn()})}));
 vi.mock("@/hooks/i18n/useT",()=>({useT:()=>(s:string)=>s}));
 const fetcher=vi.fn();
-beforeEach(()=>{vi.stubGlobal("fetch",fetcher);fetcher.mockReset();fetcher.mockResolvedValue({ok:true,json:async()=>({data:{mode:"restricted_empty",user_ids:[]}})});});
+beforeEach(()=>{vi.stubGlobal("fetch",fetcher);vi.stubGlobal("confirm",vi.fn(()=>true));fetcher.mockReset();fetcher.mockResolvedValue({ok:true,json:async()=>({data:{mode:"restricted_empty",user_ids:[]}})});});
 const initial={channels:[{id:"a",display_name:"Número A",phone_number:null,user_ids:["ana"],mode:"restricted" as const},{id:"b",display_name:"Número B",phone_number:null,user_ids:[],mode:"legacy_unconfigured" as const}],members:[{id:"ana",name:"Ana"},{id:"bruno",name:"Bruno"}]};
 describe("responsáveis por número na tela",()=>{
  it("salvar lista vazia é explícito e não altera o número vizinho",async()=>{
@@ -14,6 +14,14 @@ describe("responsáveis por número na tela",()=>{
   await waitFor(()=>expect(a.getByText("Ninguém configurado — as conversas ficarão na fila.")).toBeVisible());
   expect(JSON.parse(fetcher.mock.calls[0]![1].body)).toEqual({channel_session_id:"a",user_ids:[],reset:false});
   expect(within(screen.getByRole("group",{name:"Número B"})).getByText("Usa todos os atendentes elegíveis da organização.")).toBeVisible();
+ });
+ it("salvar sem ninguém pergunta antes; recusar não grava nada",()=>{
+  vi.stubGlobal("confirm",vi.fn(()=>false));
+  render(<ChannelRoutingForm initial={initial}/>);
+  const a=within(screen.getByRole("group",{name:"Número A"}));
+  fireEvent.click(a.getByRole("checkbox",{name:"Ana"}));fireEvent.click(a.getByRole("button",{name:"Salvar responsáveis"}));
+  expect(window.confirm).toHaveBeenCalledTimes(1);
+  expect(fetcher).not.toHaveBeenCalled();
  });
  it("voltar ao padrão envia reset; erro não anuncia salvo",async()=>{
   fetcher.mockResolvedValue({ok:false,json:async()=>({error:{message:"A equipe mudou."}})});

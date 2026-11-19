@@ -17,7 +17,7 @@ afterEach(cleanup);
 
 it("oferece a permissão sensível separada e envia só os escopos escolhidos", async () => {
   render(<ApiTokensClient />);
-  fireEvent.click(screen.getByRole("button", { name: "Criar token" }));
+  fireEvent.click(screen.getByRole("button", { name: "Criar chave" }));
   fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Prontuário de teste" } });
   fireEvent.click(screen.getByRole("button", { name: /^prontuario:contacts:read —/ }));
   fireEvent.click(screen.getByRole("button", { name: /^prontuario:contacts:demographics:read —/ }));
@@ -29,7 +29,7 @@ it("oferece a permissão sensível separada e envia só os escopos escolhidos", 
 
 it("oferece a chave só do Financeiro e envia apenas esse escopo, por 365 dias", async () => {
   render(<ApiTokensClient />);
-  fireEvent.click(screen.getByRole("button", { name: "Criar token" }));
+  fireEvent.click(screen.getByRole("button", { name: "Criar chave" }));
   fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Financeiro leitura" } });
   const opcao = screen.getByRole("button", { name: /^financeiro:contatos —/ });
   expect(opcao).toHaveAttribute("title", "Financeiro: ler nome, telefone e e-mail de um contato");
@@ -43,7 +43,7 @@ it("oferece a chave só do Financeiro e envia apenas esse escopo, por 365 dias",
 
 it("a chave dos exames do Prontuário sai só com prontuario:media:read", async () => {
   render(<ApiTokensClient />);
-  fireEvent.click(screen.getByRole("button", { name: "Criar token" }));
+  fireEvent.click(screen.getByRole("button", { name: "Criar chave" }));
   fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Prontuário VPS exames WhatsApp" } });
   const opcao = screen.getByRole("button", { name: /^prontuario:media:read —/ });
   expect(opcao).toHaveAttribute("title", "Prontuário: baixar PDF e fotos que o paciente mandou pelo WhatsApp");
@@ -61,10 +61,10 @@ it("o contrato de criação aceita a chave do Financeiro do jeito que a tela a e
 
 it("avisa quando um escopo de agenda é marcado sem o Operador de agenda, e o aviso some ao marcá-lo", () => {
   render(<ApiTokensClient />);
-  fireEvent.click(screen.getByRole("button", { name: "Criar token" }));
-  expect(screen.queryByText(/só funcionam com o escopo role:ai_operator/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Criar chave" }));
+  expect(screen.queryByText(/só funcionam com a permissão Operador de agenda/)).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: /^agenda:outcome —/ }));
   expect(screen.getByRole("alert")).toHaveTextContent(/role:ai_operator/);
   fireEvent.click(screen.getByRole("button", { name: /^role:ai_operator —/ }));
-  expect(screen.queryByText(/só funcionam com o escopo role:ai_operator/)).toBeNull();
+  expect(screen.queryByText(/só funcionam com a permissão Operador de agenda/)).toBeNull();
 });

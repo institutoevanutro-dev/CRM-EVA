@@ -164,7 +164,12 @@ export function FunisClient({
 
   const [novo, setNovo] = useState<string | null>(null);
   const [renomeando, setRenomeando] = useState<{ id: string; nome: string } | null>(null);
-  const [arquivando, setArquivando] = useState<{ id: string; erro: string | null } | null>(null);
+  const [arquivando, setArquivando] = useState<{
+    id: string;
+    erro: string | null;
+    /** "Excluir de vez" pede a mesma confirmação da gaveta antes de ir ao servidor. */
+    confirmarExclusao?: boolean;
+  } | null>(null);
   const [excluindo, setExcluindo] = useState<{ id: string; erro: string | null } | null>(null);
   const [arquivoAberto, setArquivoAberto] = useState(false);
   const [erro, setErro] = useState<{ id: string | null; texto: string } | null>(null);
@@ -751,7 +756,7 @@ export function FunisClient({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => pedirArquivamento(funil.id, true)}
+                      onClick={() => setArquivando({ id: funil.id, erro: null, confirmarExclusao: true })}
                       disabled={ocupado}
                       data-testid={`excluir-${funil.id}`}
                     >
@@ -763,6 +768,39 @@ export function FunisClient({
                   </div>
                 </Card>
               )}
+
+              {/* A mesma pergunta da gaveta: ao lado de "nada é apagado", o
+                  "Excluir de vez" não pode agir num toque só. */}
+              <AlertDialog
+                open={arquivandoAqui?.confirmarExclusao === true}
+                onOpenChange={(aberto) => {
+                  if (!aberto) setArquivando({ id: funil.id, erro: null });
+                }}
+              >
+                <AlertDialogContent className="sm:max-w-md" data-testid={`excluir-vivo-painel-${funil.id}`}>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      {t("Excluir de vez")} «{funil.name}»?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {t(
+                        "Isso não tem volta: o funil e as etapas dele somem. Se ele já recebeu negócio, a exclusão é recusada e ele continua arquivado.",
+                      )}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={ocupado}>{t("Cancelar")}</AlertDialogCancel>
+                    <AlertDialogAction
+                      className={buttonVariants({ variant: "destructive" })}
+                      disabled={ocupado}
+                      data-testid={`excluir-vivo-confirmar-${funil.id}`}
+                      onClick={() => pedirArquivamento(funil.id, true)}
+                    >
+                      {t("Excluir de vez")}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </li>
           );
         })}
