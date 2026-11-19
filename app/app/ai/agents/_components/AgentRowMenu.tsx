@@ -89,7 +89,7 @@ export function AgentRowMenu({ agent }: Props) {
             size="icon"
             aria-label={t("Menu de ações")}
             disabled={isPending}
-            className="size-8"
+            className="size-8 toque:size-11"
           >
             <DotsThree size={18} aria-hidden />
           </Button>
