@@ -106,7 +106,14 @@ function enumerar(partes: (string | null)[], t: (texto: string) => string): stri
   return uteis.length > 0 ? `${uteis.join(", ")} ${t("e")} ${ultimo}` : ultimo;
 }
 
-export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean }) {
+export function ConnectionsClient({
+  wahaConfigured,
+  adminDaInstalacao = false,
+}: {
+  wahaConfigured: boolean;
+  /** Quem administra a instalação vê o nome das variáveis; a clínica, não. */
+  adminDaInstalacao?: boolean;
+}) {
   const tagDoIdioma = useTagDeIdioma();
   const t = useT();
   const qc = useQueryClient();
@@ -124,7 +131,9 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
   const routing = useQuery({ queryKey: ["channel-routing-settings"], queryFn: () => apiClient.get<{ data: ChannelRoutingSettings }>("/api/v1/settings/routing/channels") });
   const [creating, setCreating] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [qr, setQr] = useState<{ sessionId: string; title: string } | null>(null);
+  // `nova`: conexão criada agora. Fechar o QR sem escanear deixaria um número
+  // pendente que nunca pareia (e acende a faixa vermelha para todos).
+  const [qr, setQr] = useState<{ sessionId: string; title: string; nova?: boolean } | null>(null);
   const [antiBanId, setAntiBanId] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<ChannelSession | null>(null);
   const pacingItems = usePacingKnobs().data?.items ?? [];
@@ -147,15 +156,30 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
       if (!wahaConfigured || list.length === 0) return;
       setChecking(true);
       try {
-        await Promise.allSettled(
-          list.map((c) => apiClient.get(`/api/v1/channel-sessions/${c.id}`)),
+        const resultados = await Promise.allSettled(
+          list.map((c) =>
+            apiClient.get<{ data: { phone_number_conflict?: boolean } }>(
+              `/api/v1/channel-sessions/${c.id}`,
+            ),
+          ),
         );
         invalidate();
+        // Antes terminava calado: falha e conflito de número sumiam sem aviso.
+        if (resultados.some((r) => r.status === "rejected")) {
+          toast.error(t("Não foi possível verificar todos os números. Tente de novo."));
+        }
+        if (
+          resultados.some(
+            (r) => r.status === "fulfilled" && r.value?.data?.phone_number_conflict === true,
+          )
+        ) {
+          toast.error(t("Um mesmo celular está em dois números desta lista. Exclua o repetido."));
+        }
       } finally {
         setChecking(false);
       }
     },
-    [wahaConfigured, invalidate],
+    [wahaConfigured, invalidate, t],
   );
 
   const didInitialCheck = useRef(false);
@@ -176,7 +200,7 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
       );
       invalidate();
       createKey.current = null;
-      setQr({ sessionId: res.data.id, title: t("Conectar novo WhatsApp") });
+      setQr({ sessionId: res.data.id, title: t("Conectar novo WhatsApp"), nova: true });
     } catch (err) {
       toast.error(errMsg(err, "Não foi possível iniciar a conexão.", t));
       if (err instanceof ApiError) setConnectionDetail(JSON.stringify({ code: err.code, request_id: err.requestId, ...err.details }, null, 2));
@@ -220,11 +244,31 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
     invalidate();
   }, [invalidate]);
 
-  const handleConnected = useCallback(() => {
-    toast.success(t("WhatsApp conectado!"));
-    setQr(null);
-    invalidate();
-  }, [invalidate, t]);
+  const handleConnected = useCallback(
+    (conflito: boolean) => {
+      if (conflito) {
+        // O servidor recusa gravar o número repetido: o cartão fica sem número.
+        toast.error(
+          t("Este celular já está conectado em outro número desta lista. Exclua um dos dois."),
+        );
+      } else {
+        toast.success(t("WhatsApp conectado!"));
+      }
+      setQr(null);
+      invalidate();
+    },
+    [invalidate, t],
+  );
+
+  const cancelarNova = useCallback(
+    async (sessionId: string) => {
+      await apiClient.delete(`/api/v1/channel-sessions/${sessionId}`);
+      toast.success(t("Conexão cancelada."));
+      setQr(null);
+      invalidate();
+    },
+    [invalidate, t],
+  );
 
   const list = sessions ?? [];
 
@@ -276,20 +320,30 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
       {!wahaConfigured && (
         <div className="rounded-md border border-warning bg-warning-bg p-4 text-sm text-warning-fg">
           <p className="font-medium">{t("O serviço do WhatsApp não está configurado.")}</p>
-          <p className="mt-1">
-            {t("Faltam o endereço e a chave do serviço (")}
-            <code>WAHA_API_BASE_URL</code> {t("e")} <code>WAHA_API_KEY</code>
-            {t(
-              ") nas variáveis de ambiente desta instalação. Enquanto isso, não dá para conectar, reconectar nem excluir os números pareados por QR — excluir um número também o desconecta do aparelho, e sem o serviço isso não acontece.",
-            )}
-          </p>
-          <p className="mt-1">
-            {t("Se você roda tudo na mesma máquina, o container sobe com")}{" "}
-            <code>docker compose up -d waha</code>
-            {t(
-              ". Já apareceu aqui o caso oposto: o container no ar e o endereço configurado apontando para um lugar que não existe — subir o container de novo não conserta isso.",
-            )}
-          </p>
+          {!adminDaInstalacao ? (
+            <p className="mt-1">
+              {t(
+                "Enquanto isso, não dá para conectar, reconectar nem excluir números por QR. Peça a quem administra a instalação.",
+              )}
+            </p>
+          ) : (
+            <>
+              <p className="mt-1">
+                {t("Faltam o endereço e a chave do serviço (")}
+                <code>WAHA_API_BASE_URL</code> {t("e")} <code>WAHA_API_KEY</code>
+                {t(
+                  ") nas variáveis de ambiente desta instalação. Enquanto isso, não dá para conectar, reconectar nem excluir os números pareados por QR — excluir um número também o desconecta do aparelho, e sem o serviço isso não acontece.",
+                )}
+              </p>
+              <p className="mt-1">
+                {t("Se você roda tudo na mesma máquina, o container sobe com")}{" "}
+                <code>docker compose up -d waha</code>
+                {t(
+                  ". Já apareceu aqui o caso oposto: o container no ar e o endereço configurado apontando para um lugar que não existe — subir o container de novo não conserta isso.",
+                )}
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -441,6 +495,7 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
           onClose={() => setQr(null)}
           onConnected={handleConnected}
           onForcePair={forcePair}
+          onCancelarNova={qr.nova ? cancelarNova : undefined}
         />
       )}
     </div>
@@ -659,19 +714,24 @@ function QrDialog({
   onClose,
   onConnected,
   onForcePair,
+  onCancelarNova,
 }: {
   sessionId: string;
   title: string;
   wahaConfigured: boolean;
   onClose: () => void;
-  onConnected: () => void;
+  onConnected: (conflito: boolean) => void;
   onForcePair: (sessionId: string) => Promise<void>;
+  /** Só na conexão nova: fechar sem escanear pergunta e apaga o pendente (item 117). */
+  onCancelarNova?: (sessionId: string) => Promise<void>;
 }) {
   const t = useT();
   const [status, setStatus] = useState<string>("STARTING");
   const [tick, setTick] = useState(0);
   const [pairing, setPairing] = useState(false);
   const [viuQr, setViuQr] = useState(false);
+  const [confirmarSaida, setConfirmarSaida] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
   // O relógio da espera. `sondadoEm` muda a cada sondagem (3s), o que é o que
   // faz esta tela renderizar de novo enquanto o status não muda — sem ele, uma
   // espera parada em STARTING nunca reavaliaria a saída.
@@ -684,7 +744,9 @@ function QrDialog({
     let cancelled = false;
     const poll = async () => {
       try {
-        const res = await apiClient.get<{ data: { status: string } }>(
+        const res = await apiClient.get<{
+          data: { status: string; phone_number_conflict?: boolean };
+        }>(
           `/api/v1/channel-sessions/${sessionId}`,
         );
         if (cancelled) return;
@@ -693,7 +755,7 @@ function QrDialog({
         if (s === "SCAN_QR_CODE") setViuQr(true);
         if (s === "WORKING" && !done.current) {
           done.current = true;
-          onConnected();
+          onConnected(res.data.phone_number_conflict === true);
         }
       } catch {
         // erro transitório de rede — o próximo tick tenta de novo
@@ -734,8 +796,56 @@ function QrDialog({
   const credencialMorta = status === "FAILED" || status === "STOPPED";
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (o || cancelando) return;
+        if (confirmarSaida) setConfirmarSaida(false);
+        else if (onCancelarNova && !done.current) setConfirmarSaida(true);
+        else onClose();
+      }}
+    >
       <DialogContent className="sm:max-w-md">
+        {confirmarSaida && onCancelarNova ? (
+          <>
+                <DialogHeader>
+                  <DialogTitle>{t("Cancelar esta conexão?")}</DialogTitle>
+                  <DialogDescription>
+                    {t("O número ainda não foi escaneado. Se sair agora, ele é apagado da lista.")}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    disabled={cancelando}
+                    onClick={() => setConfirmarSaida(false)}
+                  >
+                    {t("Voltar ao código")}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={cancelando}
+                    onClick={async () => {
+                      setCancelando(true);
+                      try {
+                        await onCancelarNova(sessionId);
+                      } catch (err) {
+                        toast.error(errMsg(err, "Não foi possível cancelar a conexão.", t));
+                        setCancelando(false);
+                      }
+                    }}
+                  >
+                    {cancelando ? (
+                      <CircleNotch size={14} className="animate-spin" aria-hidden />
+                    ) : (
+                      <Trash size={14} aria-hidden />
+                    )}
+                    {t("Cancelar conexão")}
+                  </Button>
+                </div>
+          </>
+        ) : (
+          <>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
@@ -804,8 +914,11 @@ function QrDialog({
                 ) : (
                   <ArrowsClockwise size={14} aria-hidden />
                 )}
-                {t("Gerar novo QR")}
+                {t("Desconectar e gerar novo QR")}
               </Button>
+              <p className="text-xs text-muted-foreground">
+                {t("Desliga o aparelho atual. Tenha o celular em mãos para escanear de novo.")}
+              </p>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
@@ -814,6 +927,8 @@ function QrDialog({
             </div>
           )}
         </div>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

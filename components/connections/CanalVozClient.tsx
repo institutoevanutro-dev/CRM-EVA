@@ -38,7 +38,14 @@ function errMsg(err: unknown, fallback: string, t: (texto: string) => string): s
   return err instanceof ApiError && err.message ? t(err.message) : t(fallback);
 }
 
-export function CanalVozClient({ wacallsConfigured }: { wacallsConfigured: boolean }) {
+export function CanalVozClient({
+  wacallsConfigured,
+  adminDaInstalacao = false,
+}: {
+  wacallsConfigured: boolean;
+  /** Só quem administra a instalação vê o nome da variável. */
+  adminDaInstalacao?: boolean;
+}) {
   const t = useT();
   const [estado, setEstado] = useState<Estado | null>(null);
   // A escolha da ORGANIZAÇÃO, que é outra pergunta que `paired`. Ler aqui é o
@@ -143,11 +150,15 @@ export function CanalVozClient({ wacallsConfigured }: { wacallsConfigured: boole
     return (
       <div className="rounded-md border border-warning bg-warning-bg p-4 text-sm text-warning-fg">
         <p className="font-medium">{t("A chamada de voz não está configurada.")}</p>
-        <p className="mt-1">
-          {t("Falta o endereço do serviço (")}
-          <code>WACALLS_API_BASE_URL</code>
-          {t(") nas variáveis de ambiente desta instalação.")}
-        </p>
+        {adminDaInstalacao ? (
+          <p className="mt-1">
+            {t("Falta o endereço do serviço (")}
+            <code>WACALLS_API_BASE_URL</code>
+            {t(") nas variáveis de ambiente desta instalação.")}
+          </p>
+        ) : (
+          <p className="mt-1">{t("Peça a quem administra a instalação.")}</p>
+        )}
       </div>
     );
   }
@@ -187,7 +198,8 @@ export function CanalVozClient({ wacallsConfigured }: { wacallsConfigured: boole
 
       {conectado && (
         <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
-          <p className="font-medium">{estado?.jid ?? t("Aparelho pareado")}</p>
+          {/* O endereço vem como `5527…@s.whatsapp.net`: só o número interessa. */}
+          <p className="font-medium">{estado?.jid?.split(/[@:]/)[0] || t("Aparelho pareado")}</p>
         </div>
       )}
 

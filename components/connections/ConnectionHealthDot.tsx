@@ -12,7 +12,7 @@ import { useT } from "@/hooks/i18n/useT";
 const DOT_COLOR: Record<ConnectionHealth, string> = {
   connected: "bg-success",
   connecting: "bg-warning",
-  down: "bg-[#f87171] ring-2 ring-[#f87171]/40",
+  down: "bg-sidebar-alerta ring-2 ring-sidebar-alerta/40",
   none: "bg-muted-foreground/40",
   unknown: "bg-muted-foreground/40",
 };

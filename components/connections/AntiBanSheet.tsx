@@ -363,7 +363,12 @@ export function AntiBanSheet({ item, canWrite, onClose }: Props) {
               min={item.bounds.daily_limit.min}
               max={item.bounds.daily_limit.max}
               inputMode="numeric"
-              placeholder={t("sem teto definido")}
+              // Vazio não apaga o teto (a coluna sempre tem um): mantém o atual.
+              placeholder={
+                item.channel_session.daily_message_limit != null
+                  ? String(item.channel_session.daily_message_limit)
+                  : t("sem teto definido")
+              }
               value={form.daily_message_limit}
               onChange={(e) => set({ daily_message_limit: e.target.value })}
               disabled={!canWrite}
@@ -373,7 +378,8 @@ export function AntiBanSheet({ item, canWrite, onClose }: Props) {
             <p className="text-xs text-muted-foreground">
               {t(
                 "Máximo de mensagens que este número inicia por dia: primeira mensagem, follow-up e campanha. A resposta a quem escreveu não conta. Números novos também respeitam o aquecimento automático abaixo, o que for menor.",
-              )}
+              )}{" "}
+              {t("Vazio mantém o teto atual.")}
             </p>
           </fieldset>
 

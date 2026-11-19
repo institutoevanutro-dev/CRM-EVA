@@ -10,7 +10,9 @@ import { Label } from "@/components/ui/label";
 import { apiClient } from "@/lib/api/client";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useT } from "@/hooks/i18n/useT";
+import { rotuloDaQualidade, rotuloDoEstadoDoCanal } from "@/lib/channels/estado";
 import { ChannelAiAccess } from "./ChannelAiAccess";
+import { ErroAoCarregar } from "./ErroAoCarregar";
 import { RenomearConexao } from "./RenomearConexao";
 
 /**
@@ -86,15 +88,18 @@ export function CanalParceiroClient() {
   const [apiKey, setApiKey] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [recemConectado, setRecemConectado] = useState<Conectado | null>(null);
+  const [falhou, setFalhou] = useState(false);
 
   const carregar = async () => {
     try {
       const r = await apiClient.get<{ data: Estado }>("/api/v1/channels/partner");
       setEstado(r.data);
+      setFalhou(false);
       if (r.data.account_id) setAccountId(r.data.account_id);
     } catch {
-      // Falha de leitura não deve travar a tela: o formulário continua servindo.
-      setEstado(null);
+      // Falha de leitura vira erro com "Tentar de novo": mostrar o formulário
+      // com "Não conectado" a quem já está conectado convidava a reconectar.
+      setFalhou(true);
     }
   };
 
@@ -125,6 +130,18 @@ export function CanalParceiroClient() {
   const rotulo = estado?.label ?? t("provedor parceiro");
   const conectado = estado?.connected ?? false;
 
+  if (!estado && !falhou) {
+    return <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>;
+  }
+  if (falhou && !estado) {
+    return (
+      <ErroAoCarregar
+        texto={t("Não foi possível carregar o provedor parceiro.")}
+        onTentar={() => void carregar()}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <Card className="flex flex-col gap-4 p-4">
@@ -150,7 +167,8 @@ export function CanalParceiroClient() {
           <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
             <p className="font-medium">{estado?.display_name ?? t("Número conectado")}</p>
             <p className="text-xs text-muted-foreground">
-              {estado?.phone_number ?? t("sem número informado")} · {estado?.status ?? "—"}
+              {estado?.phone_number ?? t("sem número informado")} ·{" "}
+              {estado?.status ? rotuloDoEstadoDoCanal(estado.status, t) : "—"}
             </p>
           </div>
         )}
@@ -230,7 +248,8 @@ export function CanalParceiroClient() {
           <ParaColar rotulo={t("Segredo (assinatura)")} valor={recemConectado.webhook_secret} />
           {recemConectado.quality_rating && (
             <p className="text-xs text-muted-foreground">
-              {t("Qualidade do número segundo a plataforma:")} {recemConectado.quality_rating}
+              {t("Qualidade do número segundo a plataforma:")}{" "}
+              {rotuloDaQualidade(recemConectado.quality_rating, t)}
             </p>
           )}
         </Card>
