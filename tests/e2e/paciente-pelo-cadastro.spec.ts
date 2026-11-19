@@ -225,6 +225,8 @@ test("ligar 'Pacientes pelo cadastro' manda quem tem cadastro para o funil de cl
   await page.getByRole("link", { name: /Tipos de agendamento/ }).first().click();
   await expect(page).toHaveURL(/\/app\/settings\/tenant\/agenda/, { timeout: 30_000 });
   const secao = page.getByTestId("paciente-pelo-cadastro");
+  // O bloco fica numa sanfona fechada (lote 11, item 126): abre-se como o leigo abriria.
+  await page.locator("summary", { hasText: "Pacientes pelo cadastro" }).click();
   await expect(secao).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("paciente-pelo-cadastro-estado")).toContainText("Desligado:");
   await expect(secao).toContainText("Esta opção não põe a etiqueta “cliente” em ninguém");

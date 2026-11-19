@@ -56,7 +56,7 @@ test.describe("limpeza de mídia antiga (opt-in)", () => {
       await d.accept();
     });
     await chave.click();
-    expect(aviso).toContain("começará a ser apagada");
+    expect(aviso).toContain("passa a ser apagada na próxima limpeza");
     await expect(chave).toHaveAttribute("aria-checked", "true");
     await expect(page.getByText(/Ligado: apaga a mídia com mais de \d+ dias\./)).toBeVisible();
     await salvar(page);
