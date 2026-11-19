@@ -27,18 +27,25 @@ interface Props {
 }
 
 const TYPE_LABELS: Record<LgpdRequestType, string> = {
-  redact: "Anonimização cliente",
-  data_request: "Solicitação de dados",
-  store_redact: "Anonimização tenant",
+  redact: "Apagar dados do paciente",
+  data_request: "Cópia dos dados",
+  store_redact: "Apagar dados da loja",
+};
+
+const SOURCE_LABELS: Record<string, string> = {
+  manual: "Registrado pela equipe",
+  nuvemshop: "Loja (Nuvemshop)",
+  api: "Integração",
+  support: "Suporte",
 };
 
 const STATUS_LABELS: Record<LgpdRequestStatus, string> = {
   received: "Recebido",
-  processing: "Processando",
+  processing: "Em andamento",
   completed: "Concluído",
   failed: "Falhou",
   expired: "Expirado",
-  pending_review: "Revisão pendente",
+  pending_review: "Aguardando revisão",
 };
 
 const STATUS_VARIANT: Record<
@@ -87,7 +94,6 @@ export function LgpdRequestDetail({ id, fuso }: Props) {
     | { method?: LgpdFormaDeEntrega; note?: string | null }
     | undefined;
 
-  const shortId = request.id.slice(0, 8);
   const typeLabel = t(TYPE_LABELS[request.request_type] ?? request.request_type);
   const statusLabel = t(STATUS_LABELS[request.status] ?? request.status);
 
@@ -105,9 +111,8 @@ export function LgpdRequestDetail({ id, fuso }: Props) {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold tracking-tight font-mono">
-            #{shortId}
-          </h1>
+          {/* De quem é o pedido: o título era o começo do id ("#3f2a9b1c"). */}
+          <h1 className="text-xl font-semibold tracking-tight">{request.titular}</h1>
           <Badge variant={STATUS_VARIANT[request.status] ?? "secondary"}>
             {statusLabel}
           </Badge>
@@ -151,6 +156,7 @@ export function LgpdRequestDetail({ id, fuso }: Props) {
           requestId={request.id}
           requestType={request.request_type}
           status={request.status}
+          titular={request.titular}
         />
         <MarcarEntregueButton
           requestId={request.id}
@@ -164,7 +170,7 @@ export function LgpdRequestDetail({ id, fuso }: Props) {
         {/* SLA Timeline */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium">{t("Linha do tempo SLA")}</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("Prazo")}</CardTitle>
           </CardHeader>
           <CardContent>
             {request.due_at ? (
@@ -172,10 +178,12 @@ export function LgpdRequestDetail({ id, fuso }: Props) {
                 received_at={request.received_at}
                 due_at={request.due_at}
                 request_type={request.request_type}
+                status={request.status}
+                completed_at={request.completed_at}
                 fuso={fuso}
               />
             ) : (
-              <p className="text-sm text-muted-foreground">{t("SLA não definido.")}</p>
+              <p className="text-sm text-muted-foreground">{t("Sem prazo definido.")}</p>
             )}
           </CardContent>
         </Card>
@@ -186,10 +194,13 @@ export function LgpdRequestDetail({ id, fuso }: Props) {
             <CardTitle className="text-sm font-medium">{t("Detalhes")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <Row label={t("ID completo")} value={request.id} mono />
+            <Row label={t("Titular")} value={request.titular} />
             <Row label={t("Tipo")} value={typeLabel} />
-            <Row label={t("Status")} value={statusLabel} />
-            <Row label={t("Origem")} value={request.source ?? "—"} />
+            <Row label={t("Situação")} value={statusLabel} />
+            <Row
+              label={t("Origem")}
+              value={request.source ? t(SOURCE_LABELS[request.source] ?? request.source) : "—"}
+            />
             {canal && LGPD_CANAL_LABELS[canal] && (
               <Row label={t("Chegou por")} value={t(LGPD_CANAL_LABELS[canal])} />
             )}
@@ -198,14 +209,19 @@ export function LgpdRequestDetail({ id, fuso }: Props) {
               <Row label={t("Entregue")} value={t(FORMA_DE_ENTREGA_LABELS[entrega.method])} />
             )}
             {entrega?.note && <Row label={t("Observação da entrega")} value={entrega.note} />}
-            <Row label={t("Escopo")} value={request.scope} />
             <Row label={t("Tentativas")} value={String(request.attempts)} />
             {request.contact_id && (
-              <Row label="Contact ID" value={request.contact_id} mono />
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground shrink-0">{t("Ficha")}</span>
+                <Link href={`/app/contacts/${request.contact_id}`} className="text-right hover:underline">
+                  {t("Abrir a ficha do paciente")}
+                </Link>
+              </div>
             )}
             {request.external_customer_id && (
-              <Row label="External customer ID" value={request.external_customer_id} />
+              <Row label={t("Código do cliente na loja")} value={request.external_customer_id} />
             )}
+            <Row label={t("Código do pedido")} value={request.id} mono />
             {request.completed_at && (
               <Row
                 label={t("Concluído em")}

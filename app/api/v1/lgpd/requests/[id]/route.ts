@@ -16,6 +16,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { rotuloDoTitular, type ContatoDoTitular } from "@/lib/lgpd/titular";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,35 @@ export async function GET(
     console.error("[lgpd-request-detail] audit_log fetch error", auditErr.message);
   }
 
-  const audit_trail = auditRows ?? [];
+  // Quem agiu, pelo nome: a trilha mostrava o começo do id do usuário. Poucos
+  // atores por pedido; quem não se acha (conta apagada) fica sem nome.
+  const nomes = new Map<string, string>();
+  const idsDosAtores = [...new Set((auditRows ?? []).map((a) => a.actor_user_id).filter((x): x is string => !!x))];
+  await Promise.all(
+    idsDosAtores.map(async (uid) => {
+      const { data } = await admin.auth.admin.getUserById(uid).catch(() => ({ data: null }));
+      const nome = (data?.user?.user_metadata?.full_name as string | undefined) ?? data?.user?.email;
+      if (nome) nomes.set(uid, nome);
+    }),
+  );
+  const audit_trail = (auditRows ?? []).map((a) => ({
+    ...a,
+    actor_name: a.actor_user_id ? (nomes.get(a.actor_user_id) ?? null) : null,
+  }));
+
+  // De quem é o pedido, pela mesma regra da lista (`rotuloDoTitular`): o título
+  // era "#3f2a9b1c". Contato filtrado pela organização da sessão, além do id.
+  let contato: ContatoDoTitular | null = null;
+  if (request.contact_id) {
+    const { data } = await admin
+      .from("contacts")
+      .select("id, name, display_name, phone_number, is_anonymized, contact_channel_identities (channel, handle, display_name)")
+      .eq("organization_id", orgId)
+      .eq("id", request.contact_id)
+      .maybeSingle();
+    contato = (data as ContatoDoTitular | null) ?? null;
+  }
+  const titular = rotuloDoTitular(request, contato, t);
 
   // Signed URL when the PDF exists: delivered (completed) or waiting for the
   // operator to deliver it by hand (pending_review).
@@ -98,7 +127,7 @@ export async function GET(
   }
 
   return ok(
-    { request, audit_trail, signed_pdf_url },
+    { request: { ...request, titular }, audit_trail, signed_pdf_url },
     { requestId },
   );
 }

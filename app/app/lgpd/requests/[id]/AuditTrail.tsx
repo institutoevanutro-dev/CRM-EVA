@@ -7,6 +7,25 @@ import { useT } from "@/hooks/i18n/useT";
 import { ClockCountdown } from "@/lib/ui/icons";
 import type { AuditTrailEntry } from "@/hooks/useLgpdRequest";
 
+/** O que aconteceu, em português. Ação sem rótulo aparece com o código. */
+const ACOES: Record<string, string> = {
+  "lgpd.data_request_received": "Pedido de cópia dos dados recebido",
+  "lgpd.redact_received": "Pedido para apagar dados recebido",
+  "lgpd.store_redact_received": "Pedido para apagar dados da loja recebido",
+  "lgpd.manually_approved": "Pedido aprovado",
+  "lgpd.request_previewed": "Prévia dos dados aberta",
+  "lgpd.export_generated": "Relatório gerado",
+  "lgpd.export_delivered": "Relatório entregue",
+  "lgpd.export_failed": "Falha ao gerar o relatório",
+  "lgpd.redact_executed": "Dados apagados",
+  "lgpd.redact_completed": "Apagamento concluído",
+  "lgpd.redact_failed": "Falha ao apagar os dados",
+  "lgpd.redact_skipped_already_anonymized": "Contato já estava anonimizado",
+  "lgpd.redact_no_local_footprint": "Nenhum dado desta pessoa no CRM",
+  "lgpd.tenant_redacted": "Dados da loja apagados",
+  "lgpd.sla_alarm_triggered": "Aviso de prazo enviado",
+};
+
 interface AuditTrailProps {
   entries: AuditTrailEntry[];
 }
@@ -33,14 +52,14 @@ export function AuditTrail({ entries }: AuditTrailProps) {
               {!isLast && <div className="mt-1 h-full min-h-[24px] w-px bg-border" aria-hidden />}
             </div>
             <div className={`pb-3 min-w-0 flex-1 ${isLast ? "pb-0" : ""}`}>
-              <p className="text-sm font-mono font-medium truncate">{entry.action}</p>
+              <p className="text-sm font-medium truncate" title={entry.action}>
+                {t(ACOES[entry.action] ?? entry.action)}
+              </p>
               <p className="text-xs text-muted-foreground">
                 {format(new Date(entry.created_at), "dd/MM/yyyy HH:mm:ss", { locale: localeDaData })}
-                {entry.actor_user_id && (
-                  <span className="ml-2 opacity-60">
-                    {t("por")} {entry.actor_user_id.slice(0, 8)}…
-                  </span>
-                )}
+                <span className="ml-2 opacity-60">
+                  {t("por")} {entry.actor_name ?? t(entry.actor_user_id ? "pessoa da equipe" : "sistema")}
+                </span>
               </p>
             </div>
           </li>

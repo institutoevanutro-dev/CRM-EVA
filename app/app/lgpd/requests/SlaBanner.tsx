@@ -1,50 +1,43 @@
 "use client";
 import { Warning } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
-import type { LgpdRequest } from "@/hooks/useLgpdRequests";
-
-const TERMINAL_STATUSES = new Set(["completed", "failed"]);
 
 interface SlaBannerProps {
-  requests: LgpdRequest[];
+  /** Contagem dos pedidos abertos da organização inteira (`meta.alertas`). */
+  alertas: { criticos: number; em_alerta: number };
 }
 
-export function SlaBanner({ requests }: SlaBannerProps) {
+export function SlaBanner({ alertas }: SlaBannerProps) {
   const t = useT();
-  const active = requests.filter((r) => !TERMINAL_STATUSES.has(r.status));
+  const { criticos, em_alerta } = alertas;
 
-  const critical = active.filter(
-    (r) => r.sla_bucket === "overdue" || r.sla_bucket === "critical",
-  );
-  const warning = active.filter((r) => r.sla_bucket === "warning");
-
-  if (critical.length > 0) {
+  if (criticos > 0) {
     return (
       <div
         role="alert"
-        className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+        className="flex items-center gap-3 rounded-lg border border-error-fg/30 bg-error-bg px-4 py-3 text-sm text-error-fg"
       >
-        <Warning size={18} weight="fill" className="shrink-0 text-red-600 dark:text-red-400" aria-hidden />
+        <Warning size={18} weight="fill" className="shrink-0" aria-hidden />
         <span>
-          <strong>{critical.length}</strong>{" "}
-          {t(critical.length === 1 ? "solicitação crítica" : "solicitações críticas")} —{" "}
-          {t("SLA vencido ou inferior a 2 dias. Ação imediata requerida.")}
+          <strong>{criticos}</strong>{" "}
+          {t(criticos === 1 ? "pedido urgente" : "pedidos urgentes")} —{" "}
+          {t("prazo vencido ou vencendo em até 2 dias.")}
         </span>
       </div>
     );
   }
 
-  if (warning.length > 0) {
+  if (em_alerta > 0) {
     return (
       <div
         role="alert"
-        className="flex items-center gap-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300"
+        className="flex items-center gap-3 rounded-lg border border-warning-fg/30 bg-warning-bg px-4 py-3 text-sm text-warning-fg"
       >
-        <Warning size={18} weight="fill" className="shrink-0 text-yellow-600 dark:text-yellow-400" aria-hidden />
+        <Warning size={18} weight="fill" className="shrink-0" aria-hidden />
         <span>
-          <strong>{warning.length}</strong>{" "}
-          {t(warning.length === 1 ? "solicitação em alerta" : "solicitações em alerta")} —{" "}
-          {t("mais de 50% do prazo consumido.")}
+          <strong>{em_alerta}</strong>{" "}
+          {t(em_alerta === 1 ? "pedido pede atenção" : "pedidos pedem atenção")} —{" "}
+          {t("já passou da metade do prazo.")}
         </span>
       </div>
     );

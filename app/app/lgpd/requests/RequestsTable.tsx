@@ -25,6 +25,7 @@ import {
 import { Warning } from "@/lib/ui/icons";
 import {
   useLgpdRequests,
+  type LgpdRequest,
   type LgpdRequestStatus,
   type LgpdRequestType,
   type SlaBucket,
@@ -35,18 +36,18 @@ import { SlaBanner } from "./SlaBanner";
 // ── Label helpers ─────────────────────────────────────────────────────────────
 
 const TYPE_LABELS: Record<LgpdRequestType, string> = {
-  redact: "Anonimização cliente",
-  data_request: "Solicitação dados",
-  store_redact: "Anonimização tenant",
+  redact: "Apagar dados do paciente",
+  data_request: "Cópia dos dados",
+  store_redact: "Apagar dados da loja",
 };
 
 const STATUS_LABELS: Record<LgpdRequestStatus, string> = {
   received: "Recebido",
-  processing: "Processando",
+  processing: "Em andamento",
   completed: "Concluído",
   failed: "Falhou",
   expired: "Expirado",
-  pending_review: "Revisão pendente",
+  pending_review: "Aguardando revisão",
 };
 
 const STATUS_VARIANT: Record<
@@ -61,21 +62,18 @@ const STATUS_VARIANT: Record<
   pending_review: "outline",
 };
 
-const SLA_VARIANT: Record<
-  SlaBucket,
-  "default" | "secondary" | "destructive" | "outline"
-> = {
-  overdue: "destructive",
-  critical: "destructive",
-  warning: "outline",
-  ok: "default",
+const SLA_VARIANT: Record<SlaBucket, "error" | "warning" | "success"> = {
+  overdue: "error",
+  critical: "error",
+  warning: "warning",
+  ok: "success",
 };
 
 const SLA_LABELS: Record<SlaBucket, string> = {
   overdue: "Vencido",
-  critical: "Crítico",
-  warning: "Alerta",
-  ok: "OK",
+  critical: "Urgente",
+  warning: "Atenção",
+  ok: "Em dia",
 };
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -100,6 +98,12 @@ function fmtRelative(iso: string, t: (texto: string) => string): string {
 /** Pedido encerrado não está "vencendo": mostra só a data. */
 const ABERTOS = new Set<LgpdRequestStatus>(LGPD_ESTADOS_ABERTOS);
 
+/** dd/MM do instante, no fuso de quem olha. */
+function diaEMes(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 // ── Select options ────────────────────────────────────────────────────────────
 
 const ALL = "__ALL__";
@@ -119,8 +123,8 @@ export function RequestsTable() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* SLA Banner — shown based on full current page data */}
-      {!q.isLoading && rows.length > 0 && <SlaBanner requests={rows} />}
+      {/* Aviso do topo: conta os abertos da organização inteira, não só a página. */}
+      {meta?.alertas && <SlaBanner alertas={meta.alertas} />}
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2">
@@ -132,10 +136,10 @@ export function RequestsTable() {
           }}
         >
           <SelectTrigger className="h-9 w-[170px]">
-            <SelectValue placeholder={t("Status: todos")} />
+            <SelectValue placeholder={t("Situação: todas")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>{t("Status: todos")}</SelectItem>
+            <SelectItem value={ALL}>{t("Situação: todas")}</SelectItem>
             <SelectItem value="received">{t(STATUS_LABELS.received)}</SelectItem>
             <SelectItem value="processing">{t(STATUS_LABELS.processing)}</SelectItem>
             <SelectItem value="completed">{t(STATUS_LABELS.completed)}</SelectItem>
@@ -170,14 +174,14 @@ export function RequestsTable() {
           }}
         >
           <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder={t("SLA: todos")} />
+            <SelectValue placeholder={t("Prazo: todos")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>{t("SLA: todos")}</SelectItem>
+            <SelectItem value={ALL}>{t("Prazo: todos")}</SelectItem>
             <SelectItem value="overdue">{t(SLA_LABELS.overdue)}</SelectItem>
             <SelectItem value="critical">{t(SLA_LABELS.critical)}</SelectItem>
             <SelectItem value="warning">{t(SLA_LABELS.warning)}</SelectItem>
-            <SelectItem value="ok">{SLA_LABELS.ok}</SelectItem>
+            <SelectItem value="ok">{t(SLA_LABELS.ok)}</SelectItem>
           </SelectContent>
         </Select>
 
@@ -203,103 +207,91 @@ export function RequestsTable() {
         )}
       </div>
 
-      {/* Table */}
-      <Card className="overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[90px]">ID</TableHead>
-              <TableHead>{t("Tipo")}</TableHead>
-              <TableHead>{t("Titular")}</TableHead>
-              <TableHead>{t("Recebido")}</TableHead>
-              <TableHead>{t("Vence")}</TableHead>
-              <TableHead>SLA</TableHead>
-              <TableHead>{t("Status")}</TableHead>
-              <TableHead className="w-[60px]" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {q.isLoading ? (
-              Array.from({ length: 8 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: 8 }).map((__, j) => (
-                    <TableCell key={j}>
-                      <Skeleton className="h-4 w-full" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : q.isError ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center">
-                  <div className="flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground">
-                    <Warning size={24} weight="fill" className="text-error" aria-hidden />
-                    <p>{t("Erro ao carregar solicitações.")}</p>
-                    <Button size="sm" variant="outline" onClick={() => q.refetch()}>
-                      {t("Tentar novamente")}
+      {q.isLoading ? (
+        <Card className="flex flex-col gap-3 p-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-6 w-full" />
+          ))}
+        </Card>
+      ) : q.isError ? (
+        <Card className="flex flex-col items-center gap-2 py-8 text-sm text-muted-foreground">
+          <Warning size={24} weight="fill" className="text-error" aria-hidden />
+          <p>{t("Erro ao carregar solicitações.")}</p>
+          <Button size="sm" variant="outline" onClick={() => q.refetch()}>
+            {t("Tentar novamente")}
+          </Button>
+        </Card>
+      ) : rows.length === 0 ? (
+        <Card className="flex flex-col items-center gap-2 py-12 text-sm text-muted-foreground">
+          <Warning size={32} weight="thin" aria-hidden />
+          <p className="font-medium">{t("Nenhuma solicitação LGPD")}</p>
+          <p className="text-xs">{t("Solicitações de dados e anonimizações aparecerão aqui.")}</p>
+        </Card>
+      ) : (
+        <>
+          {/* Celular: um cartão por pedido, sem tabela correndo para o lado. */}
+          <ul className="flex flex-col gap-2 md:hidden">
+            {rows.map((r) => (
+              <li key={r.id}>
+                <Card className="flex flex-col gap-2 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium" title={r.titular}>
+                        {r.titular}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {t(TYPE_LABELS[r.request_type] ?? r.request_type)} · {fmtRelative(r.received_at, t)}
+                      </p>
+                    </div>
+                    <Button asChild size="sm" variant="outline" className="h-8 shrink-0 px-3 text-xs">
+                      <Link href={`/app/lgpd/requests/${r.id}`}>{t("Ver")}</Link>
                     </Button>
                   </div>
-                </TableCell>
-              </TableRow>
-            ) : rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center">
-                  <div className="flex flex-col items-center gap-2 py-12 text-sm text-muted-foreground">
-                    <Warning size={32} weight="thin" aria-hidden />
-                    <p className="font-medium">{t("Nenhuma solicitação LGPD")}</p>
-                    <p className="text-xs">
-                      {t("Solicitações de dados e anonimizações aparecerão aqui.")}
-                    </p>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <Prazo r={r} t={t} />
+                    <Urgencia r={r} t={t} />
+                    <Situacao r={r} t={t} />
                   </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((r) => {
-                // Data e estado vêm prontos do servidor, no fuso da organização:
-                // a tela não refaz conta de prazo (era aqui que "atrasado hoje"
-                // aparecia às 21h da véspera).
-                const aberto = ABERTOS.has(r.status);
-                const vencido = aberto && r.prazo.estado === "vencido";
-                const urgente = aberto && r.prazo.estado === "vence_hoje";
+                </Card>
+              </li>
+            ))}
+          </ul>
 
-                return (
+          <Card className="hidden overflow-hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("Titular")}</TableHead>
+                  <TableHead>{t("Tipo")}</TableHead>
+                  <TableHead>{t("Recebido")}</TableHead>
+                  <TableHead>{t("Prazo")}</TableHead>
+                  <TableHead>{t("Urgência")}</TableHead>
+                  <TableHead>{t("Situação")}</TableHead>
+                  <TableHead className="w-[60px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {r.id.slice(0, 8)}
+                    <TableCell className="max-w-[220px] truncate text-sm" title={r.titular}>
+                      {r.titular}
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="whitespace-nowrap text-xs">
                         {t(TYPE_LABELS[r.request_type] ?? r.request_type)}
                       </Badge>
                     </TableCell>
-                    <TableCell className="max-w-[220px] truncate text-sm" title={r.titular}>
-                      {r.titular}
-                    </TableCell>
                     <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                       {fmtRelative(r.received_at, t)}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-xs">
-                      <span className="block text-foreground">{r.prazo.data ?? "—"}</span>
-                      {aberto && r.prazo.texto && (
-                        <span
-                          className={`block font-medium ${vencido || urgente ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
-                        >
-                          {r.prazo.texto}
-                        </span>
-                      )}
+                      <Prazo r={r} t={t} empilhado />
                     </TableCell>
                     <TableCell>
-                      <Badge variant={SLA_VARIANT[r.sla_bucket]} className="text-xs">
-                        {t(SLA_LABELS[r.sla_bucket])}
-                      </Badge>
+                      <Urgencia r={r} t={t} />
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={STATUS_VARIANT[r.status]}
-                        className="whitespace-nowrap text-xs"
-                      >
-                        {t(STATUS_LABELS[r.status] ?? r.status)}
-                      </Badge>
+                      <Situacao r={r} t={t} />
                     </TableCell>
                     <TableCell>
                       <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
@@ -307,12 +299,12 @@ export function RequestsTable() {
                       </Button>
                     </TableCell>
                   </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </>
+      )}
 
       {/* Pagination */}
       {meta && (meta.page > 1 || meta.has_more) && (
@@ -339,5 +331,55 @@ export function RequestsTable() {
         </div>
       )}
     </div>
+  );
+}
+
+// ── Células ───────────────────────────────────────────────────────────────────
+
+type Linha = LgpdRequest;
+type T = (texto: string) => string;
+
+/**
+ * O prazo da linha. Concluído para o relógio e diz quando terminou; aberto mostra
+ * a data e quanto falta (data e estado vêm prontos do servidor, no fuso da
+ * organização: a tela não refaz conta de prazo).
+ */
+function Prazo({ r, t, empilhado = false }: { r: Linha; t: T; empilhado?: boolean }) {
+  if (r.status === "completed" && r.completed_at) {
+    return (
+      <span className="text-success-fg">
+        {t("Concluído em")} {diaEMes(r.completed_at)}
+      </span>
+    );
+  }
+  const aberto = ABERTOS.has(r.status);
+  const urgente = aberto && (r.prazo.estado === "vencido" || r.prazo.estado === "vence_hoje");
+  const bloco = empilhado ? "block" : "";
+  return (
+    <span>
+      <span className={`${bloco} text-foreground`}>{r.prazo.data ?? "—"}</span>
+      {aberto && r.prazo.texto && (
+        <span className={`${bloco} ${empilhado ? "" : "ml-1"} font-medium ${urgente ? "text-error-fg" : "text-muted-foreground"}`}>
+          {r.prazo.texto}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function Urgencia({ r, t }: { r: Linha; t: T }) {
+  if (!r.sla_bucket) return <span className="text-xs text-muted-foreground">—</span>;
+  return (
+    <Badge variant={SLA_VARIANT[r.sla_bucket]} className="text-xs">
+      {t(SLA_LABELS[r.sla_bucket])}
+    </Badge>
+  );
+}
+
+function Situacao({ r, t }: { r: Linha; t: T }) {
+  return (
+    <Badge variant={STATUS_VARIANT[r.status]} className="whitespace-nowrap text-xs">
+      {t(STATUS_LABELS[r.status] ?? r.status)}
+    </Badge>
   );
 }
