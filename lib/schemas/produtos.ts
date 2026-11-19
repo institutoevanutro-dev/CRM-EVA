@@ -119,10 +119,11 @@ export const produtoCreateSchema = z.object({
 });
 
 /**
- * Campos que, num item da Precificação (`origem = "precificaeva"`), só mudam
+ * Campos que, num item da Precificação (`origem = ORIGEM_DA_PRECIFICACAO`), só mudam
  * lá: a sincronização de hora em hora desfaria a mudança, e um código novo
  * viraria item duplicado com o preço velho. A tela trava e a rota recusa.
  */
+export const ORIGEM_DA_PRECIFICACAO = "precificaeva";
 export const CAMPOS_DA_PRECIFICACAO = ["codigo", "nome", "categoria", "preco_cents", "custo_cents", "ativo"] as const;
 
 /** Tudo opcional: o PATCH muda o que veio e não encosta no resto. */

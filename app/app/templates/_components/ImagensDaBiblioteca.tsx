@@ -86,7 +86,7 @@ export function ImagensDaBiblioteca({
                   disabled={disabled}
                   onClick={() => onChange(valor.filter((x) => x !== id))}
                   aria-label={t("Remover imagem")}
-                  className="rounded-md p-0.5 text-muted-foreground hover:text-foreground"
+                  className="flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground lg:size-7"
                 >
                   <X className="size-3.5" aria-hidden />
                 </button>

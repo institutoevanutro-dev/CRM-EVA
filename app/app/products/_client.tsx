@@ -18,7 +18,7 @@ import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { apiClient } from "@/lib/api/client";
 import { formatCents } from "@/lib/money";
 import { DotsThree } from "@/lib/ui/icons";
-import { CAMPOS_DA_PRECIFICACAO, precoParaCentavos, type Produto } from "@/lib/schemas/produtos";
+import { CAMPOS_DA_PRECIFICACAO, ORIGEM_DA_PRECIFICACAO, precoParaCentavos, type Produto } from "@/lib/schemas/produtos";
 
 interface Textos {
   titulo: string;
@@ -58,7 +58,7 @@ const VAZIO: Rascunho = {
 };
 
 /** Item da Precificação: os `CAMPOS_DA_PRECIFICACAO` ficam travados aqui. */
-const DA_PRECIFICACAO = "precificaeva";
+const DA_PRECIFICACAO = ORIGEM_DA_PRECIFICACAO;
 
 function centavosParaTexto(c: number): string {
   return (c / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

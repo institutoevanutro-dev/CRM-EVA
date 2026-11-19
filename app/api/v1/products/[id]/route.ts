@@ -13,10 +13,9 @@ import { type NextRequest } from "next/server";
 import { audit } from "@/lib/audit";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
-import { CAMPOS_DA_PRECIFICACAO, COLUNAS_DO_PRODUTO, produtoPatchSchema } from "@/lib/schemas/produtos";
+import { CAMPOS_DA_PRECIFICACAO, COLUNAS_DO_PRODUTO, ORIGEM_DA_PRECIFICACAO, produtoPatchSchema } from "@/lib/schemas/produtos";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { ORIGEM_PRECIFICAEVA } from "@/lib/integrations/precificaeva/catalogo";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +60,7 @@ export async function PATCH(
       .eq("organization_id", authz.org.orgId)
       .eq("id", id)
       .maybeSingle();
-    if (atual?.origem === ORIGEM_PRECIFICAEVA) {
+    if (atual?.origem === ORIGEM_DA_PRECIFICACAO) {
       return fail("state_conflict", t("Este item vem da Precificação: altere na Precificação."), 409, {
         requestId,
         details: { campos: travados },
