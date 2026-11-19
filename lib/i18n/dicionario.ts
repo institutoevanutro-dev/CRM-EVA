@@ -10544,8 +10544,8 @@ export const DICIONARIO: Traducoes = {
   "Procura um produto no catálogo da loja e devolve o preço exato e o que está disponível, para o assistente responder com o valor cadastrado em vez de estimar.": {
     es: "Busca un producto en el catálogo de la tienda y devuelve el precio exacto y lo que está disponible, para que el asistente responda con el valor registrado en vez de estimar.",
   },
-  "Quando o cliente diz o e-mail, o nome ou o telefone dele na conversa, guarda essa informação para uma pessoa conferir antes de entrar na ficha, exceto o telefone de um cadastro sem número, quando a empresa liga a opção em Configurações › Distribuição de atendimento: aí ele entra na hora, em formato E.164, sem sobrescrever quem já tem número.": {
-    es: "Cuando el cliente da su correo electrónico, nombre o teléfono en la conversación, guarda esa información para que una persona la revise antes de pasarla a la ficha, salvo el teléfono de una ficha sin número, cuando la empresa activa la opción en Configuración › Distribución de atención: ahí entra al instante, en formato E.164, sin sobrescribir a quien ya tiene número.",
+  "Quando o cliente diz o nome, o telefone, o e-mail, o CPF, a data de nascimento ou o endereço na conversa, guarda essa informação para uma pessoa conferir antes de entrar na ficha. Se a empresa ligar as opções em Configurações › Distribuição de atendimento, o dado entra na hora quando aquele campo da ficha está vazio, sem nunca trocar o que já está preenchido.": {
+    es: "Cuando el cliente da su nombre, teléfono, correo electrónico, CPF, fecha de nacimiento o dirección en la conversación, guarda esa información para que una persona la revise antes de pasarla a la ficha. Si la empresa activa las opciones en Configuración › Distribución de atención, el dato entra al instante cuando ese campo de la ficha está vacío, sin cambiar nunca lo que ya está completado.",
   },
   // #2593, item 1 do CR — a opção por organização em Configurações ›
   // Distribuição de atendimento, e o interruptor que a liga.
@@ -10565,6 +10565,19 @@ export const DICIONARIO: Traducoes = {
     es: "Solo un administrador de la organización puede cambiar esta opción.",
   },
   "Opção salva.": { es: "Opción guardada." },
+  // Cadastro de ficha vazia — o segundo interruptor, ao lado do telefone.
+  "Dados de cadastro informados ao assistente entram sozinhos na ficha vazia": {
+    es: "Los datos de registro informados al asistente entran solos en la ficha vacía",
+  },
+  "Quando o cliente diz ao assistente o nome completo, o CPF, o e-mail, a data de nascimento ou o endereço, o dado é gravado na hora se aquele campo da ficha estiver vazio, e aparece na linha do tempo do contato quando ele tem um negócio aberto. O que já está preenchido nunca é trocado: continua esperando uma pessoa conferir. Vem desligada.": {
+    es: "Cuando el cliente le da al asistente su nombre completo, CPF, correo, fecha de nacimiento o dirección, el dato se guarda al instante si ese campo de la ficha está vacío, y aparece en la línea de tiempo del contacto cuando tiene un negocio abierto. Lo que ya está completado nunca se cambia: sigue esperando que una persona lo revise. Viene desactivada.",
+  },
+  "Ligado: os dados de cadastro ditos ao assistente preenchem os campos vazios da ficha.": {
+    es: "Activado: los datos de registro dichos al asistente completan los campos vacíos de la ficha.",
+  },
+  "Desligado: os dados de cadastro ditos ao assistente viram proposta para alguém conferir.": {
+    es: "Desactivado: los datos de registro dichos al asistente se vuelven propuesta para que alguien los revise.",
+  },
   // Interruptor da extração silenciosa de cadastro (migration 0407).
   "Ler o cadastro que o cliente manda nas conversas atendidas pela equipe": {
     es: "Leer el registro que el cliente envía en las conversaciones atendidas por el equipo",

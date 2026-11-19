@@ -152,10 +152,12 @@ const propostaShape = {
 };
 
 /**
- * ⚠️ Esta ferramenta NÃO grava o dado — com UMA exceção condicionada (#2593): o
- * TELEFONE de um contato SEM número é gravado na hora, em E.164, com auditoria e
+ * ⚠️ Esta ferramenta NÃO grava o dado — com DUAS exceções condicionadas: o
+ * TELEFONE de um contato SEM número (#2593, `settings.crm.telefone_de_ficha_vazia`)
+ * e o nome completo, CPF, e-mail, nascimento e endereço de campo VAZIO
+ * (`settings.crm.cadastro_de_ficha_vazia`), gravados na hora com auditoria e
  * rastro na linha do tempo, MAS SÓ quando a organização liga a opção
- * `settings.crm.telefone_de_ficha_vazia` (desligada por padrão). Nos demais
+ * (desligadas por padrão). Nos demais
  * casos ela cria uma proposta que uma pessoa confirma, e o `description` diz as
  * DUAS coisas ao modelo em primeiro lugar, de propósito: um modelo que acredite
  * ter gravado responderia "pronto, já atualizei seu cadastro" ao cliente,
@@ -180,13 +182,13 @@ export const crmProposeContactField: McpToolDefinition<typeof propostaShape> = {
   name: "crm_propose_contact_field",
   description:
     "Registra uma informação que o cliente forneceu (email, nome, telefone, data de nascimento, CPF ou endereço) como PROPOSTA para " +
-    "uma pessoa confirmar; a proposta vence sozinha se ninguém decidir. EXCEÇÃO: um TELEFONE informado para um " +
-    "contato que está SEM número pode ser gravado NA HORA, em formato internacional E.164 — mas só quando a " +
-    "organização liga essa opção (vem desligada), e quem diz se a gravação aconteceu é o RETORNO desta chamada " +
-    "(motivo \"aplicado_automaticamente\"); sem esse motivo, diga que alguém vai conferir. Nunca é gravado: telefone de " +
-    "quem JÁ tem número no cadastro (trocar exige decisão humana), email, nome, data de nascimento, CPF e endereço — para esses nunca " +
-    "diga que o cadastro foi atualizado. Recusa se já houver proposta do mesmo campo aguardando decisão, se o valor for " +
-    "igual ao que já está gravado, ou se o contato foi anonimizado.",
+    "uma pessoa confirmar; a proposta vence sozinha se ninguém decidir. EXCEÇÃO: quando o campo está VAZIO no cadastro, o valor " +
+    "pode ser gravado NA HORA (telefone em formato internacional E.164; nome só se for o nome COMPLETO) — mas só quando a " +
+    "organização liga essa opção (vem desligada). Quem diz se a gravação aconteceu é o RETORNO desta chamada: só com " +
+    "motivo \"aplicado_automaticamente\" diga ao cliente que anotou no cadastro; em qualquer outro retorno, diga que alguém da " +
+    "equipe vai conferir e nunca que o cadastro foi atualizado. Um valor que JÁ existe no cadastro nunca é substituído " +
+    "(trocar exige decisão humana). Chame uma vez por campo. Recusa se já houver proposta do mesmo campo aguardando decisão, " +
+    "se o valor for igual ao que já está gravado, ou se o contato foi anonimizado.",
   inputSchema: propostaShape,
   category: "write",
   requiresRole: "agent",
@@ -222,6 +224,36 @@ export const crmProposeContactField: McpToolDefinition<typeof propostaShape> = {
       // Este é o ÚNICO desfecho em que a mensagem pode ser repetida ao
       // cliente — ele aconteceu de verdade. Os de baixo continuam sendo do
       // fluxo interno, para o modelo decidir o que fazer em seguida.
+      if (r.motivo === "aplicado_automaticamente" && "campo" in r) {
+        // ── Cadastro de ficha vazia: o campo estava VAZIO e foi gravado ──────
+        await audit({
+          action: "contact.field_auto_applied",
+          actorUserId: a.actorUserId,
+          organizationId: ctx.organizationId,
+          resourceType: "contact",
+          resourceId: input.contact_id,
+          requestId: ctx.requestId,
+          // O CAMPO, nunca o valor (nem o mascarado): a auditoria não é
+          // alcançada pela anonimização, e o CPF não mora aqui em forma alguma.
+          // O valor fica na linha da timeline, que a cascata da LGPD limpa.
+          metadata: {
+            ...a.metadataActor,
+            campo: r.campo,
+            automatico: true,
+            origem: "cadastro_de_ficha_vazia",
+            legal_basis: "L-05 transactional (dado informado pelo titular em atendimento iniciado por ele)",
+          },
+        });
+        return {
+          proposta_criada: false,
+          motivo: r.motivo,
+          campo: r.campo,
+          valor: r.valor,
+          mensagem:
+            "este campo estava VAZIO no cadastro e o valor que a pessoa informou foi GRAVADO; pode dizer ao " +
+            "cliente que ficou anotado no cadastro. Um valor que já existia nunca é substituído por esta chamada.",
+        };
+      }
       if (r.motivo === "aplicado_automaticamente") {
         await audit({
           action: "contact.field_auto_applied",
@@ -291,6 +323,9 @@ export const crmProposeContactField: McpToolDefinition<typeof propostaShape> = {
       proposta_id: r.id,
       campo: input.campo,
       aguardando: "confirmação de uma pessoa",
+      mensagem:
+        "ficou registrado para alguém da equipe conferir; NÃO diga ao cliente que o cadastro foi atualizado — " +
+        "diga que a equipe vai conferir.",
     };
   },
 };

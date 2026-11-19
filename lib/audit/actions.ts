@@ -838,7 +838,8 @@ export const AUDIT_ACTIONS = [
   // #2593: o TELEFONE de uma ficha SEM número foi GRAVADO na hora, sem decisão
   // humana, quando o agente ouviu o número na conversa — `proporDadoDoContato`
   // só toma este caminho com `phone_number` vazio e valor em E.164, e a trava
-  // é o `phone_number is null` no UPDATE. Distinguir de `field_proposed` é o
+  // é o `phone_number is null` no UPDATE. Também os campos de cadastro vazios
+  // (`origem: "cadastro_de_ficha_vazia"`, sem o valor no metadata). Distinguir de `field_proposed` é o
   // que permite responder "quantos números entraram sozinhos, e de quem".
   "contact.field_auto_applied",
   // #2593, item 1 do CR: um administrador ligou ou desligou a escrita
@@ -848,6 +849,11 @@ export const AUDIT_ACTIONS = [
   // cliente precisa encontrar o ato administrativo que abriu a porta, e não só
   // as gravações que ela deixou passar.
   "crm.telefone_de_ficha_vazia_alterado",
+  // Irmã da de cima: ligou/desligou a escrita automática do cadastro de ficha
+  // vazia (`settings.crm.cadastro_de_ficha_vazia` — nome completo, CPF,
+  // e-mail, nascimento, endereço). As gravações saem como
+  // `contact.field_auto_applied` com `origem: "cadastro_de_ficha_vazia"`.
+  "crm.cadastro_de_ficha_vazia_alterado",
   // Migration 0407: um administrador ligou ou desligou a extração silenciosa
   // de cadastro (`organizations.settings.crm.extracao_silenciosa`). Mesmo
   // motivo do código acima: é o ato que abre a escrita sem decisão humana. As
