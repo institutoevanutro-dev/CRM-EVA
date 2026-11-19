@@ -38,9 +38,12 @@ import { useT } from "@/hooks/i18n/useT";
 export function ConexoesShell({
   wahaConfigured,
   wacallsConfigured,
+  adminDaInstalacao = false,
 }: {
   wahaConfigured: boolean;
   wacallsConfigured: boolean;
+  /** Mostra nomes de variável do servidor só a quem administra a instalação. */
+  adminDaInstalacao?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -99,11 +102,14 @@ export function ConexoesShell({
       </TabsContent>
 
       <TabsContent value="numeros" className="mt-0">
-        <ConnectionsClient wahaConfigured={wahaConfigured} />
+        <ConnectionsClient wahaConfigured={wahaConfigured} adminDaInstalacao={adminDaInstalacao} />
       </TabsContent>
 
       <TabsContent value="voz" className="mt-0">
-        <CanalVozClient wacallsConfigured={wacallsConfigured} />
+        <CanalVozClient
+          wacallsConfigured={wacallsConfigured}
+          adminDaInstalacao={adminDaInstalacao}
+        />
       </TabsContent>
 
       <TabsContent value="parceiro" className="mt-0">

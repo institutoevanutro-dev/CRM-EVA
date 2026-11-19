@@ -35,7 +35,11 @@ export default async function ConnectionsPage() {
           )}
         </p>
       </header>
-      <ConexoesShell wahaConfigured={wahaConfigured} wacallsConfigured={wacallsConfigured} />
+      <ConexoesShell
+        wahaConfigured={wahaConfigured}
+        wacallsConfigured={wacallsConfigured}
+        adminDaInstalacao={user.is_platform_admin && !user.support}
+      />
     </div>
   );
 }

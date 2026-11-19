@@ -10,6 +10,8 @@ import {
   type TemplatePreview,
 } from "@/hooks/channels/useTemplates";
 import { useT } from "@/hooks/i18n/useT";
+import { rotuloDoEstadoDoModelo } from "@/lib/channels/estado";
+import { ErroAoCarregar } from "./ErroAoCarregar";
 
 /** Só APPROVED pode ser disparado — o resto é informação, não opção. */
 function statusTone(status: string): "default" | "secondary" | "destructive" | "outline" {
@@ -58,7 +60,7 @@ function Preview({ preview }: { preview: TemplatePreview }) {
 
 export function TemplatesClient() {
   const t = useT();
-  const { data, isPending } = useTemplates();
+  const { data, isPending, isError, refetch } = useTemplates();
   const sync = useSyncTemplates();
 
   const waba = data?.data.waba ?? null;
@@ -69,6 +71,16 @@ export function TemplatesClient() {
     const { inserted, updated, disabled } = res.data;
     toast.success(
       `${t("Sincronizado:")} ${inserted} ${t("novo(s),")} ${updated} ${t("atualizado(s),")} ${disabled} ${t("desativado(s).")}`,
+    );
+  }
+
+  // Falha de leitura era "Carregando…" para sempre (auditoria 17/11, item 119).
+  if (isError && templates === null) {
+    return (
+      <ErroAoCarregar
+        texto={t("Não foi possível carregar os templates.")}
+        onTentar={() => void refetch()}
+      />
     );
   }
 
@@ -120,7 +132,9 @@ export function TemplatesClient() {
                 <Badge variant="outline" className="font-mono text-xs">
                   {tpl.language}
                 </Badge>
-                <Badge variant={statusTone(tpl.status)}>{tpl.status}</Badge>
+                <Badge variant={statusTone(tpl.status)}>
+                  {rotuloDoEstadoDoModelo(tpl.status, t)}
+                </Badge>
                 {tpl.category ? (
                   <Badge variant="outline" className="text-xs">
                     {tpl.category}

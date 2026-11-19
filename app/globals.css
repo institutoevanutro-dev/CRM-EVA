@@ -251,6 +251,8 @@
   --color-sidebar-fg: #e9e2c8;
   --color-sidebar-muted: #b9b39c;
   --color-sidebar-active-bg: rgba(255, 255, 255, 0.1);
+  /* Alerta SOBRE o menu (bolinha de conexão caída): vermelho claro, 4,75:1 na funda. */
+  --color-sidebar-alerta: #f87171;
   --color-gold: #d9b24c;
   --color-table-head: #efece3;
   --color-row-hover: #fbf9f4;
@@ -540,6 +542,7 @@
   --color-sidebar-fg: var(--color-sidebar-fg);
   --color-sidebar-muted: var(--color-sidebar-muted);
   --color-sidebar-active: var(--color-sidebar-active-bg);
+  --color-sidebar-alerta: var(--color-sidebar-alerta);
   --color-gold: var(--color-gold);
   --color-table-head: var(--color-table-head);
   --color-row-hover: var(--color-row-hover);

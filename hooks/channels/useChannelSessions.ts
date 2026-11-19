@@ -2,6 +2,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api/client";
+import { nomeDoCanal } from "@/lib/channels/estado";
 
 export interface ChannelSession {
   id: string;
@@ -40,16 +41,16 @@ export function canaisQueEnviam(sessions: ChannelSession[] | undefined): Channel
 export type ConnectionHealth = "connected" | "connecting" | "down" | "none" | "unknown";
 
 /**
- * Como um canal se chama na tela. Existe porque nenhum dos três campos é
- * garantido: o canal oficial não tem nome de sessão no transporte, e um canal
- * recém-criado ainda não tem apelido nem número — a cadeia sem o último degrau
- * rendia uma opção em branco no seletor.
+ * Como um canal se chama na tela: apelido, telefone ou "Número sem nome".
+ * O nome da sessão no transporte (`org_2dd5e6ea_…`) NÃO entra — é identificador
+ * nosso, e um número pendente aparecia assim na Conexões (auditoria 17/11, item
+ * 122). A regra mora em `nomeDoCanal`.
  */
 export function channelLabel(
-  c: Pick<ChannelSession, "display_name" | "phone_number" | "waha_session_name">,
+  c: Pick<ChannelSession, "display_name" | "phone_number">,
   t: (texto: string) => string = (texto) => texto,
 ): string {
-  return c.display_name || c.phone_number || c.waha_session_name || t("Número sem nome");
+  return nomeDoCanal(c, t);
 }
 
 /**

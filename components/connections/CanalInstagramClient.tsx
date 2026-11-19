@@ -20,6 +20,7 @@ import { Card } from "@/components/ui/card";
 import { apiClient } from "@/lib/api/client";
 import { InstagramLogo } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import { ErroAoCarregar } from "./ErroAoCarregar";
 
 /**
  * Instagram Direct em Conexões: contas conectadas, validade da chave, Origem
@@ -200,75 +201,88 @@ export function CanalInstagramClient() {
         </div>
       )}
 
-      <Card className="flex flex-col gap-4 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-              <InstagramLogo size={16} weight="regular" aria-hidden />
-              {t("Instagram")}
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              {t("As mensagens do Direct das contas conectadas entram no Inbox e viram lead no funil.")}
-            </p>
-          </div>
-          {contas.length > 0 ? (
-            <Badge variant="secondary">{t("Conectado")}</Badge>
-          ) : (
-            <Badge variant="outline">{t("Não conectado")}</Badge>
-          )}
-        </div>
-
-        {falhou && (
-          <p role="alert" className="text-sm text-destructive">
-            {t("Não foi possível carregar as contas do Instagram.")}
-          </p>
-        )}
-
-        {contas.map((conta) => (
-          <div key={conta.id} className="flex flex-col gap-3 rounded-md border border-border p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-medium">{conta.username ? `@${conta.username}` : t("Conta do Instagram")}</p>
-                <p className="text-xs text-muted-foreground">
-                  {conta.status === "WORKING" ? t("Recebendo mensagens") : t("Precisa reconectar")}
-                  {conta.expira_em ? ` · ${t("Chave válida até")} ${format(new Date(conta.expira_em), "dd/MM/yyyy")}` : ""}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                {podeConectar && (
-                  <Button size="sm" variant="outline" asChild>
-                    <a href={CONECTAR}>{t("Reconectar")}</a>
-                  </Button>
-                )}
-                <Button size="sm" variant="ghost" onClick={() => setDesconectando(conta)}>
-                  {t("Desconectar")}
-                </Button>
-              </div>
-            </div>
-            <OrigemPadrao conta={conta} campos={estado?.campos ?? []} onSalvo={() => void carregar()} />
-          </div>
-        ))}
-
-        {estado && !podeConectar ? (
-          <div className="flex flex-col gap-2">
-            <Button disabled title={t("Falta a credencial do Instagram nesta instalação.")} className="self-start">
-              {t("Conectar Instagram")}
-            </Button>
-            <div className="rounded-md border border-warning/40 bg-warning-bg p-3 text-xs">
-              <p className="font-medium">{t("Falta a credencial do Instagram nesta instalação.")}</p>
-              <ol className="mt-1 list-decimal pl-4 text-muted-foreground">
-                <li>{t("Painel da Meta › seu app › Instagram › Configuração da API com login do Instagram")}</li>
-                <li>{t("Copie o Instagram App ID e o Instagram App Secret.")}</li>
-                <li>{t("Quem administra a instalação cola os dois na tela Meta do painel do administrador.")}</li>
-              </ol>
-            </div>
-          </div>
+      {/* Sem resposta ainda, nada de "Não conectado" nem botão de conectar:
+          a falha vira erro com "Tentar de novo" (auditoria 17/11, item 119). */}
+      {!estado ? (
+        falhou ? (
+          <ErroAoCarregar
+            texto={t("Não foi possível carregar as contas do Instagram.")}
+            onTentar={() => void carregar()}
+          />
         ) : (
-          <Button asChild className="self-start" disabled={!estado}>
-            <a href={CONECTAR}>{contas.length > 0 ? t("Conectar outra conta") : t("Conectar Instagram")}</a>
-          </Button>
-        )}
-      </Card>
+          <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>
+        )
+      ) : (
+        <Card className="flex flex-col gap-4 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+                <InstagramLogo size={16} weight="regular" aria-hidden />
+                {t("Instagram")}
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                {t("As mensagens do Direct das contas conectadas entram no Inbox e viram lead no funil.")}
+              </p>
+            </div>
+            {contas.length > 0 ? (
+              <Badge variant="secondary">{t("Conectado")}</Badge>
+            ) : (
+              <Badge variant="outline">{t("Não conectado")}</Badge>
+            )}
+          </div>
+
+          {falhou && (
+            <p role="alert" className="text-sm text-destructive">
+              {t("Não foi possível carregar as contas do Instagram.")}
+            </p>
+          )}
+
+          {contas.map((conta) => (
+            <div key={conta.id} className="flex flex-col gap-3 rounded-md border border-border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">{conta.username ? `@${conta.username}` : t("Conta do Instagram")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {conta.status === "WORKING" ? t("Recebendo mensagens") : t("Precisa reconectar")}
+                    {conta.expira_em ? ` · ${t("Chave válida até")} ${format(new Date(conta.expira_em), "dd/MM/yyyy")}` : ""}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  {podeConectar && (
+                    <Button size="sm" variant="outline" asChild>
+                      <a href={CONECTAR}>{t("Reconectar")}</a>
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => setDesconectando(conta)}>
+                    {t("Desconectar")}
+                  </Button>
+                </div>
+              </div>
+              <OrigemPadrao conta={conta} campos={estado?.campos ?? []} onSalvo={() => void carregar()} />
+            </div>
+          ))}
+
+          {estado && !podeConectar ? (
+            <div className="flex flex-col gap-2">
+              <Button disabled title={t("Falta a credencial do Instagram nesta instalação.")} className="self-start">
+                {t("Conectar Instagram")}
+              </Button>
+              <div className="rounded-md border border-warning/40 bg-warning-bg p-3 text-xs">
+                <p className="font-medium">{t("Falta a credencial do Instagram nesta instalação.")}</p>
+                <ol className="mt-1 list-decimal pl-4 text-muted-foreground">
+                  <li>{t("Painel da Meta › seu app › Instagram › Configuração da API com login do Instagram")}</li>
+                  <li>{t("Copie o Instagram App ID e o Instagram App Secret.")}</li>
+                  <li>{t("Quem administra a instalação cola os dois na tela Meta do painel do administrador.")}</li>
+                </ol>
+              </div>
+            </div>
+          ) : (
+            <Button asChild className="self-start" disabled={!estado}>
+              <a href={CONECTAR}>{contas.length > 0 ? t("Conectar outra conta") : t("Conectar Instagram")}</a>
+            </Button>
+          )}
+        </Card>
+      )}
 
       <AlertDialog open={desconectando !== null} onOpenChange={(v) => !v && setDesconectando(null)}>
         <AlertDialogContent>
