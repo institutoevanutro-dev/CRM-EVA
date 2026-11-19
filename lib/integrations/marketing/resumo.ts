@@ -6,9 +6,14 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { emLotes, lerComparecimentos, lerEventosDoPeriodo, type Contato } from "@/lib/integrations/marketing/eventos-do-periodo";
+import type { ConsultaVendas } from "@/lib/integrations/marketing/funil-por-origem";
+import type { VendaPorContato } from "@/lib/integrations/financeiro/cliente";
+import { logger } from "@/lib/logger";
+import { z } from "zod";
 
 export interface Numeros { leads: number; agendamentos: number; comparecimentos: number; sinais: number; ganhos: number; ganhos_sem_valor: number; receita_cents: string }
-export interface Resumo { currency: "BRL"; totais: Numeros; por_anuncio: (Numeros & { anuncio: string })[]; leads_sem_anuncio: number }
+/** `vendido_cents`/`compradores` só vêm com o Financeiro ligado: vendas do período de quem veio por aquele anúncio. */
+export interface Resumo { currency: "BRL"; totais: Numeros; por_anuncio: (Numeros & { anuncio: string; vendido_cents?: string; compradores?: number })[]; leads_sem_anuncio: number }
 
 /** Código do anúncio da Meta: `sourceId` (conexão não oficial, camelCase) ou `source_id` (API oficial). Post impulsionado não conta. */
 const CODIGO = /^\d{10,20}$/;
@@ -56,8 +61,24 @@ export function montarResumo(
   };
 }
 
+/** Soma, por anúncio, o vendido do Financeiro e quantos contatos daquele anúncio compraram. */
+export function somarVendasPorAnuncio(vendas: VendaPorContato[], anuncios: ReadonlyMap<string, string>) {
+  const s = new Map<string, { vendido: bigint; compradores: number }>();
+  for (const v of vendas) {
+    const a = anuncios.get(v.contato_id);
+    if (!a || !(v.vendas > 0)) continue;
+    const l = s.get(a) ?? { vendido: 0n, compradores: 0 };
+    l.vendido += BigInt(v.valor_cents);
+    l.compradores += 1;
+    s.set(a, l);
+  }
+  return s;
+}
+
+const UUID_RFC = z.string().uuid();
+
 // Service role: TODA consulta filtra a organização.
-export async function consultaResumo(admin: SupabaseClient, org: string, de: string, ate: string): Promise<Resumo> {
+export async function consultaResumo(admin: SupabaseClient, org: string, de: string, ate: string, vendas?: ConsultaVendas): Promise<Resumo> {
   const eventos = { ...(await lerEventosDoPeriodo(admin, org, de, ate)), comparecimentos: await lerComparecimentos(admin, org, de, ate) };
   const contatos = [...new Set(Object.values(eventos).flat().map((x) => x.contactId).filter((x): x is string => Boolean(x)))];
   const anuncios = new Map<string, string>();
@@ -71,5 +92,21 @@ export async function consultaResumo(admin: SupabaseClient, org: string, de: str
       if (a) anuncios.set(c.id, a);
     }
   }
-  return montarResumo(eventos, anuncios);
+  const resumo = montarResumo(eventos, anuncios);
+  // Só os contatos que vieram por anúncio vão ao Financeiro, em lotes de 500 (o limite da rota dele).
+  const aceitos = [...anuncios.keys()].filter((id) => UUID_RFC.safeParse(id).success);
+  if (!vendas) return resumo;
+  let s: ReturnType<typeof somarVendasPorAnuncio>;
+  try {
+    const todas: VendaPorContato[] = [];
+    for (let i = 0; i < aceitos.length; i += 500) todas.push(...(await vendas(aceitos.slice(i, i + 500))));
+    s = somarVendasPorAnuncio(todas, anuncios); // dentro do try: valor fora do formato não derruba o resumo
+  } catch (err) {
+    logger.warn("resumo: vendas do Financeiro indisponíveis", { org, error: err instanceof Error ? err.message : String(err) });
+    return resumo; // Financeiro fora: sai sem o vendido, nunca com zero inventado
+  }
+  return {
+    ...resumo,
+    por_anuncio: resumo.por_anuncio.map((a) => ({ ...a, vendido_cents: (s.get(a.anuncio)?.vendido ?? 0n).toString(), compradores: s.get(a.anuncio)?.compradores ?? 0 })),
+  };
 }
