@@ -73,7 +73,9 @@ export const regrasSchema = z.object({
   metas_por_mes: z
     .record(
       z.string().regex(MES),
-      z.object({ comparecimento: metaSchema, sinal_pago: metaSchema, avaliacao_google: metaSchema }),
+      // Critério sem meta fica AUSENTE (não 0): meta 0 contava como batida e
+      // pagava o prêmio cheio sem ninguém ter definido a meta.
+      z.object({ comparecimento: metaSchema, sinal_pago: metaSchema, avaliacao_google: metaSchema }).partial(),
     )
     .default({}),
   meses_de_teste: z
@@ -108,7 +110,7 @@ export const regrasSchema = z.object({
 });
 
 export type RegrasDoBonus = z.infer<typeof regrasSchema>;
-export type MetasDoMes = Record<ChaveDeResultado, { basica: number; alta: number }>;
+export type MetasDoMes = Partial<Record<ChaveDeResultado, { basica: number; alta: number }>>;
 
 export const REGRAS_PADRAO: RegrasDoBonus = regrasSchema.parse({});
 
