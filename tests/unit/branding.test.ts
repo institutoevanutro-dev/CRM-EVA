@@ -944,7 +944,7 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "placeholder do campo de URL do webhook de saída: mostra o FORMATO do que digitar. A doutrina já trata endereço de rede em tela como exemplo técnico (tests/unit/i18n-espanhol-cobre-a-tela.test.ts).",
   },
-  "tusitio.com": {
+  "seusite.com.br": {
     categoria: "AMOSTRA",
     motivo:
       "placeholder do campo de URL de redirecionamento do webhook: mesma natureza — amostra de formato, não destino que o produto busca.",
@@ -1137,7 +1137,7 @@ describe("catraca de host de terceiro no código que embarca", () => {
       // de formato, nunca acessado pela rede nem exibido; entrou porque o
       // importador de clínicas passou a ler e gerar planilhas.
       "schemas.openxmlformats.org",
-      "tusitio.com",
+      "seusite.com.br",
     ]);
   });
 

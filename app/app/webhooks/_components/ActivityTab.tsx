@@ -312,7 +312,8 @@ function ActionLine({ action, run }: { action: AutomationRuleRunActionResult; ru
 export function ActivityTab() {
   const localeDaData = useLocaleDeData();
   const t = useT();
-  const { data, isLoading, refetch, isRefetching } = useAutomationRuns();
+  const { data, isLoading, refetch, isRefetching, hasNextPage, fetchNextPage, isFetchingNextPage } =
+    useAutomationRuns();
   const runs = data?.data ?? [];
 
   return (
@@ -364,6 +365,18 @@ export function ActivityTab() {
               </CardContent>
             </Card>
           ))}
+          {hasNextPage ? (
+            <div className="flex justify-center">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void fetchNextPage()}
+                disabled={isFetchingNextPage}
+              >
+                {isFetchingNextPage ? t("Carregando…") : t("Carregar mais")}
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

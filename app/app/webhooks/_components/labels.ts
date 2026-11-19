@@ -46,3 +46,45 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   call_webhook: "Avisar outro sistema (webhook)",
   start_message_flow: "Iniciar fluxo de mensagem",
 };
+
+/**
+ * O que falta, em português, a partir do primeiro erro do Zod.
+ *
+ * A mensagem crua do Zod é técnica e em inglês ("Too small: expected string to
+ * have >=1 characters", "Invalid UUID") e não diz o campo. Aqui o campo vem do
+ * `path` do erro. Erro `custom` já nasce em português no schema
+ * (`lib/schemas/webhooks.ts`) e passa como está. Toda frase devolvida é chave
+ * do dicionário: quem chama passa por `t()`.
+ */
+const MENSAGEM_POR_CAMPO: Record<string, string> = {
+  name: "Dê um nome à automação.",
+  trigger_event: "Escolha quando a automação roda.",
+  conditions: "Revise as condições: escolha o campo e preencha o valor.",
+  pipeline_id: "Escolha o funil na ação.",
+  stage_id: "Escolha a etapa na ação.",
+  channel_session_id: "Escolha o número de WhatsApp na ação.",
+  template: "Escreva a mensagem da ação.",
+  agent_id: "Escolha o agente na ação.",
+  instruction: "Escreva a instrução para a IA.",
+  user_id: "Escolha o atendente na ação.",
+  url: "Preencha o endereço (https://…) do outro sistema.",
+  flow_pointer_id: "Escolha o fluxo de mensagem na ação.",
+  assunto: "Escreva o assunto do e-mail.",
+  corpo: "Escreva o texto do e-mail.",
+  email_fixo: "Confira o e-mail que recebe os envios.",
+};
+
+export function mensagemDoErroDaAutomacao(
+  issue: { code: string; path: PropertyKey[]; message: string } | undefined,
+): string {
+  if (!issue) return "Revise os campos da automação.";
+  if (issue.code === "custom") return issue.message;
+  const [raiz] = issue.path;
+  if (raiz === "actions" && issue.path.length === 1) {
+    return issue.code === "too_big" ? "Use no máximo 10 ações." : "Adicione pelo menos uma ação.";
+  }
+  if (issue.code === "too_big") return "Um dos campos passou do tamanho máximo.";
+  if (raiz === "conditions") return MENSAGEM_POR_CAMPO.conditions!;
+  const campo = [...issue.path].reverse().find((p): p is string => typeof p === "string");
+  return (campo && MENSAGEM_POR_CAMPO[campo]) || "Revise os campos da automação.";
+}

@@ -1,5 +1,5 @@
 "use client";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Pipeline, Stage } from "@/lib/kanban/types";
@@ -128,12 +128,31 @@ export function usePipelines() {
   });
 }
 
-export function usePipelineStages(pipelineId: string | null) {
-  return useQuery({
+function etapasDoFunilQuery(pipelineId: string | null) {
+  return {
     queryKey: ["pipeline-stages", pipelineId],
     queryFn: async () =>
       apiClient.get<{ data: { stages: Stage[] } }>(`/api/v1/pipelines/${pipelineId}/board`),
     enabled: !!pipelineId,
     staleTime: 60_000,
-  });
+  };
+}
+
+export function usePipelineStages(pipelineId: string | null) {
+  return useQuery(etapasDoFunilQuery(pipelineId));
+}
+
+/**
+ * As etapas de TODOS os funis, agrupadas. A condição "etapa de destino" das
+ * automações lia só o funil padrão: regra com etapa de outro funil abria em
+ * branco, e não havia como escolher etapa fora do padrão.
+ */
+export function useEtapasPorFunil(): { pipeline: Pipeline; stages: Stage[] }[] {
+  const { data } = usePipelines();
+  const pipelines = data?.data ?? [];
+  const etapas = useQueries({ queries: pipelines.map((p) => etapasDoFunilQuery(p.id)) });
+  return pipelines.map((pipeline, i) => ({
+    pipeline,
+    stages: etapas[i]?.data?.data?.stages ?? [],
+  }));
 }

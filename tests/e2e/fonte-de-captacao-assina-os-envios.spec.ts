@@ -122,13 +122,15 @@ test.describe("fonte de captação — assinatura pela tela", () => {
       ).toBe(200);
 
       // --- a seção nasce desligada, e o botão de teste está disponível ---
-      await expect(sheet.getByText("Assinatura (HMAC)")).toBeVisible();
+      await expect(sheet.getByText("Assinatura de segurança")).toBeVisible();
       await expect(sheet.getByText("Desligada")).toBeVisible();
       await expect(sheet.getByRole("button", { name: "Enviar lead de teste" })).toBeEnabled();
       await page.screenshot({ path: path.join(EVIDENCIA, "1-assinatura-desligada.png") });
 
       // --- gera: o valor aparece UMA vez ---
       await sheet.getByRole("button", { name: "Gerar segredo" }).click();
+      // Ligar avisa antes que formulário de site deixa de funcionar.
+      await page.getByRole("alertdialog").getByRole("button", { name: "Ligar" }).click();
       await expect(sheet.getByText("Guarde agora. Ele não será mostrado de novo.")).toBeVisible();
       await expect(sheet.getByText("Ligada")).toBeVisible();
 
