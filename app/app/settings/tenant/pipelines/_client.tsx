@@ -171,7 +171,8 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
   const [won, setWon] = useState(v.won ?? "Ganho");
   const [lost, setLost] = useState(v.lost ?? "Perdido");
   const [reasonsText, setReasonsText] = useState(readLostReasons(pipeline.settings).join(", "));
-  const [fields, setFields] = useState<CustomFieldDef[]>(camposDoFunil(pipeline.settings));
+  const camposIniciais = camposDoFunil(pipeline.settings);
+  const [fields, setFields] = useState<CustomFieldDef[]>(camposIniciais);
   // A `key` de cada linha é um id que nasce com ela, nunca a chave digitada:
   // com `f.key` na `key`, cada letra remontava a linha e o campo perdia o foco.
   const [idsDasLinhas, setIdsDasLinhas] = useState<string[]>(() => fields.map((_, i) => `inicial-${i}`));
