@@ -62,6 +62,7 @@ export interface EphemeralToken {
  * lista, que é o defeito que ele existe para pegar.
  */
 export const EPHEMERAL_TOKEN_PREFIX = "dsk_run_";
+const PODA_DAS_TEMPORARIAS_MS = 24 * 60 * 60 * 1000;
 
 export function buildEphemeralPrefix(runId: string): string {
   return `${EPHEMERAL_TOKEN_PREFIX}${runId.slice(0, 8)}_${randomBytes(4).toString("hex")}`;
@@ -126,6 +127,21 @@ export async function mintEphemeralToken(input: MintEphemeralTokenInput): Promis
   if (error || !data) {
     throw new Error(`ephemeral_token_insert_failed: ${error?.message ?? "unknown"}`);
   }
+
+  // Poda as temporárias vencidas há mais de um dia. Sem isto elas só
+  // acumulavam (uma por execução) e, com ~5 mil linhas, a RLS por linha fazia
+  // a tela de chaves passar de 18s e desistir. Melhor esforço: falha aqui não
+  // pode derrubar a execução do agente.
+  await admin
+    .from("api_tokens")
+    .delete()
+    .eq("organization_id", input.organizationId)
+    .like("prefix", `${EPHEMERAL_TOKEN_PREFIX}%`)
+    .lt("expires_at", new Date(Date.now() - PODA_DAS_TEMPORARIAS_MS).toISOString())
+    .then(
+      () => undefined,
+      () => undefined,
+    );
 
   return { id: data.id as string, plaintext, expiresAt: data.expires_at as string };
 }
