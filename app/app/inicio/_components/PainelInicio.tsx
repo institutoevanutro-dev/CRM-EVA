@@ -1,4 +1,5 @@
 "use client";
+import { SERVICO_DA_SAUDE } from "@/lib/channels/servicos-da-saude";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, CalendarDays, CircleCheck, ListChecks, MessageCircle } from "lucide-react";
@@ -53,7 +54,7 @@ export function noPlural(n: number, [um, varios]: readonly [string, string]): st
 type Saude = { status: string; version?: string; checks?: Record<string, { status: string }> };
 
 /** O nome de cada serviço da rota de saúde, como a recepção diria. */
-const SERVICO: Record<string, string> = { supabase: "Banco de dados", redis: "Fila de envio", waha: "WhatsApp" };
+const SERVICO = SERVICO_DA_SAUDE;
 
 /** Centavos de DÓLAR (o custo de IA é calculado em USD — ver BudgetCard). */
 function dolares(cents: number) {

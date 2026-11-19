@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { CHAVE_DO_CANAL_NA_SAUDE } from "@/lib/channels/servicos-da-saude";
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -49,7 +50,7 @@ describe("Início › Meu dia", () => {
 
   it("Sistema: com o 503 da saúde, diz o que caiu e não repete a chamada", async () => {
     const fetchFalso = vi.fn().mockResolvedValue({
-      json: async () => ({ data: { status: "unhealthy", checks: { supabase: { status: "ok" }, redis: { status: "ok" }, waha: { status: "down" } } } }),
+      json: async () => ({ data: { status: "unhealthy", checks: { supabase: { status: "ok" }, redis: { status: "ok" }, [CHAVE_DO_CANAL_NA_SAUDE]: { status: "down" } } } }),
     });
     vi.stubGlobal("fetch", fetchFalso);
     montar(GESTAO);
