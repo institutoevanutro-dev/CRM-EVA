@@ -244,7 +244,7 @@ export function QuadroClient({
 
         <div className="flex flex-wrap items-center gap-3">
           {semNome ? (
-            <span className="text-xs text-amber-700 dark:text-amber-500">
+            <span className="text-xs text-warning-fg">
               {t("Dê um nome à coluna em branco.")}
             </span>
           ) : null}

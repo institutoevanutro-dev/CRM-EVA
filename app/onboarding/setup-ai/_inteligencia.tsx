@@ -190,7 +190,7 @@ export function InteligenciaDele({ inicial }: { inicial: EstadoDaChave }) {
         {prova?.estado === "problema" && (
           <>
             {t("A chave foi aceita, mas o teste não passou:")}{" "}
-            <span className="text-amber-700 dark:text-amber-500">{prova.mensagem}</span>.{" "}
+            <span className="text-warning-fg">{prova.mensagem}</span>.{" "}
             {t(
               "Se for falta de crédito, adicione saldo na conta da empresa de IA — sem isso ele não responde a nenhum cliente.",
             )}
