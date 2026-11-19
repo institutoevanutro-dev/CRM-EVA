@@ -163,7 +163,7 @@ export function NewLeadDialog({
 
     try {
       await create.mutateAsync(parsed.data as CreateLeadInput);
-      toast.success(t("Lead criado"));
+      toast.success(t("Adicionado ao funil"));
       onCreated?.();
       form.reset({
         title: "",
@@ -221,7 +221,7 @@ export function NewLeadDialog({
         <DialogHeader>
           <DialogTitle>{titulo ?? t("Novo Lead")}</DialogTitle>
           <DialogDescription>
-            {t("Crie um lead manualmente neste pipeline.")}
+            {t("Preencha os dados para adicionar ao funil.")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

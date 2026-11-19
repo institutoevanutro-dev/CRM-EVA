@@ -577,6 +577,7 @@ test.describe("Contatos duplicados — juntar pela tela", () => {
     // A ficha de A: "Juntar com outra ficha", busca "Sorriso", compara com B.
     await login(page, creds.users.manager!.email, creds.password);
     await page.goto(`/app/contacts/${idSorrisoA}`);
+    await page.getByRole("button", { name: "Mais", exact: true }).click();
     await page.getByTestId("juntar-com-outra-ficha").click();
     const dialogoDeJuntar = page.getByRole("dialog");
     await dialogoDeJuntar.getByPlaceholder(/nome ou telefone/i).fill("Sorriso");

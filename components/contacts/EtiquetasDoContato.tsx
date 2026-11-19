@@ -189,7 +189,9 @@ export function EtiquetasDoContato({
                 onClick={() => remover(tag)}
                 disabled={disabled}
                 aria-label={`${t("Remover etiqueta")} ${tag}`}
-                className="ml-1 rounded-sm hover:text-destructive"
+                // No toque, a área de clique cresce para 44px por um pseudo-
+                // elemento centrado no X, sem mudar o tamanho do chip.
+                className="relative ml-1 rounded-sm hover:text-destructive toque:before:absolute toque:before:left-1/2 toque:before:top-1/2 toque:before:size-11 toque:before:-translate-x-1/2 toque:before:-translate-y-1/2 toque:before:content-['']"
               >
                 <X size={10} weight="bold" aria-hidden />
               </button>

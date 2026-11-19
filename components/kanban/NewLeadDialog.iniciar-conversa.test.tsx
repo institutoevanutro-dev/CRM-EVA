@@ -299,7 +299,7 @@ describe("NewLeadDialog · salvar e iniciar conversa (#3483)", () => {
     await user.type(screen.getByLabelText("Título"), "Joana Prado");
     await user.click(screen.getByRole("button", { name: "Criar lead" }));
 
-    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("Lead criado"));
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("Adicionado ao funil"));
     expect(caminhos(fetchMock)).toEqual(["/api/v1/leads"]);
     expect(pushMock).not.toHaveBeenCalled();
   });
@@ -326,7 +326,7 @@ describe("NewLeadDialog · salvar e iniciar conversa (#3483)", () => {
     await waitFor(() => expect(showApiErrorMock).toHaveBeenCalled());
     // O negócio JÁ foi criado (a recusa é do passo seguinte) e nada é assumido:
     // o caminho novo herda a recusa do Inbox em vez de contorná-la.
-    expect(toastMock.success).toHaveBeenCalledWith("Lead criado");
+    expect(toastMock.success).toHaveBeenCalledWith("Adicionado ao funil");
     expect(pushMock).not.toHaveBeenCalled();
   });
 });

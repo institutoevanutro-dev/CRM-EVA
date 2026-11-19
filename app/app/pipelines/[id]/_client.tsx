@@ -166,6 +166,14 @@ export function PipelinePageClient({
     const visiveis = new Set(filteredLeads.map((l) => l.id));
     return selectedIds.filter((id) => visiveis.has(id));
   }, [selectedIds, filteredLeads]);
+  // ...e quando o FILTRO muda, a seleção é PODADA de fato: só derivar fazia os
+  // escondidos voltarem marcados ao limpar o filtro. Ajuste durante a
+  // renderização (padrão do React para estado que depende de outro), sem efeito.
+  const [filtrosDaSelecao, setFiltrosDaSelecao] = useState(filters);
+  if (filtrosDaSelecao !== filters) {
+    setFiltrosDaSelecao(filters);
+    if (selecionadosVisiveis.length !== selectedIds.length) setSelectedIds(selecionadosVisiveis);
+  }
   const tagsDoQuadro = useMemo(
     () => [...new Set((data?.leads ?? []).flatMap((l) => l.tags))].sort(),
     [data?.leads],

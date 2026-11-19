@@ -104,3 +104,59 @@ it("mostra os sinais do paciente com data, situação e valor exatos", async () 
   expect(lista).toHaveTextContent("17/11/2026 · Usado numa venda");
   expect(lista).toHaveTextContent("data-estranha · Usado numa venda");
 });
+it("data da venda e validade da proposta; enviada vencida diz Vencida; atrasada em destaque", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      Response.json({
+        data: {
+          configurada: true,
+          abrir_url: "https://f.test/pacientes/crm",
+          base_url: "https://f.test",
+          resumo: {
+            consultado_em: "2026-11-16T00:00:00Z",
+            propostas: [
+              { id: "p1", numero: "P-1", status: "enviada", total_cents: "1000", validade: "2020-01-31" },
+              { id: "p2", numero: "P-2", status: "enviada", total_cents: "1000", validade: "2099-12-31" },
+            ],
+            vendas: [
+              {
+                id: "v1",
+                numero: "V-1",
+                data: "2026-11-02",
+                situacao: "atrasada",
+                total_cents: "1000",
+                recebido_cents: "0",
+                saldo_cents: "1000",
+              },
+            ],
+            limitado: false,
+          },
+        },
+      }),
+    ),
+  );
+  render(<FinanceiroDoContato contactId="ficticio" />);
+  expect(await screen.findByRole("link", { name: /P-1/ })).toHaveTextContent("P-1 · Vencida");
+  expect(screen.getByRole("link", { name: /P-2/ })).toHaveTextContent("P-2 · Enviada");
+  expect(screen.getByText(/vale até 31\/12\/2099/)).toBeInTheDocument();
+  expect(screen.getByText(/Vendida em 02\/11\/2026/)).toBeInTheDocument();
+  expect(screen.getByText("Atrasada")).toHaveClass("text-error-fg");
+});
+it("Atualizar mantém o quadro na tela enquanto recarrega", async () => {
+  let soltar: (r: Response) => void = () => undefined;
+  const corpo = {
+    data: { configurada: true, resumo: null, abrir_url: "https://f.test/p", base_url: "https://f.test" },
+  };
+  const f = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json(corpo))
+    .mockImplementationOnce(() => new Promise<Response>((r) => (soltar = r)));
+  vi.stubGlobal("fetch", f);
+  render(<FinanceiroDoContato contactId="ficticio" />);
+  await screen.findByRole("link", { name: "Abrir no financeiro" });
+  fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
+  expect(screen.getByRole("link", { name: "Abrir no financeiro" })).toBeInTheDocument();
+  soltar(Response.json(corpo));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Atualizar" })).not.toBeDisabled());
+});

@@ -126,7 +126,7 @@ test("suporte mantém identidade, opera B e encerra sem misturar A; readonly/exp
   await expect(page.locator("[data-conversation-id]").getByText(`Contato A ${suffix}`,{exact:true})).toHaveCount(0);
   await other.reload();await expect(other.getByTestId("tenant-switcher")).toContainText(`Suporte A ${suffix}`);
   const members=await db.from("user_organizations").select("id").eq("organization_id",orgs[1]).eq("user_id",actor);expect(members.data).toEqual([]);
-  await page.goto(`/app/contacts/${contacts[1]}`);await page.getByRole("button",{name:"Editar",exact:true}).click();
+  await page.goto(`/app/contacts/${contacts[1]}`);await page.getByRole("button",{name:"Mais",exact:true}).click();await page.getByRole("button",{name:"Editar",exact:true}).click();
   await page.getByLabel("Nome",{exact:true}).fill(`Editado B ${suffix}`);await page.getByRole("button",{name:"Salvar",exact:true}).click();
   await expect.poll(async()=> (await db.from("contacts").select("name").eq("id",contacts[1]).single()).data?.name).toBe(`Editado B ${suffix}`);
   await expect.poll(async()=> (await db.from("api_audit_log").select("metadata,actor_user_id").eq("organization_id",orgs[1]).eq("actor_user_id",actor).eq("resource_id",contacts[1]).order("created_at",{ascending:false}).limit(1)).data?.[0]?.metadata?.support_session_id).toBeTruthy();

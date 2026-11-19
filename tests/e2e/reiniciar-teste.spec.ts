@@ -154,6 +154,7 @@ test.describe("Reiniciar teste — o gestor zera o contato de teste pela página
 
     await login(page, creds.users.manager!.email, creds.password);
     await page.goto(`/app/contacts/${contato.A}`);
+    await page.getByRole("button", { name: "Mais", exact: true }).click();
     await page.getByRole("button", { name: "Reiniciar teste" }).click();
     const dialogo = page.getByRole("alertdialog");
     await expect(dialogo).toContainText("cancele o agendamento para testar a marcação do zero");
@@ -171,6 +172,7 @@ test.describe("Reiniciar teste — o gestor zera o contato de teste pela página
   test("número fora da lista: a tela recusa e nada muda", async ({ page }) => {
     await login(page, creds.users.manager!.email, creds.password);
     await page.goto(`/app/contacts/${contato.B}`);
+    await page.getByRole("button", { name: "Mais", exact: true }).click();
     await page.getByRole("button", { name: "Reiniciar teste" }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Reiniciar teste" }).click();
 
