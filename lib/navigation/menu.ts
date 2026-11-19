@@ -1,7 +1,7 @@
 import type { Role } from "@/lib/auth/types";
 
 import type { InterfaceSettings } from "./interface";
-import { NAV_DESTINATIONS, NAV_GROUPS, areaDaRota, searchable, type NavDestination, type NavGroupId } from "./registry";
+import { FORA_DO_MENU, NAV_DESTINATIONS, NAV_GROUPS, areaDaRota, searchable, type NavDestination, type NavGroupId } from "./registry";
 
 /**
  * O menu lateral agrupado pelo que a pessoa veio FAZER (pedido do dono, 11/10/2026):
@@ -92,11 +92,8 @@ export const MENU: ReadonlyArray<{ id: string; label: string; hrefs: readonly st
 /** Abrem pelo cartão de quem está logado, no rodapé do menu. */
 export const MINHA_CONTA: readonly string[] = ["/app/settings/profile", "/app/settings/security", "/app/settings/notifications"];
 
-/**
- * Telas do produto de origem que a clínica não usa. Saem só do MENU: a rota, a busca (⌘K) e a
- * página de Configurações continuam, para o código não divergir do produto de origem.
- */
-export const FORA_DO_MENU: readonly string[] = ["/app/integrations/nuvemshop", "/app/settings/billing"];
+/** Telas que saem do menu e da página de área; a lista mora no registro (o hub também a lê). */
+export { FORA_DO_MENU };
 
 // Tela fora do catálogo (detalhe de lead, configuração sem entrada): cai no grupo da área antiga.
 const DA_AREA: Record<NavGroupId, string> = { atendimento: "atendimento", crm: "vendas", ia: "assistente", analise: "analise", organizacao: "clinica" };
@@ -120,6 +117,19 @@ export function gruposDoMenu(isPlatformAdmin: boolean, role: Role | null, settin
   });
 }
 
+/**
+ * Menu recolhido (decisão do André, 18/11, item 228): em vez de um ícone por grupo, que levava à
+ * 1ª tela do grupo (Agenda e Contatos ficavam sem porta, e Agenda acendia o ícone do Inbox), a
+ * faixa mostra direto os destinos do dia. O Início vem antes, pelo `veInicio`.
+ */
+export const ATALHOS_RECOLHIDO: readonly string[] = ["/app/agenda", "/app/inbox", "/app/contacts", "/app/ai/inbox"];
+
+/** Os atalhos do menu recolhido que este papel vê, na ordem acima. */
+export function atalhosDoMenu(isPlatformAdmin: boolean, role: Role | null, settings?: InterfaceSettings): NavDestination[] {
+  const visivel = new Set(searchable(isPlatformAdmin, role, settings).map((d) => d.href));
+  return ATALHOS_RECOLHIDO.filter((h) => visivel.has(h)).map((h) => porHref.get(h)!);
+}
+
 /** O "Início" só aparece para quem o vê (a interface do vínculo pode escondê-lo). */
 export function veInicio(isPlatformAdmin: boolean, role: Role | null, settings?: InterfaceSettings): boolean {
   return searchable(isPlatformAdmin, role, settings).some((d) => d.href === "/app/inicio");
@@ -133,7 +143,7 @@ export function telasDaConta(isPlatformAdmin: boolean, role: Role | null, settin
 
 /**
  * A página de Configurações é a porta para o que NÃO tem tela no menu: atualização do sistema, canal
- * oficial, modelos, voz, além de Nuvemshop e Plano e cobrança. Por isso ela continua com link próprio no
+ * oficial, modelos, voz. Por isso ela continua com link próprio no
  * rodapé do menu (`tests/e2e/voz-desligada-por-padrao.spec.ts` cobra essa porta pelo endereço).
  */
 export const CONFIGURACOES = "/app/settings";

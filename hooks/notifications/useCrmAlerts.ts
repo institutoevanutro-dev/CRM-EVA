@@ -12,6 +12,7 @@ import {
   type EstadoVisto,
 } from "./aviso-de-negocio";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
+import { ECO_DE_ASSUMIR, ehEcoLocal } from "@/lib/kanban/local-echo";
 import { entregarAviso } from "@/lib/notifications/deliver";
 import { mencaoAtingeUsuario, textoLegivelDeMencao } from "@/lib/notifications/mentions";
 
@@ -63,7 +64,15 @@ export function useCrmAlerts(): void {
       const estado = estadoDoNovo(novo);
       vistos.current.set(leadId, estado);
 
-      const avisos = avisosDoNegocio(anterior, estado, user.id, carimbosDoNovo(novo));
+      // A própria ação não avisa (nem som, nem toast): quem ganhou, perdeu ou
+      // assumiu já viu a mudança na tela. Mesma marca que impede o card de
+      // pulsar na aba que agiu (`lib/kanban/local-echo.ts`); o histórico acima
+      // é gravado mesmo assim.
+      if (ehEcoLocal(leadId)) return;
+      const assumindo = ehEcoLocal(ECO_DE_ASSUMIR);
+      const avisos = avisosDoNegocio(anterior, estado, user.id, carimbosDoNovo(novo)).filter(
+        (a) => !(assumindo && a === "lead_assigned"),
+      );
       if (avisos.length === 0) return;
 
       const title = str(novo.title) || "Lead";

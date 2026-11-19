@@ -4,7 +4,7 @@ import { useT } from "@/hooks/i18n/useT";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { CalendarDots, FileText, ImageSquare, Plus, UserCircle } from "@/lib/ui/icons";
+import { CalendarDots, FileText, ImageSquare, Plus, Sparkle, UserCircle } from "@/lib/ui/icons";
 
 interface Props {
   disabled?: boolean;
@@ -23,10 +23,15 @@ interface Props {
    * quando a linha tem largura para ele.
    */
   onAgendar?: () => void;
+  /**
+   * "Sugerir resposta" dentro do "+", SÓ NO TOQUE (item 209): no iPhone o botão
+   * ao lado do campo deixava ~150 px para o texto. No computador ele segue lá.
+   */
+  onSugerir?: () => void;
 }
 
 /** Menu "+" do composer (padrão WhatsApp): Fotos e vídeos / Documento / Contato. */
-export function AttachMenu({ disabled, onPick, onPickContact, soFoto, onAgendar }: Props) {
+export function AttachMenu({ disabled, onPick, onPickContact, soFoto, onAgendar, onSugerir }: Props) {
   const t = useT();
   const mediaRef = useRef<HTMLInputElement | null>(null);
   const docRef = useRef<HTMLInputElement | null>(null);
@@ -47,6 +52,7 @@ export function AttachMenu({ disabled, onPick, onPickContact, soFoto, onAgendar 
             variant="ghost"
             className="shrink-0"
             aria-label={t("Anexar")}
+            title={t("Anexar")}
             disabled={disabled}
           >
             <Plus size={18} weight="regular" aria-hidden />
@@ -89,6 +95,16 @@ export function AttachMenu({ disabled, onPick, onPickContact, soFoto, onAgendar 
             >
               <CalendarDots size={18} weight="duotone" className="text-primary" aria-hidden />
               {t("Mensagens agendadas")}
+            </button>
+          )}
+          {onSugerir && (
+            <button
+              type="button"
+              className="hidden min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted pointer-coarse:flex"
+              onClick={onSugerir}
+            >
+              <Sparkle size={18} weight="duotone" className="text-primary" aria-hidden />
+              {t("Sugerir resposta")}
             </button>
           )}
         </PopoverContent>

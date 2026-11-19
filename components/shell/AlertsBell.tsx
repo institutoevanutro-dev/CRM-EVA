@@ -9,8 +9,9 @@ import { useT } from "@/hooks/i18n/useT";
 import { Bell } from "@/lib/ui/icons";
 
 /**
- * Sino da central de avisos (Operação Visível F1): contador de avisos abertos
- * do runtime do agente no header; clique leva a /app/ai/inbox.
+ * Sino da central de avisos (Operação Visível F1): conta os avisos abertos que
+ * chegam à pessoa — o mesmo recorte do Início, não os da clínica toda (decisão
+ * do André, 18/11); clique leva a /app/ai/inbox.
  */
 export function AlertsBell() {
   const { user, activeOrg } = useAuth();
@@ -29,14 +30,14 @@ function VisibleAlertsBell() {
   const { data } = useAgentInbox("open");
   // O som da organização para o pedido de pessoa.
   useSonsDaCentral(data?.items);
-  const count = data?.open_count ?? 0;
+  const count = data?.my_open_count ?? 0;
 
   return (
     <Link
       href="/app/ai/inbox"
       aria-label={
         count > 0
-          ? `${t("Central de avisos")} — ${count} ${t("em aberto")}`
+          ? `${t("Central de avisos")} — ${count} ${t("para você")}`
           : t("Central de avisos")
       }
       data-testid="alerts-bell"

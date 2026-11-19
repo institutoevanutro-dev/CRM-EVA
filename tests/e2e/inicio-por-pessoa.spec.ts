@@ -229,11 +229,16 @@ test("gerente vê a Visão da clínica e, no Meu dia, a fila e o aviso da clíni
   await expect(avisos.getByText(/Conexão do WhatsApp caiu/)).toBeVisible();
   await expect(avisos.getByText("Paciente pediu para falar com uma pessoa")).toHaveCount(0);
 
-  await expect(page.getByRole("heading", { name: "Visão da clínica" })).toBeVisible({ timeout: 30_000 });
+  // A Visão da clínica nasce em sanfona fechada (lote 19, item 187): o gerente a abre.
+  const visao = page.getByRole("heading", { name: "Visão da clínica" });
+  await expect(visao).toBeVisible({ timeout: 30_000 });
+  await visao.click();
   const depois = (rotulo: string) => page.getByText(rotulo, { exact: true }).locator("xpath=following-sibling::dd[1]");
   // A clínica toda: 3 esperando há pouco (ana, bia e a fila), 1 delas sem responsável; 1 antiga à parte.
-  await expect(depois("Esperando resposta agora")).toContainText("3", { timeout: 30_000 });
-  await expect(depois("Esperando resposta agora")).toContainText("1 sem responsável");
+  // O rótulo diz o recorte (item 184): aqui são todas as conversas, não só as do Meu dia.
+  const esperandoNaClinica = "Esperando resposta agora, todas as conversas";
+  await expect(depois(esperandoNaClinica)).toContainText("3", { timeout: 30_000 });
+  await expect(depois(esperandoNaClinica)).toContainText("1 sem responsável");
   await expect(page.locator("dd").filter({ hasText: /^Conversas antigas sem resposta \(mais de 3 dias\): 1$/ })).toBeVisible();
   await expect(depois("Consultas hoje")).toHaveText("2");
   const tabela = page.getByRole("table", { name: "Agenda por profissional nesta semana" });

@@ -88,3 +88,25 @@ describe("Composer + anexos", () => {
 
 // A fixture exercita um atendente autorizado a consultar modelos de mensagem.
 vi.mock("@/hooks/auth/AuthProvider", () => ({ usePermission: () => true }));
+
+describe("item 209 — no toque, \"Sugerir resposta\" mora dentro do +", () => {
+  it("o item existe no menu só para o toque, e o botão ao lado do campo some no toque", async () => {
+    const { AttachMenu } = await import("@/components/inbox/composer/AttachMenu");
+    const { DraftReplyButton } = await import("@/components/inbox/composer/DraftReplyButton");
+    const onSugerir = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <AttachMenu onPick={() => {}} onSugerir={onSugerir} />
+        <DraftReplyButton conversationId="conv-1" onDraft={() => {}} className="pointer-coarse:hidden" />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /anexar/i }));
+    const itens = screen.getAllByRole("button", { name: "Sugerir resposta", hidden: true });
+    const doMenu = itens.find((b) => b.className.includes("pointer-coarse:flex"));
+    const doCampo = itens.find((b) => b.className.includes("pointer-coarse:hidden"));
+    expect(doMenu?.className).toContain("hidden");
+    expect(doCampo).toBeTruthy();
+    fireEvent.click(doMenu!);
+    expect(onSugerir).toHaveBeenCalledTimes(1);
+  });
+});

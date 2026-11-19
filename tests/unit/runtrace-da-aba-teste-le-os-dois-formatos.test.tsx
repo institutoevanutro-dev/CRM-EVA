@@ -61,7 +61,8 @@ describe("RunTrace lê as DUAS origens de tool_call (#2550)", () => {
   it("({ tool_name, args }): o formato que o componente já lia, continua igual", () => {
     render(<RunTrace toolCalls={[PASSO_TOOL_NAME]} />);
 
-    expect(screen.getByText("crm_get_lead")).toBeInTheDocument();
+    // O rótulo da tela no lugar do id do código (item 225 da auditoria).
+    expect(screen.getByText("Ver uma oportunidade")).toHaveAttribute("title", "crm_get_lead");
     expect(screen.queryByText("(sem nome)")).toBeNull();
 
     const args = screen.getByText(/"lead-1"/);

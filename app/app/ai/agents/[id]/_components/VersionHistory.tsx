@@ -43,6 +43,7 @@ import { apiClient } from "@/lib/api/client";
 import type { AgentVersionRow, AgentVersionSummary } from "@/hooks/ai/useAgentVersions";
 import { revertToVersionAction } from "../_actions";
 import { VersionDiff } from "./VersionDiff";
+import { NomeDoModelo } from "./ModelPicker";
 
 interface Props {
   agentId: string;
@@ -54,6 +55,9 @@ interface Props {
   alteracoesNaoSalvas?: boolean;
   onIrParaConfiguracao?: () => void;
   onAbrirNoEditor?: (versao: AgentVersionRow) => void;
+  /** Para o comparar nomear materiais e funis. */
+  materiais?: ReadonlyArray<{ id: string; name: string }>;
+  funis?: ReadonlyArray<{ id: string; name: string }>;
 }
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -98,6 +102,8 @@ export function VersionHistory({
   alteracoesNaoSalvas = false,
   onIrParaConfiguracao,
   onAbrirNoEditor,
+  materiais,
+  funis,
 }: Props) {
   const t = useT();
   const router = useRouter();
@@ -223,8 +229,8 @@ export function VersionHistory({
               <span className="text-xs text-muted-foreground">
                 {new Date(v.created_at).toLocaleString()}
               </span>
-              <span className="font-mono text-xs text-muted-foreground">
-                {v.provider}/{v.model}
+              <span className="text-xs text-muted-foreground">
+                <NomeDoModelo provider={v.provider} model={v.model} />
               </span>
               {v.published_at ? (
                 <span className="text-xs text-muted-foreground">
@@ -238,7 +244,7 @@ export function VersionHistory({
                   disabled={carregando === v.id}
                   onClick={() => void openDiff(v)}
                 >
-                  {t("Diff")}
+                  {t("Comparar")}
                 </Button>
                 {rascunhoAntigo && !readOnly && onAbrirNoEditor ? (
                   <Button
@@ -257,7 +263,7 @@ export function VersionHistory({
                     disabled={alteracoesNaoSalvas}
                     onClick={() => setRevertTarget(v)}
                   >
-                    {t("Reverter")}
+                    {t("Voltar a esta versão")}
                   </Button>
                 ) : null}
               </div>
@@ -271,11 +277,16 @@ export function VersionHistory({
           <DialogHeader>
             <DialogTitle>
               {diffPair
-                ? `${t("Diff v")}${diffPair.a.version_number}${t(" ↔ v")}${diffPair.b.version_number}`
-                : t("Diff")}
+                ? `${t("Comparar v")}${diffPair.a.version_number}${t(" ↔ v")}${diffPair.b.version_number}`
+                : t("Comparar")}
             </DialogTitle>
           </DialogHeader>
-          {diffPair ? <VersionDiff versionA={diffPair.a} versionB={diffPair.b} /> : null}
+          {diffPair ? <VersionDiff
+              versionA={diffPair.a}
+              versionB={diffPair.b}
+              materiais={materiais}
+              funis={funis}
+            /> : null}
         </DialogContent>
       </Dialog>
 
@@ -286,7 +297,7 @@ export function VersionHistory({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {t("Reverter para v")}{revertTarget?.version_number}?
+              {t("Voltar para a v")}{revertTarget?.version_number}?
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t("Uma cópia da v")}
@@ -304,7 +315,7 @@ export function VersionHistory({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={reverting}>{t("Cancelar")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleRevert} disabled={reverting}>
-              {reverting ? t("Revertendo…") : t("Confirmar revert")}
+              {reverting ? t("Voltando…") : t("Voltar a esta versão")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

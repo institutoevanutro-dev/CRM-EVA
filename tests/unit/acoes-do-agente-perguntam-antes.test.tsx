@@ -160,9 +160,9 @@ describe("item 7 — reverter avisa que o rascunho em andamento sai do editor", 
     const user = userEvent.setup();
     const v4 = versao(4, "published");
     const v5 = versao(5, "draft");
-    render(<VersionHistory agentId={AGENTE} versions={[v5, v4]} rascunhoVigente={v5} />);
+    render(comProvedor(<VersionHistory agentId={AGENTE} versions={[v5, v4]} rascunhoVigente={v5} />));
 
-    await user.click(screen.getByRole("button", { name: "Reverter" }));
+    await user.click(screen.getByRole("button", { name: "Voltar a esta versão" }));
     const dialogo = await screen.findByRole("alertdialog");
     expect(dialogo, "o rascunho sumia do editor sem aviso").toHaveTextContent(
       "O rascunho v5, ainda não publicado, sai do editor. Ele fica no Histórico e pode ser aberto de novo.",
@@ -171,8 +171,8 @@ describe("item 7 — reverter avisa que o rascunho em andamento sai do editor", 
 
   it("com mudanças não salvas, reverter fica bloqueado e diz por quê", () => {
     const v4 = versao(4, "published");
-    render(<VersionHistory agentId={AGENTE} versions={[v4]} alteracoesNaoSalvas />);
-    expect(screen.getByRole("button", { name: "Reverter" })).toBeDisabled();
+    render(comProvedor(<VersionHistory agentId={AGENTE} versions={[v4]} alteracoesNaoSalvas />));
+    expect(screen.getByRole("button", { name: "Voltar a esta versão" })).toBeDisabled();
     expect(screen.getByText(/Salve ou descarte antes de reverter/)).toBeInTheDocument();
   });
 });

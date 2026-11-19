@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
-import { useAtRiskLeads, type AtRiskLead } from "@/hooks/leads/useAtRiskLeads";
+import { LIMITE_MAXIMO_DO_RADAR, useAtRiskLeads, type AtRiskLead } from "@/hooks/leads/useAtRiskLeads";
 import type { RiskBucket } from "@/lib/leads/risk-radar";
 import {
   ArrowRight,
@@ -53,7 +53,8 @@ function followupWhen(iso: string, t: (texto: string) => string): string {
 
 export function RiskRadarList() {
   const t = useT();
-  const { data, isLoading, isError, refetch } = useAtRiskLeads();
+  const [limite, setLimite] = useState(50);
+  const { data, isLoading, isError, refetch } = useAtRiskLeads(limite);
   const [verTodas, setVerTodas] = useState(false);
 
   if (isLoading) {
@@ -85,6 +86,9 @@ export function RiskRadarList() {
   // "Nenhuma demanda em risco" — escondendo exatamente o vazamento que o
   // invariante 4 existe para denunciar.
   const semPasso = data?.sem_proximo_passo ?? [];
+  // O número vem do servidor (item 195): a lista vem cortada no `limit`.
+  const totalSemPasso = Math.max(data?.total_sem_proximo_passo ?? 0, semPasso.length);
+  const podeVerMais = limite < LIMITE_MAXIMO_DO_RADAR;
   if (!data || (data.total === 0 && semPasso.length === 0)) {
     return (
       <div
@@ -111,8 +115,8 @@ export function RiskRadarList() {
           data-testid="radar-sem-proximo-passo"
         >
           <p className="text-sm font-medium">
-            {semPasso.length}{" "}
-            {semPasso.length === 1
+            {totalSemPasso}{" "}
+            {totalSemPasso === 1
               ? t("demanda aberta sem próximo passo")
               : t("demandas abertas sem próximo passo")}
           </p>
@@ -123,11 +127,15 @@ export function RiskRadarList() {
           </p>
           <ul className="flex flex-col gap-1">
             {(verTodas ? semPasso : semPasso.slice(0, PRIMEIRAS_PENDENCIAS)).map((d) => (
-              <li key={d.id} className="flex items-baseline justify-between gap-3 text-xs">
-                <span className="truncate">{d.contact_name ?? t("Contato sem nome")}</span>
-                <span className="shrink-0 tabular-nums text-muted-foreground">
-                  {abertaHa(d.horas_aberta, t)}
-                </span>
+              <li key={d.id}>
+                {/* A linha abre o contato (item 195): era só texto. */}
+                <Link
+                  href={`/app/contacts/${d.contact_id}`}
+                  className="-mx-1 flex min-h-11 items-center justify-between gap-3 rounded-md px-1 text-xs hover:bg-row-hover lg:min-h-0 lg:py-1"
+                >
+                  <span className="truncate">{d.contact_name ?? t("Contato sem nome")}</span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">{abertaHa(d.horas_aberta, t)}</span>
+                </Link>
               </li>
             ))}
           </ul>
@@ -135,10 +143,13 @@ export function RiskRadarList() {
             <button
               type="button"
               onClick={() => setVerTodas((v) => !v)}
-              className="mt-2 text-xs font-medium text-accent-strong underline-offset-2 hover:underline"
+              className="mt-2 min-h-11 text-xs font-medium text-accent-strong underline-offset-2 hover:underline lg:min-h-0"
             >
-              {verTodas ? t("Mostrar menos") : `${t("Ver todas")} (${semPasso.length})`}
+              {verTodas ? t("Mostrar menos") : `${t("Ver todas")} (${totalSemPasso})`}
             </button>
+          ) : null}
+          {verTodas && totalSemPasso > semPasso.length ? (
+            <MostrandoDe mostrando={semPasso.length} total={totalSemPasso} onVerMais={podeVerMais ? () => setLimite(LIMITE_MAXIMO_DO_RADAR) : undefined} />
           ) : null}
         </section>
       ) : null}
@@ -160,7 +171,33 @@ export function RiskRadarList() {
           <RadarRow key={lead.id} lead={lead} />
         ))}
       </ul>
+      {/* Os selos contam todos; a lista vem cortada — e agora diz (item 195). */}
+      {data.total > data.items.length ? (
+        <MostrandoDe
+          mostrando={data.items.length}
+          total={data.total}
+          onVerMais={podeVerMais ? () => setLimite(LIMITE_MAXIMO_DO_RADAR) : undefined}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function MostrandoDe({ mostrando, total, onVerMais }: { mostrando: number; total: number; onVerMais?: () => void }) {
+  const t = useT();
+  return (
+    <p className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground" data-testid="radar-mostrando">
+      {t("Mostrando {{n}} de {{total}}").replace("{{n}}", String(mostrando)).replace("{{total}}", String(total))}
+      {onVerMais ? (
+        <button
+          type="button"
+          onClick={onVerMais}
+          className="min-h-11 font-medium text-accent-strong underline-offset-2 hover:underline lg:min-h-0"
+        >
+          {t("Ver mais")}
+        </button>
+      ) : null}
+    </p>
   );
 }
 
@@ -210,7 +247,9 @@ function RadarRow({ lead }: { lead: AtRiskLead }) {
     <li
       data-testid="radar-item"
       data-risk={lead.risk}
-      className="flex items-start gap-2 pr-3 transition-colors hover:bg-row-hover"
+      // No celular as ações descem para baixo do texto (item 196): ao lado,
+      // espremiam o nome e o "Ver compromisso" ficava com 12 px.
+      className="flex flex-col gap-0 pb-3 transition-colors hover:bg-row-hover sm:flex-row sm:items-start sm:gap-2 sm:pb-0 sm:pr-3"
     >
       <Link href={href} className="flex min-w-0 flex-1 items-start gap-3 px-4 py-3">
         <Badge variant={meta.variant} className="mt-0.5 shrink-0">
@@ -243,20 +282,25 @@ function RadarRow({ lead }: { lead: AtRiskLead }) {
           )}
         </div>
       </Link>
-      <div className="flex shrink-0 items-center gap-2 self-center">
-        {lead.agenda?.appointment_id ? <Link className="text-xs underline" href={`/app/agenda?compromisso=${lead.agenda.appointment_id}`}>{t("Ver compromisso")}</Link> : null}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 sm:self-center sm:px-0">
+        {lead.agenda?.appointment_id ? (
+          <Button asChild size="sm" variant="outline" className="min-h-11 sm:min-h-0">
+            <Link href={`/app/agenda?compromisso=${lead.agenda.appointment_id}`}>{t("Ver compromisso")}</Link>
+          </Button>
+        ) : null}
         {canClaim ? (
           <Button
             size="sm"
             variant="outline"
             disabled={claim.isPending}
             onClick={handleClaim}
+            className="min-h-11 sm:min-h-0"
             data-testid="radar-claim"
           >
             {t("Assumir")}
           </Button>
         ) : null}
-        <ArrowRight size={16} className="text-muted-foreground" aria-hidden />
+        <ArrowRight size={16} className="hidden text-muted-foreground sm:block" aria-hidden />
       </div>
     </li>
   );

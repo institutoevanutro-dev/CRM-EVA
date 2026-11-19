@@ -18,7 +18,7 @@ describe("papel humano prestador", () => {
 
   it("usa os rótulos definidos para a clínica", () => {
     expect(ROTULO_DO_PAPEL.provider).toBe("Prestador de serviço");
-    expect(ROTULO_DO_PAPEL.agent).toBe("Colaborador");
+    expect(ROTULO_DO_PAPEL.agent).toBe("Atendente");
   });
 
   it("é aceito pelos dois CHECKs humanos do baseline", () => {

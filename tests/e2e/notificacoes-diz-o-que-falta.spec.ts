@@ -130,13 +130,14 @@ test.describe("Notificações — a tela conta a verdade sobre esta instalação
     // 2 · Ele diz o LIMITE em português, não em jargão de variável.
     await expect(aviso).toContainText(/só aparecem com o site aberto/i);
 
-    // 3 · E diz O QUE FAZER — o comando e as duas chaves, nominalmente.
-    //     Um aviso que só informa a falta deixa o operador sem saída: ele
-    //     descobre que está quebrado e continua sem saber o que fazer.
-    await expect(aviso).toContainText("npx web-push generate-vapid-keys");
-    await expect(aviso).toContainText("VAPID_PUBLIC_KEY");
-    await expect(aviso).toContainText("VAPID_PRIVATE_KEY");
-    await expect(aviso).toContainText(/\.env/);
+    // 3 · E diz O QUE FAZER — para quem está na tela. Uma atendente não mexe
+    //     no `.env`: para ela, a saída é saber que quem administra o servidor
+    //     precisa configurar uma vez (lote 20). O passo a passo com o comando e
+    //     as duas chaves só aparece para quem administra a instalação — esse
+    //     lado é provado em `tests/unit/notificacoes-tela-diz-o-que-falta.test.tsx`.
+    await expect(aviso).toContainText(/quem administra o servidor precisa configurar/i);
+    await expect(aviso).not.toContainText("npx web-push generate-vapid-keys");
+    await expect(aviso).not.toContainText("VAPID_PRIVATE_KEY");
 
     await captura(page, "01-aviso-sem-chaves");
   });
@@ -178,7 +179,7 @@ test.describe("Notificações — a tela conta a verdade sobre esta instalação
     await page.goto("/app/settings/notifications");
 
     const linhaMensagem = page.getByRole("row", { name: /Nova mensagem/i });
-    const interruptorPush = linhaMensagem.getByRole("switch", { name: /via push/i });
+    const interruptorPush = linhaMensagem.getByRole("switch", { name: /: notificação/i });
 
     // 1 · O controle não sumiu da tela por falta de VAPID.
     await expect(interruptorPush).toBeVisible();

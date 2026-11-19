@@ -178,12 +178,12 @@ export function ConversationListItem({
         {naFila && (
           <div className="mb-0.5 flex items-center gap-1.5">
             <span
-              className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-soft px-1 text-[11px] font-medium tabular-nums text-accent"
+              className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-soft px-1 text-xs font-medium tabular-nums text-text"
               aria-label={`${t("Posição")} ${queuePosition} ${t("na fila")}`}
             >
               {queuePosition}º
             </span>
-            <span className="text-[11px] text-text-muted">
+            <span className="text-xs text-text-muted">
               {waitingLabel(conversation, t, localeDaData)}
             </span>
           </div>
@@ -198,19 +198,19 @@ export function ConversationListItem({
           >
             {displayName}
           </span>
-          <span
-            // Com não lidas a hora acende na cor da marca, junto com a bolinha.
-            className={cn(
-              "shrink-0 text-xs tabular-nums",
-              unread > 0 ? "font-semibold text-accent" : "text-text-subtle",
-            )}
-            // O mesmo lugar da tela mostra duas coisas diferentes conforme a aba:
-            // na Fila é "desde quando o cliente escreveu", nas outras é "há quanto
-            // tempo a conversa mexeu". O rótulo existe só onde a leitura muda.
-            title={naFila ? t("Desde quando o cliente espera resposta") : undefined}
-          >
-            {time}
-          </span>
+          {/* Na Fila o tempo já está em "Aguardando há…" logo acima: dizê-lo de
+              novo aqui era a mesma informação duas vezes na linha (item 212). */}
+          {!naFila && (
+            <span
+              // Com não lidas a hora acende na cor da marca, junto com a bolinha.
+              className={cn(
+                "shrink-0 text-xs tabular-nums",
+                unread > 0 ? "font-semibold text-accent" : "text-text-subtle",
+              )}
+            >
+              {time}
+            </span>
+          )}
         </div>
 
         <div className="mt-0.5 flex items-center justify-between gap-2">
@@ -257,8 +257,9 @@ export function ConversationListItem({
         type="button"
         role="checkbox"
         aria-checked={selecionado}
-        aria-label={t("Selecionar conversa")}
-        title={t("Selecionar conversa")}
+        // Com o nome (item 215): "Selecionar conversa" vinte vezes não diz qual.
+        aria-label={`${t("Selecionar")} ${displayName}`}
+        title={`${t("Selecionar")} ${displayName}`}
         data-testid={`selecao-em-lote-${conversation.id}`}
         onClick={() => onAlternarSelecao(conversation.id)}
         className={cn(

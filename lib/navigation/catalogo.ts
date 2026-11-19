@@ -118,7 +118,8 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/inbox",
-    label: "Inbox",
+    // "Conversas", como o título da tela (item 236): um nome só para cada tela.
+    label: "Conversas",
     // A aba "Comentários" (Task 8, ?filter=comentarios) mora AQUI dentro — é
     // estado interno da mesma tela, não uma rota nova, e o precedente é o
     // resto das abas do Inbox (Fila, Minhas, Fechadas…), nenhuma com entrada
@@ -200,6 +201,9 @@ export const NAV_CATALOG = [
     group: "crm",
     sidebar: true,
     section: "O dia a dia da venda",
+    // A API das campanhas só responde a gerente: para atendente a tela abria com
+    // "Erro ao carregar as campanhas" (item 232). A página tem a mesma guarda.
+    minRole: "manager",
     // SÓ NO HUB, como as demais telas de preparação: o quinto item do sidebar do
     // CRM já fez o menu rolar 13px em 900px (e2e `navegacao.spec.ts`), e a
     // campanha é montada de vez em quando, não aberta todo dia.
@@ -431,7 +435,8 @@ export const NAV_CATALOG = [
   },
   {
     href: "/app/ai/inbox",
-    label: "Alertas",
+    // "Central de avisos", como o título da tela e o sino (item 236).
+    label: "Central de avisos",
     description: "O que a IA encontrou e precisa de uma decisão sua.",
     icon: "Flag",
     group: "ia",

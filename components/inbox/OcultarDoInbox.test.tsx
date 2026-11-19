@@ -47,7 +47,7 @@ describe("OcultarDoInbox", () => {
     montar({ conversationId: CONVERSA, variante: "icone" });
     fireEvent.click(screen.getByRole("button", { name: "Ocultar do Inbox" }));
     const dialogo = await screen.findByTestId("ocultar-do-inbox-dialogo");
-    expect(dialogo).toHaveTextContent("A IA não responde");
+    expect(dialogo).toHaveTextContent("O automático não responde");
     expect(dialogo).toHaveTextContent("as mensagens continuam guardadas");
     expect(fetch).not.toHaveBeenCalled();
 

@@ -41,6 +41,16 @@ interface Marca {
 const ECOS = new Map<string, Marca>();
 
 /**
+ * Marca de "estou assumindo uma conversa". A rota de assumir dá dono ao
+ * negócio aberto do contato no servidor, e a tela não sabe o id desse negócio
+ * antes da resposta; então a marca não é por negócio, é desta aba. Enquanto
+ * ela vale, "Lead atribuído a você" não sai (`useCrmAlerts`).
+ * ponytail: uma atribuição de OUTRA pessoa para mim no mesmo segundo também
+ * fica quieta — custa um aviso, e o dado atualiza igual.
+ */
+export const ECO_DE_ASSUMIR = "__assumir_conversa__";
+
+/**
  * Folga depois que a mutação assenta, para o último evento da cascata chegar.
  *
  * Cobre só o trecho que sobra depois da resposta: commit, distribuição e

@@ -86,13 +86,15 @@ export function RunsTable({ agentId, active }: Props) {
           <TableHeader>
             <TableRow>
               <TableHead className="w-[170px]">{t("Início")}</TableHead>
-              <TableHead>{t("Status")}</TableHead>
+              <TableHead>{t("Situação")}</TableHead>
               <TableHead>{t("Tipo")}</TableHead>
-              <TableHead>{t("Tokens (in/out)")}</TableHead>
+              <TableHead>{t("Volume de texto (entrada/saída)")}</TableHead>
               <TableHead>{t("Custo")}</TableHead>
               <TableHead>{t("Latência")}</TableHead>
-              <TableHead>{t("Steps")}</TableHead>
-              <TableHead className="text-right">{t("Ações")}</TableHead>
+              <TableHead>{t("Ações")}</TableHead>
+              <TableHead className="text-right">
+                <span className="sr-only">{t("Detalhes")}</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

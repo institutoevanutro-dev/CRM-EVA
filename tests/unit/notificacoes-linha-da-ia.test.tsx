@@ -53,7 +53,7 @@ describe("Configurações › Notificações — Conversa passada pela IA", () =
     comNotification(notif);
     await tela();
 
-    const linha = screen.getByRole("switch", { name: "Conversa passada pela IA via push" });
+    const linha = screen.getByRole("switch", { name: "Conversa passada pela IA: notificação" });
     // Ligada por padrão, mas sem permissão ainda aparece desligada: é ligando
     // que a pessoa chega ao "Permitir".
     expect(linha.getAttribute("aria-checked")).toBe("false");
@@ -62,7 +62,7 @@ describe("Configurações › Notificações — Conversa passada pela IA", () =
     await waitFor(() => expect(sync).toHaveBeenCalled());
     expect(notif.requestPermission).toHaveBeenCalledTimes(1);
     expect(window.localStorage.getItem("alerts.enabled")).toBe("0");
-    expect(screen.getByRole("switch", { name: "Nova mensagem via push" }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("switch", { name: "Nova mensagem: notificação" }).getAttribute("aria-checked")).toBe("false");
   });
 
   it("navegador sem notificação (iPhone fora da Tela de Início): explica como resolver", async () => {

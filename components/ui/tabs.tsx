@@ -24,7 +24,13 @@ const TabsList = React.forwardRef<
       // Aqui e não na tela do agente de propósito: TODA `TabsList` do app tem a
       // mesma fragilidade, e consertar só onde eu esbarrei deixaria as irmãs
       // quebradas com um álibi de "já foi tratado".
-      "inline-flex h-9 max-w-full items-center justify-center overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground",
+      //
+      // Centraliza pelas margens automáticas do 1º e do último filho, e não por
+      // `justify-center`: com `justify-center`, uma fila que rola corta o COMEÇO
+      // (o que transborda à esquerda não é alcançável pela rolagem), e no iPhone
+      // "Números por QR" sumia em Conexões (item 243). Margem automática vira
+      // zero quando falta espaço, então a fila que rola começa na esquerda.
+      "inline-flex h-9 max-w-full items-center justify-start [&>:first-child]:ms-auto [&>:last-child]:me-auto overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground",
       className
     )}
     {...props}

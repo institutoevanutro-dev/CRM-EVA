@@ -10,7 +10,7 @@ import { rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
 import { marcarReleitura } from "@/lib/audit/releitura";
 import { avatarUrlServivel } from "@/lib/notifications/avatar_url";
 import { entregarAviso } from "@/lib/notifications/deliver";
-import { shouldNotifyInbound } from "@/lib/notifications/policy";
+import { conversaNoAutomatico, shouldNotifyInbound, type ConversaDoAviso } from "@/lib/notifications/policy";
 import { syncPushSubscription } from "@/lib/notifications/push_client";
 
 function tabFocused(): boolean {
@@ -87,22 +87,40 @@ async function contactNotifyBits(contactId: string): Promise<{ title: string; ic
   return { title, icon };
 }
 
-async function contactIdFromRow(
-  row: Record<string, unknown>,
-  conversationId: string | null,
-): Promise<string | null> {
-  if (typeof row.contact_id === "string") return row.contact_id;
-  if (!conversationId) return null;
-  // Mesmo motivo de `contatoDaRota`: pelo client do browser este select voltava
-  // vazio SEM erro. A rota autentica no servidor.
+/**
+ * A conversa pela rota (mesmo motivo de `contatoDaRota`: pelo client do browser
+ * este select voltava vazio SEM erro). Dela saem o contato, quando o payload
+ * não o traz, e quem manda na conversa (`conversaNoAutomatico`).
+ */
+async function conversaDaRota(conversationId: string): Promise<(ConversaDoAviso & { contact_id?: unknown }) | null> {
   try {
     const r = await fetch(`/api/v1/conversations/${conversationId}`, { credentials: "include" });
     if (!r.ok) return null;
-    const c = ((await r.json()) as { data?: { contact_id?: string | null } | null }).data;
-    return typeof c?.contact_id === "string" ? c.contact_id : null;
+    const c = ((await r.json()) as { data?: unknown }).data;
+    return c && typeof c === "object" && !Array.isArray(c) ? (c as ConversaDoAviso & { contact_id?: unknown }) : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * A org tem automático de pé? Lido uma vez a cada 5 min (como o selo do Inbox,
+ * `useAutomaticoAtivo`). Falhou ou sem permissão: `undefined` (não guardado),
+ * e aí nada cala.
+ */
+let automaticoEmCache: { valor: boolean; ate: number } | null = null;
+async function automaticoDaOrg(): Promise<boolean | undefined> {
+  if (automaticoEmCache && automaticoEmCache.ate > Date.now()) return automaticoEmCache.valor;
+  let valor: boolean | undefined;
+  try {
+    const r = await fetch("/api/v1/ai/automatico-ativo", { credentials: "include" });
+    const ativo = r.ok ? ((await r.json()) as { data?: { ativo?: unknown } }).data?.ativo : undefined;
+    valor = typeof ativo === "boolean" ? ativo : undefined;
+  } catch {
+    valor = undefined;
+  }
+  if (valor !== undefined) automaticoEmCache = { valor, ate: Date.now() + 5 * 60_000 };
+  return valor;
 }
 
 export function useInboundMessageAlerts(): void {
@@ -130,7 +148,16 @@ export function useInboundMessageAlerts(): void {
       return;
     }
     void (async () => {
-      const contactId = await contactIdFromRow(row, conversationId);
+      // `shouldNotifyInbound` já garantiu a conversa.
+      const [conversa, automatico] = await Promise.all([conversaDaRota(conversationId!), automaticoDaOrg()]);
+      // Conversa que o automático está atendendo não avisa a equipe.
+      if (conversaNoAutomatico(conversa, automatico)) return;
+      const contactId =
+        typeof row.contact_id === "string"
+          ? row.contact_id
+          : typeof conversa?.contact_id === "string"
+            ? conversa.contact_id
+            : null;
       const bits = contactId
         ? await contactNotifyBits(contactId)
         : { title: "Nova mensagem" as const, icon: undefined };

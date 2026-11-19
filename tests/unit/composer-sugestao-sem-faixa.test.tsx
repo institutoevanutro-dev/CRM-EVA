@@ -125,6 +125,23 @@ describe("a assistência do agente só ocupa a tela com sugestão (#3234)", () =
     expect(screen.getByTestId("sugestao-sai-com-teclado").contains(bloco())).toBe(true);
   });
 
+  it("item 214: as ações propostas aparecem com o nome da tela, não o da máquina", async () => {
+    comRascunhos([
+      rascunho({
+        proposals: [
+          { tool: "crm_schedule_followup", arguments: {} },
+          { tool: "ferramenta_desconhecida", arguments: {} },
+        ],
+      }),
+    ]);
+    renderComposer();
+    expect(await screen.findByText("Agendar um retorno para o cliente")).toBeTruthy();
+    expect(screen.queryByText("crm_schedule_followup")).toBeNull();
+    // Sem rótulo no catálogo, o nome cru ainda é melhor que nada.
+    expect(screen.getByText("ferramenta_desconhecida")).toBeTruthy();
+    expect(screen.getByLabelText("O que melhorar na próxima sugestão")).toBeTruthy();
+  });
+
   it("CONTROLE: rascunho preparando e rascunho aprovado também mantêm o bloco", async () => {
     comRascunhos([rascunho({ status: "generating", original_body: null })]);
     const primeira = renderComposer();
@@ -211,7 +228,7 @@ describe("a assistência do agente só ocupa a tela com sugestão (#3234)", () =
 
     await waitFor(() =>
       expect(deps.toastSuccess).toHaveBeenCalledWith(
-        "Sugestão rejeitada. O feedback será usado na próxima sugestão.",
+        "Sugestão rejeitada. O comentário será usado na próxima sugestão.",
       ),
     );
     await waitFor(() => expect(bloco()).toBeNull());

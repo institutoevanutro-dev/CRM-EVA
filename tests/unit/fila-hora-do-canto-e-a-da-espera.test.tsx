@@ -65,38 +65,29 @@ const pintar = (conv: ConversationWithContact, queuePosition?: number) =>
     />,
   );
 
-const cantoDaFila = () => screen.getByTitle("Desde quando o cliente espera resposta");
+/** Na Fila o tempo aparece UMA vez, na pílula "Aguardando há…" (item 212). */
+const pilula = () => screen.getByText(/^Aguardando/);
 
-describe("na Fila, o relógio da linha é o relógio da ordem", () => {
-  it("⭐ a hora do canto é a da ESPERA — a mensagem mais antiga sem resposta", () => {
+describe("na Fila, o tempo da linha é o tempo da ordem — e aparece uma vez só", () => {
+  it("⭐ a pílula mede a ESPERA — a mensagem mais antiga sem resposta", () => {
     pintar(base, 3);
-    expect(cantoDaFila()).toHaveTextContent(horaDaEspera);
+    expect(pilula()).toHaveTextContent("há 9 dias");
   });
 
-  it("⭐ não é a ÚLTIMA mensagem do cliente, nem a da atividade, nem a criação", () => {
-    // É a troca que a #990 descreve, na linha: quem insiste faz a própria espera
-    // "recomeçar" e a pílula volta para "há 1 min" enquanto a posição afunda.
+  it("⭐ item 212: o canto não repete o tempo da pílula", () => {
     pintar(base, 3);
+    expect(screen.queryByText(horaDaEspera)).not.toBeInTheDocument();
     expect(screen.queryByText(horaDaUltimaDoCliente)).not.toBeInTheDocument();
     expect(screen.queryByText(horaDaAtividade)).not.toBeInTheDocument();
     expect(screen.queryByText(horaDaCriacao)).not.toBeInTheDocument();
   });
 
-  it("⭐ sem mensagem do cliente, cai no MESMO fallback da pílula de espera", () => {
-    // A pílula "Aguardando há…" usa `esperaDaConversa`
-    // (`awaiting_since ?? last_inbound_at ?? created_at`). Duas respostas para o
-    // mesmo "desde quando?", a 40px de distância, seriam a próxima divergência —
-    // então o fallback é o mesmo, e este caso o prende.
+  it("⭐ sem mensagem do cliente, a pílula cai no fallback da criação", () => {
     pintar(
       { ...base, awaiting_since: null, last_inbound_at: null } as unknown as ConversationWithContact,
       1,
     );
-    expect(cantoDaFila()).toHaveTextContent(horaDaCriacao);
-  });
-
-  it("o rótulo diz o que o número é — o mesmo canto significa outra coisa na Fila", () => {
-    pintar(base, 3);
-    expect(cantoDaFila()).toBeInTheDocument();
+    expect(pilula()).toHaveTextContent("há 10 meses");
   });
 });
 

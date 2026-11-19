@@ -200,4 +200,20 @@ describe("aviso de mensagem nova — quem mandou", () => {
 
     expect(titulo).toBe("Nova mensagem");
   });
+
+  it("conversa que o automático está atendendo não avisa a equipe", async () => {
+    fetchFalso.mockImplementation(async (url: string) => {
+      if (url === "/api/v1/ai/automatico-ativo") return resposta(true, { data: { ativo: true } });
+      if (url === "/api/v1/conversations/conv-1") {
+        return resposta(true, { data: { status: "open", assigned_to_user_id: null, bot_silenced_until: null, contacts: { force_human: false } } });
+      }
+      return resposta(true, { data: { display_name: "Maria Souza" } });
+    });
+    renderHook(() => useInboundMessageAlerts());
+    await waitFor(() => expect(canal.onChange).not.toBeNull());
+    canal.onChange!(mensagem());
+    await waitFor(() => expect(fetchFalso).toHaveBeenCalledWith("/api/v1/conversations/conv-1", { credentials: "include" }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(toastFalso).not.toHaveBeenCalled();
+  });
 });

@@ -1,3 +1,5 @@
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -26,6 +28,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * `renderToStaticMarkup` **não roda efeitos**. É exatamente a fatia de tempo
  * onde o defeito vive: o que a pessoa vê antes de o efeito chegar. Um valor
  * correto aqui só é possível se a leitura acontecer no RENDER.
+ *
+ * ## A hidratação é o outro lado (erro #418)
+ *
+ * `renderToStaticMarkup` usa o valor de SERVIDOR do `useSyncExternalStore` — o
+ * mesmo que a hidratação usa. Ele é `"unsupported"` fixo, porque no servidor
+ * não existe `Notification`: o HTML sai sempre com o Push desabilitado (o lado
+ * seguro). Quando esse valor era `getPermission`, o navegador hidratava com a
+ * permissão real contra um HTML `unsupported` e o React acusava o #418 toda vez
+ * que a tela abria. O estado real é medido no render do CLIENTE
+ * (`markupNoCliente`), que lê `getPermission` no próprio render, sem efeito.
  *
  * ## O que isto NÃO cobre, declarado
  *
@@ -59,6 +71,20 @@ async function markupSemEfeitos(): Promise<string> {
   return renderToStaticMarkup(<NotificationPrefsClient />);
 }
 
+/** O render do cliente (sem hidratar): lê a permissão real no próprio render. */
+async function markupNoCliente(): Promise<string> {
+  vi.resetModules();
+  const { NotificationPrefsClient } = await import(
+    "@/app/app/settings/notifications/_client"
+  );
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  await act(async () => root.render(<NotificationPrefsClient />));
+  const html = container.innerHTML;
+  await act(async () => root.unmount());
+  return html;
+}
+
 /**
  * Os `<button role="switch">` de Push, e se cada um traz o ATRIBUTO `disabled`.
  *
@@ -72,7 +98,7 @@ async function markupSemEfeitos(): Promise<string> {
  * separa o atributo do prefixo `disabled:` das classes.
  */
 function pushDesabilitado(markup: string): boolean[] {
-  return [...markup.matchAll(/<button[^>]*aria-label="[^"]*via push"[^>]*>/g)].map((m) =>
+  return [...markup.matchAll(/<button[^>]*aria-label="[^"]*: notificação"[^>]*>/g)].map((m) =>
     /\sdisabled[=\s>]/.test(m[0]),
   );
 }
@@ -80,18 +106,28 @@ function pushDesabilitado(markup: string): boolean[] {
 describe("a permissão do navegador é lida no primeiro render", () => {
   it("o instrumento está vivo — controle positivo antes de qualquer conclusão", async () => {
     comPermissaoDoNavegador("denied");
-    const markup = await markupSemEfeitos();
+    const markup = await markupNoCliente();
     // Se o seletor parar de casar, todo caso abaixo vira `[] === []` e passa
     // verde medindo nada.
     expect(
       pushDesabilitado(markup).length,
-      "não achei nenhum interruptor 'via push' no markup — o seletor morreu",
+      "não achei nenhum interruptor de notificação no markup — o seletor morreu",
     ).toBeGreaterThan(0);
   });
 
+  it.each(["granted", "denied", "default"])(
+    "⭐ HTML de servidor e hidratação não dependem da permissão do navegador (%s): Push desabilitado (#418)",
+    async (valor) => {
+      comPermissaoDoNavegador(valor);
+      const markup = await markupSemEfeitos();
+      expect(pushDesabilitado(markup).length).toBeGreaterThan(0);
+      expect(pushDesabilitado(markup).every(Boolean)).toBe(true);
+    },
+  );
+
   it("⭐ com a notificação BLOQUEADA no navegador, ele já nasce desabilitado", async () => {
     comPermissaoDoNavegador("denied");
-    const markup = await markupSemEfeitos();
+    const markup = await markupNoCliente();
     expect(
       pushDesabilitado(markup).every(Boolean),
       "o interruptor nasce habilitado e só desabilita depois do efeito — " +
@@ -101,7 +137,7 @@ describe("a permissão do navegador é lida no primeiro render", () => {
 
   it("⭐ com a notificação CONCEDIDA, ele já nasce habilitado", async () => {
     comPermissaoDoNavegador("granted");
-    const markup = await markupSemEfeitos();
+    const markup = await markupNoCliente();
     // O outro sentido: um conserto que simplesmente desabilitasse sempre
     // passaria no caso acima e falharia aqui. Guarda de um lado só vira defeito
     // do outro — e foi exatamente assim que o detector quebrado desta suíte
@@ -144,7 +180,7 @@ describe("a permissão do navegador é lida no primeiro render", () => {
     ).toBe("");
 
     comPermissaoDoNavegador("granted");
-    const markup = await markupSemEfeitos();
+    const markup = await markupNoCliente();
     expect(
       pushDesabilitado(markup).some(Boolean),
       "sem VAPID o Push nasceu desabilitado — é o conserto exagerado, que tira " +

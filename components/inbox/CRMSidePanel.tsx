@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { Tag, Receipt, Users, ArrowRight, CaretDown, CaretDoubleLeft, CaretDoubleRight } from "@/lib/ui/icons";
+import { Tag, Users, CalendarPlus, ArrowRight, CaretDown, CaretDoubleLeft, CaretDoubleRight } from "@/lib/ui/icons";
 import { apiClient } from "@/lib/api/client";
 import { marcarReleitura } from "@/lib/audit/releitura";
 import { toast } from "sonner";
@@ -68,15 +68,6 @@ interface LeadRow {
   etapas_do_funil?: Array<{ id: string; name: string; is_won: boolean; is_lost: boolean }>;
   /** Motivos de perda cadastrados neste funil (rota crm-summary). */
   motivos_de_perda?: string[];
-}
-
-interface OrderRow {
-  id: string;
-  external_id: string | null;
-  status: string | null;
-  total_cents: number | null;
-  currency: string | null;
-  created_at: string;
 }
 
 interface ActivityRow {
@@ -684,7 +675,6 @@ function PainelDoContato({ conversation, onAlternarRecolhido }: Omit<Props, "rec
 
 
   const [leads, setLeads] = useState<LeadRow[] | null>(null);
-  const [orders, setOrders] = useState<OrderRow[] | null>(null);
   const [activities, setActivities] = useState<ActivityRow[] | null>(null);
   const [demandas, setDemandas] = useState<DemandaRow[] | null>(null);
   const [fatos, setFatos] = useState<Array<{ id: string; headline: string; body: string }>>([]);
@@ -717,7 +707,6 @@ function PainelDoContato({ conversation, onAlternarRecolhido }: Omit<Props, "rec
   useEffect(() => {
     if (!contactId) {
       setLeads(null);
-      setOrders(null);
       setActivities(null);
       setDemandas(null);
       setFatos([]); setHistorico([]);
@@ -736,7 +725,6 @@ function PainelDoContato({ conversation, onAlternarRecolhido }: Omit<Props, "rec
         const r = await apiClient.get<{
           data: {
             leads: LeadRow[];
-            orders: OrderRow[];
             activities: ActivityRow[];
             demandas: DemandaRow[];
             fatos?: Array<{ id: string; headline: string; body: string }>;
@@ -749,7 +737,6 @@ function PainelDoContato({ conversation, onAlternarRecolhido }: Omit<Props, "rec
         resumoCarregadoDe.current = contactId;
         setSummaryContactId(contactId);
         setLeads(r.data.leads);
-        setOrders(r.data.orders);
         setActivities(r.data.activities);
         // `?? []` e não `?? null`: aqui a leitura DEU CERTO. Cair em `null`
         // faria a lista vazia se disfarçar do terceiro estado e o painel
@@ -763,7 +750,6 @@ function PainelDoContato({ conversation, onAlternarRecolhido }: Omit<Props, "rec
         // não conseguiu ler — nunca que não há.
         setErro(true);
         setLeads(null);
-        setOrders(null);
         setActivities(null);
         setDemandas(null);
         setFatos([]); setHistorico([]);
@@ -808,8 +794,8 @@ function PainelDoContato({ conversation, onAlternarRecolhido }: Omit<Props, "rec
   const sectionsLoading = useMemo(
     () =>
       !erro &&
-      (summaryContactId !== contactId || (leads === null && orders === null && activities === null && demandas === null)),
-    [erro, summaryContactId, contactId, leads, orders, activities, demandas],
+      (summaryContactId !== contactId || (leads === null && activities === null && demandas === null)),
+    [erro, summaryContactId, contactId, leads, activities, demandas],
   );
 
   if (!conversation) {
@@ -834,6 +820,16 @@ function PainelDoContato({ conversation, onAlternarRecolhido }: Omit<Props, "rec
         <div className="sticky top-0 z-10 -mx-4 -mt-4 flex shrink-0 justify-end border-b border-border bg-surface px-2 py-1">
           <BotaoDeRecolherDoPainel recolhido={false} onAlternar={onAlternarRecolhido} />
         </div>
+      )}
+      {/* A AÇÃO PRINCIPAL NUMA CLÍNICA, NO TOPO (item 211 da auditoria de 17/11):
+          era um link sublinhado pequeno no meio do cartão do contato. */}
+      {contactId && (
+        <Button asChild className="w-full">
+          <Link href={`/app/agenda?contato=${contactId}&conversa=${conversation.id}`}>
+            <CalendarPlus size={16} className="mr-1.5" weight="regular" aria-hidden />
+            {t("Marcar consulta")}
+          </Link>
+        </Button>
       )}
       {/* RECOLHIDA por padrão (pedido da clínica, 22/10): abre quando o mouse
           PARA sobre o título (300 ms) e fecha ao sair da seção; o clique no
@@ -975,12 +971,11 @@ function PainelDoContato({ conversation, onAlternarRecolhido }: Omit<Props, "rec
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {tags.map((t) => (
-                <ChipDeEtiqueta key={t} tag={t} className="h-4 px-1.5 text-[10px]" />
+                <ChipDeEtiqueta key={t} tag={t} className="h-5 px-1.5 text-xs" />
               ))}
             </div>
           )}
           <div className="flex flex-wrap gap-2 pt-1">
-            {contactId&&conversation?<Link className="underline" href={`/app/agenda?contato=${contactId}&conversa=${conversation.id}`}>{t("Marcar compromisso")}</Link>:null}
             <Button
               size="sm"
               variant="outline"
@@ -1050,43 +1045,10 @@ function PainelDoContato({ conversation, onAlternarRecolhido }: Omit<Props, "rec
           {t("Memória do contato")}
           <CaretDown size={12} className="text-text-muted transition-transform group-open:rotate-180" aria-hidden />
         </summary>
-        <p className="mt-1 text-xs text-muted-foreground">{t("Fatos duráveis registrados nas notas. Pendências pertencem à demanda vigente.")}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{t("O que vale guardar sobre a pessoa, tirado das notas.")}</p>
         {!sectionsLoading && fatos.map((f) => <details key={f.id} className="mt-2 text-xs"><summary>{f.headline}</summary><p className="mt-1 whitespace-pre-wrap">{f.body}</p></details>)}
-        {!sectionsLoading && fatos.length === 0 && <p className="mt-2 text-xs text-muted-foreground">{t("Nenhum fato durável registrado.")}</p>}
+        {!sectionsLoading && fatos.length === 0 && <p className="mt-2 text-xs text-muted-foreground">{t("Nada guardado ainda.")}</p>}
         {!sectionsLoading && historico.length > 0 && <div className="mt-3 text-xs"><h4>{t("Histórico encerrado — sem tarefas pendentes")}</h4>{historico.map((h) => <p key={h.id}>{t(DESFECHO_LEGIVEL[h.desfecho] ?? h.desfecho)}{h.fechada_em ? ` · ${shortDate(h.fechada_em, localeDaData)}` : ""}</p>)}</div>}
-      </details>
-
-      <Separator />
-
-      <details className="group">
-        <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold text-text [&::-webkit-details-marker]:hidden">
-          {t("Pedidos recentes")}
-          <CaretDown size={12} className="text-text-muted transition-transform group-open:rotate-180" aria-hidden />
-        </summary>
-        {sectionsLoading ? (
-          <Skeleton className="mt-2 h-14 w-full" />
-        ) : orders && orders.length > 0 ? (
-          <ul className="mt-2 space-y-1.5">
-            {orders.map((o) => (
-              <li
-                key={o.id}
-                className="flex items-center justify-between rounded-md border border-border p-2 text-xs"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1 truncate font-medium">
-                    <Receipt size={11} weight="regular" aria-hidden />
-                    {o.external_id ?? o.id.slice(0, 8)}
-                  </div>
-                  <div className="text-muted-foreground">
-                    {o.status ?? "—"} · {formatMoney(o.total_cents, o.currency)}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <SemLista vazio="Sem pedidos." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
-        )}
       </details>
 
       <Separator />

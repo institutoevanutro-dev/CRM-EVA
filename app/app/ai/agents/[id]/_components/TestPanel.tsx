@@ -19,11 +19,13 @@ import { Badge } from "@/components/ui/badge";
 
 import { apiClient } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
-import { agentRunsKey } from "@/hooks/ai/useAgentRuns";
+import { RUN_STATUS_LABEL_PT, agentRunsKey } from "@/hooks/ai/useAgentRuns";
+import { catalogEntry } from "@/lib/mcp/tools/catalogo";
 import { useT } from "@/hooks/i18n/useT";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 
+import { NomeDoModelo } from "./ModelPicker";
 import { RunTrace } from "./RunTrace";
 
 interface Props {
@@ -217,7 +219,9 @@ export function TestPanel({
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    // Uma coluna: pergunta em cima, resultado embaixo (regra da casa). Em duas
+    // colunas a metade direita ficava vazia até o primeiro teste.
+    <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4">
         {alteracoesNaoSalvas ? (
           <div
@@ -246,23 +250,23 @@ export function TestPanel({
           </p>
           <div className="flex items-center gap-2 text-sm">
             <Badge variant="outline">{versionLabel}</Badge>
-            <span className="font-mono text-xs">
-              {target.provider} / {target.model}
+            <span className="text-xs text-muted-foreground">
+              <NomeDoModelo provider={target.provider} model={target.model} />
             </span>
           </div>
         </div>
 
         <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs">
           <p className="font-medium text-warning-fg">
-            {t("⚠ Modo teste consome créditos do provider.")}
+            {t("O teste gasta créditos da inteligência artificial.")}
           </p>
           <p className="mt-1 text-muted-foreground">
-            {t("Nenhuma mensagem é enviada via WhatsApp. O run é registrado como dry-run.")}
+            {t("Nenhuma mensagem vai pelo WhatsApp. O teste aparece em Execuções marcado como teste.")}
           </p>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="test-message">{t("Mensagem do cliente (sample)")}</Label>
+          <Label htmlFor="test-message">{t("Mensagem do cliente (exemplo)")}</Label>
           <Textarea
             id="test-message"
             value={message}
@@ -316,7 +320,7 @@ export function TestPanel({
         ) : null}
 
         {pending ? (
-          <p className="text-sm text-muted-foreground">{t("Executando dry-run…")}</p>
+          <p className="text-sm text-muted-foreground">{t("Executando o teste…")}</p>
         ) : null}
 
         {result ? (
@@ -330,21 +334,25 @@ export function TestPanel({
             ) : null}
 
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <Cell label={t("Status")}>{result.status}</Cell>
+              <Cell label={t("Situação")}>
+                {RUN_STATUS_LABEL_PT[result.status] ? t(RUN_STATUS_LABEL_PT[result.status]!) : result.status}
+              </Cell>
               <Cell label={t("Latência")}>
                 {typeof result.latency_ms === "number" ? `${result.latency_ms}ms` : "—"}
               </Cell>
-              <Cell label={t("Tokens in/out")}>
+              <Cell label={t("Volume de texto (entrada/saída)")}>
                 {result.tokens_in?.toLocaleString()??"—"} /{" "}
                 {result.tokens_out?.toLocaleString()??"—"}
               </Cell>
-              <Cell label={t("Custo (cents)")}>{result.cost_cents ?? "—"}</Cell>
+              <Cell label={t("Custo")}>
+                {result.cost_cents == null ? "—" : `US$ ${(result.cost_cents / 100).toFixed(4)}`}
+              </Cell>
             </div>
 
             <RunTrace
               toolCalls={result.tool_calls}
               finalText={result.final_text ?? null}
-              emptyMessage={t("Sem tool calls (resposta direta do LLM).")}
+              emptyMessage={t("Nenhuma ação usada: respondeu direto.")}
             />
 
             {result.candidates ? (
@@ -362,9 +370,13 @@ export function TestPanel({
                 {result.candidates.map((candidate, i) => (
                   <details key={i}>
                     <summary>{t("Verificações da resposta")}</summary>
-                    <pre className="overflow-auto whitespace-pre-wrap">
-                      {JSON.stringify(candidate.trace, null, 2)}
-                    </pre>
+                    <ul className="mt-1 space-y-0.5 pl-4">
+                      {candidate.trace.map((v, j) => (
+                        <li key={j}>
+                          {v.gate}: {v.verdict}
+                        </li>
+                      ))}
+                    </ul>
                   </details>
                 ))}
                 {result.impediments?.map((x, i) => (
@@ -379,7 +391,9 @@ export function TestPanel({
                     </p>
                     <ul>
                       {result.proposals.map((x, i) => (
-                        <li key={i}>{x.tool}</li>
+                        <li key={i}>
+                          {catalogEntry(x.tool)?.rotulo ? t(catalogEntry(x.tool)!.rotulo) : x.tool}
+                        </li>
                       ))}
                     </ul>
                   </div>

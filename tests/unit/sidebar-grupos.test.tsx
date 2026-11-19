@@ -67,7 +67,7 @@ describe("Sidebar por área", () => {
     expect(rotulos().filter((r) => grupos.includes(r ?? ""))).toEqual(grupos);
     const telas = screen.getByRole("navigation", { name: "Telas de Atendimento" });
     expect(Array.from(telas.querySelectorAll("a")).map((a) => a.textContent?.trim())).toEqual([
-      "Inbox", "Radar", "Agenda", "Respostas rápidas", "Alertas", "Casos", "Propostas",
+      "Conversas", "Radar", "Agenda", "Respostas rápidas", "Central de avisos", "Casos", "Propostas",
     ]);
     expect(screen.queryByRole("navigation", { name: "Telas de Vendas" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Ver tudo" })).toBeNull();
@@ -211,19 +211,30 @@ describe("Sidebar por área", () => {
     expect(screen.getByRole("button", { name: "Atendimento" })).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("recolhido, o ícone da área leva à primeira tela dela e marca a área atual", () => {
+  it("recolhido, mostra direto os 5 destinos do dia e marca o atual (item 228)", () => {
     comoPapel("admin");
-    rota.atual = "/app/pipelines/abc";
+    rota.atual = "/app/agenda";
     render(<SidebarContent collapsed />);
-    const vendas = nav().querySelector('a[title="Vendas"]');
-    expect(vendas).toHaveAttribute("href", "/app/kanban");
-    expect(vendas).toHaveAttribute("aria-current", "page");
+    const links = Array.from(nav().querySelectorAll("a")).map((a) => [a.getAttribute("title"), a.getAttribute("href")]);
+    expect(links).toEqual([
+      ["Início", "/app/inicio"],
+      ["Agenda", "/app/agenda"],
+      ["Conversas", "/app/inbox"],
+      ["Contatos", "/app/contacts"],
+      ["Central de avisos", "/app/ai/inbox"],
+    ]);
+    // A Agenda acende o próprio ícone, não o das Conversas.
+    expect(nav().querySelector('a[aria-current="page"]')).toHaveAttribute("href", "/app/agenda");
   });
 
-  it("colapsado mantém os links com o nome como dica", () => {
+  it("recolhido, o aviso de conexão caída vai no ícone das Conversas, só para quem abre Conexões", () => {
     comoPapel("admin");
     render(<SidebarContent collapsed />);
-    expect(nav().querySelector('a[title="Vendas"]')).not.toBeNull();
+    expect(nav().querySelector('a[href="/app/inbox"] [data-testid="saude-da-conexao"]')).not.toBeNull();
+    cleanup();
+    comoPapel("agent");
+    render(<SidebarContent collapsed />);
+    expect(screen.queryByTestId("saude-da-conexao")).toBeNull();
   });
 
   it("papel sem tela numa área não vê a área", () => {

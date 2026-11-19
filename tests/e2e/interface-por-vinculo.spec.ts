@@ -144,7 +144,7 @@ test("interface por membro atualiza ao vivo, preserva formulário e convite apli
     await expect(abasDeVendas.getByRole("link", { name: "Contatos" })).toHaveCount(0);
     await member.keyboard.press("ControlOrMeta+k");
     await expect(member.getByRole("option").filter({ hasText: "Produtos" })).toBeVisible();
-    await expect(member.getByRole("option").filter({ hasText: "Inbox" })).toHaveCount(0);
+    await expect(member.getByRole("option").filter({ hasText: /^Conversas/ })).toHaveCount(0);
     await member.keyboard.press("Escape");
     mkdirSync(evidence, { recursive: true });
     await member.screenshot({ path: `${evidence}/interface-hub-only.png` });

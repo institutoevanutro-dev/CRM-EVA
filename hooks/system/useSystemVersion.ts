@@ -8,6 +8,8 @@ export interface SystemVersion {
   is_owner: boolean;
   latest_version?: string;
   update_available?: boolean;
+  /** `false`: a instalação esconde "Atualizar agora" (`ESCONDER_ATUALIZAR_AGORA`). */
+  atualizar_pela_tela?: boolean;
   off_release?: boolean;
   /** O host não conseguiu comparar a versão instalada com a última publicada. */
   compare_failed?: boolean;

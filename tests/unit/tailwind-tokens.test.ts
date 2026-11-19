@@ -658,7 +658,8 @@ describe("D1.3 — cor só de token, e texto de estado legível", () => {
 
   it("catraca: cor crua da paleta e texto de 8–11 px só podem cair", () => {
     // Medido em 06/11/2026, depois da D1.3. Reduziu? Baixe o teto aqui.
-    const TETO_COR_CRUA = 266;
+    // Cor crua chegou a zero no lote 24 (19/11/2026): agora é proibida.
+    const TETO_COR_CRUA = 0;
     const TETO_TEXTO_MINUSCULO = 166;
     const conta = (rx: RegExp) =>
       ARQUIVOS.reduce((n, f) => n + (fs.readFileSync(f, "utf8").match(rx)?.length ?? 0), 0);
@@ -667,6 +668,5 @@ describe("D1.3 — cor só de token, e texto de estado legível", () => {
     const minusculo = conta(/text-\[(?:8|9|10|11)px\]/g);
     expect(corCrua, "cor crua (amber|red|emerald|yellow-NNN) subiu — use token de estado").toBeLessThanOrEqual(TETO_COR_CRUA);
     expect(minusculo, "texto de 8–11 px subiu — situação não fica abaixo de 12 px").toBeLessThanOrEqual(TETO_TEXTO_MINUSCULO);
-    expect(corCrua).toBeGreaterThan(0);
   });
 });

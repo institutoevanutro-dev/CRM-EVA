@@ -119,7 +119,7 @@ describe("guarda de white-label (self-host)", () => {
     // no layout raiz E ele envolve `children` (um provedor montado ao lado, sem
     // envolver a árvore, deixaria todo consumidor no padrão do produto).
     expect(layoutRaiz).toMatch(/<MarcaDaInstalacaoProvider\s+marca=\{/);
-    expect(layoutRaiz).toMatch(/<MarcaDosClientComponents>\s*\n\s*<ThemeProvider>\{children\}/);
+    expect(layoutRaiz).toMatch(/<MarcaDosClientComponents>\s*\n\s*<ThemeProvider>\s*\{children\}/);
   });
 });
 
@@ -1227,9 +1227,11 @@ const EVA_CONGELADA: Readonly<Record<string, number>> = {
   // A rota do cron: o import do módulo, as três variáveis `PRECIFICAEVA_*` e a
   // resposta 503 do scheduler ("Integração PrecificaEva indisponível.").
   "app/api/v1/cron/precificaeva-catalogo/route.ts": 8,
-  // `origem === "precificaeva"` em quatro lugares e o `data-testid` do aviso: o
-  // valor que o banco guarda e o seletor que os testes usam. Nenhum é texto de tela.
-  "app/app/products/_client.tsx": 5,
+  // O `data-testid` do aviso: o seletor que os testes usam. Não é texto de tela.
+  "app/app/products/_client.tsx": 1,
+  // `ORIGEM_DA_PRECIFICACAO`: o valor que o banco guarda em `catalog_products.origem`,
+  // num lugar só para a tela e a rota de Produtos (antes eram 4 literais na tela).
+  "lib/schemas/produtos.ts": 1,
   // `PRECIFICAEVA_URL`, `PRECIFICAEVA_TOKEN` e `PRECIFICAEVA_ORGANIZATION_ID`:
   // variáveis que já estão no `.env` de quem ligou a integração.
   "lib/env.ts": 3,

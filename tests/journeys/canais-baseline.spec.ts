@@ -155,7 +155,7 @@ test.describe("jornada WAHA — baseline do seam de canais", () => {
     await expect(page.getByLabel("Mensagem")).toBeVisible({ timeout: 30_000 });
 
     await abrirAcoesDaConversa(page);
-    const lembrar = page.getByRole("button", { name: /Lembrar|Lembrete ativo/ });
+    const lembrar = page.getByRole("button", { name: /Lembrar|Lembrete às/ });
     await expect(lembrar).toBeVisible({ timeout: 30_000 });
     await lembrar.click();
     const opcao = page.getByRole("menuitem").first();

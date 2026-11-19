@@ -27,6 +27,9 @@ vi.mock("@/lib/auth/requirePlatformAdmin", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+// O mesmo objeto em todas as importações da rota: o teste muda o campo e lê de novo.
+const envRef = { ESCONDER_ATUALIZAR_AGORA: "" };
+vi.mock("@/lib/env", () => ({ env: envRef }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 
 const OWNER = { id: "11111111-1111-4111-8111-111111111111", email: "dono@x.com", is_platform_admin: true };
@@ -190,6 +193,21 @@ describe("GET /api/v1/system/version", () => {
       { version: "1.1.0", texto: expect.stringContaining("reconecte o número") },
     ]);
     expect(body.data.notes.complete).toBe(true);
+  });
+
+  it("oferece \"Atualizar agora\" por padrão e esconde com ESCONDER_ATUALIZAR_AGORA=true (pergunta 26)", async () => {
+    vi.mocked(loadAuthUser).mockResolvedValue(OWNER as never);
+    const { GET } = await import("../version/route");
+    expect((await (await GET(get())).json()).data.atualizar_pela_tela).toBe(true);
+    envRef.ESCONDER_ATUALIZAR_AGORA = "true";
+    try {
+      const body = await (await GET(get())).json();
+      expect(body.data.atualizar_pela_tela).toBe(false);
+      // A versão continua: só o botão some.
+      expect(body.data.current_version).toBe("1.0.0");
+    } finally {
+      envRef.ESCONDER_ATUALIZAR_AGORA = "";
+    }
   });
 
   it("entrega TODAS as seções entre a instalada e a alvo, com o aviso do meio nomeado", async () => {

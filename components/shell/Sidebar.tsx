@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { CaretDown, Gear, House, SignOut } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
+import { ROTULO_DO_PAPEL } from "@/lib/auth/types";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { ConnectionHealthDot } from "@/components/connections/ConnectionHealthDot";
 import { SearchTrigger } from "@/components/shell/SearchTrigger";
@@ -12,7 +13,7 @@ import { VersionFooter } from "@/components/shell/VersionFooter";
 import { LogotipoDoProduto, SimboloDoProduto } from "@/components/branding/MarcaDoProduto";
 import { marcaEhADoProduto } from "@/lib/branding";
 import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
-import { CONFIGURACOES, gruposDoMenu, ondeNoMenu, telasDaConta, veInicio } from "@/lib/navigation/menu";
+import { CONFIGURACOES, atalhosDoMenu, gruposDoMenu, ondeNoMenu, telasDaConta, veInicio } from "@/lib/navigation/menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,6 +64,10 @@ export function SidebarContent({
   // Grupos pelo que a pessoa veio fazer (lib/navigation/menu.ts); cada um mostra todas as suas telas.
   const grupos = gruposDoMenu(...quem);
   const conta = telasDaConta(...quem);
+  // Recolhido, a faixa mostra direto os destinos do dia (item 228), não um ícone por grupo.
+  const atalhos = atalhosDoMenu(...quem);
+  // O aviso de conexão caída só para quem pode abrir Conexões e agir; recolhido, ele vai no ícone das Conversas.
+  const conexaoNoMenu = grupos.some((g) => g.itens.some((d) => d.healthDot));
   const onde = ondeNoMenu(pathname);
   const atual = onde.grupo;
   const abaAtual = onde.href;
@@ -78,8 +83,9 @@ export function SidebarContent({
   }
   const alternar = (id: string) => setAberto((a) => (a === id ? null : id));
 
-  const papeis: Record<string, string> = { admin: t("Administrador"), manager: t("Gestor"), agent: t("Atendente"), viewer: t("Leitura") };
-  const papel = papeis[activeOrg?.role ?? ""];
+  // Mesmo rótulo da Equipe e do convite (item 242): uma fonte só, ROTULO_DO_PAPEL.
+  const rotulo = (ROTULO_DO_PAPEL as Record<string, string>)[activeOrg?.role ?? ""];
+  const papel = rotulo ? t(rotulo) : undefined;
 
   const brand = useMarcaDaInstalacao();
   const nome = activeOrg?.marca?.nome ?? brand.name;
@@ -110,50 +116,53 @@ export function SidebarContent({
     </Link>
   );
 
+  const atalho = (d: (typeof atalhos)[number]) => {
+    const Icone = d.icon;
+    const ligada = d.href === abaAtual;
+    return (
+      <Link
+        key={d.href}
+        href={d.href}
+        {...intencao(d.href)}
+        title={t(d.label)}
+        aria-label={t(d.label)}
+        aria-current={ligada ? "page" : undefined}
+        onClick={onNavigate}
+        className={cn(
+          "relative flex min-h-11 items-center justify-center rounded-lg px-2 transition-colors hover:bg-sidebar-active lg:min-h-10",
+          ligada ? "bg-sidebar-active text-gold" : "text-sidebar-fg",
+        )}
+      >
+        <Icone size={20} weight={ligada ? "fill" : "light"} aria-hidden />
+        {conexaoNoMenu && d.href === "/app/inbox" && <ConnectionHealthDot className="absolute top-1.5 right-1.5" />}
+      </Link>
+    );
+  };
+
   const grupo = (item: (typeof grupos)[number]) => {
-    const Icone = item.icon;
-    const ativa = atual === item.id;
     // O aviso de conexão caída só para quem pode abrir Conexões e agir.
     const temSaude = item.itens.some((d) => d.healthDot);
     const expandido = !collapsed && aberto === item.id;
     return (
       <div key={item.id}>
-        {collapsed ? (
-          // Recolhido não há lista para abrir: o ícone leva à primeira tela do grupo.
-          <Link
-            href={item.itens[0]!.href}
-            {...intencao(item.itens[0]!.href)}
-            title={t(item.label)}
-            aria-current={ativa ? "page" : undefined}
-            onClick={onNavigate}
-            className={cn(
-              "relative flex min-h-11 items-center justify-center rounded-lg px-2 transition-colors hover:bg-sidebar-active lg:min-h-10",
-              ativa ? "bg-sidebar-active text-gold" : "text-sidebar-fg",
-            )}
-          >
-            <Icone size={20} weight={ativa ? "fill" : "light"} aria-hidden />
-            {temSaude && <ConnectionHealthDot className="absolute top-1.5 right-1.5" />}
-          </Link>
-        ) : (
-          // Aberto, o nome do grupo SÓ abre e fecha (D1.10): antes ele às vezes levava à
-          // primeira tela e às vezes só abria, conforme a tela em que se estava. Abre na
-          // hora; só a seta gira — animar a altura falha calado no Safari (ver a coluna
-          // de horários no globals.css).
-          <button
-            type="button"
-            onClick={() => alternar(item.id)}
-            aria-expanded={expandido}
-            className="rotulo-secao flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-gold transition-colors hover:bg-sidebar-active lg:min-h-10"
-          >
-            <span className="min-w-0 flex-1 truncate">{t(item.label)}</span>
-            {temSaude && <ConnectionHealthDot />}
-            <CaretDown
-              size={14}
-              aria-hidden
-              className={cn("shrink-0 transition-transform duration-150 motion-reduce:transition-none", expandido && "rotate-180")}
-            />
-          </button>
-        )}
+        {/* O nome do grupo SÓ abre e fecha (D1.10): antes ele às vezes levava à
+            primeira tela e às vezes só abria, conforme a tela em que se estava. Abre na
+            hora; só a seta gira — animar a altura falha calado no Safari (ver a coluna
+            de horários no globals.css). Recolhido, os grupos dão lugar aos atalhos. */}
+        <button
+          type="button"
+          onClick={() => alternar(item.id)}
+          aria-expanded={expandido}
+          className="rotulo-secao flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-gold transition-colors hover:bg-sidebar-active lg:min-h-10"
+        >
+          <span className="min-w-0 flex-1 truncate">{t(item.label)}</span>
+          {temSaude && <ConnectionHealthDot />}
+          <CaretDown
+            size={14}
+            aria-hidden
+            className={cn("shrink-0 transition-transform duration-150 motion-reduce:transition-none", expandido && "rotate-180")}
+          />
+        </button>
         {expandido && (
           <nav aria-label={`${t("Telas de")} ${t(item.label)}`} className="mt-0.5 mb-2 space-y-0.5">
             {item.itens.map((d) => {
@@ -226,13 +235,14 @@ export function SidebarContent({
       </div>
       <div aria-hidden className="mx-4 mb-2 h-px bg-gradient-to-r from-transparent via-gold/70 to-transparent" />
       <div className={cn("px-3 pb-2", collapsed && "px-2")}>
-        <SearchTrigger naLateral recolhida={collapsed} atalho={showCollapseControl} />
+        {/* Escolheu na busca: a gaveta do celular fecha, como ao escolher no menu (item 234). */}
+        <SearchTrigger naLateral recolhida={collapsed} atalho={showCollapseControl} aoNavegar={onNavigate} />
       </div>
       {/* Só os grupos rolam. O Início fica parado acima deles: com um grupo grande aberto numa
           janela baixa, a lista rolava e ele aparecia cortado embaixo da busca (print de 10/10/2026). */}
       <nav className="flex min-h-0 flex-1 flex-col p-2" aria-label={t("Navegação principal")}>
         {veInicio(...quem) && <div className="shrink-0 pb-1">{inicio}</div>}
-        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">{grupos.map(grupo)}</div>
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">{collapsed ? atalhos.map(atalho) : grupos.map(grupo)}</div>
       </nav>
       <div className="border-t border-white/10 p-2">
         {/* A página de Configurações lista também o que não tem tela no menu (atualização, canal oficial, modelos,
