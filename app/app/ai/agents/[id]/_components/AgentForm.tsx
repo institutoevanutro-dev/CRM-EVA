@@ -392,35 +392,14 @@ function ErroDoCampo({ campo, erro }: { campo: string; erro?: string }) {
   );
 }
 
-/** Campos do cartão "Freios de segurança": erro em qualquer um abre a sanfona. */
-const FREIOS = [
-  "max_steps",
-  "token_budget",
-  "cost_budget_cents",
-  "history_message_window",
-  "history_token_window",
-  "reply_min_interval_ms",
-] as const;
-
 /**
  * Cartão em sanfona (regra da casa). `<details>` nativo: teclado, leitor de
- * tela e Safari sem JS. `aberta` vale só na montagem — depois quem manda é a
- * pessoa.
+ * tela e Safari sem JS. Todas nascem abertas (decisão do dono, 19/11); fechar
+ * é escolha da pessoa.
  */
-function Sanfona({
-  titulo,
-  aberta,
-  children,
-}: {
-  titulo: string;
-  aberta: boolean;
-  children: React.ReactNode;
-}) {
-  // Só o valor da montagem: se o `open` seguisse a prop, escolher o modelo
-  // fecharia a sanfona na cara de quem está mexendo nela.
-  const [inicial] = React.useState(aberta);
+function Sanfona({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
-    <details open={inicial} className="group rounded-lg border border-border bg-surface">
+    <details open className="group rounded-lg border border-border bg-surface">
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-4 py-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
         <h3>{titulo}</h3>
         <CaretDown
@@ -920,7 +899,7 @@ export function AgentForm(props: Props) {
           mexe pouco começa fechado — e abre ao carregar quando falta algo nele. */}
       <div className={papel === "conversa" ? "flex flex-col gap-4" : "hidden"}>
         {/* Identification */}
-        <Sanfona titulo={t("Quem é este agente")} aberta={!isEdit}>
+        <Sanfona titulo={t("Quem é este agente")}>
           <div className="space-y-1">
             <Label htmlFor="name">{t("Nome")}</Label>
             <Input
@@ -1025,7 +1004,7 @@ export function AgentForm(props: Props) {
         </Card>
 
         {/* Provider + credential + model */}
-        <Sanfona titulo={t("A inteligência que ele usa")} aberta={!isEdit || !form.model || !form.credential_id}>
+        <Sanfona titulo={t("A inteligência que ele usa")}>
           <div className="space-y-1">
             <Label htmlFor="provider">{t("Empresa de inteligência artificial")}</Label>
             <Select
@@ -1093,7 +1072,7 @@ export function AgentForm(props: Props) {
         </Sanfona>
 
         {/* WhatsApp session */}
-        <Sanfona titulo={t("Por qual número ele atende")} aberta={!isEdit || !form.channel_session_id}>
+        <Sanfona titulo={t("Por qual número ele atende")}>
           {props.routerMembership && (
             <div className="flex items-start gap-2 rounded-md bg-accent-soft p-3 text-xs text-text-muted">
               <Info className="mt-0.5 shrink-0" aria-hidden />
@@ -1176,7 +1155,7 @@ export function AgentForm(props: Props) {
         </Sanfona>
 
         {/* Capacidades */}
-        <Sanfona titulo={t("O que o agente pode fazer")} aberta={true}>
+        <Sanfona titulo={t("O que o agente pode fazer")}>
           <p className="text-xs text-muted-foreground">
             {t(
               "Ligue por jornada de trabalho. O agente só consegue fazer o que estiver ligado aqui — e o que estiver ligado, ele fará sozinho durante o atendimento.",
@@ -1201,7 +1180,7 @@ export function AgentForm(props: Props) {
         />
 
         {/* Triggers */}
-        <Sanfona titulo={t("Quando ele entra em ação")} aberta={true}>
+        <Sanfona titulo={t("Quando ele entra em ação")}>
           <TriggerEditor
             value={form.trigger_config}
             onChange={(v) => patch({ trigger_config: v })}
@@ -1210,7 +1189,7 @@ export function AgentForm(props: Props) {
         </Sanfona>
 
         {/* Handoff */}
-        <Sanfona titulo={t("Passar para uma pessoa")} aberta={!isEdit}>
+        <Sanfona titulo={t("Passar para uma pessoa")}>
           <div className="flex items-center gap-2">
             <Switch
               id="handoff_tool_enabled"
@@ -1230,7 +1209,7 @@ export function AgentForm(props: Props) {
         </Sanfona>
 
         {/* Casos humanos */}
-        <Sanfona titulo={t("Pedir ajuda sem sair da conversa")} aberta={!isEdit}>
+        <Sanfona titulo={t("Pedir ajuda sem sair da conversa")}>
           <div className="flex items-center gap-2">
             <Switch
               id="cases_enabled"
@@ -1250,7 +1229,7 @@ export function AgentForm(props: Props) {
         </Sanfona>
 
         {/* Follow-up */}
-        <Sanfona titulo={t("Follow-up")} aberta={true}>
+        <Sanfona titulo={t("Follow-up")}>
           <p className="text-xs text-muted-foreground">
             {t(
               "Retomar sozinho quem parou de responder, para o interessado não sumir sem ninguém perceber.",
@@ -1283,7 +1262,7 @@ export function AgentForm(props: Props) {
           />
         </Sanfona>
         {/* Estilo de resposta (split de mensagens — Onda 4) */}
-        <Sanfona titulo={t("Estilo de resposta")} aberta={!isEdit || !!validation.split_max_chars}>
+        <Sanfona titulo={t("Estilo de resposta")}>
           <div className="flex items-center gap-2">
             <Switch
               id="split_messages"
@@ -1321,7 +1300,7 @@ export function AgentForm(props: Props) {
         </Sanfona>
 
         {/* Limits */}
-        <Sanfona titulo={t("Freios de segurança")} aberta={!isEdit || FREIOS.some((c) => !!validation[c])}>
+        <Sanfona titulo={t("Freios de segurança")}>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label htmlFor="max_steps">{t("Ações por atendimento (1 a 25)")}</Label>
