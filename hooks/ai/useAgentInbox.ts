@@ -21,20 +21,25 @@ export interface AgentInboxItem {
 export interface AgentInboxData {
   items: AgentInboxItem[];
   open_count: number;
+  /** Abertos que chegam a quem lê — o mesmo recorte do Início (`avisosAbertos`). Só vem com `status=open`. */
+  my_open_count?: number | null;
 }
 
+/** Quantos avisos a lista pede por vez; "Ver mais" soma outro tanto, até o teto da rota (200). */
+export const AVISOS_POR_PAGINA = 50;
+
 /** Central de avisos do runtime (F1). Polling 30s — avisos nascem no worker. */
-export function useAgentInbox(status: "open" | "resolved" = "open") {
+export function useAgentInbox(status: "open" | "resolved" = "open", limit = AVISOS_POR_PAGINA) {
   const podeConsultar = usePermission("ai.inbox.view");
   return useQuery({
     enabled: podeConsultar,
-    queryKey: ["agent-inbox", status],
+    queryKey: ["agent-inbox", status, limit],
     // 30 s: é esta leitura que toca o som do pedido de pessoa
     // (`useSonsDaCentral`) — um minuto de atraso num pedido de pessoa pesa.
     refetchInterval: 30_000,
     queryFn: () =>
       apiClient
-        .get<{ data: AgentInboxData }>(`/api/v1/ai/inbox?status=${status}`)
+        .get<{ data: AgentInboxData }>(`/api/v1/ai/inbox?status=${status}&limit=${limit}`)
         .then((r) => r.data),
   });
 }

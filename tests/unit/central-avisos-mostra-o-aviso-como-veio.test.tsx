@@ -34,6 +34,7 @@ import {
 } from "@/hooks/ai/useAgentInbox";
 
 vi.mock("@/hooks/ai/useAgentInbox", () => ({
+  AVISOS_POR_PAGINA: 50,
   useAgentInbox: vi.fn(),
   useUpdateInboxItem: vi.fn(),
   useResolveAllInboxItems: vi.fn(),
@@ -111,11 +112,28 @@ describe("Central de avisos: o dado sai como veio", () => {
 });
 
 describe("Central de avisos: resolver todos de uma vez", () => {
-  it("o botão aparece na aba Abertos para quem pode resolver e dispara uma chamada só", () => {
+  it("o botão aparece na aba Abertos para quem pode resolver, pede confirmação e dispara uma chamada só", () => {
     render(<AgentInboxList canResolve />);
 
     fireEvent.click(screen.getByRole("button", { name: "ES:Marcar todos resolvidos" }));
+    // Resolve TODOS os abertos, não só os da tela: nada sai antes de confirmar.
+    expect(resolverTodos).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("ES:Marcar 1 aviso como resolvido?");
+    fireEvent.click(screen.getByRole("button", { name: "ES:Marcar resolvidos" }));
     expect(resolverTodos).toHaveBeenCalledOnce();
+  });
+
+  it("a aba conta mais do que a lista traz: diz quantos aparecem e oferece ver mais", () => {
+    const muitos = Array.from({ length: 50 }, (_, i) => ({ ...aviso, id: `aviso-${i}` }));
+    vi.mocked(useAgentInbox).mockReturnValue({
+      data: { items: muitos, open_count: 144 },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAgentInbox>);
+    render(<AgentInboxList canResolve />);
+
+    expect(screen.getByTestId("inbox-contagem")).toHaveTextContent("ES:Mostrando 50 de 144");
+    fireEvent.click(screen.getByRole("button", { name: "ES:Ver mais" }));
+    expect(vi.mocked(useAgentInbox)).toHaveBeenLastCalledWith("open", 100);
   });
 
   it("quem não pode resolver não recebe o botão do lote", () => {

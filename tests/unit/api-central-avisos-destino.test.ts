@@ -39,9 +39,18 @@ describe("API Central projeta destinos com sessão", () => {
     expect((await response.json()).data.items[0].destination.estado).toBe("indisponivel");
     expect(calls.filter(c => c[0] === "admin")).toEqual([["admin", "agent_inbox_items"], ["admin", "agent_inbox_items"]]);
     expect(calls).toContainEqual(["authenticated", "conversations"]);
-    expect(calls.filter(c => c[0] === "organization_id")).toEqual(Array(3).fill(["organization_id", org]));
+    // 4: lista + contagem (admin), destino e o recorte "para você" do sino (sessão).
+    expect(calls.filter(c => c[0] === "organization_id")).toEqual(Array(4).fill(["organization_id", org]));
     expect(requireRole).toHaveBeenCalledWith("agent", expect.any(Object));
     expect(audit).not.toHaveBeenCalled();
+  });
+  it("o sino recebe o recorte da pessoa, lido com a sessão (RLS); fora da aba aberta, nada", async () => {
+    const aberto = await (await GET(new NextRequest("http://localhost/api/v1/ai/inbox"))).json();
+    expect(aberto.data.open_count).toBe(1);
+    expect(aberto.data.my_open_count).toBe(0);
+    expect(calls).toContainEqual(["authenticated", "agent_inbox_items"]);
+    const resolvidos = await (await GET(new NextRequest("http://localhost/api/v1/ai/inbox?status=resolved"))).json();
+    expect(resolvidos.data.my_open_count).toBeNull();
   });
   it("controle positivo recebe URL apenas pela leitura autenticada", async () => {
     vi.mocked(createClient).mockResolvedValue(client(false, true) as unknown as Awaited<ReturnType<typeof createClient>>);

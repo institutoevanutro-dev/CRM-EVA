@@ -39,6 +39,7 @@ import { AtendimentoForm } from "./_form";
 import { PausaDaIaForm } from "./_pausa-form";
 import { ExtracaoSilenciosa } from "./_extracaoSilenciosa";
 import { TelefoneDeFichaVazia } from "./_telefoneDeFichaVazia";
+import { LembreteDeCasoParado } from "./_lembrete-caso-parado";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -54,7 +55,7 @@ export default async function AtendimentoSettingsPage() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("organizations")
-    .select("settings")
+    .select("settings, lembrete_caso_ligado, lembrete_caso_intervalo_horas, lembrete_caso_teto")
     .eq("id", activeOrg.orgId)
     .maybeSingle();
 
@@ -105,6 +106,16 @@ export default async function AtendimentoSettingsPage() {
             initialMaxHoras={lerClienteSemRespostaMaxHoras(data?.settings)}
             initialFimDoDiaSeguinte={lerIaVoltaAposEquipe(data?.settings) !== null}
           />
+          {/* Mesma régua da action que grava (0397): a quem ela recusa, não se oferece o formulário. */}
+          {data && podeAdministrarEmpresa(user, activeOrg) ? (
+            <LembreteDeCasoParado
+              inicial={{
+                ligado: data.lembrete_caso_ligado,
+                intervaloHoras: data.lembrete_caso_intervalo_horas,
+                teto: data.lembrete_caso_teto,
+              }}
+            />
+          ) : null}
           <ChannelRoutingForm initial={channels} />
           <AssinaturaForm initial={{ humanos: assinatura.humanos, ia: assinatura.ia, nome_ia: assinatura.nomeIa }} />
           <TelefoneDeFichaVazia
