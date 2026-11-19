@@ -977,8 +977,8 @@ export const DICIONARIO: Traducoes = {
   "Prepara no compositor: você revisa e envia": { es: "Lo prepara en el editor: tú revisas y envías" },
   "Buscar resposta": { es: "Buscar respuesta" },
   "Mostrar na barra do Inbox": { es: "Mostrar en la barra del Inbox" },
-  'Para não depender do dado, ponha um texto de reserva: {{primeiro_nome|"aluno"}}.': {
-    es: 'Para no depender del dato, pon un texto de respaldo: {{primeiro_nome|"alumno"}}.',
+  'Para não depender do dado, ponha um texto de reserva: {{primeiro_nome|"paciente"}}.': {
+    es: 'Para no depender del dato, pon un texto de respaldo: {{primeiro_nome|"paciente"}}.',
   },
   "Desmarcado, a resposta sai da barra do Inbox e continua no atalho /.": {
     es: "Sin marcar, la respuesta sale de la barra del Inbox y sigue en el atajo /.",
@@ -8191,7 +8191,7 @@ export const DICIONARIO: Traducoes = {
   "Só um administrador pode recomeçar o radar.": { es: "Solo un administrador puede reiniciar el radar." },
   "Não foi possível recomeçar o radar.": { es: "No fue posible reiniciar el radar." },
   "Demandas abertas que esfriaram e precisam de você. Se o assistente já agendou um retorno, aparece como “em voo”; sem próximo passo, é risco de perder o cliente.": { es: "Demandas abiertas que se enfriaron y te necesitan. Si el asistente ya agendó un retorno, aparece como “en vuelo”; sin próximo paso, es riesgo de perder al cliente." },
-  "Scripts salvos para responder mais rápido no atendimento.": { es: "Guiones guardados para responder más rápido en la atención." },
+  "Textos prontos para responder mais rápido no atendimento.": { es: "Textos listos para responder más rápido en la atención." },
   "Saudação inicial": { es: "Saludo inicial" },
   "Use": { es: "Usa" },
   "para personalizar.": { es: "para personalizar." },
@@ -9435,8 +9435,11 @@ export const DICIONARIO: Traducoes = {
   "Salvar produto": { es: "Guardar producto" },
   "em estoque": { es: "en stock" },
   "sem controle de estoque": { es: "sin control de stock" },
-  "preço da Precificação": { es: "precio de la Fijación de precios" },
-  "Este item vem da Precificação. Nome, categoria, preço, custo e situação são atualizados de lá a cada hora: o que mudar aqui volta ao valor da Precificação. Para mudar o preço, altere na Precificação.": { es: "Este artículo viene de la Fijación de precios. Nombre, categoría, precio, costo y estado se actualizan desde allí cada hora: lo que cambie aquí vuelve al valor de la Fijación de precios. Para cambiar el precio, modifíquelo en la Fijación de precios." },
+  "Da Precificação": { es: "De la Fijación de precios" },
+  "Este item vem da Precificação. Código, nome, categoria, preço, custo e situação só mudam lá: altere na Precificação.": { es: "Este artículo viene de la Fijación de precios. Código, nombre, categoría, precio, costo y estado solo cambian allí: modifíquelo en la Fijación de precios." },
+  "Desative na Precificação": { es: "Desactívelo en la Fijación de precios" },
+  "Ações do produto": { es: "Acciones del producto" },
+  "Este item vem da Precificação: altere na Precificação.": { es: "Este artículo viene de la Fijación de precios: modifíquelo en la Fijación de precios." },
 
   // Chamada de voz WhatsApp (WaCalls, spec 18)
   // "Chamar", não "Ligar" — a chave já existe com outro sentido (ativar/toggle,

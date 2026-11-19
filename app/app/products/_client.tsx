@@ -7,11 +7,18 @@ import { toast } from "sonner";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { useT } from "@/hooks/i18n/useT";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { CabecalhoDaPagina } from "@/components/shell/CabecalhoDaPagina";
 import { apiClient } from "@/lib/api/client";
 import { formatCents } from "@/lib/money";
-import { precoParaCentavos, type Produto } from "@/lib/schemas/produtos";
+import { DotsThree } from "@/lib/ui/icons";
+import { CAMPOS_DA_PRECIFICACAO, precoParaCentavos, type Produto } from "@/lib/schemas/produtos";
 
 interface Textos {
   titulo: string;
@@ -49,6 +56,9 @@ const VAZIO: Rascunho = {
   quantidade: "0",
   controla_estoque: true,
 };
+
+/** Item da Precificação: os `CAMPOS_DA_PRECIFICACAO` ficam travados aqui. */
+const DA_PRECIFICACAO = "precificaeva";
 
 function centavosParaTexto(c: number): string {
   return (c / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -115,6 +125,8 @@ export function ProdutosClient({
   const [resumo, setResumo] = React.useState<ResumoDaImportacao | null>(null);
   const arquivoRef = React.useRef<HTMLInputElement>(null);
 
+  const travado = editando?.origem === DA_PRECIFICACAO;
+
   const filtrados = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     if (q === "") return inicial;
@@ -128,6 +140,9 @@ export function ProdutosClient({
     if ("erro" in corpo) {
       toast.error(corpo.erro as string);
       return;
+    }
+    if (editando?.origem === DA_PRECIFICACAO) {
+      for (const k of CAMPOS_DA_PRECIFICACAO) delete (corpo as Record<string, unknown>)[k];
     }
     setSalvando(true);
     try {
@@ -301,9 +316,9 @@ export function ProdutosClient({
               {t("Editando")} {editando.nome}
             </p>
           ) : null}
-          {editando?.origem === "precificaeva" ? (
+          {travado ? (
             <p className="mb-3 rounded-md border border-warning/40 bg-warning-bg p-2 text-sm text-warning-fg" data-testid="produto-do-precificaeva">
-              {t("Este item vem da Precificação. Nome, categoria, preço, custo e situação são atualizados de lá a cada hora: o que mudar aqui volta ao valor da Precificação. Para mudar o preço, altere na Precificação.")}
+              {t("Este item vem da Precificação. Código, nome, categoria, preço, custo e situação só mudam lá: altere na Precificação.")}
             </p>
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
@@ -311,6 +326,7 @@ export function ProdutosClient({
               {t("Código")}
               <input
                 value={rascunho.codigo}
+                disabled={travado}
                 onChange={(e) => setRascunho({ ...rascunho, codigo: e.target.value })}
                 className="mt-1 h-9 w-full rounded-md border px-3"
                 data-testid="produto-codigo"
@@ -320,6 +336,7 @@ export function ProdutosClient({
               {t("Nome")}
               <input
                 value={rascunho.nome}
+                disabled={travado}
                 onChange={(e) => setRascunho({ ...rascunho, nome: e.target.value })}
                 className="mt-1 h-9 w-full rounded-md border px-3"
                 data-testid="produto-nome"
@@ -337,6 +354,7 @@ export function ProdutosClient({
               {t("Categoria")}
               <input
                 value={rascunho.categoria}
+                disabled={travado}
                 onChange={(e) => setRascunho({ ...rascunho, categoria: e.target.value })}
                 className="mt-1 h-9 w-full rounded-md border px-3"
               />
@@ -345,7 +363,7 @@ export function ProdutosClient({
               {t("Preço de venda")}
               <input
                 value={rascunho.preco}
-                disabled={editando?.origem === "precificaeva"}
+                disabled={travado}
                 onChange={(e) => setRascunho({ ...rascunho, preco: e.target.value })}
                 placeholder="5.499,00"
                 className="mt-1 h-9 w-full rounded-md border px-3"
@@ -356,7 +374,7 @@ export function ProdutosClient({
               {t("Custo")} <span className="text-muted-foreground">{t("(opcional)")}</span>
               <input
                 value={rascunho.custo}
-                disabled={editando?.origem === "precificaeva"}
+                disabled={travado}
                 onChange={(e) => setRascunho({ ...rascunho, custo: e.target.value })}
                 placeholder="4.100,00"
                 className="mt-1 h-9 w-full rounded-md border px-3"
@@ -418,47 +436,61 @@ export function ProdutosClient({
       ) : (
         <ul className="divide-y rounded-lg border" data-testid="lista-produtos">
           {filtrados.map((p) => (
-            <li key={p.id} className="flex items-center gap-4 p-3" data-testid={`produto-${p.codigo}`}>
+            <li key={p.id} className="flex items-center gap-3 p-3" data-testid={`produto-${p.codigo}`}>
               <div className="min-w-0 flex-1">
                 <p className={`truncate font-medium ${p.ativo ? "" : "text-muted-foreground line-through"}`}>
                   {p.nome}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  {p.codigo}
+                {/* Item da Precificação mostra a origem, não o código técnico "pe:proc:…". */}
+                <p className="truncate text-xs text-muted-foreground">
+                  {p.origem === DA_PRECIFICACAO ? t("Da Precificação") : p.codigo}
                   {p.marca ? ` · ${p.marca}` : ""}
                   {p.controla_estoque
                     ? ` · ${p.quantidade} ${t("em estoque")}`
                     : ` · ${t("sem controle de estoque")}`}
-                  {p.origem === "precificaeva" ? ` · ${t("preço da Precificação")}` : ""}
                 </p>
               </div>
               <span className="shrink-0 tabular-nums font-medium">
                 {formatCents(p.preco_cents, p.moeda)}
               </span>
               {podeEditar ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => abrirEdicao(p)}
-                  data-testid={`editar-${p.codigo}`}
-                >
-                  {t("Editar")}
-                </Button>
-              ) : null}
-              {podeEditar ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    // Desativar tira o item do que o assistente de IA oferece:
-                    // pede confirmação. Reativar é seguro e vai direto.
-                    if (p.ativo && !window.confirm(t("Desativar este produto? O assistente de IA deixa de oferecê-lo."))) return;
-                    void alternarAtivo(p);
-                  }}
-                  data-testid={`alternar-${p.codigo}`}
-                >
-                  {t(p.ativo ? "Desativar" : "Reativar")}
-                </Button>
+                // Ações num "⋯": no celular, dois botões de texto por linha
+                // apertavam o nome até sumir.
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0"
+                      aria-label={t("Ações do produto")}
+                      data-testid={`acoes-${p.codigo}`}
+                    >
+                      <DotsThree size={20} aria-hidden />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => abrirEdicao(p)} data-testid={`editar-${p.codigo}`}>
+                      {t("Editar")}
+                    </DropdownMenuItem>
+                    {p.origem === DA_PRECIFICACAO ? (
+                      <DropdownMenuItem disabled data-testid={`alternar-${p.codigo}`}>
+                        {t("Desative na Precificação")}
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          // Desativar tira o item do que o assistente de IA oferece:
+                          // pede confirmação. Reativar é seguro e vai direto.
+                          if (p.ativo && !window.confirm(t("Desativar este produto? O assistente de IA deixa de oferecê-lo."))) return;
+                          void alternarAtivo(p);
+                        }}
+                        data-testid={`alternar-${p.codigo}`}
+                      >
+                        {t(p.ativo ? "Desativar" : "Reativar")}
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               ) : null}
             </li>
           ))}
