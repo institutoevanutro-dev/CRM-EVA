@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
@@ -41,11 +42,13 @@ export function SnoozeButton({ conversationId, snoozeUntil, disabled, variante =
   const isActive = isSnoozeActive(snoozeUntil);
   const isPending = snooze.isPending || cancel.isPending;
   const tag = useTagDeIdioma();
+  // A hora de cada opção é contada a partir do instante em que o menu abre.
+  const [abertoEm, setAbertoEm] = useState<number | null>(null);
   // Item 213: o lembrete diz ATÉ QUANDO, e cada opção diz a hora em que vai tocar.
   const rotulo = isActive && snoozeUntil ? `${t("Lembrete às")} ${horaDoLembrete(snoozeUntil, tag)}` : t("Lembrar");
 
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={(aberto) => setAbertoEm(aberto ? Date.now() : null)}>
       <DropdownMenuTrigger asChild>
         {variante === "item" ? (
           <Button
@@ -96,7 +99,8 @@ export function SnoozeButton({ conversationId, snoozeUntil, disabled, variante =
                 )
               }
             >
-              {t(d.label)} · {horaDoLembrete(new Date(Date.now() + d.hours * 3_600_000), tag)}
+              {t(d.label)}
+              {abertoEm !== null && ` · ${horaDoLembrete(new Date(abertoEm + d.hours * 3_600_000), tag)}`}
             </DropdownMenuItem>
           ))
         )}
