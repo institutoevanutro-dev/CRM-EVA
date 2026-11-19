@@ -110,3 +110,48 @@ it("erro de leitura diz de onde veio", async () => {
   const { cliente } = clienteFalso(true);
   await expect(consultaResumo(cliente as never, "10000000-0000-4000-8000-000000000001", "2026-11-01", "2026-11-07")).rejects.toThrow(/^eventos_do_periodo:/);
 });
+
+describe("vendido do Financeiro por anúncio", () => {
+  it("somarVendasPorAnuncio soma só quem veio por anúncio e comprou", async () => {
+    const { somarVendasPorAnuncio } = await import("@/lib/integrations/marketing/resumo");
+    const anuncios = new Map([["c1", AD], ["c2", AD], ["c3", "120219999999999999"]]);
+    const s = somarVendasPorAnuncio([
+      { contato_id: "c1", vendas: 1, valor_cents: "65000", recebido_cents: "0" },
+      { contato_id: "c2", vendas: 2, valor_cents: "10000", recebido_cents: "0" },
+      { contato_id: "c3", vendas: 0, valor_cents: "0", recebido_cents: "0" },
+      { contato_id: "c-organico", vendas: 1, valor_cents: "99999", recebido_cents: "0" },
+    ], anuncios);
+    expect(s.get(AD)).toEqual({ vendido: 75000n, compradores: 2 });
+    expect(s.get("120219999999999999")).toBeUndefined();
+  });
+
+  it("consultaResumo pede ao Financeiro só os contatos de anúncio e põe vendido/compradores em cada anúncio; Financeiro fora não derruba", async () => {
+    const { vi } = await import("vitest");
+    const c1 = "10000000-0000-4000-8000-0000000000c1";
+    const c2 = "10000000-0000-4000-8000-0000000000c2";
+    const tabela = () => {
+      const q: Record<string, unknown> = {};
+      for (const k of ["select", "eq", "in"]) q[k] = () => q;
+      q.then = (ok: (v: unknown) => unknown) => Promise.resolve({ data: [{ id: c1, ad_platform: "meta_ads", ad_raw: { sourceId: AD } }, { id: c2, ad_platform: null, ad_raw: null }], error: null }).then(ok);
+      return q;
+    };
+    vi.doMock("@/lib/integrations/marketing/eventos-do-periodo", () => ({
+      emLotes: (xs: string[]) => [xs],
+      lerEventosDoPeriodo: async () => ({ leads: [{ contactId: c1 }, { contactId: c2 }], agendamentos: [], sinais: [], ganhos: [] }),
+      lerComparecimentos: async () => [],
+    }));
+    vi.resetModules();
+    const m = await import("@/lib/integrations/marketing/resumo");
+    const pedidos: string[][] = [];
+    const r = await m.consultaResumo({ from: tabela } as never, "org", "2026-11-01", "2026-11-07", async (lote) => {
+      pedidos.push(lote);
+      return [{ contato_id: c1, vendas: 1, valor_cents: "65000", recebido_cents: "0" }];
+    });
+    expect(pedidos).toEqual([[c1]]);
+    expect(r.por_anuncio).toEqual([expect.objectContaining({ anuncio: AD, leads: 1, vendido_cents: "65000", compradores: 1 })]);
+    const semFin = await m.consultaResumo({ from: tabela } as never, "org", "2026-11-01", "2026-11-07", async () => { throw new Error("fora"); });
+    expect(semFin.por_anuncio[0]).not.toHaveProperty("vendido_cents");
+    vi.doUnmock("@/lib/integrations/marketing/eventos-do-periodo");
+    vi.resetModules();
+  });
+});
