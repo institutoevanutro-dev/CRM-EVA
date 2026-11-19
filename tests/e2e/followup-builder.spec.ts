@@ -495,7 +495,8 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
 
     // 4. Publish INCOMPLETE — expect 422 anchored to the offending nodes.
     await page.getByTestId("publish-button").click();
-    await expect(page.getByText(/reprovado na validação/i)).toBeVisible();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Publicar" }).click();
+    await expect(page.getByText(/O fluxo tem pendências/i)).toBeVisible();
     await expect(page.locator(`[data-testid="node-error-${waitId}"]`)).toBeVisible();
     await expect(page.locator(`[data-testid="node-error-${actionId}"]`)).toBeVisible();
     await expect(page.locator(`[data-testid="node-error-${endId}"]`)).toBeVisible();
@@ -510,6 +511,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
 
     // 6. Publish for real — expect success + "Ativo" badge + toast.
     await page.getByTestId("publish-button").click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Publicar" }).click();
     await expect(page.getByText("Fluxo publicado.")).toBeVisible();
     await expect(page.locator('[aria-label="status: Ativo"]')).toBeVisible();
     await expect(page.locator(`[data-testid="node-error-${waitId}"]`)).toHaveCount(0);
@@ -585,19 +587,20 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
 
     await page.locator('[data-testid^="node-card-wait-"]').click();
     await expect(page.getByTestId("node-config-panel")).toBeVisible();
-    await expect(page.getByTestId("delete-selection")).toHaveText("Excluir nó");
+    await expect(page.getByTestId("delete-selection")).toHaveText("Excluir bloco");
     await page.getByTestId("delete-node").click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Excluir" }).click();
     await expect(page.locator('[data-testid^="node-card-wait-"]')).toHaveCount(0);
     await expect(page.getByTestId("node-config-sheet")).toHaveCount(0);
 
     await page.locator('[data-testid^="node-card-end-"]').click();
-    await expect(page.getByTestId("delete-selection")).toHaveText("Excluir nó");
+    await expect(page.getByTestId("delete-selection")).toHaveText("Excluir bloco");
     await page.getByTestId("delete-selection").click();
     // O #749 pôs uma confirmação entre o clique e o apagamento, e ela é o
     // comportamento certo: apagar nó é destrutivo e não dá para desfazer. A
     // spec passa a fazer o que a pessoa faz — confirma.
     await expect(page.getByRole("alertdialog")).toBeVisible();
-    await expect(page.getByRole("alertdialog")).toContainText("Excluir este nó?");
+    await expect(page.getByRole("alertdialog")).toContainText("Excluir este bloco?");
     // O nó SEGUE na tela enquanto a pergunta está aberta: é isto que separa
     // "pediu confirmação" de "apagou e mostrou um aviso depois".
     await expect(page.locator('[data-testid^="node-card-end-"]')).toHaveCount(1);
@@ -629,7 +632,7 @@ test.describe("followup flow builder — canvas visual (Task 6.2)", () => {
     if (!edgeId) throw new Error("aresta sem id");
     await page.locator(`[data-testid="rf__edge-${edgeId}"] .react-flow__edge-textbg`).click();
     await expect(page.getByTestId("edge-config-panel")).toBeVisible();
-    await expect(page.getByTestId("delete-selection")).toHaveText("Excluir aresta");
+    await expect(page.getByTestId("delete-selection")).toHaveText("Excluir ligação");
     await page.getByTestId("delete-edge").click();
     await expect(page.locator(".react-flow__edge")).toHaveCount(0);
     await expect(page.getByTestId("edge-config-sheet")).toHaveCount(0);
@@ -801,7 +804,8 @@ test.describe("followup flow builder — editor de condição de aresta / ai_cla
     // Task 6.2 state, before this task's editor existed). It must fail: `ai_classify`
     // has no `class_match` edge for either declared class and no `no_reply` edge.
     await page.getByTestId("publish-button").click();
-    await expect(page.getByText(/reprovado na validação/i)).toBeVisible();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Publicar" }).click();
+    await expect(page.getByText(/O fluxo tem pendências/i)).toBeVisible();
     await expect(page.locator(`[data-testid="node-error-${classifyId}"]`)).toBeVisible();
     // Exactly one node carries an error — proves the failure is scoped to the classify
     // node's edge coverage, not some unrelated structural problem in the graph.
@@ -836,6 +840,7 @@ test.describe("followup flow builder — editor de condição de aresta / ai_cla
     // 7. Publish for real — expect SUCCESS this time, where the identical graph shape
     // with all-`always` edges failed above.
     await page.getByTestId("publish-button").click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Publicar" }).click();
     await expect(page.getByText("Fluxo publicado.")).toBeVisible();
     await expect(page.locator('[aria-label="status: Ativo"]')).toBeVisible();
     await expect(page.locator(`[data-testid="node-error-${classifyId}"]`)).toHaveCount(0);

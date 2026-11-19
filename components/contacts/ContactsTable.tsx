@@ -44,7 +44,7 @@ import {
   regrasDeClienteDe,
 } from "@/lib/contacts/cliente-para-o-funil";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
-import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import { telefoneLegivel } from "@/lib/channels/phone-variants";
 import { EditContactDialog } from "@/components/contacts/EditContactDialog";
 
 interface Props {
@@ -178,8 +178,13 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
 
   return (
     <>
-    <Table>
-      <TableHeader>
+    {/*
+      No celular (abaixo de `md`) a MESMA tabela vira lista de cartões só por
+      CSS: sem cabeçalho, cada linha quebra em blocos e as ações vão para o fim.
+      Duas marcações (tabela + cartões) dobrariam cada ação na árvore.
+    */}
+    <Table className="max-md:block">
+      <TableHeader className="max-md:hidden">
         <TableRow>
           <SortableHead
             label={t("Nome")}
@@ -218,10 +223,20 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
           </TableHead>
         </TableRow>
       </TableHeader>
-      <TableBody>
+      <TableBody className="max-md:block">
         {contacts.map((c) => (
-          <TableRow key={c.id} className="cursor-pointer">
-            <TableCell className="font-medium">
+          <TableRow
+            key={c.id}
+            className="cursor-pointer max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-x-3 max-md:gap-y-1 max-md:py-3 max-md:[&>td]:p-0"
+            // A linha inteira abre a ficha, como o cursor promete. O nome segue
+            // sendo o link (teclado e leitor de tela); clique em botão ou link
+            // de dentro da linha faz só o gesto dele.
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest("a,button,[role=dialog]")) return;
+              router.push(`/app/contacts/${c.id}`);
+            }}
+          >
+            <TableCell className="font-medium max-md:w-full max-md:text-base">
               <Link href={`/app/contacts/${c.id}`} className="hover:underline">
                 {displayName(c)}
               </Link>
@@ -232,7 +247,7 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
               </TableCell>
             )}
             <TableCell className="whitespace-nowrap text-muted-foreground">
-              {c.phone_number ? phoneForDisplay(c.phone_number) : "—"}
+              {c.phone_number ? telefoneLegivel(c.phone_number) : "—"}
             </TableCell>
             <TableCell>
               <div className="flex flex-wrap gap-1">
@@ -243,7 +258,7 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
                     ))}
               </div>
             </TableCell>
-            <TableCell className="whitespace-nowrap text-muted-foreground text-sm">
+            <TableCell className="whitespace-nowrap text-muted-foreground text-sm max-md:hidden">
               {c.last_activity_at
                 ? formatUltimaAtividade(c.last_activity_at, localeDaData)
                 : "—"}
@@ -270,10 +285,10 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
                     A coluna só fala quando há exceção. */}
               </div>
             </TableCell>
-            <TableCell>
+            <TableCell className="max-md:ml-auto">
               <div className="flex items-center justify-end gap-0.5">
                 {c.conversa ? (
-                  <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 toque:h-11 toque:w-11" asChild>
                     <Link
                       href={`/app/inbox?id=${c.conversa.id}`}
                       title={t("Abrir conversa no Inbox")}
@@ -289,7 +304,7 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8"
+                    className="h-8 w-8 toque:h-11 toque:w-11"
                     title={t("Iniciar conversa no Inbox")}
                     aria-label={`${t("Iniciar conversa com")} ${displayName(c, t)} ${t("no Inbox")}`}
                     disabled={abrindo === c.id}
@@ -304,7 +319,7 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8"
+                    className="h-8 w-8 toque:h-11 toque:w-11"
                     title={t("Editar contato")}
                     aria-label={`${t("Editar contato")} ${displayName(c, t)}`}
                     onClick={() => setContatoEmEdicao(c)}
@@ -315,7 +330,7 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-error-fg"
+                  className="h-8 w-8 toque:h-11 toque:w-11 text-muted-foreground hover:text-error-fg"
                   title={t("Excluir contato")}
                   aria-label={`${t("Excluir contato")} ${displayName(c, t)}`}
                   onClick={() => setAlvo(c)}

@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { ConfirmarNaTela } from "@/components/inbox/ConfirmarNaTela";
+import { useAvisoAoSairSemSalvar } from "@/hooks/ui/useAvisoAoSairSemSalvar";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { ArrowRight, CaretLeft, Plus, Trash } from "@/lib/ui/icons";
 import { randomId } from "@/lib/random-id";
@@ -102,7 +104,10 @@ export function RouterEditorClient({
   const channel = channelSessions.find((c) => c.id === router.channel_session_id);
 
   const [name, setName] = React.useState(router.name);
-  const [isActive, setIsActive] = React.useState(router.is_active);
+  // O interruptor grava NA HORA (com confirmação), fora do "Salvar": quem
+  // desliga numa emergência e sai da tela não pode deixar o roteador ligado.
+  const isActive = router.is_active;
+  const [confirmarAtivo, setConfirmarAtivo] = React.useState<boolean | null>(null);
   const [fallbackAgentId, setFallbackAgentId] = React.useState(router.fallback_agent_id ?? "");
   // Uma chave só para os dois campos: escolher modelo sem levar o provedor junto
   // manda o id para o provedor da ORG, e a classificação falha sempre.
@@ -119,7 +124,6 @@ export function RouterEditorClient({
   const baseline = React.useMemo(
     () => ({
       name: router.name,
-      isActive: router.is_active,
       fallbackAgentId: router.fallback_agent_id ?? "",
       classifier: classifierKeyFrom(router.config),
       members: members.map(({ agent_id, intent_name, intent_description, examples }) => ({
@@ -141,7 +145,6 @@ export function RouterEditorClient({
 
   const dirty =
     name !== baseline.name ||
-    isActive !== baseline.isActive ||
     fallbackAgentId !== baseline.fallbackAgentId ||
     classifier !== baseline.classifier ||
     JSON.stringify(currentMembers) !== JSON.stringify(baseline.members);
@@ -194,14 +197,12 @@ export function RouterEditorClient({
     try {
       if (
         name !== baseline.name ||
-        isActive !== baseline.isActive ||
         fallbackAgentId !== baseline.fallbackAgentId ||
         classifier !== baseline.classifier
       ) {
         const [provider, modelId] = classifier.split("::");
         await updateRouter.mutateAsync({
           name,
-          is_active: isActive,
           fallback_agent_id: fallbackAgentId || null,
           // O PATCH mescla `config` com a existente, então mandar só estes dois
           // campos preserva sticky/min_confidence.
@@ -218,6 +219,18 @@ export function RouterEditorClient({
     } catch (err) {
       showApiError(err);
     }
+  }
+
+  useAvisoAoSairSemSalvar(dirty, t("Sair sem salvar? O que você mudou neste roteador será perdido."));
+
+  function mudarAtivo(ligar: boolean) {
+    updateRouter.mutate(
+      { is_active: ligar },
+      {
+        onSuccess: () => toast.success(ligar ? t("Roteador ligado.") : t("Roteador desligado.")),
+        onError: showApiError,
+      },
+    );
   }
 
   function handleDelete() {
@@ -282,8 +295,8 @@ export function RouterEditorClient({
               <Switch
                 id="router-active"
                 checked={isActive}
-                onCheckedChange={setIsActive}
-                disabled={!canManage}
+                onCheckedChange={(v) => setConfirmarAtivo(v)}
+                disabled={!canManage || updateRouter.isPending}
               />
               <Label htmlFor="router-active">
                 {isActive
@@ -291,6 +304,19 @@ export function RouterEditorClient({
                   : t("Inativo — não roteia nada")}
               </Label>
             </div>
+            <ConfirmarNaTela
+              aberto={confirmarAtivo !== null}
+              onAbertoChange={(v) => !v && setConfirmarAtivo(null)}
+              titulo={confirmarAtivo ? t("Ligar o roteador?") : t("Desligar o roteador?")}
+              descricao={
+                confirmarAtivo
+                  ? t("Vale na hora: as conversas deste número passam a ser distribuídas entre os agentes.")
+                  : t("Vale na hora: as conversas deste número deixam de ser distribuídas pelo roteador.")
+              }
+              acao={confirmarAtivo ? t("Ligar") : t("Desligar")}
+              destrutiva={confirmarAtivo === false}
+              onConfirmar={() => confirmarAtivo !== null && mudarAtivo(confirmarAtivo)}
+            />
           </Card>
 
           <Card className="space-y-3 p-4">
@@ -356,7 +382,7 @@ export function RouterEditorClient({
             </div>
           </Card>
 
-          <TestPanel routerId={routerId} canTest={canTest} />
+          <TestPanel routerId={routerId} canTest={canTest} naoSalvo={dirty} />
         </div>
 
         <div className="space-y-4">
@@ -598,7 +624,16 @@ function ExamplesInput({
  * se confere a montagem antes de ligar no canal) e, com um contato escolhido,
  * o classificador recebe a agenda dele, como no turno real.
  */
-export function TestPanel({ routerId, canTest }: { routerId: string; canTest: boolean }) {
+export function TestPanel({
+  routerId,
+  canTest,
+  naoSalvo = false,
+}: {
+  routerId: string;
+  canTest: boolean;
+  /** Há mudança na tela: o teste usa o que está SALVO, e precisa dizer isso. */
+  naoSalvo?: boolean;
+}) {
   const [message, setMessage] = React.useState("");
   const [contato, setContato] = React.useState<Contact | null>(null);
   const testRouter = useTestRouter(routerId);
@@ -652,6 +687,11 @@ export function TestPanel({ routerId, canTest }: { routerId: string; canTest: bo
           maxLength={4000}
           disabled={!canTest}
         />
+        {naoSalvo ? (
+          <p className="text-xs text-warning-fg" data-testid="teste-usa-o-salvo">
+            {t("O teste usa o que está salvo. Salve para testar as mudanças.")}
+          </p>
+        ) : null}
         <Button
           variant="outline"
           size="sm"

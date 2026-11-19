@@ -18,13 +18,23 @@ import { AvisoSemResposta, useEnvioComTeto } from "@/components/auth/teto-da-esp
  * administração (`reservaBloqueia`). Aberta como a principal, ela parecia o
  * caminho da equipe: dois botões verdes "Entrar", o cursor no e-mail, a senha
  * certa recusada e as cinco tentativas gastas (auditoria 17/11, item 47).
- * Vira porta secundária: abaixo de "Entrar com senha (administração)", sem
- * cursor no e-mail, botão sem o verde e recusa que aponta o botão do EvaLink.
+ * Decisão do André em 18/11: a senha fica RECOLHIDA num link pequeno "Entrar com
+ * senha", embaixo; o EvaLink é o botão principal. A senha segue funcionando
+ * (revisores entram por ela).
  *
- * Visível, e não recolhida como o relatório propunha: o e2e roda com o EvaLink
- * ligado, e ~100 specs entram pela senha — recolher pedia mexer em todas.
+ * `senhaAberta`: abre a senha já de saída (`EVALINK_SENHA_ABERTA=1`). Existe
+ * para a suíte e2e, que roda com o EvaLink ligado e entra pela senha em ~130
+ * specs; uma instalação que prefira a senha à vista também pode usar.
  */
-export function LoginForm({ next, evalink = false }: { next?: string; evalink?: boolean }) {
+export function LoginForm({
+  next,
+  evalink = false,
+  senhaAberta = false,
+}: {
+  next?: string;
+  evalink?: boolean;
+  senhaAberta?: boolean;
+}) {
   const t = useT();
   const router = useRouter();
   const { pendente: isPending, semResposta, enviar } = useEnvioComTeto();
@@ -130,17 +140,13 @@ export function LoginForm({ next, evalink = false }: { next?: string; evalink?: 
   if (!evalink) return formulario;
 
   return (
-    // Sem `aria-labelledby` na seção, de propósito: um rótulo com "senha" faria
-    // `getByLabel(/senha/i)` (e o leitor de tela) achar dois campos de senha.
-    <section className="space-y-4">
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <span aria-hidden className="h-px flex-1 bg-border" />
-        <h2 className="font-normal">
-          {t("Entrar com senha (administração)")}
-        </h2>
-        <span aria-hidden className="h-px flex-1 bg-border" />
-      </div>
-      {formulario}
-    </section>
+    // `<details>` nativo: abre e fecha sem JS e funciona no Safari. O marcador
+    // padrão sai pelas duas regras (`list-none` e o pseudo do WebKit).
+    <details open={senhaAberta || undefined}>
+      <summary className="mx-auto w-fit cursor-pointer list-none text-center text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground [&::-webkit-details-marker]:hidden">
+        {t("Entrar com senha")}
+      </summary>
+      <div className="mt-4">{formulario}</div>
+    </details>
   );
 }

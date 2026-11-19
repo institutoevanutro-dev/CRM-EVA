@@ -41,7 +41,6 @@ export function PausaDaIaForm({
   const [maxHoras, setMaxHoras] = useState(String(initialMaxHoras));
   const [maxHorasSalvo, setMaxHorasSalvo] = useState(initialMaxHoras);
   const [fim, setFim] = useState(initialFimDoDiaSeguinte);
-  const [fimSalvo, setFimSalvo] = useState(initialFimDoDiaSeguinte);
   const [isPending, startTransition] = useTransition();
 
   const valor = Number(minutos);
@@ -74,13 +73,30 @@ export function PausaDaIaForm({
         setSalvo(valor);
         setEsperaSalva(valorEspera);
         setMaxHorasSalvo(valorMaxHoras);
-        setFimSalvo(fim);
         toast.success(t("Pausa da IA salva."));
       } catch (err) {
         toast.error(err instanceof Error ? t(err.message) : t("Não consegui salvar."));
       }
     });
   }
+
+  // O interruptor salva no toque, sozinho (a rota aceita só este campo); os
+  // números seguem no "Salvar pausa". Antes ele esperava o botão lá embaixo,
+  // sem aviso, ao lado de outros interruptores que salvam no toque.
+  function mudarFim(novo: boolean) {
+    setFim(novo);
+    startTransition(async () => {
+      try {
+        await apiClient.patch("/api/v1/settings/atendimento/pausa-da-ia", { fim_do_dia_seguinte: novo });
+        toast.success(t("Opção salva."));
+      } catch (err) {
+        setFim(!novo);
+        toast.error(err instanceof Error ? t(err.message) : t("Não consegui salvar."));
+      }
+    });
+  }
+
+  const haMudancas = valor !== salvo || valorEspera !== esperaSalva || valorMaxHoras !== maxHorasSalvo;
 
   return (
     <form onSubmit={salvar} className="max-w-3xl" data-testid="form-pausa-da-ia">
@@ -109,7 +125,7 @@ export function PausaDaIaForm({
             checked={fim}
             disabled={isPending}
             aria-describedby="ia_volta_fim_do_dia_seguinte_ajuda"
-            onCheckedChange={setFim}
+            onCheckedChange={mudarFim}
           />
         </div>
         <div className="max-w-sm space-y-1">
@@ -195,11 +211,16 @@ export function PausaDaIaForm({
             !valido ||
             !esperaValida ||
             !maxHorasValido ||
-            (valor === salvo && valorEspera === esperaSalva && valorMaxHoras === maxHorasSalvo && fim === fimSalvo)
+            !haMudancas
           }
         >
           {isPending ? t("Salvando…") : t("Salvar pausa")}
         </Button>
+        {haMudancas && (
+          <span className="ml-3 text-sm text-muted-foreground" role="status">
+            {t("Há mudanças não salvas")}
+          </span>
+        )}
       </Card>
     </form>
   );

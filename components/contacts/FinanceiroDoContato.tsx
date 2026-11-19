@@ -44,8 +44,12 @@ export function FinanceiroDoContato({ contactId }: { contactId: string }) {
     erro: boolean;
   } | null>(null);
   const carregando = resultado?.chave !== chave;
-  const dados = carregando ? null : resultado?.dados;
+  // Ao recarregar, o quadro anterior fica na tela até a resposta nova chegar
+  // (antes ele sumia e voltava). Depois de uma falha não há quadro antigo:
+  // número velho ao lado de "não foi possível" leria como atual.
+  const dados = resultado?.erro ? null : resultado?.dados;
   const erro = !carregando && resultado?.erro;
+  const hoje = new Date().toISOString().slice(0, 10);
   useEffect(() => {
     const controller = new AbortController();
     fetch(`/api/v1/contacts/${contactId}/financeiro`, {
@@ -70,7 +74,7 @@ export function FinanceiroDoContato({ contactId }: { contactId: string }) {
           {t("Atualizar")}
         </Button>
       </div>
-      {carregando ? <p role="status">{t("Consultando o financeiro…")}</p> : null}
+      {carregando && !dados ? <p role="status">{t("Consultando o financeiro…")}</p> : null}
       {erro ? (
         <p role="alert">
           {t("Não foi possível consultar o financeiro. Use Atualizar para tentar novamente.")}
@@ -79,7 +83,7 @@ export function FinanceiroDoContato({ contactId }: { contactId: string }) {
       {dados && !dados.configurada ? (
         <p>
           {t(
-            "Integração não configurada para esta organização. Solicite a configuração ao administrador.",
+            "A ligação com o financeiro não está configurada nesta instalação. Quem liga é quem cuida do servidor.",
           )}
         </p>
       ) : null}
@@ -124,9 +128,20 @@ export function FinanceiroDoContato({ contactId }: { contactId: string }) {
                         target="_blank"
                         rel="noreferrer"
                       >
-                        {p.numero ?? t("Rascunho")} · {t(rotulo[p.status]!)}
+                        {p.numero ?? t("Rascunho")} ·{" "}
+                        {/* Enviada e já vencida não é mais "Enviada": o paciente não pode aceitar. */}
+                        {p.status === "enviada" && p.validade && p.validade.slice(0, 10) < hoje
+                          ? t("Vencida")
+                          : t(rotulo[p.status]!)}
                       </a>
-                      <span>{brl(p.total_cents)}</span>
+                      <span className="flex flex-wrap gap-x-3">
+                        {p.validade ? (
+                          <span className="text-sm text-muted-foreground">
+                            {t("vale até")} {dataDoSinal(p.validade, idioma)}
+                          </span>
+                        ) : null}
+                        <span>{brl(p.total_cents)}</span>
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -144,8 +159,16 @@ export function FinanceiroDoContato({ contactId }: { contactId: string }) {
                         target="_blank"
                         rel="noreferrer"
                       >
-                        {v.numero} · {t(rotulo[v.situacao]!)}
+                        {v.numero} ·{" "}
+                        <span className={v.situacao === "atrasada" ? "font-semibold text-error-fg" : undefined}>
+                          {t(rotulo[v.situacao]!)}
+                        </span>
                       </a>
+                      {v.data ? (
+                        <p className="text-sm text-muted-foreground">
+                          {t("Vendida em")} {dataDoSinal(v.data, idioma)}
+                        </p>
+                      ) : null}
                       <p className="text-sm">
                         {t("Total")} {brl(v.total_cents)} · {t("Recebido")} {brl(v.recebido_cents)}{" "}
                         · {t("A receber")} {brl(v.saldo_cents)}

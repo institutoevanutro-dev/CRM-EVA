@@ -16,6 +16,14 @@
  *
  * Desligar interrompe o envio, inclusive o que estava esperando nova tentativa,
  * e mantém a credencial. Remover a conexão de vez ainda não tem superfície.
+ *
+ * ── Um padrão só: o interruptor salva no toque ──────────────────────────────
+ *
+ * Com a conexão já gravada, o interruptor salva sozinho, com os valores que
+ * estão gravados (não com o texto em edição). Antes, uns salvavam no toque e
+ * outros só no "Salvar" lá embaixo, sem aviso: quem desligava o aviso à Meta e
+ * saía achava que tinha pausado. O texto segue no formulário, com "Há mudanças
+ * não salvas" enquanto não for salvo.
  */
 
 import { useState, useTransition } from "react";
@@ -48,7 +56,11 @@ function useSalvar(idioma: Idioma) {
   const t = (texto: string) => traduzir(texto, idioma);
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  function salvar(acao: () => Promise<{ ok: true } | { ok: false; error: string }>, depois?: () => void) {
+  function salvar(
+    acao: () => Promise<{ ok: true } | { ok: false; error: string }>,
+    depois?: () => void,
+    seFalhar?: () => void,
+  ) {
     startTransition(async () => {
       const resultado = await acao();
       if (resultado.ok) {
@@ -57,6 +69,7 @@ function useSalvar(idioma: Idioma) {
         router.refresh();
         return;
       }
+      seFalhar?.();
       toast.error(t(ERRO_EM_PORTUGUES[resultado.error] ?? "Não consegui salvar agora."));
     });
   }
@@ -88,14 +101,31 @@ function Campo(props: {
   );
 }
 
-function Ligar(props: { id: string; rotulo: string; ligado: boolean; onChange: (v: boolean) => void; ajuda: string }) {
+/** O aviso de texto em edição; o interruptor nunca entra nele. */
+function NaoSalvo({ visivel, t }: { visivel: boolean; t: (texto: string) => string }) {
+  if (!visivel) return null;
+  return (
+    <span className="text-sm text-muted-foreground" role="status">
+      {t("Há mudanças não salvas")}
+    </span>
+  );
+}
+
+function Ligar(props: {
+  id: string;
+  rotulo: string;
+  ligado: boolean;
+  onChange: (v: boolean) => void;
+  ajuda: string;
+  disabled?: boolean;
+}) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-md border p-4">
       <div className="flex flex-col gap-1">
         <Label htmlFor={props.id}>{props.rotulo}</Label>
         <p className="text-xs text-muted-foreground">{props.ajuda}</p>
       </div>
-      <Switch id={props.id} checked={props.ligado} onCheckedChange={props.onChange} />
+      <Switch id={props.id} checked={props.ligado} disabled={props.disabled} onCheckedChange={props.onChange} />
     </div>
   );
 }
@@ -179,10 +209,11 @@ export function EtapasDeSinalPago({
             ))}
           </ul>
         )}
-        <div>
+        <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={isPending}>
             {isPending ? t("Salvando…") : t("Salvar etapas")}
           </Button>
+          <NaoSalvo t={t} visivel={[...escolhidas].sort().join() !== [...marcadas].sort().join()} />
         </div>
       </form>
     </Card>
@@ -197,6 +228,34 @@ export function FormularioMeta({ estado, idioma }: { estado: EstadoMeta; idioma:
   const [habilitada, setHabilitada] = useState(estado.habilitada);
   const [sinalPago, setSinalPago] = useState(estado.sinalPagoHabilitado);
   const podeSalvar = datasetId.trim().length >= 5 && (estado.temToken || token.trim().length >= 20);
+  // Já gravada: o interruptor salva no toque, com o que está gravado.
+  const gravada = Boolean(estado.datasetId) && estado.temToken;
+  function noToque(mudanca: { enabled?: boolean; deposit_paid_enabled?: boolean }) {
+    const antes = { enabled: habilitada, deposit_paid_enabled: sinalPago };
+    const depois = { ...antes, ...mudanca };
+    setHabilitada(depois.enabled);
+    setSinalPago(depois.deposit_paid_enabled);
+    if (!gravada) return;
+    salvar(
+      () =>
+        updateAdPlatformConnection({
+          platform: "meta_ads",
+          dataset_id: estado.datasetId ?? "",
+          test_event_code: estado.testEventCode,
+          ...depois,
+        }),
+      undefined,
+      () => {
+        setHabilitada(antes.enabled);
+        setSinalPago(antes.deposit_paid_enabled);
+      },
+    );
+  }
+  const haMudancas =
+    datasetId !== (estado.datasetId ?? "") ||
+    token !== "" ||
+    codigoDeTeste !== (estado.testEventCode ?? "") ||
+    (!gravada && (habilitada !== estado.habilitada || sinalPago !== estado.sinalPagoHabilitado));
 
   return (
     <Card className="p-6">
@@ -248,20 +307,23 @@ export function FormularioMeta({ estado, idioma }: { estado: EstadoMeta; idioma:
           id="meta_enabled"
           rotulo={t("Avisar a Meta quando um paciente agendar")}
           ligado={habilitada}
-          onChange={setHabilitada}
+          onChange={(v) => noToque({ enabled: v })}
+          disabled={isPending}
           ajuda={t("Ao desligar, o envio para na hora, inclusive o que estava esperando nova tentativa, e a credencial continua gravada.")}
         />
         <Ligar
           id="meta_deposit_paid_enabled"
           rotulo={t("Avisar a Meta quando o sinal for pago")}
           ligado={sinalPago}
-          onChange={setSinalPago}
+          onChange={(v) => noToque({ deposit_paid_enabled: v })}
+          disabled={isPending}
           ajuda={t("Vai como o evento padrão CompleteRegistration, sem valor. Só sai para as etapas marcadas acima.")}
         />
-        <div>
+        <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={isPending || !podeSalvar}>
             {isPending ? t("Salvando…") : t("Salvar Meta")}
           </Button>
+          <NaoSalvo t={t} visivel={haMudancas} />
         </div>
       </form>
     </Card>
@@ -323,10 +385,11 @@ export function IdentidadeDaMeta({
           placeholder="104987654321098"
           ajuda={t("Só para quem usa a API oficial e não tem Página a informar. Com a Página preenchida, este campo não é usado.")}
         />
-        <div>
+        <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={isPending}>
             {isPending ? t("Salvando…") : t("Salvar Página")}
           </Button>
+          <NaoSalvo t={t} visivel={pagina !== (paginaMeta ?? "") || waba !== (wabaMeta ?? "")} />
         </div>
       </form>
     </Card>
@@ -355,6 +418,44 @@ export function FormularioGoogle({ estado, idioma }: { estado: EstadoGoogle; idi
     (estado.temRefreshToken || refreshToken.trim().length >= 10) &&
     // Opcional: o Google aposentou o developer token em 09/09/2026.
     (developerToken.trim().length === 0 || developerToken.trim().length >= 10);
+  // Já gravada: o interruptor salva no toque, com o que está gravado. Ligar
+  // sem a ação de conversão gravada é recusado pelo servidor e volta atrás.
+  const gravada =
+    Boolean(estado.customerId) && Boolean(estado.clientId) && estado.temClientSecret && estado.temRefreshToken;
+  function noToque(mudanca: { enabled?: boolean; deposit_paid_enabled?: boolean }) {
+    const antes = { enabled: habilitada, deposit_paid_enabled: sinalPago };
+    const depois = { ...antes, ...mudanca };
+    setHabilitada(depois.enabled);
+    setSinalPago(depois.deposit_paid_enabled);
+    if (!gravada) return;
+    salvar(
+      () =>
+        updateAdPlatformConnection({
+          platform: "google_ads",
+          customer_id: estado.customerId ?? "",
+          login_customer_id: estado.loginCustomerId,
+          conversion_action_id: estado.conversionActionId,
+          deposit_paid_conversion_action_id: estado.conversionActionIdSinalPago,
+          client_id: estado.clientId ?? "",
+          ...depois,
+        }),
+      undefined,
+      () => {
+        setHabilitada(antes.enabled);
+        setSinalPago(antes.deposit_paid_enabled);
+      },
+    );
+  }
+  const haMudancas =
+    customerId !== (estado.customerId ?? "") ||
+    loginCustomerId !== (estado.loginCustomerId ?? "") ||
+    acao !== (estado.conversionActionId ?? "") ||
+    acaoSinal !== (estado.conversionActionIdSinalPago ?? "") ||
+    clientId !== (estado.clientId ?? "") ||
+    clientSecret !== "" ||
+    refreshToken !== "" ||
+    developerToken !== "" ||
+    (!gravada && (habilitada !== estado.habilitada || sinalPago !== estado.sinalPagoHabilitado));
 
   return (
     <Card className="p-6">
@@ -403,20 +504,23 @@ export function FormularioGoogle({ estado, idioma }: { estado: EstadoGoogle; idi
           id="google_enabled"
           rotulo={t("Avisar o Google Ads quando um paciente agendar")}
           ligado={habilitada}
-          onChange={setHabilitada}
+          onChange={(v) => noToque({ enabled: v })}
+          disabled={isPending}
           ajuda={t("Ao desligar, o envio para na hora, inclusive o que estava esperando nova tentativa, e a credencial continua gravada.")}
         />
         <Ligar
           id="google_deposit_paid_enabled"
           rotulo={t("Avisar o Google Ads quando o sinal for pago")}
           ligado={sinalPago}
-          onChange={setSinalPago}
+          onChange={(v) => noToque({ deposit_paid_enabled: v })}
+          disabled={isPending}
           ajuda={t("Vai para a ação de conversão do sinal pago, sem valor. Só sai para as etapas marcadas acima.")}
         />
-        <div>
+        <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={isPending || !podeSalvar}>
             {isPending ? t("Salvando…") : t("Salvar Google Ads")}
           </Button>
+          <NaoSalvo t={t} visivel={haMudancas} />
         </div>
       </form>
     </Card>

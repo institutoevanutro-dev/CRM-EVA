@@ -136,8 +136,8 @@ test.describe("rbac role matrix (spec 13 §4)", () => {
     await expect(page.getByRole("heading", { name: "Chaves de integração" })).toBeVisible();
 
     const nome = `Financeiro leitura e2e ${Date.now()}`;
-    await page.getByRole("button", { name: "Criar token" }).click();
-    const novo = page.getByRole("dialog", { name: "Criar novo token" });
+    await page.getByRole("button", { name: "Criar chave" }).click();
+    const novo = page.getByRole("dialog", { name: "Criar chave" });
     await novo.getByLabel("Nome", { exact: true }).fill(nome);
     const opcao = novo.getByRole("button", { name: /^financeiro:contatos —/ });
     await expect(opcao).toHaveAttribute("title", "Financeiro: ler nome, telefone e e-mail de um contato");
@@ -146,10 +146,13 @@ test.describe("rbac role matrix (spec 13 §4)", () => {
     await novo.screenshot({ path: ".superpowers/evidence/escopo-financeiro/criar-chave-do-financeiro.png" });
     await novo.getByRole("button", { name: "Criar", exact: true }).click();
 
-    const criado = page.getByRole("dialog", { name: "Token criado" });
+    const criado = page.getByRole("alertdialog", { name: "Chave criada" });
     const chave = (await criado.locator("code").innerText()).trim();
     expect(chave).toMatch(/^dsk_[0-9a-f]{8}_/);
+    // A chave não aparece de novo: Escape não fecha, só o "Já copiei".
     await page.keyboard.press("Escape");
+    await expect(criado).toBeVisible();
+    await criado.getByRole("button", { name: "Já copiei" }).click();
     const linha = page.getByRole("row", { name: new RegExp(nome) });
     await expect(linha.getByText("financeiro:contatos", { exact: true })).toBeVisible();
 
@@ -165,6 +168,8 @@ test.describe("rbac role matrix (spec 13 §4)", () => {
     expect((await page.request.get("/api/v1/contacts", comChave)).status()).toBe(403);
 
     await linha.getByRole("button", { name: "Revogar" }).click();
+    // Revogar não tem volta: a tela pergunta antes.
+    await page.getByRole("alertdialog").getByRole("button", { name: "Revogar" }).click();
     await expect(linha.getByText("Revogado")).toBeVisible();
     expect((await page.request.get(rotaDoFinanceiro, comChave)).status()).toBe(401);
   });

@@ -19,6 +19,7 @@ import {
   type BotaoDaDefinicao,
 } from "@/lib/channels/template-conteudo";
 import { cn } from "@/lib/utils";
+import { rotuloDoEstadoDoModelo } from "@/lib/channels/estado";
 import { useT } from "@/hooks/i18n/useT";
 
 /**
@@ -52,10 +53,10 @@ interface TemplateParceiro {
 }
 
 const COR_DO_ESTADO: Record<string, string> = {
-  APPROVED: "text-emerald-700 dark:text-emerald-400",
-  PENDING: "text-amber-700 dark:text-amber-400",
+  APPROVED: "text-success-fg",
+  PENDING: "text-warning-fg",
   REJECTED: "text-destructive",
-  PAUSED: "text-amber-700 dark:text-amber-400",
+  PAUSED: "text-warning-fg",
   DISABLED: "text-muted-foreground",
 };
 
@@ -361,8 +362,8 @@ export function TemplatesParceiroClient() {
                é recusada, e a recusa chega horas depois sem ninguém ligar uma
                coisa à outra. O formulário deixava digitar `{{1}}` e nunca
                pedia o exemplo. */
-            <div className="flex flex-col gap-1.5 rounded-md border border-amber-300 bg-amber-50/50 p-2 dark:border-amber-800/60 dark:bg-amber-950/20">
-              <p className="text-[11px] text-amber-900 dark:text-amber-200">
+            <div className="flex flex-col gap-1.5 rounded-md border border-warning-border bg-warning-bg p-2">
+              <p className="text-[11px] text-warning-fg">
                 {t("A revisão exige um exemplo de cada valor. Sem eles o modelo é recusado.")}
               </p>
               {Array.from({ length: nVariaveis }, (_, i) => (
@@ -477,7 +478,7 @@ export function TemplatesParceiroClient() {
                       COR_DO_ESTADO[tpl.status?.toUpperCase()] ?? "text-muted-foreground",
                     )}
                   >
-                    {tpl.status}
+                    {rotuloDoEstadoDoModelo(tpl.status, t)}
                   </span>
                 </button>
 

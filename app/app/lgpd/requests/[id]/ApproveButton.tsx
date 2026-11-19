@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
 import { CheckCircle } from "@/lib/ui/icons";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { useApiErrorHandler } from "@/components/feedback/ApiErrorToast";
 import { useApproveLgpdRequest } from "@/hooks/useApproveLgpdRequest";
 import type { LgpdRequestType } from "@/hooks/useLgpdRequests";
 
@@ -25,32 +27,39 @@ interface ApproveButtonProps {
   requestId: string;
   requestType: LgpdRequestType;
   status: string;
+  /** De quem é o pedido, para o diálogo dizer o nome. */
+  titular: string;
 }
+
+/** A mesma palavra da ficha (`AnonymizeDialog`): apagar dados pede digitá-la. */
+const CONFIRM_TEXT = "ANONIMIZAR";
 
 const VARIANT_LABELS: Record<LgpdRequestType, { button: string; title: string; description: string }> = {
   data_request: {
-    button: "Aprovar export",
-    title: "Aprovar exportação de dados",
+    button: "Aprovar a cópia dos dados",
+    title: "Aprovar a cópia dos dados de",
     description:
-      "Ao confirmar, esta solicitação será colocada em fila para exportação dos dados do titular. A ação não pode ser desfeita.",
+      "Ao confirmar, o relatório com os dados desta pessoa começa a ser montado. A aprovação não pode ser desfeita.",
   },
   redact: {
-    button: "Aprovar anonimização",
-    title: "Aprovar anonimização de contato",
+    button: "Apagar dados do paciente",
+    title: "Apagar os dados de",
     description:
-      "Ao confirmar, todos os dados pessoais do titular serão anonimizados (irreversível). O histórico de timestamps é preservado.",
+      "Ao confirmar, nome, telefone, e-mail e CPF desta pessoa são apagados e as conversas são redigidas. Não dá para desfazer. As datas do histórico ficam.",
   },
   store_redact: {
-    button: "Aprovar anonimização (tenant)",
-    title: "Aprovar anonimização de tenant",
+    button: "Apagar dados da loja",
+    title: "Apagar os dados de",
     description:
-      "Ao confirmar, todos os dados pessoais do tenant serão anonimizados (irreversível). Esta ação afeta todos os contatos do tenant.",
+      "Ao confirmar, os dados pessoais de todos os clientes da loja são apagados. Não dá para desfazer.",
   },
 };
 
-export function ApproveButton({ requestId, requestType, status }: ApproveButtonProps) {
+export function ApproveButton({ requestId, requestType, status, titular }: ApproveButtonProps) {
   const t = useT();
+  const mostrarErro = useApiErrorHandler();
   const [reason, setReason] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [open, setOpen] = useState(false);
   const { mutate, isPending } = useApproveLgpdRequest();
 
@@ -58,7 +67,10 @@ export function ApproveButton({ requestId, requestType, status }: ApproveButtonP
   if (status !== "received") return null;
 
   const labels = VARIANT_LABELS[requestType];
-  const isValid = reason.trim().length >= 10;
+  // Apagar dados é irreversível: a mesma guarda da ficha (justificativa + digitar
+  // ANONIMIZAR). A cópia dos dados não apaga nada e fica só com a justificativa.
+  const apaga = requestType !== "data_request";
+  const isValid = reason.trim().length >= 10 && (!apaga || confirm === CONFIRM_TEXT);
 
   function handleConfirm() {
     if (!isValid) return;
@@ -66,21 +78,31 @@ export function ApproveButton({ requestId, requestType, status }: ApproveButtonP
       { id: requestId, approved_reason: reason.trim() },
       {
         onSuccess: () => {
-          toast.success(t("Aprovação registrada — request mudou para processing"));
+          toast.success(t("Aprovado. O pedido está em andamento; esta tela se atualiza sozinha."));
           setOpen(false);
           setReason("");
+          setConfirm("");
         },
-        onError: () => {
-          toast.error(t("Falha ao aprovar a solicitação. Tente novamente."));
-        },
+        // O motivo que a rota deu (pedido já aprovado, sessão de suporte…), não
+        // um "Falha ao aprovar" igual para tudo.
+        onError: mostrarErro,
       },
     );
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) {
+          setReason("");
+          setConfirm("");
+        }
+      }}
+    >
       <AlertDialogTrigger asChild>
-        <Button size="sm" className="gap-2">
+        <Button size="sm" variant={apaga ? "destructive" : "default"} className="gap-2">
           <CheckCircle size={16} aria-hidden />
           {t(labels.button)}
         </Button>
@@ -88,7 +110,9 @@ export function ApproveButton({ requestId, requestType, status }: ApproveButtonP
 
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t(labels.title)}</AlertDialogTitle>
+          <AlertDialogTitle className={apaga ? "text-error-fg" : undefined}>
+            {t(labels.title)} {titular}
+          </AlertDialogTitle>
           <AlertDialogDescription>{t(labels.description)}</AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -112,6 +136,22 @@ export function ApproveButton({ requestId, requestType, status }: ApproveButtonP
           </p>
         </div>
 
+        {apaga && (
+          <div className="space-y-2">
+            <div className="rounded-md border border-error-fg/30 bg-error-bg p-3 text-sm text-error-fg">
+              {t("Para confirmar, digite")} <strong>{CONFIRM_TEXT}</strong> {t("abaixo.")}
+            </div>
+            <Label htmlFor="approved_confirm">{t("Confirmação")}</Label>
+            <Input
+              id="approved_confirm"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder={CONFIRM_TEXT}
+              autoComplete="off"
+            />
+          </div>
+        )}
+
         <AlertDialogFooter>
           <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
           <AlertDialogAction
@@ -120,8 +160,9 @@ export function ApproveButton({ requestId, requestType, status }: ApproveButtonP
               handleConfirm();
             }}
             disabled={!isValid || isPending}
+            className={apaga ? buttonVariants({ variant: "destructive" }) : undefined}
           >
-            {isPending ? t("Aprovando…") : t("Confirmar aprovação")}
+            {isPending ? t("Aprovando…") : t(apaga ? "Apagar permanentemente" : "Confirmar aprovação")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

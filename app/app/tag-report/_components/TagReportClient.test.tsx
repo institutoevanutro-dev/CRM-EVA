@@ -9,11 +9,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as HookDoRelatorio from "@/hooks/reports/useTagReport";
 import { janelaDosUltimosDias, type RelatorioPorEtiqueta } from "@/hooks/reports/useTagReport";
 
-import { TagReportClient, esperaLegivel } from "./TagReportClient";
+import { formatarDuracao } from "@/lib/metrics/atrito";
+
+import { TagReportClient } from "./TagReportClient";
 
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (chave: string) => chave }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
 
-let estado: { data?: { data: RelatorioPorEtiqueta }; isLoading: boolean; isError: boolean };
+let estado: {
+  data?: { data: RelatorioPorEtiqueta };
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => void;
+};
 vi.mock("@/hooks/reports/useTagReport", async (original) => ({
   ...(await original<typeof HookDoRelatorio>()),
   useTagReport: () => estado,
@@ -34,10 +42,10 @@ function relatorio(parcial: Partial<RelatorioPorEtiqueta>): { data: RelatorioPor
 }
 
 beforeEach(() => {
-  estado = { isLoading: false, isError: false };
+  estado = { isLoading: false, isError: false, refetch: () => {} };
 });
 
-describe("esperaLegivel", () => {
+describe("formatarDuracao (o único formatador de tempo dos relatórios)", () => {
   it.each([
     [null, "—"],
     [0, "< 1 min"],
@@ -49,7 +57,7 @@ describe("esperaLegivel", () => {
     [86_400, "1 d"],
     [3 * 86_400 + 4 * 3600, "3 d 4 h"],
   ])("%s s → %s", (segundos, esperado) => {
-    expect(esperaLegivel(segundos)).toBe(esperado);
+    expect(formatarDuracao(segundos)).toBe(esperado);
   });
 });
 
@@ -100,10 +108,11 @@ describe("TagReportClient", () => {
     expect(html).not.toContain("tabela-por-etiqueta");
   });
 
-  it("erro: mensagem legível, sem tabela", () => {
+  it("erro: mensagem legível com Tentar de novo, sem tabela", () => {
     estado.isError = true;
     const html = renderToStaticMarkup(<TagReportClient />);
     expect(html).toContain("Erro ao carregar o relatório.");
+    expect(html).toContain("Tentar de novo");
     expect(html).not.toContain("tabela-por-etiqueta");
   });
 });

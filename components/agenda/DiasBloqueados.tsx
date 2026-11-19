@@ -202,7 +202,12 @@ export function DiasBloqueados({
       setResultado(r);
       invalidar();
     },
-    onError: showApiError,
+    // Repetição que falha no meio já gravou parte (item 128): recarregar a lista
+    // faz a próxima tentativa pular o que entrou, em vez de duplicar.
+    onError: (err) => {
+      showApiError(err);
+      invalidar();
+    },
   });
 
   const remover = useMutation({
@@ -392,9 +397,19 @@ export function DiasBloqueados({
                   variant="ghost"
                   className="min-h-11"
                   disabled={remover.isPending}
-                  onClick={() => remover.mutate(e.id)}
+                  onClick={() => {
+                    // Apagar um dia ABERTO fecha o dia (item 128): o rótulo diz
+                    // isso e pede confirmação; "Reabrir" fazia o contrário.
+                    if (
+                      !e.is_unavailable &&
+                      !window.confirm(t("Cancelar a abertura deste dia? Ele volta a ficar fechado para marcar."))
+                    ) {
+                      return;
+                    }
+                    remover.mutate(e.id);
+                  }}
                 >
-                  {t("Reabrir")}
+                  {e.is_unavailable ? t("Reabrir") : t("Cancelar abertura")}
                 </Button>
               ) : null}
             </li>

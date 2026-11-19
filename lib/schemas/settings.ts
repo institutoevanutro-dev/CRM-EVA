@@ -315,6 +315,13 @@ export const crmSettingsSchema = z
      */
     telefone_de_ficha_vazia: z.boolean().catch(false),
     /**
+     * `cadastro_de_ficha_vazia`: o nome completo, o CPF, o e-mail, a data de
+     * nascimento e o endereço que o cliente diz ao ASSISTENTE entram SOZINHOS
+     * no campo VAZIO da ficha, sem a fila de proposta. Irmã da chave acima, e
+     * independente dela. NASCE DESLIGADA: só o booleano `true` liga.
+     */
+    cadastro_de_ficha_vazia: z.boolean().catch(false),
+    /**
      * `extracao_silenciosa` (migration 0407): nas conversas atendidas pela
      * equipe, o CPF, o e-mail, a data de nascimento e o endereço que o cliente
      * manda entram na ficha VAZIA sozinhos, e valor diferente vira proposta.
@@ -327,6 +334,7 @@ export const crmSettingsSchema = z
     paciente_pelo_cadastro: false,
     internal_contact_tags: [],
     telefone_de_ficha_vazia: false,
+    cadastro_de_ficha_vazia: false,
     extracao_silenciosa: false,
   });
 
@@ -365,6 +373,15 @@ export function clientePelaAgendaLigado(settings: unknown): boolean {
  */
 export function telefoneDeFichaVaziaLigado(settings: unknown): boolean {
   return crmDe(settings).telefone_de_ficha_vazia === true;
+}
+
+/**
+ * A escrita automática do cadastro de ficha vazia (nome, CPF, e-mail,
+ * nascimento, endereço) está ligada? Mesma régua de `telefoneDeFichaVaziaLigado`:
+ * desligada por padrão, só o booleano `true` liga, nunca lança.
+ */
+export function cadastroDeFichaVaziaLigado(settings: unknown): boolean {
+  return crmDe(settings).cadastro_de_ficha_vazia === true;
 }
 
 /**

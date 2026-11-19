@@ -2,7 +2,6 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { apiClient } from "@/lib/api/client";
 
 /**
@@ -60,17 +59,16 @@ export function useHorariosLivres(filtro: HorariosLivresFiltro | null) {
       if (filtro!.owner_user_id) qs.set("owner_user_id", filtro!.owner_user_id);
       if (filtro!.unit_id) qs.set("unit_id", filtro!.unit_id);
       if (filtro!.duracao_minutos) qs.set("duracao_minutos", String(filtro!.duracao_minutos));
-      try {
-        const r = await apiClient.get<{ data: HorariosLivresResposta }>(
-          `/api/v1/agenda/horarios-livres?${qs.toString()}`,
-        );
-        // `ok()` embrulha em `data` — desembrulhar aqui evita que cada tela
-        // repita o caminho e erre em uma delas.
-        return (r as unknown as { data: HorariosLivresResposta }).data ?? (r as unknown as HorariosLivresResposta);
-      } catch (err) {
-        showApiError(err);
-        throw err;
-      }
+      // SEM TOAST na falha (item 131): toda tela que usa este hook já mostra o
+      // aviso no lugar (grade, painel e modal leem `isError`). O toast vermelho
+      // com "ID: …" repetia o aviso e, no iPhone, cobria "Hoje" e "Novo
+      // agendamento".
+      const r = await apiClient.get<{ data: HorariosLivresResposta }>(
+        `/api/v1/agenda/horarios-livres?${qs.toString()}`,
+      );
+      // `ok()` embrulha em `data` — desembrulhar aqui evita que cada tela
+      // repita o caminho e erre em uma delas.
+      return (r as unknown as { data: HorariosLivresResposta }).data ?? (r as unknown as HorariosLivresResposta);
     },
   });
 }

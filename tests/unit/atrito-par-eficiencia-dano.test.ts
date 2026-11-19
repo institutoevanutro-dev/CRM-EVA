@@ -141,7 +141,7 @@ describe("regra 3.3 — nenhuma eficiência é publicada sozinha", () => {
     const p90Diferente = pares
       .find((p) => p.chave === "custo_humano")
       ?.danos.find((d) => d.chave === "espera_humana_p90_s");
-    expect(p90Diferente?.nota).toMatch(/quem espera mais/i);
+    expect(p90Diferente?.nota).toMatch(/quem mais espera/i);
   });
 
   it("a taxa de contorno é publicada — mede a ferramenta sendo evitada", () => {
@@ -337,23 +337,24 @@ describe("cálculos derivados", () => {
 
 describe("formatação", () => {
   it("razão vira percentual", () => {
-    expect(formatarMedida({ chave: "x", rotulo: "x", valor: 0.25, unidade: "razao" })).toBe("25.0%");
+    expect(formatarMedida({ chave: "x", rotulo: "x", valor: 0.25, unidade: "razao" })).toBe("25,0%");
   });
 
   it("contagem é inteira", () => {
     expect(formatarMedida({ chave: "x", rotulo: "x", valor: 12, unidade: "contagem" })).toBe("12");
   });
 
-  it("média mantém uma casa — 2.5 retornos não é 3", () => {
-    expect(formatarMedida({ chave: "x", rotulo: "x", valor: 2.5, unidade: "media" })).toBe("2.5");
+  it("média mantém uma casa, com vírgula — 2,5 retornos não é 3", () => {
+    expect(formatarMedida({ chave: "x", rotulo: "x", valor: 2.5, unidade: "media" })).toBe("2,5");
   });
 
   it.each([
-    [45, "45s"],
-    [900, "15min"],
-    [3600, "1h"],
-    [7200, "2h"],
-    [5400, "1h 30min"],
+    [45, "< 1 min"],
+    [900, "15 min"],
+    [3600, "1 h"],
+    [7200, "2 h"],
+    [5400, "1 h 30 min"],
+    [7505, "2 h 5 min"],
   ])("duração de %is é %s", (segundos, esperado) => {
     expect(formatarDuracao(segundos)).toBe(esperado);
   });

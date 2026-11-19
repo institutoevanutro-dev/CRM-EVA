@@ -73,6 +73,19 @@ export interface Contact {
     last_message_at: string | null;
     unread: number;
   };
+  /**
+   * Derivado, só no GET da ficha: as próximas consultas (até 3, da mais perto)
+   * e as últimas (até 3, da mais recente), sem as canceladas. `null` = a
+   * leitura falhou (a ficha diz isso, em vez de "nenhuma consulta").
+   */
+  consultas?: ConsultaDoContato[] | null;
+}
+
+export interface ConsultaDoContato {
+  id: string;
+  title: string;
+  starts_at: string;
+  status: string;
 }
 
 /**

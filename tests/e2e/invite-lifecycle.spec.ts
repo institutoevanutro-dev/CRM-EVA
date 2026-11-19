@@ -315,6 +315,10 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
     await login(page, base.users.agent!.email);
     await page.goto(`/team/accept-invite/${valid}`);
     await expect(page.getByRole("heading", { name: /não corresponde/i })).toBeVisible();
+    // "Sair" ia para /api/auth/signout, que não existe (404). Agora sai e volta
+    // ao login já apontando para o convite.
+    await page.getByRole("button", { name: "Sair", exact: true }).click();
+    await expect(page).toHaveURL(/\/login\?next=%2Fteam%2Faccept-invite%2F/);
   });
 
   test("9. não autenticado → CTA de login, não o formulário de aceite", async ({ page }) => {
@@ -452,7 +456,8 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
     const row = page.getByRole("row", { name: new RegExp(FRESH_EMAIL, "i") });
     await row.getByRole("button", { name: /Ações/i }).click();
     await page.getByRole("menuitem", { name: /Reenviar/i }).click();
-    await expect(page.getByText(/Convite reenviado/i)).toBeVisible();
+    // CI não configura Resend: o aviso diz que renovou e que o e-mail NÃO saiu.
+    await expect(page.getByText(/Convite renovado, mas o e-mail não saiu/i)).toBeVisible();
 
     const { data } = await svc
       .from("team_invites")
@@ -520,7 +525,7 @@ test.describe("ciclo de vida do convite (ponta a ponta + adversarial)", () => {
     //
     // O heading "Convite inválido ou expirado" é do SERVIDOR, e sai só quando
     // `verifyInviteToken` devolve `null`: token adulterado ou vencido. Aqui o
-    // token está íntegro e dentro das 24h — o que o invalidou foi a LINHA
+    // token está íntegro e dentro do prazo — o que o invalidou foi a LINHA
     // (`team_invites.revoked_at`), e essa recusa acontece na server action, já
     // com a página desenhada. Ela chega pelo `<p role="alert">` do
     // `AcceptInviteForm`.

@@ -41,6 +41,7 @@ import {
 } from "@/hooks/webhooks/useWebhookSources";
 import { usePermission } from "@/hooks/auth/AuthProvider";
 import { HEADER_ASSINATURA_DE_ENTRADA } from "@/lib/webhooks/assinatura";
+import { HEADER_LEAD_DE_TESTE } from "@/lib/webhooks/lead-de-teste";
 import { useT } from "@/hooks/i18n/useT";
 
 interface Props {
@@ -132,11 +133,14 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
    * `variables`, o segredo entre elas, no cache global por mais cinco minutos.
    */
   const [revelado, setRevelado] = React.useState<{ id: string; valor: string } | null>(null);
+  /** O `is_active` que o PATCH devolveu — mesmo motivo de `assinatura` acima. */
+  const [atividade, setAtividade] = React.useState<{ id: string; ativa: boolean } | null>(null);
 
   const url = publicUrl(source.path_token);
   const events = eventsRes?.data ?? [];
   const temAssinatura = assinatura?.id === source.id ? assinatura.ativa : source.has_secret;
   const secretRevelado = revelado?.id === source.id ? revelado.valor : null;
+  const ativa = atividade?.id === source.id ? atividade.ativa : source.is_active;
 
   const aplicarSecret = (secret: string | null, aviso: string) =>
     update.mutate(
@@ -160,7 +164,10 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
       // externos) esteja desalinhada num self-host atrás de proxy.
       const res = await fetch(`/api/v1/webhooks/in/${source.path_token}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // O cabeçalho de teste faz o lead entrar marcado "teste" e SEM disparar
+        // automação nem mensagem (decisão do dono, 18/11/2026): antes, a
+        // boas-vindas podia mandar WhatsApp para este número inventado.
+        headers: { "Content-Type": "application/json", [HEADER_LEAD_DE_TESTE]: "1" },
         body: JSON.stringify({ nome: "Lead de Teste", telefone: "11999990000", utm_source: "teste" }),
       });
       if (!res.ok) {
@@ -168,12 +175,14 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
         toast.error(
           t(
             body?.error?.message ??
-              "Não funcionou. Confira se a fonte está ativa e se o funil/estágio ainda existem.",
+              "Não funcionou. Confira se a fonte está ativa e se o funil e a etapa ainda existem.",
           ),
         );
         return;
       }
-      toast.success(t("Funcionou! Um lead de teste entrou no seu funil."));
+      toast.success(
+        t("Funcionou! Um lead marcado como teste entrou no funil, sem disparar automação nem mensagem."),
+      );
       setTestOk(true);
       void refetchEvents();
     } catch {
@@ -197,8 +206,8 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
         <SheetHeader>
           <div className="flex items-center gap-2">
             <SheetTitle>{source.name}</SheetTitle>
-            <Badge variant={source.is_active ? "success" : "neutral"}>
-              {source.is_active ? t("Ativa") : t("Pausada")}
+            <Badge variant={ativa ? "success" : "neutral"}>
+              {ativa ? t("Ativa") : t("Pausada")}
             </Badge>
           </div>
           <SheetDescription>
@@ -217,6 +226,7 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
                 type="button"
                 variant="secondary"
                 size="icon"
+                aria-label={t("Copiar endereço")}
                 onClick={() => copy(url, t("Endereço copiado."), t)}
               >
                 <Copy />
@@ -224,46 +234,59 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
             </div>
           </section>
 
-          <section className="space-y-2">
-            <p className="text-sm font-medium text-text">
-              {t("Formulário pronto para colar no seu site")}
+          {/* Formulário de site não sabe assinar: com a assinatura ligada, o
+              servidor recusa cada envio dele (401) e o paciente vê página de
+              erro. Oferecer o formulário pronto aí é oferecer lead perdido. */}
+          {temAssinatura ? (
+            <p className="rounded-sm border border-border bg-muted p-3 text-sm text-muted-foreground">
+              {t(
+                "Com a assinatura ligada, formulário de site (HTML, WordPress, Elementor) não consegue enviar. Só sistemas que assinam cada envio, como Zapier, n8n ou código próprio.",
+              )}
             </p>
-            <Textarea readOnly rows={6} value={formSnippet(url, t)} className="font-mono text-xs" />
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => copy(formSnippet(url, t), t("Formulário copiado."), t)}
-            >
-              <Copy /> {t("Copiar formulário")}
-            </Button>
-          </section>
+          ) : (
+            <>
+              <section className="space-y-2">
+                <p className="text-sm font-medium text-text">
+                  {t("Formulário pronto para colar no seu site")}
+                </p>
+                <Textarea readOnly rows={6} value={formSnippet(url, t)} className="font-mono text-xs" />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => copy(formSnippet(url, t), t("Formulário copiado."), t)}
+                >
+                  <Copy /> {t("Copiar formulário")}
+                </Button>
+              </section>
 
-          <section className="space-y-2 rounded-sm border border-border">
-            <details className="group p-3">
-              <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium text-text">
-                {t("Como conectar no seu caso")}
-                <CaretDown className="transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="mt-3 space-y-4 text-sm text-muted-foreground">
-                <div>
-                  <p className="font-medium text-text">WordPress / Elementor</p>
-                  <p>
-                    {t(
-                      'Cole o endereço acima no campo "Action" (ou "URL de envio") do seu formulário.',
-                    )}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-medium text-text">Zapier / n8n</p>
-                  <p>{t('Use a ação "Webhooks" → POST, apontando para o endereço acima.')}</p>
-                </div>
-                <div>
-                  <p className="font-medium text-text">{t("Formulário próprio")}</p>
-                  <p>{t("Use o HTML pronto logo acima — já aponta para o endereço certo.")}</p>
-                </div>
-              </div>
-            </details>
-          </section>
+              <section className="space-y-2 rounded-sm border border-border">
+                <details className="group p-3">
+                  <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium text-text">
+                    {t("Como conectar no seu caso")}
+                    <CaretDown className="transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="mt-3 space-y-4 text-sm text-muted-foreground">
+                    <div>
+                      <p className="font-medium text-text">WordPress / Elementor</p>
+                      <p>
+                        {t(
+                          'Cole o endereço acima no campo "Action" (ou "URL de envio") do seu formulário.',
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-text">Zapier / n8n</p>
+                      <p>{t('Use a ação "Webhooks" → POST, apontando para o endereço acima.')}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-text">{t("Formulário próprio")}</p>
+                      <p>{t("Use o HTML pronto logo acima — já aponta para o endereço certo.")}</p>
+                    </div>
+                  </div>
+                </details>
+              </section>
+            </>
+          )}
 
           <details className="rounded-sm border border-border p-3">
             <summary className="cursor-pointer list-none text-sm font-medium text-text">
@@ -296,7 +319,7 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
 
           <section className="space-y-3 rounded-sm border border-border p-3">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-text">{t("Assinatura (HMAC)")}</p>
+              <p className="text-sm font-medium text-text">{t("Assinatura de segurança")}</p>
               {/* "Ligada", e não "Ativa": o cabeçalho do painel já tem uma badge
                   "Ativa/Pausada" para a FONTE, e duas badges com a mesma palavra
                   no mesmo painel falam de duas coisas diferentes. */}
@@ -306,7 +329,7 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
             </div>
             <p className="text-xs text-muted-foreground">
               {t(
-                "Sem assinatura, quem descobrir o endereço consegue criar leads. Com ela, quem envia assina o corpo cru da requisição com HMAC-SHA256 e manda o resultado em hexadecimal — hex puro, sem prefixo — neste cabeçalho:",
+                "Sem assinatura, quem descobrir o endereço consegue criar leads. Com ela, só aceita envio assinado. Para quem programa: HMAC-SHA256 do corpo, em hex, neste cabeçalho:",
               )}{" "}
               {/* O nome sai da constante, e não de uma string aqui: ele é
                   contrato de fio (lib/webhooks/assinatura.ts), e a mesma
@@ -329,6 +352,7 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
                     type="button"
                     variant="secondary"
                     size="icon"
+                    aria-label={t("Copiar segredo")}
                     onClick={() => copy(secretRevelado, t("Segredo copiado."), t)}
                   >
                     <Copy />
@@ -401,13 +425,32 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
                     </AlertDialog>
                   </>
                 ) : (
-                  <Button
-                    type="button"
-                    disabled={update.isPending}
-                    onClick={() => aplicarSecret(gerarSecretHex(), t("Assinatura ligada."))}
-                  >
-                    {t("Gerar segredo")}
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button type="button" disabled={update.isPending}>
+                        {t("Gerar segredo")}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>{t("Ligar a assinatura?")}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {t(
+                            "Formulários de site (HTML, WordPress, Elementor) param de funcionar: cada envio deles será recusado. Ligue só se quem envia é um sistema que assina, como Zapier, n8n ou código próprio.",
+                          )}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+                        <AlertDialogAction
+                          disabled={update.isPending}
+                          onClick={() => aplicarSecret(gerarSecretHex(), t("Assinatura ligada."))}
+                        >
+                          {t("Ligar")}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 )}
               </div>
             ) : null}
@@ -445,14 +488,17 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
               </p>
             </div>
             <Switch
-              checked={source.is_active}
+              checked={ativa}
+              aria-label={t("Fonte ativa")}
               disabled={update.isPending}
               onCheckedChange={(checked) =>
                 update.mutate(
                   { id: source.id, is_active: checked },
                   {
-                    onSuccess: () =>
-                      toast.success(checked ? t("Fonte ativada.") : t("Fonte pausada.")),
+                    onSuccess: (res) => {
+                      setAtividade({ id: source.id, ativa: res.data.is_active });
+                      toast.success(res.data.is_active ? t("Fonte ativada.") : t("Fonte pausada."));
+                    },
                   },
                 )
               }

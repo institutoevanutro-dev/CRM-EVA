@@ -225,6 +225,8 @@ test("ligar 'Pacientes pelo cadastro' manda quem tem cadastro para o funil de cl
   await page.getByRole("link", { name: /Tipos de agendamento/ }).first().click();
   await expect(page).toHaveURL(/\/app\/settings\/tenant\/agenda/, { timeout: 30_000 });
   const secao = page.getByTestId("paciente-pelo-cadastro");
+  // O bloco fica numa sanfona fechada (lote 11, item 126): abre-se como o leigo abriria.
+  await page.locator("summary", { hasText: "Pacientes pelo cadastro" }).click();
   await expect(secao).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("paciente-pelo-cadastro-estado")).toContainText("Desligado:");
   await expect(secao).toContainText("Esta opção não põe a etiqueta “cliente” em ninguém");
@@ -338,6 +340,8 @@ test("ligar 'Pacientes pelo cadastro' manda quem tem cadastro para o funil de cl
 
   // ── 6 · desligar: sem confirmação, e vale para quem escrever depois ─────
   await page.goto("/app/settings/tenant/agenda");
+  // Os blocos de configuração ficam em sanfonas fechadas (lote 11, item 126).
+  await page.locator("summary", { hasText: "Pacientes pelo cadastro" }).click();
   await expect(page.getByTestId("paciente-pelo-cadastro-estado")).toContainText("Ligado:", { timeout: 30_000 });
   await page.getByTestId("paciente-pelo-cadastro-interruptor").click();
   await expect(page.getByTestId("paciente-pelo-cadastro-estado")).toContainText("Desligado:", {

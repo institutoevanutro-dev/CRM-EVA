@@ -45,9 +45,10 @@ export function PerguntasFrequentesClient() {
 
   const [rascunho, setRascunho] = React.useState<Rascunho | null>(null);
   // Edição local sobre o valor do banco: sem efeito que copia o servidor para o estado.
-  const [ligadoEditado, setLigado] = React.useState<boolean | null>(null);
+  // O interruptor não tem edição local: grava na hora (parecia gravado e só
+  // valia com "Salvar").
   const [limiteEditado, setLimite] = React.useState<string | null>(null);
-  const ligado = ligadoEditado ?? data?.config.ligado ?? false;
+  const ligado = data?.config.ligado ?? false;
   const limite = limiteEditado ?? (data ? data.config.limite_similaridade.toFixed(2) : "0.82");
 
   // Erro tem saída própria: antes `!data` com a consulta falhada deixava
@@ -102,10 +103,9 @@ export function PerguntasFrequentesClient() {
     }
   }
 
-  async function salvarConfiguracao() {
+  async function salvarConfiguracao(input: { ligado: boolean; limite_similaridade: number }) {
     try {
-      await salvarConfig.mutateAsync({ ligado, limite_similaridade: Number(limite) });
-      setLigado(null);
+      await salvarConfig.mutateAsync(input);
       setLimite(null);
       toast.success(t("Configuração salva."));
     } catch (err) {
@@ -142,30 +142,42 @@ export function PerguntasFrequentesClient() {
         </CardHeader>
         <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end">
           <div className="flex items-center gap-2">
-            <Switch id="rp-ligado" checked={ligado} onCheckedChange={setLigado} aria-label={t("Responder sem IA")} />
+            <Switch
+              id="rp-ligado"
+              checked={ligado}
+              disabled={salvarConfig.isPending}
+              onCheckedChange={(v) =>
+                void salvarConfiguracao({ ligado: v, limite_similaridade: data.config.limite_similaridade })
+              }
+              aria-label={t("Responder sem IA")}
+            />
             <Label htmlFor="rp-ligado">{ligado ? t("Ligado") : t("Desligado")}</Label>
           </div>
           <div className="flex flex-col gap-1">
             <Label htmlFor="rp-limite">{t("Rigor do reconhecimento")}</Label>
-            <Input
-              id="rp-limite"
-              type="number"
-              step="0.01"
-              min={LIMITE_MINIMO}
-              max={LIMITE_MAXIMO}
-              value={limite}
-              onChange={(e) => setLimite(e.target.value)}
-              className="w-28"
-            />
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{t("mais solto")}</span>
+              <input
+                id="rp-limite"
+                type="range"
+                step="0.01"
+                min={LIMITE_MINIMO}
+                max={LIMITE_MAXIMO}
+                value={limite}
+                onChange={(e) => setLimite(e.target.value)}
+                className="w-40 accent-accent"
+              />
+              <span>{t("mais rígido")}</span>
+            </div>
             <p className="text-xs text-muted-foreground">
-              {t("Quanto maior, mais parecida a mensagem precisa ser com uma das formas de perguntar. Entre 0,78 e 0,95; o padrão é 0,82.")}
+              {t("Mais rígido: só responde quando a mensagem é quase igual a uma das formas de perguntar. Mais solto: aceita jeitos mais diferentes de perguntar.")}
             </p>
           </div>
           <Button
-            onClick={() => void salvarConfiguracao()}
-            disabled={salvarConfig.isPending || !limiteAceito(limite)}
+            onClick={() => void salvarConfiguracao({ ligado, limite_similaridade: Number(limite) })}
+            disabled={salvarConfig.isPending || !limiteAceito(limite) || limiteEditado === null}
           >
-            {t("Salvar configuração")}
+            {t("Salvar rigor")}
           </Button>
         </CardContent>
       </Card>

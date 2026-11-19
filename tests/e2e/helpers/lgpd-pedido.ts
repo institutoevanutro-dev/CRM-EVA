@@ -8,10 +8,10 @@
  * (`createLgpdRequest`). Não existe botão "nova solicitação" na tela. O insert
  * abaixo grava o que o webhook grava (pedido `received`, prazo, payload), sem
  * emitir o evento, para que quem ponha o pedido para andar seja o operador,
- * pelo botão "Aprovar export" da tela.
+ * pelo botão "Aprovar a cópia dos dados" da tela.
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 export function servico(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -53,20 +53,29 @@ export async function criarPedido(
   return pedido.data.id as string;
 }
 
+/**
+ * A linha do pedido na lista. A coluna com o começo do id saiu da tela (lote 14:
+ * a linha diz o NOME do titular); o que ainda identifica o pedido sem ambiguidade
+ * é o endereço do link "Ver".
+ */
+export function linhaDoPedido(page: Page, pedidoId: string): Locator {
+  return page.getByRole("row").filter({ has: page.locator(`a[href="/app/lgpd/requests/${pedidoId}"]`) });
+}
+
 /** O operador abre o pedido pela lista e aprova pela tela. */
 export async function aprovarPelaTela(page: Page, pedidoId: string, pasta: string): Promise<void> {
   await page.goto("/app/lgpd/requests");
-  const linha = page.getByRole("row").filter({ hasText: pedidoId.slice(0, 8) });
+  const linha = linhaDoPedido(page, pedidoId);
   await expect(linha).toContainText("Recebido", { timeout: 30_000 });
   await page.screenshot({ path: `${pasta}/1-lista-recebido.png`, fullPage: true });
 
   await linha.getByRole("link", { name: "Ver" }).click();
   await page.waitForURL(new RegExp(`/app/lgpd/requests/${pedidoId}`));
-  await page.getByRole("button", { name: "Aprovar export" }).click();
+  await page.getByRole("button", { name: "Aprovar a cópia dos dados" }).click();
   await page.locator("#approved_reason").fill("Titular confirmou a identidade no balcão da clínica.");
   await page.screenshot({ path: `${pasta}/2-aprovar.png`, fullPage: true });
   await page.getByRole("button", { name: "Confirmar aprovação" }).click();
-  await expect(page.getByText("Processando", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Em andamento", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
   await page.screenshot({ path: `${pasta}/3-processando.png`, fullPage: true });
 }
 

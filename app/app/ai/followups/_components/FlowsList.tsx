@@ -12,6 +12,7 @@ import { FlowArrow, Plus } from "@/lib/ui/icons";
 import { useFollowupFlows, type FollowupFlowPointerRow } from "@/hooks/followup/useFollowupFlows";
 import { DeleteFollowupFlowButton } from "./DeleteFollowupFlowButton";
 import { DuplicateFollowupFlowButton } from "./DuplicateFollowupFlowButton";
+import { FUSO_PADRAO } from "@/lib/tempo/fusos";
 import { FlowStatusBadge } from "./FlowStatusBadge";
 import { NewFlowDialog } from "./NewFlowDialog";
 import { RenameFollowupFlowButton } from "./RenameFollowupFlowButton";
@@ -26,8 +27,16 @@ function formatUpdatedAt(iso: string, idioma: string): string {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    timeZone: FUSO_PADRAO,
   });
 }
+
+// Português simples no cartão (era "Handoff: pause").
+const EQUIPE_ASSUME: Record<string, string> = {
+  pause: "pausa",
+  cancel: "cancela",
+  allow: "segue",
+};
 
 export function FlowsList({ initialData, canWrite }: Props) {
   const tagDoIdioma = useTagDeIdioma();
@@ -81,15 +90,15 @@ export function FlowsList({ initialData, canWrite }: Props) {
                 <dl className="grid grid-cols-2 gap-2 pt-1 text-xs">
                   <div>
                     <dt className="text-text-muted">{t("Versão")}</dt>
-                    <dd className="font-mono">{flow.active_version_id ? "publicada" : "—"}</dd>
+                    <dd>{flow.active_version_id ? t("publicada") : "—"}</dd>
                   </div>
                   <div>
-                    <dt className="text-text-muted">Handoff</dt>
-                    <dd className="font-mono">{flow.handoff_policy}</dd>
+                    <dt className="text-text-muted">{t("Se a equipe assume")}</dt>
+                    <dd>{t(EQUIPE_ASSUME[flow.handoff_policy] ?? flow.handoff_policy)}</dd>
                   </div>
                 </dl>
                 <p className="mt-auto pt-2 text-xs text-text-muted">
-                  Atualizado em {formatUpdatedAt(flow.updated_at, tagDoIdioma)}
+                  {t("Atualizado em")} {formatUpdatedAt(flow.updated_at, tagDoIdioma)}
                 </p>
               </Link>
               {canWrite && (

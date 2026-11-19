@@ -285,6 +285,8 @@ test("fontes e destino entre duas contas, somente leitura e ocupação imediatam
     "a ocupação do Google não veio na lista da agenda",
   ).toBe(true);
   await page.goto("/app/settings/tenant/agenda");
+  // Os blocos de configuração ficam em sanfonas fechadas (lote 11, item 126).
+  await page.locator("summary", { hasText: "Suas agendas Google" }).click();
   const section = page.getByRole("region", { name: "Suas agendas Google" });
   await expect(section.getByText("Principal local", { exact: true })).toBeVisible();
   const reader = section
@@ -461,6 +463,8 @@ test("retry pela tela usa filtro PostgREST real; conflito exige escolha e conser
     await expect(page.getByText("Alterações sincronizadas.")).toBeVisible();
     await evidence(page, info, "publicado", "[role='dialog']");
     await page.goto("/app/settings/tenant/agenda");
+    // Os blocos de configuração ficam em sanfonas fechadas (lote 11, item 126).
+    await page.locator("summary", { hasText: "Suas agendas Google" }).click();
     const settings = page.getByRole("region", { name: "Suas agendas Google" });
     await settings
       .locator("div.rounded-md")

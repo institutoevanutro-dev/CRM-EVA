@@ -156,6 +156,12 @@ function dbFalso(contato: Linha | null) {
           }),
         };
       }
+      // Campo vazio lê a opção `cadastro_de_ficha_vazia`: sem a chave, desligada.
+      if (tabela === "organizations") {
+        return {
+          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { settings: null }, error: null }) }) }),
+        };
+      }
       return {
         insert: (linha: Linha) => {
           inseridas.push(linha);

@@ -31,10 +31,10 @@ async function main() {
       espera_valor: pega("Esperas sem nenhuma resposta por mais de 4h"),
       abandono_presente: t.indexOf("morreram no silêncio") >= 0,
       pior_caso_presente: t.indexOf("Insistência no pior caso") >= 0,
-      base_sem_ressalva_de_escopo: /Base: \d+ demandas? encerradas? nos últimos 30 dias, e \d+ ainda abertas/.test(t),
-      invariante4_presente: t.indexOf("Demandas abertas sem próximo passo") >= 0,
-      invariante4_valor: (function(){ var m=t.match(/Demandas abertas sem próximo passo[\s\S]{0,200}?(\d+)\s/); return m?m[1]:null; })(),
-      insistencia_declara_denominador: /Medido sobre as \d+ demandas que passaram por atendimento humano/.test(t)
+      base_sem_ressalva_de_escopo: /Base: \d+ atendimentos? encerrados? nos últimos 30 dias, e \d+ ainda abertos/.test(t),
+      invariante4_presente: t.indexOf("Atendimentos abertos sem próximo passo") >= 0,
+      invariante4_valor: (function(){ var m=t.match(/Atendimentos abertos sem próximo passo[\s\S]{0,200}?(\d+)\s/); return m?m[1]:null; })(),
+      insistencia_declara_denominador: /Medido sobre os \d+ atendimentos que passaram por um atendente/.test(t)
     };
   })()`);
   console.log(JSON.stringify(m, null, 2));

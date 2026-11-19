@@ -57,7 +57,8 @@ test("o atendente marca e desmarca 'Sempre atendimento humano' na ficha do conta
   await page.goto(`/app/contacts/${contatoId}`);
   await expect(page.getByText(NOME).first()).toBeVisible({ timeout: 60_000 });
 
-  // Controle: o contato nasce sem a marca.
+  // Controle: o contato nasce sem a marca. As ações moram no menu "Mais".
+  await page.getByRole("button", { name: "Mais", exact: true }).click();
   await expect(page.getByRole("button", { name: "Tirar sempre humano" })).toHaveCount(0);
   expect(await marcaNoBanco(page, contatoId)).toBe(false);
 
@@ -65,8 +66,11 @@ test("o atendente marca e desmarca 'Sempre atendimento humano' na ficha do conta
   await expect(page.getByRole("alertdialog")).toContainText("A IA para agora");
   await page.getByRole("button", { name: "Marcar como sempre humano" }).click();
 
+  await page.getByRole("button", { name: "Mais", exact: true }).click();
   await expect(page.getByRole("button", { name: "Tirar sempre humano" })).toBeVisible({ timeout: 20_000 });
+  await page.keyboard.press("Escape");
   await page.reload();
+  await page.getByRole("button", { name: "Mais", exact: true }).click();
   await expect(page.getByRole("button", { name: "Tirar sempre humano" })).toBeVisible({ timeout: 20_000 });
   expect(await marcaNoBanco(page, contatoId)).toBe(true);
   fs.mkdirSync("evidence/sempre-humano", { recursive: true });
@@ -74,6 +78,7 @@ test("o atendente marca e desmarca 'Sempre atendimento humano' na ficha do conta
 
   await page.getByRole("button", { name: "Tirar sempre humano" }).click();
   await page.getByRole("button", { name: "Tirar a marca" }).click();
+  await page.getByRole("button", { name: "Mais", exact: true }).click();
   await expect(page.getByRole("button", { name: "Sempre atendimento humano" })).toBeVisible({ timeout: 20_000 });
   expect(await marcaNoBanco(page, contatoId)).toBe(false);
 });

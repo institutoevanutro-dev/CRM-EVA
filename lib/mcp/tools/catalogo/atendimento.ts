@@ -49,15 +49,15 @@ export const TOOLS_ATENDIMENTO = declararTools([
     // Nenhum dos dois gerou conflito de texto — o `tsc` é que reprovou no merge.
     rotulo: "Anotar dado que o cliente informou",
     explicacao:
-      "Quando o cliente diz o e-mail, o nome ou o telefone dele na conversa, guarda essa informação para uma pessoa " +
-      "conferir antes de entrar na ficha, exceto o telefone de um cadastro sem número, quando a empresa liga a " +
-      "opção em Configurações › Distribuição de atendimento: aí ele entra na hora, em formato E.164, sem " +
-      "sobrescrever quem já tem número.",
+      "Quando o cliente diz o nome, o telefone, o e-mail, o CPF, a data de nascimento ou o endereço na conversa, " +
+      "guarda essa informação para uma pessoa conferir antes de entrar na ficha. Se a empresa ligar as opções em " +
+      "Configurações › Distribuição de atendimento, o dado entra na hora quando aquele campo da ficha está vazio, " +
+      "sem nunca trocar o que já está preenchido.",
     oQueToca: "Cadastro de clientes",
     // `atencao`, não `critico`: nada sai para o cliente, e o ÚNICO dado que
-    // entra na ficha por conta desta ferramenta é o telefone de um cadastro
-    // SEM número (#2593) — sozinho, sem sobrescrever nada, com auditoria e
-    // rastro na linha do tempo, E SÓ COM A OPÇÃO DA ORGANIZAÇÃO LIGADA (vem
+    // entra na ficha por conta desta ferramenta é o de campo VAZIO (telefone,
+    // #2593; e o cadastro de ficha vazia) — sem sobrescrever nada, com auditoria
+    // e rastro na linha do tempo, E SÓ COM A OPÇÃO DA ORGANIZAÇÃO LIGADA (vem
     // desligada). O resto continua esperando a confirmação humana, que é onde o
     // peso mora. Marcar `critico` aqui faria a tela pedir cerimônia para uma
     // anotação.

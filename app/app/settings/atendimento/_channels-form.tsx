@@ -13,6 +13,10 @@ export function ChannelRoutingForm({ initial }: { initial: ChannelRoutingSetting
   const [busy, setBusy] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
   async function save(id: string, reset: boolean) {
+    // Sem ninguém marcado, o número não tem quem receba: as conversas param na
+    // fila. Pergunta ANTES de gravar, e não só no aviso depois.
+    const vazio = !reset && (channels.find((c) => c.id === id)?.user_ids.length ?? 0) === 0;
+    if (vazio && !window.confirm(t("Ninguém vai receber as conversas deste número: elas ficam paradas na fila. Salvar assim mesmo?"))) return;
     setBusy(id); setFeedback("");
     try {
       const response = await fetch("/api/v1/settings/routing/channels", { method: "PATCH", headers: { "Content-Type": "application/json" },

@@ -4,6 +4,7 @@ import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { usePermission } from "@/hooks/auth/AuthProvider";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { chaveDoQuadro, useBoard } from "@/hooks/kanban/useBoard";
@@ -262,9 +263,7 @@ export function KanbanBoard({
         {/* Este estado é "o funil não tem etapas" (`stages.length === 0`), não
             "não tem negócio": a frase antiga mandava esperar por algo que nunca viria. */}
         {t("Este funil ainda não tem etapas.")}{" "}
-        <a href="/app/settings/tenant/pipelines" className="font-medium text-accent-strong underline">
-          {t("Criar etapas")}
-        </a>
+        <CaminhoParaCriarEtapas />
       </Card>
     );
   }
@@ -314,5 +313,20 @@ export function KanbanBoard({
         />
       )}
     </DragDropContext>
+  );
+}
+
+/**
+ * Mesmo piso da tela de etapas (manager+): para quem não alcança, o link
+ * levava a um 403. Componente à parte para a permissão só ser lida no quadro
+ * vazio.
+ */
+function CaminhoParaCriarEtapas() {
+  const t = useT();
+  if (!usePermission("pipeline.create")) return <>{t("Peça a quem gerencia os funis para criar as etapas.")}</>;
+  return (
+    <a href="/app/settings/tenant/pipelines" className="font-medium text-accent-strong underline">
+      {t("Criar etapas")}
+    </a>
   );
 }

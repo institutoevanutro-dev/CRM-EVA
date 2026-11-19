@@ -312,18 +312,19 @@ test.describe.serial("Inbox: enviar exame ao Prontuário", () => {
   test("o admin cria pela tela a chave só de mídia do Prontuário", async ({ page }) => {
     await entrar(page, pessoas.admin!.email);
     await page.goto("/app/settings/api-tokens");
-    await page.getByRole("button", { name: "Criar token" }).click();
-    const novo = page.getByRole("dialog", { name: "Criar novo token" });
+    await page.getByRole("button", { name: "Criar chave" }).click();
+    const novo = page.getByRole("dialog", { name: "Criar chave" });
     await novo.getByLabel("Nome", { exact: true }).fill(`${PREFIXO} Prontuário VPS exames WhatsApp`);
     const opcao = novo.getByRole("button", { name: /^prontuario:media:read —/ });
     await expect(opcao).toHaveAttribute("title", "Prontuário: baixar PDF e fotos que o paciente mandou pelo WhatsApp");
     await opcao.click();
     await novo.screenshot({ path: path.join(EVIDENCIA, "0-criar-chave.png") });
     await novo.getByRole("button", { name: "Criar", exact: true }).click();
-    const criado = page.getByRole("dialog", { name: "Token criado" });
+    const criado = page.getByRole("alertdialog", { name: "Chave criada" });
     chaveDeLeitura = (await criado.locator("code").innerText()).trim();
     expect(chaveDeLeitura).toMatch(/^dsk_/);
-    await page.keyboard.press("Escape");
+    await criado.getByRole("button", { name: "Já copiei" }).click();
+    await expect(criado).toHaveCount(0);
   });
 
   test("1 e 13: a recepção vê botão e dicas no lugar certo, com as medidas", async ({ page }) => {
@@ -460,9 +461,18 @@ test.describe.serial("Inbox: enviar exame ao Prontuário", () => {
   test("10: auditoria com o id da mensagem e a lista sem exam_id", async ({ page }) => {
     await entrar(page, pessoas.admin!.email);
     await page.goto("/app/audit");
-    await page.getByPlaceholder("ex: lead.created").fill("prontuario.exam_s");
-    await expect(page.getByText("prontuario.exam_sent").first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText("prontuario.exam_send_failed").first()).toBeVisible();
+    // O Histórico de alterações filtra por lista ("O quê") e escreve frases (lote 15);
+    // o código da ação fica nos detalhes da linha.
+    await page.getByLabel("O quê").click();
+    await page.getByRole("option", { name: "Prontuário", exact: true }).click();
+    const enviado = page.getByRole("row").filter({ hasText: "enviou um exame ao Prontuário" }).first();
+    const falhou = page.getByRole("row").filter({ hasText: "tentou enviar um exame ao Prontuário" }).first();
+    await expect(enviado).toBeVisible({ timeout: 20_000 });
+    await expect(falhou).toBeVisible();
+    await enviado.getByText("Ver", { exact: true }).click();
+    await expect(enviado.getByText(/prontuario\.exam_sent\b/)).toBeVisible();
+    await falhou.getByText("Ver", { exact: true }).click();
+    await expect(falhou.getByText("prontuario.exam_send_failed")).toBeVisible();
     await page.screenshot({ path: path.join(EVIDENCIA, "10-auditoria.png"), fullPage: true });
     const lista = await page.request.get(`/api/v1/conversations/${conv.vinculado!.conversa}/messages`);
     const texto = await lista.text();

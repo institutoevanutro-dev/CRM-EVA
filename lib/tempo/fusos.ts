@@ -39,7 +39,7 @@ export const FUSOS_OFERECIDOS: { codigo: string; rotulo: string }[] = [
   { codigo: "America/Lima", rotulo: "Lima (Peru)" },
   { codigo: "America/Bogota", rotulo: "Bogotá (Colômbia)" },
   { codigo: "America/Mexico_City", rotulo: "Cidade do México (México)" },
-  { codigo: "America/Sao_Paulo", rotulo: "São Paulo (Brasil)" },
+  { codigo: "America/Sao_Paulo", rotulo: "Brasília (Brasil)" },
   { codigo: "America/Manaus", rotulo: "Manaus (Brasil)" },
   { codigo: "America/Belem", rotulo: "Belém (Brasil)" },
   { codigo: "America/Recife", rotulo: "Recife (Brasil)" },

@@ -191,7 +191,7 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
       if (patch.tags) setTags(patch.tags as string[]);
       setEtiquetaPendente(null);
       setChaveDasEtiquetas((k) => k + 1);
-      toast.success(t("Lead atualizado"));
+      toast.success(t("Dados salvos"));
       onSaved?.();
     } catch {
       // toast already shown

@@ -46,6 +46,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
@@ -324,9 +325,13 @@ export function PainelDeTags({ tags, idioma }: { tags: LinhaDeVocabulario[]; idi
         )}
       </Card>
 
+      {/* Num diálogo, e não no fim da página: lá embaixo, sem rolar até ele,
+          o toque em Renomear/Juntar/Excluir/Cor parecia não fazer nada. */}
+      <Dialog open={alvo !== null} onOpenChange={(aberto) => !aberto && !ocupado && setAlvo(null)}>
       {alvo && (
-        <Card className="flex flex-col gap-4 p-4">
-          <p className="text-sm">
+        <DialogContent className="flex flex-col gap-4" aria-describedby={undefined}>
+          <DialogTitle asChild>
+          <p className="pr-8 text-sm font-normal leading-relaxed">
             {/* Mesma regra do toast: o texto estático passa por `t()`, a
                 etiqueta entra fora dele. */}
             {acao === "renomear" && (
@@ -353,6 +358,7 @@ export function PainelDeTags({ tags, idioma }: { tags: LinhaDeVocabulario[]; idi
               </>
             )}
           </p>
+          </DialogTitle>
 
           {acao === "excluir" ? (
             alvo.em_regras > 0 && (
@@ -460,8 +466,9 @@ export function PainelDeTags({ tags, idioma }: { tags: LinhaDeVocabulario[]; idi
               {t("Cancelar")}
             </Button>
           </div>
-        </Card>
+        </DialogContent>
       )}
+      </Dialog>
     </div>
   );
 }

@@ -33,13 +33,18 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const post = vi.fn((..._a: unknown[]) => Promise.resolve({ data: {} }));
+const del = vi.fn((..._a: unknown[]) => Promise.resolve({}));
+let leituras = 0;
 /** O que a tela já tem cadastrado — o lote confere duplicata contra isto. */
 let jaCadastrado: unknown[] = [];
 vi.mock("@/lib/api/client", () => ({
   apiClient: {
-    get: () => Promise.resolve({ data: jaCadastrado }),
+    get: () => {
+      leituras += 1;
+      return Promise.resolve({ data: jaCadastrado });
+    },
     post: (...a: unknown[]) => post(...a),
-    delete: () => Promise.resolve({}),
+    delete: (...a: unknown[]) => del(...a),
   },
 }));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));
@@ -290,5 +295,45 @@ describe("Bloquear um HORÁRIO de uma pessoa", () => {
     // A RLS não deixaria apagar o da colega: o botão não promete o que não faz.
     expect(itens[0]).not.toHaveTextContent("Reabrir");
     expect(itens[1]).toHaveTextContent("Reabrir");
+  });
+});
+
+describe("Item 128 — cancelar abertura e falha no meio da repetição", () => {
+  beforeEach(() => {
+    post.mockClear();
+    del.mockClear();
+    jaCadastrado = [];
+  });
+
+  it("num dia ABERTO o botão diz 'Cancelar abertura' e só apaga depois de confirmar", async () => {
+    jaCadastrado = [
+      { id: "a1", user_id: EU, exception_date: "2026-10-22", is_unavailable: false, start_minute: 480, end_minute: 720, reason: null },
+    ];
+    const confirmar = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const u = userEvent.setup();
+    montar({ pessoas: EQUIPE, euId: EU });
+
+    const botao = await screen.findByRole("button", { name: "Cancelar abertura" });
+    expect(screen.queryByRole("button", { name: "Reabrir" })).toBeNull();
+    await u.click(botao);
+    expect(del).not.toHaveBeenCalled();
+    await u.click(botao);
+    await waitFor(() => expect(del).toHaveBeenCalledWith("/api/v1/agenda/excecoes", { id: "a1" }));
+    confirmar.mockRestore();
+  });
+
+  it("repetição que falha no meio recarrega a lista (a próxima tentativa pula o que entrou)", async () => {
+    post.mockImplementationOnce(() => Promise.resolve({ data: {} })).mockImplementationOnce(() => Promise.reject(new Error("falhou")));
+    const u = userEvent.setup();
+    montar();
+    await screen.findByText("Nenhum dia fora da rotina daqui para a frente.");
+    const antes = leituras;
+
+    await u.type(screen.getByLabelText("Dia"), "2026-10-01");
+    await u.type(screen.getByLabelText("Repetir toda semana até (opcional)"), "2026-10-15");
+    await u.click(screen.getByRole("button", { name: "Fechar este dia" }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(leituras).toBeGreaterThan(antes));
   });
 });

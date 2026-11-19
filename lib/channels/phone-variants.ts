@@ -91,6 +91,21 @@ export function phoneForDisplay(raw: string | null | undefined): string {
 }
 
 /**
+ * Leitura humana: número BR no formato nacional — "(27) 99981-0001" no
+ * celular, "(27) 3333-4444" no fixo. Estrangeiro e o que não for 55 + DDD
+ * válido saem como `phoneForDisplay`. Só para MOSTRAR: campo de formulário,
+ * link e comparação continuam no E.164 de `phoneForDisplay`.
+ */
+export function telefoneLegivel(raw: string | null | undefined): string {
+  const e164 = phoneForDisplay(raw);
+  const d = digitsOf(e164);
+  if (!d.startsWith("55") || !DDD_BR.test(d.slice(2, 4))) return e164;
+  const local = d.slice(4);
+  if (local.length !== 8 && local.length !== 9) return e164;
+  return `(${d.slice(2, 4)}) ${local.slice(0, -4)}-${local.slice(-4)}`;
+}
+
+/**
  * Os dois números são a MESMA pessoa, considerando o nono dígito?
  *
  * Útil para asserção e para decidir merge.

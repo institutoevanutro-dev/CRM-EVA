@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { fraseDoErro } from "../_components/erros";
 
 import { acceptWelcome } from "@/app/actions/onboarding/acceptWelcome";
 import { Button } from "@/components/ui/button";
@@ -55,7 +56,7 @@ export function WelcomeForm({ defaultOrgName }: { defaultOrgName: string }) {
         startTransition(async () => {
           const res = await acceptWelcome(formData);
           if (res && !res.ok) {
-            toast.error(`Falha: ${res.error}`);
+            toast.error(t(fraseDoErro(res.error)));
           }
         });
       }}

@@ -22,6 +22,7 @@ import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 import { listarConexoesCaidas, type ConexaoCaida } from "@/lib/channels/health";
 import { VoiceCallProvider } from "@/components/voice/VoiceCallContext";
 import { acessoFoiRevogado } from "@/lib/auth/vinculo-revogado";
+import { montaOAssistente } from "@/lib/onboarding/passos";
 import { estadoDosExames } from "@/lib/integrations/prontuario/cliente";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -108,7 +109,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     enrolled = isEnrolled;
     needsMfaGate = mfaRequired;
 
-    if (orgRow && !orgRow.onboarded_at && !user.support) redirect("/onboarding");
+    // Só quem monta o assistente é levado a ele; a equipe convidada usa o app
+    // enquanto o dono termina (auditoria 17/11, item 176).
+    if (
+      orgRow &&
+      !orgRow.onboarded_at &&
+      !user.support &&
+      montaOAssistente(activeOrg.role, user)
+    )
+      redirect("/onboarding");
     if (orgRow?.status === "suspended") redirect("/account-suspended");
     // G4-02: expõe visibility_mode ao client (inbox decide visões visíveis).
     // Fonte confiável (admin client, org do cookie validado) — nunca do body.

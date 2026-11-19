@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/empty";
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -69,6 +70,9 @@ function SerieDiaria({ dias }: { dias: LinhaDoDia[] }) {
     <div className="flex items-end gap-1 overflow-x-auto pb-1" data-testid="serie-diaria">
       {dias.map((d) => (
         <div key={d.data} className="flex min-w-[18px] flex-1 flex-col items-center gap-1">
+          {/* O número fica escrito: o `title` só aparece com o mouse, e no
+              iPhone nunca. */}
+          <span className="text-[10px] tabular-nums text-foreground">{d.quantidade}</span>
           <div
             className="w-full rounded-sm bg-accent/70"
             style={{ height: `${Math.max(2, (d.quantidade / teto) * 72)}px` }}
@@ -86,7 +90,7 @@ function SerieDiaria({ dias }: { dias: LinhaDoDia[] }) {
 export function ActivityReportClient() {
   const t = useT();
   const [dias, setDias] = useState<number>(7);
-  const { data, isLoading, isError } = useActivityReport(dias);
+  const { data, isLoading, isError, refetch } = useActivityReport(dias);
 
   const relatorio = data?.data;
 
@@ -118,7 +122,7 @@ export function ActivityReportClient() {
     return (
       <div className="flex flex-col gap-6">
         {seletor}
-        <p className="text-sm text-destructive">{t("Erro ao carregar o relatório.")}</p>
+        <ErroDeLeitura texto={t("Erro ao carregar o relatório.")} onRetry={() => refetch()} />
       </div>
     );
   }

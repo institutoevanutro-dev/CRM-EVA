@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { randomId } from "@/lib/random-id";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { fraseDoErro } from "../_components/erros";
 
 import { Button } from "@/components/ui/button";
 import { skipWhatsapp, markWhatsappConfigured } from "@/app/actions/onboarding/skipWhatsapp";
@@ -185,7 +186,7 @@ function Saidas({ status, sessionName }: { status: Status; sessionName: string }
               await skipWhatsapp();
             } catch (err) {
               if (isRedirectError(err)) throw err;
-              toast.error(`${t("Falha ao pular:")} ${String(err)}`);
+              toast.error(t("Não consegui pular este passo. Tente de novo."));
             }
           })
         }
@@ -204,7 +205,7 @@ function Saidas({ status, sessionName }: { status: Status; sessionName: string }
               );
             } catch (err) {
               if (isRedirectError(err)) throw err;
-              toast.error(`${t("Falha ao marcar passo:")} ${String(err)}`);
+              toast.error(t(fraseDoErro(undefined)));
             }
           })
         }
@@ -321,7 +322,7 @@ export function ConnectWhatsappClient({
         await markWhatsappConfigured(confirmedSession, "WORKING");
       } catch (err) {
         if (isRedirectError(err)) throw err;
-        toast.error(`${t("Falha ao avançar:")} ${String(err)}`);
+        toast.error(t(fraseDoErro(undefined)));
       }
     });
   }, [status, info.session, t]);
@@ -393,7 +394,7 @@ export function ConnectWhatsappClient({
         <VoltarParaEscolha onVoltar={() => setForma(null)} />
 
         {forma === "oficial" && !oficialPodeReceber && (
-          <div className="rounded-md border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100">
+          <div className="rounded-md border border-warning/40 bg-warning-bg p-4 text-sm text-warning-fg">
             <p className="font-medium">
               {t("Este servidor ainda não está pronto para RECEBER por este caminho.")}
             </p>
@@ -419,7 +420,7 @@ export function ConnectWhatsappClient({
     <div className="space-y-4 rounded-lg border bg-background p-6">
       <VoltarParaEscolha onVoltar={() => setForma(null)} />
       {!wahaConfigured && (
-        <div className="rounded-md border border-amber-300/60 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100">
+        <div className="rounded-md border border-warning/40 bg-warning-bg p-4 text-sm text-warning-fg">
           <p className="font-medium">{t("O WhatsApp desta instalação ainda não subiu.")}</p>
           <p className="mt-1">
             {t("Ele roda no seu próprio servidor. Dá para seguir sem ele agora e conectar o número depois, em")}{" "}
@@ -480,7 +481,7 @@ export function ConnectWhatsappClient({
           )}
 
           {status === "WORKING" && (
-            <p className="mt-3 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+            <p className="mt-3 text-sm font-medium text-success-fg">
               ✓ {t("Conectado! Avançando…")}
             </p>
           )}

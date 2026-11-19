@@ -79,34 +79,86 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const orgId = activeOrg.orgId;
   const offset = (page - 1) * limit;
+  const fuso = fusoUtilizavel(activeOrg.timezone);
+  const agora = new Date();
+  const daPaginaNoBanco = () =>
+    supabase
+      .from("lgpd_requests")
+      .select(
+        "id, organization_id, request_type, source, contact_id, external_customer_id, status, attempts, received_at, due_at, completed_at, emergency, scope, error_message, request_payload",
+      )
+      .eq("organization_id", orgId);
+  type LinhaDaPagina = NonNullable<Awaited<ReturnType<typeof daPaginaNoBanco>>["data"]>[number];
 
-  // Count query (before sla_bucket filter which is client-side)
-  let countQuery = supabase
-    .from("lgpd_requests")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", orgId);
-  if (status) countQuery = countQuery.eq("status", status);
-  if (type) countQuery = countQuery.eq("request_type", type);
-  const { count } = await countQuery;
-  const total = count ?? 0;
+  // O balde só existe para pedido ABERTO: o concluído parou o relógio. Era daqui
+  // que saía o "Vencido" vermelho num pedido entregue.
+  const ehAberto = (s: string) => (LGPD_ESTADOS_ABERTOS as readonly string[]).includes(s);
+  const baldeDe = (r: { status: string; due_at: string | null; received_at: string }) =>
+    ehAberto(r.status) ? computeSlaBucket(r.due_at, r.received_at, agora, fuso) : null;
 
-  // Data query
-  let dataQuery = supabase
+  // Os pedidos abertos da organização inteira, só com as colunas do balde. Deles
+  // saem o aviso do topo (que olhava só a página aberta) e o filtro de prazo
+  // (que era aplicado DEPOIS de paginar: 2 linhas e "25 solicitações").
+  // ponytail: o balde é aritmética de dia civil em TypeScript (`computeSlaBucket`),
+  // então o recorte é em memória sobre os ABERTOS. O teto é o max-rows do
+  // PostgREST (1000 abertos); passar disso pede o balde numa função SQL.
+  const { data: abertosBrutos, error: erroDosAbertos } = await supabase
     .from("lgpd_requests")
-    .select(
-      "id, organization_id, request_type, source, contact_id, external_customer_id, status, attempts, received_at, due_at, completed_at, emergency, scope, error_message, request_payload",
-    )
+    .select("id, request_type, status, received_at, due_at")
     .eq("organization_id", orgId)
+    .in("status", [...LGPD_ESTADOS_ABERTOS])
     .order("due_at", { ascending: true, nullsFirst: false })
-    .order("received_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+    .order("received_at", { ascending: false });
+  if (erroDosAbertos) {
+    return fail("internal_error", erroDosAbertos.message, 500, { requestId });
+  }
+  const abertos = (abertosBrutos ?? []).map((r) => ({ ...r, sla_bucket: baldeDe(r) }));
+  const alertas = {
+    criticos: abertos.filter((r) => r.sla_bucket === "overdue" || r.sla_bucket === "critical").length,
+    em_alerta: abertos.filter((r) => r.sla_bucket === "warning").length,
+  };
 
-  if (status) dataQuery = dataQuery.eq("status", status);
-  if (type) dataQuery = dataQuery.eq("request_type", type);
+  let total: number;
+  let rows: LinhaDaPagina[];
+  if (parsed.data.sla_bucket) {
+    const ids = abertos
+      .filter(
+        (r) =>
+          r.sla_bucket === parsed.data.sla_bucket &&
+          (!status || r.status === status) &&
+          (!type || r.request_type === type),
+      )
+      .map((r) => r.id);
+    total = ids.length;
+    const daPagina = ids.slice(offset, offset + limit);
+    if (daPagina.length === 0) {
+      rows = [];
+    } else {
+      const { data, error: dbErr } = await daPaginaNoBanco().in("id", daPagina);
+      if (dbErr) return fail("internal_error", dbErr.message, 500, { requestId });
+      const posicao = new Map(daPagina.map((id, i) => [id, i]));
+      rows = [...(data ?? [])].sort((a, b) => posicao.get(a.id)! - posicao.get(b.id)!);
+    }
+  } else {
+    let countQuery = supabase
+      .from("lgpd_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId);
+    if (status) countQuery = countQuery.eq("status", status);
+    if (type) countQuery = countQuery.eq("request_type", type);
+    const { count } = await countQuery;
+    total = count ?? 0;
 
-  const { data: rows, error: dbErr } = await dataQuery;
-  if (dbErr) {
-    return fail("internal_error", dbErr.message, 500, { requestId });
+    let dataQuery = daPaginaNoBanco()
+      .order("due_at", { ascending: true, nullsFirst: false })
+      .order("received_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (status) dataQuery = dataQuery.eq("status", status);
+    if (type) dataQuery = dataQuery.eq("request_type", type);
+
+    const { data, error: dbErr } = await dataQuery;
+    if (dbErr) return fail("internal_error", dbErr.message, 500, { requestId });
+    rows = data ?? [];
   }
 
   // Balde por linha. A régua mora em `lib/lgpd/balde-de-sla.ts` porque é
@@ -117,9 +169,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   // O titular: UMA consulta para a página inteira (nada de uma por linha), com
   // o filtro de organização escrito aqui mesmo, além da RLS. Um `contact_id`
   // de outra organização numa linha torta não traz nome nenhum.
-  const fuso = fusoUtilizavel(activeOrg.timezone);
-  const agora = new Date();
-  const idsDeContato = [...new Set((rows ?? []).map((r) => r.contact_id).filter((id): id is string => !!id))];
+  const idsDeContato = [...new Set(rows.map((r) => r.contact_id).filter((id): id is string => !!id))];
   const contatos = new Map<string, ContatoDoTitular>();
   if (idsDeContato.length > 0) {
     const { data: achados, error: erroDosContatos } = await supabase
@@ -134,7 +184,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
 
   // O `request_payload` só serve ao rótulo: tem dado pessoal e não sai daqui.
-  const enriched = (rows ?? []).map(({ request_payload, ...r }) => ({
+  const enriched = rows.map(({ request_payload, ...r }) => ({
     ...r,
     titular: rotuloDoTitular(
       { ...r, request_payload },
@@ -142,20 +192,17 @@ export async function GET(req: NextRequest): Promise<Response> {
       t,
     ),
     prazo: rotuloDoPrazo(r.due_at, agora, fuso, t),
-    sla_bucket: computeSlaBucket(r.due_at, r.received_at, agora, fuso),
+    sla_bucket: baldeDe(r),
   }));
 
-  const filtered = parsed.data.sla_bucket
-    ? enriched.filter((r) => r.sla_bucket === parsed.data.sla_bucket)
-    : enriched;
-
-  return ok(filtered, {
+  return ok(enriched, {
     requestId,
     meta: {
       total,
       page,
       limit,
       has_more: offset + limit < total,
+      alertas,
     },
   });
 }

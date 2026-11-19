@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { fraseDoErro } from "../_components/erros";
 
 import { copyToClipboard } from "@/lib/clipboard";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ export function InviteTeamForm() {
     startTransition(async () => {
       if (skip) {
         const res = await sendOnboardingInvites({ invitations: [], skip: true });
-        if (res && !res.ok) toast.error(`${t("Falha:")} ${res.error}`);
+        if (res && !res.ok) toast.error(t(fraseDoErro(res.error)));
         return;
       }
       const emails = Array.from(
@@ -53,7 +54,7 @@ export function InviteTeamForm() {
         invitations: emails.map((email) => ({ email, role })),
       });
       if (res && !res.ok) {
-        toast.error(`${t("Falha:")} ${res.error}`);
+        toast.error(t(fraseDoErro(res.error)));
         return;
       }
       if (res && res.ok && res.undelivered?.length) {
@@ -108,7 +109,7 @@ export function InviteTeamForm() {
       </div>
 
       {undelivered.length > 0 && (
-        <div className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20">
+        <div className="space-y-3 rounded-md border border-warning/40 bg-warning-bg p-4">
           <p className="text-sm font-medium">
             {t(
               "Esta instalação não envia e-mail. Os convites estão prontos — copie o link de cada pessoa e mande por onde você já fala com ela:",

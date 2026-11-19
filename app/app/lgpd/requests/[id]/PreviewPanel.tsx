@@ -74,7 +74,7 @@ export function PreviewPanel({ requestId }: PreviewPanelProps) {
           )}
 
           {error && (
-            <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+            <div className="flex items-center gap-2 rounded-md border border-error-fg/30 bg-error-bg px-3 py-2 text-sm text-error-fg">
               <Warning size={16} aria-hidden />
               {t("Falha ao carregar prévia.")}
             </div>
@@ -83,7 +83,7 @@ export function PreviewPanel({ requestId }: PreviewPanelProps) {
           {preview && (
             <div className="space-y-4">
               {preview.no_local_footprint && (
-                <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800 dark:border-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300">
+                <div className="rounded-md border border-warning-fg/30 bg-warning-bg px-3 py-2 text-sm text-warning-fg">
                   {t("Nenhum dado local encontrado para este titular.")}
                 </div>
               )}
@@ -167,11 +167,22 @@ function SampleBlock({ label, rows }: { label: string; rows: unknown[] }) {
   return (
     <div className="space-y-1">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <div className="max-h-40 overflow-y-auto rounded-md border bg-muted/20 p-2">
-        <pre className="text-xs leading-relaxed whitespace-pre-wrap break-all">
-          {JSON.stringify(rows, null, 2)}
-        </pre>
-      </div>
+      {/* Uma linha por item, só os campos preenchidos: era o JSON cru. */}
+      <ul className="max-h-40 space-y-1 overflow-y-auto rounded-md border bg-muted/20 p-2 text-xs leading-relaxed">
+        {rows.map((row, i) => (
+          <li key={i} className="break-all">
+            {linhaDaAmostra(row)}
+          </li>
+        ))}
+      </ul>
     </div>
   );
+}
+
+function linhaDaAmostra(row: unknown): string {
+  if (!row || typeof row !== "object") return String(row);
+  return Object.entries(row as Record<string, unknown>)
+    .filter(([, v]) => v !== null && v !== undefined && v !== "")
+    .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+    .join(" · ");
 }

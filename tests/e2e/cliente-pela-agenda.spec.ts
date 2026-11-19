@@ -205,6 +205,8 @@ test("ligar 'Clientes pela agenda' transforma quem tem horário marcado em clien
   await page.getByRole("link", { name: /Tipos de agendamento/ }).first().click();
   await expect(page).toHaveURL(/\/app\/settings\/tenant\/agenda/, { timeout: 30_000 });
   const secao = page.getByTestId("cliente-pela-agenda");
+  // O bloco fica numa sanfona fechada (lote 11, item 126): abre-se como o leigo abriria.
+  await page.locator("summary", { hasText: "Clientes pela agenda" }).click();
   await expect(secao).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId("cliente-pela-agenda-estado")).toContainText("Desligado:");
   await secao.scrollIntoViewIfNeeded();

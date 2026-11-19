@@ -270,6 +270,7 @@ test.describe("condição com várias regras — uma bolinha por regra", () => {
     await page.getByRole("button", { name: "Salvar" }).click();
     await expect(page.getByTestId("dirty-indicator")).toHaveCount(0, { timeout: PRAZO });
     await page.getByTestId("publish-button").click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Publicar" }).click();
     await expect(page.getByText("Fluxo publicado.")).toBeVisible({ timeout: PRAZO });
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "ramos-03-publicado.png"), fullPage: true });
 

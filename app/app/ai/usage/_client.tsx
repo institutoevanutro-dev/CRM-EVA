@@ -93,7 +93,15 @@ export function UsageDashboardClient({ agents, initial }: Props) {
     <div className="flex flex-col gap-6">
       <UsageFilters agents={agents} kinds={kinds} initial={initial} />
 
-      {q.isLoading || !q.data ? (
+      {q.isError ? (
+        // Falha não é carregamento: os blocos cinza ficavam para sempre.
+        <div role="alert" className="flex flex-col items-center gap-2 py-16 text-center">
+          <p className="text-sm font-medium">{t("Não foi possível carregar o uso de IA.")}</p>
+          <button type="button" onClick={() => void q.refetch()} className="text-sm text-accent-strong underline">
+            {t("Tentar de novo")}
+          </button>
+        </div>
+      ) : q.isLoading || !q.data ? (
         <>
           <StatSkeletons />
           <ChartSkeletons />

@@ -30,6 +30,12 @@ async function login(page: Page, email: string, password: string): Promise<void>
   await page.waitForURL(/\/app(?:\/|$)/);
 }
 
+/** Os blocos da tela vêm em sanfonas fechadas: abre todas, como quem clica em cada título. */
+async function abrirSanfonas(page: Page): Promise<void> {
+  const fechada = page.locator("details:not([open]) > summary");
+  while ((await fechada.count()) > 0) await fechada.first().click();
+}
+
 async function drain(page: Page): Promise<{
   batch_size: number;
   outcomes: Record<string, number>;
@@ -185,6 +191,7 @@ test("configura responsáveis por canal e o cron distribui sem misturar números
     await login(page, manager.email, password);
     await page.goto("/app/settings/atendimento");
     await expect(page.getByRole("heading", { name: "Distribuição de atendimento" })).toBeVisible();
+    await abrirSanfonas(page);
 
     const northGroup = page.getByRole("group", { name: "Canal Norte" });
     const southGroup = page.getByRole("group", { name: "Canal Sul" });
@@ -197,7 +204,14 @@ test("configura responsáveis por canal e o cron distribui sem misturar números
       "Somente as pessoas selecionadas recebem este número.",
     );
 
+    // Salvar sem ninguém marcado pergunta antes (lote 8): as conversas parariam na fila.
+    let aviso = "";
+    page.once("dialog", async (d) => {
+      aviso = d.message();
+      await d.accept();
+    });
     await southGroup.getByRole("button", { name: "Salvar responsáveis" }).click();
+    await expect.poll(() => aviso).toContain("ficam paradas na fila");
     await expect(southGroup.getByTestId("channel-routing-state")).toHaveText(
       "Ninguém configurado — as conversas ficarão na fila.",
     );
@@ -318,6 +332,7 @@ test("configura responsáveis por canal e o cron distribui sem misturar números
     ).toBeVisible();
 
     await page.goto("/app/settings/atendimento");
+    await abrirSanfonas(page);
     const resetSouth = page.getByRole("group", { name: "Canal Sul" });
     await resetSouth.getByRole("button", { name: "Voltar ao padrão da organização" }).click();
     await expect(resetSouth.getByTestId("channel-routing-state")).toHaveText(

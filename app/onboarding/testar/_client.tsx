@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { rodarOuAvisar } from "../_components/erros";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -103,6 +105,9 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
               "Sem ninguém treinado, não há o que testar. Dá para voltar ao passo anterior agora ou fazer isso depois, em IA › Agentes.",
             )}
           </p>
+          <Button asChild variant="outline" size="sm" className="mt-3">
+            <Link href="/onboarding/setup-ai">{t("Voltar e treinar")}</Link>
+          </Button>
         </div>
       )}
 
@@ -157,7 +162,7 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
           {desfecho?.tipo === "erro" && (
             <div
               role="alert"
-              className="space-y-2 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20"
+              className="space-y-2 rounded-md border border-warning/40 bg-warning-bg p-4"
             >
               <p className="text-sm font-medium">
                 {t(
@@ -184,7 +189,7 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
           type="button"
           variant="ghost"
           disabled={pending}
-          onClick={() => startTransition(() => void pularTeste())}
+          onClick={() => startTransition(() => rodarOuAvisar(pularTeste, t))}
         >
           {t("Pular")}
         </Button>

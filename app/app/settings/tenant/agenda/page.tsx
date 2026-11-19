@@ -9,7 +9,7 @@ import { lerCanalDoLembrete } from "@/lib/agenda/canal-do-lembrete";
 import { listSelectableChannels } from "@/lib/channels/selectable";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 
-import { TiposDeAgendamentoClient, type TipoRow } from "./_client";
+import { Sanfona, TiposDeAgendamentoClient, type TipoRow } from "./_client";
 import { CanalDoLembrete } from "./_canal-do-lembrete";
 import { RecursosDaAgenda, type SalaRow, type UnidadeRow } from "./_resources";
 
@@ -111,14 +111,6 @@ export default async function TiposDeAgendamentoPage() {
           {t("O que se pode marcar, quanto dura e quem atende. É isto que a tela de marcar e o agente de IA oferecem ao cliente.")}
         </p>
       </header>
-      {canais.length > 0 ? (
-        <CanalDoLembrete
-          canais={canais.map((c) => ({ id: c.id, nome: c.display_name }))}
-          inicial={lerCanalDoLembrete(org?.settings)}
-          podeEditar={podeEditar}
-        />
-      ) : null}
-      <RecursosDaAgenda unidades={(unidades ?? []) as UnidadeRow[]} salas={(salas ?? []) as SalaRow[]} podeEditar={podeEditar} />
       <TiposDeAgendamentoClient
         tiposIniciais={(tipos ?? []) as TipoRow[]}
         erroDeLeitura={erroTipos ? erroTipos.message : null}
@@ -138,6 +130,19 @@ export default async function TiposDeAgendamentoPage() {
         // etiquetas de todo contato com histórico. A RPC cobra de novo.
         podeLigarClientePelaAgenda={ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin}
       />
+      {/* Depois da lista e fechados (item 126): a lista é o que se procura aqui. */}
+      {canais.length > 0 ? (
+        <Sanfona titulo={t("Número que envia os lembretes")}>
+          <CanalDoLembrete
+            canais={canais.map((c) => ({ id: c.id, nome: c.display_name }))}
+            inicial={lerCanalDoLembrete(org?.settings)}
+            podeEditar={podeEditar}
+          />
+        </Sanfona>
+      ) : null}
+      <Sanfona titulo={t("Unidades e salas")}>
+        <RecursosDaAgenda unidades={(unidades ?? []) as UnidadeRow[]} salas={(salas ?? []) as SalaRow[]} podeEditar={podeEditar} />
+      </Sanfona>
     </div>
   );
 }

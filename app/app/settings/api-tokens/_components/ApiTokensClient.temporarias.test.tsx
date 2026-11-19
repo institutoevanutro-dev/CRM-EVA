@@ -13,10 +13,14 @@ const linha = (over: Record<string, unknown>) => ({
 });
 
 const temporarias = vi.hoisted(() => vi.fn());
+const revogar = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock("@/hooks/team/useApiTokens", () => ({
   useApiTokens: () => ({
     data: {
-      data: [linha({ id: "p1", name: "Prontuário", prefix: "dsk_ab12cd34" })],
+      data: [
+        linha({ id: "p1", name: "Prontuário", prefix: "dsk_ab12cd34" }),
+        linha({ id: "p2", name: "Financeiro", prefix: "dsk_ef56", revoked_at: null, last_used_at: "2026-11-01T13:00:00Z" }),
+      ],
       meta: { temporarias_da_ia: 1410 },
     },
     isLoading: false,
@@ -29,7 +33,7 @@ vi.mock("@/hooks/team/useApiTokens", () => ({
       : { data: undefined, isLoading: false, isError: false };
   },
   useCreateApiToken: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useRevokeApiToken: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRevokeApiToken: () => ({ mutateAsync: revogar, isPending: false }),
 }));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));
 vi.mock("@/hooks/i18n/useLocaleDeData", () => ({ useTagDeIdioma: () => "pt-BR" }));
@@ -58,4 +62,17 @@ it("lista só as chaves de pessoas e recolhe as temporárias da IA com a contage
   expect(dePessoa?.className).not.toBe(daIa?.className);
   const linhaDaIa = screen.getByText("agent-run:abc").closest("tr")!;
   expect(within(linhaDaIa).queryByRole("button", { name: "Revogar" })).toBeNull();
+});
+
+it("revogar pede confirmação antes de desligar a chave, e mostra o último uso", async () => {
+  render(<ApiTokensClient />);
+  expect(screen.getAllByText("Nunca").length).toBeGreaterThan(0);
+
+  fireEvent.click(screen.getByRole("button", { name: "Revogar" }));
+  expect(revogar).not.toHaveBeenCalled();
+  const dialogo = screen.getByRole("alertdialog");
+  expect(dialogo.textContent).toContain("para de funcionar na hora");
+
+  fireEvent.click(within(dialogo).getByRole("button", { name: "Revogar" }));
+  await waitFor(() => expect(revogar).toHaveBeenCalledWith("p2"));
 });

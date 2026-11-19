@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { canonicalPhoneBR, phoneForDisplay, phoneLookupVariants, samePhone } from "@/lib/channels/phone-variants";
+import {
+  canonicalPhoneBR,
+  phoneForDisplay,
+  phoneLookupVariants,
+  samePhone,
+  telefoneLegivel,
+} from "@/lib/channels/phone-variants";
 
 /** Payloads REAIS capturados da WABA de teste em 2026-07-29. */
 const INBOUND = JSON.parse(
@@ -130,5 +136,20 @@ describe("samePhone", () => {
 
   it("fixo e celular com dígitos parecidos NÃO se confundem", () => {
     expect(samePhone("553132345678", "5531932345678")).toBe(false);
+  });
+});
+
+describe("telefoneLegivel — o formato nacional só para mostrar", () => {
+  it("celular BR com o nono, mesmo quando gravado sem ele", () => {
+    expect(telefoneLegivel("+5527999810001")).toBe("(27) 99981-0001");
+    expect(telefoneLegivel("+552799810001")).toBe("(27) 99981-0001");
+  });
+  it("fixo BR com oito dígitos locais", () => {
+    expect(telefoneLegivel("+552733334444")).toBe("(27) 3333-4444");
+  });
+  it("estrangeiro e vazio ficam como estão", () => {
+    expect(telefoneLegivel("+14155550100")).toBe("+14155550100");
+    expect(telefoneLegivel(null)).toBe("");
+    expect(telefoneLegivel("  ")).toBe("");
   });
 });

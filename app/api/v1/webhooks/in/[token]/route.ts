@@ -42,6 +42,8 @@ import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 import { ApiError } from "@/lib/api/types";
 import { autorizarContatoParaIA } from "@/lib/ai/elegibilidade/autorizacao";
 import { kickLocalPipeline } from "@/lib/dev/kick-local-pipeline";
+import { ETIQUETA_DE_TESTE, PREFIXO_REQUEST_DE_TESTE, ehEnvioDeTeste } from "@/lib/webhooks/lead-de-teste";
+import { paginaDeObrigado } from "@/lib/webhooks/pagina-de-obrigado";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -251,8 +253,16 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     if (isForm && source.redirect_to) {
       return NextResponse.redirect(source.redirect_to as string, 303);
     }
+    // Formulário de site sem página de agradecimento configurada: quem preencheu
+    // é uma pessoa num navegador, e o JSON abaixo aparecia para ela como uma
+    // página só com código.
+    if (isForm) return paginaDeObrigado(requestId);
     return ok({ lead_id: leadId }, { requestId });
   };
+
+  // "Enviar lead de teste" da tela: entra marcado e não dispara nada
+  // (lib/webhooks/lead-de-teste.ts).
+  const envioDeTeste = ehEnvioDeTeste(req.headers);
 
   // Traz o CONTATO junto, e não só o id do lead: a linha de captação precisa do
   // vínculo para a LGPD alcançá-la. O gatilho de anonimização casa por
@@ -544,7 +554,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       : (mapped.name ?? mapped.phone ?? mapped.email ?? "Lead sem nome"),
     contact_id: contactId,
     currency: "BRL",
-    tags: [],
+    tags: envioDeTeste ? [ETIQUETA_DE_TESTE] : [],
     source: "webhook",
     custom_fields: mapped.custom_fields,
     source_metadata: { webhook_source_id: source.id, ...mapped.source_metadata },
@@ -558,7 +568,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       {
         organization_id: source.organization_id,
         actor: { type: "webhook_source", id: source.id },
-        requestId,
+        // O prefixo viaja no `lead.created` e o motor de regras pula o evento.
+        requestId: envioDeTeste ? `${PREFIXO_REQUEST_DE_TESTE}${requestId}` : requestId,
       },
       leadInput,
     );
@@ -702,12 +713,15 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
 
   // Captação: drena lead.created e inscreve no fluxo neste mesmo request.
   // Sem isto, em prod (Vercel Hobby sem cron de 1 min) o gatilho fica pending.
-  await kickLocalPipeline(
-    admin,
-    contactId
-      ? { organizationId: source.organization_id, contactId }
-      : undefined,
-  );
+  // O teste não arranca nada: o fluxo do contato poderia mandar mensagem.
+  if (!envioDeTeste) {
+    await kickLocalPipeline(
+      admin,
+      contactId
+        ? { organizationId: source.organization_id, contactId }
+        : undefined,
+    );
+  }
 
   return respondWithLead(String(lead.id));
 }

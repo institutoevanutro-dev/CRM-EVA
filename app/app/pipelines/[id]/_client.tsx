@@ -166,6 +166,17 @@ export function PipelinePageClient({
     const visiveis = new Set(filteredLeads.map((l) => l.id));
     return selectedIds.filter((id) => visiveis.has(id));
   }, [selectedIds, filteredLeads]);
+  // ...e quando o FILTRO muda, a seleção é PODADA de fato: só derivar fazia os
+  // escondidos voltarem marcados ao limpar o filtro. Ajuste durante a
+  // renderização (padrão do React para estado que depende de outro), sem efeito.
+  // Compara pelo VALOR serializado, não pela referência: `useSearchParams` pode
+  // devolver objeto novo a cada render, e a referência viraria laço infinito.
+  const chaveDosFiltros = filtersToParams(filters);
+  const [filtrosDaSelecao, setFiltrosDaSelecao] = useState(chaveDosFiltros);
+  if (filtrosDaSelecao !== chaveDosFiltros) {
+    setFiltrosDaSelecao(chaveDosFiltros);
+    if (selecionadosVisiveis.length !== selectedIds.length) setSelectedIds(selecionadosVisiveis);
+  }
   const tagsDoQuadro = useMemo(
     () => [...new Set((data?.leads ?? []).flatMap((l) => l.tags))].sort(),
     [data?.leads],

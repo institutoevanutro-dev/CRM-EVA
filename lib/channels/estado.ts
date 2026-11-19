@@ -112,3 +112,32 @@ export function nomeDoCanal(
   if (telefone) return telefone;
   return t("Número sem nome");
 }
+
+/**
+ * O estado de um MODELO (template) na Meta, em português. A tela mostrava o
+ * valor cru (`APPROVED`, `PENDING`) — auditoria 17/11, item 122.
+ */
+const ESTADO_DO_MODELO: Record<string, string> = {
+  APPROVED: "Aprovado",
+  PENDING: "Em análise",
+  REJECTED: "Recusado",
+  PAUSED: "Pausado",
+  DISABLED: "Desativado",
+};
+
+export function rotuloDoEstadoDoModelo(
+  status: string | null | undefined,
+  t: (texto: string) => string = (texto) => texto,
+): string {
+  return t(ESTADO_DO_MODELO[(status ?? "").toUpperCase()] ?? "Situação desconhecida");
+}
+
+/** A nota de qualidade do número na Meta (`GREEN`/`YELLOW`/`RED`). */
+const QUALIDADE: Record<string, string> = { GREEN: "Alta", YELLOW: "Média", RED: "Baixa" };
+
+export function rotuloDaQualidade(
+  nota: string | null | undefined,
+  t: (texto: string) => string = (texto) => texto,
+): string {
+  return t(QUALIDADE[(nota ?? "").toUpperCase()] ?? "Sem nota");
+}

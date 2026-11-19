@@ -122,6 +122,14 @@ describe("resultados da dupla", () => {
     expect(avaliarCriterio("sinal_pago", 99, 6_000, undefined)).toMatchObject({ valorCents: 0, faixa: "sem_meta" });
     expect(avaliarCriterio("avaliacao_google", null, 3_000, meta)).toMatchObject({ valorCents: 0, faixa: "pendente" });
   });
+  it("meta alta 0 (critério que ninguém preencheu) nunca paga", () => {
+    expect(avaliarCriterio("sinal_pago", 0, 6_000, { basica: 0, alta: 0 })).toMatchObject({
+      valorCents: 0,
+      faixa: "sem_meta",
+      basica: null,
+      alta: null,
+    });
+  });
 });
 
 /** Um mês inteiro feito por uma pessoa: todas as rotinas de todos os dias úteis. */

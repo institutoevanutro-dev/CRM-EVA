@@ -53,7 +53,7 @@ function ehOrigemConhecida(source: string): source is keyof typeof ROTULO_DA_ORI
   return Object.prototype.hasOwnProperty.call(ROTULO_DA_ORIGEM_DA_FICHA, source);
 }
 
-function rotuloDaOrigem(source: string, t: (texto: string) => string): string {
+export function rotuloDaOrigem(source: string, t: (texto: string) => string): string {
   if (origemDoContato(source) === "prontuario") return t("Prontuário");
   return ehOrigemConhecida(source) ? t(ROTULO_DA_ORIGEM_DA_FICHA[source]) : source;
 }

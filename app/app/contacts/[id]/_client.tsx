@@ -4,9 +4,21 @@ import { OcultarDoInbox, SeloDeOculto } from "@/components/inbox/OcultarDoInbox"
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import { useT } from "@/hooks/i18n/useT";
+import Link from "next/link";
 import { useState } from "react";
 import { format } from "date-fns";
-import { ShieldCheck, PencilSimple, LockOpen, UserCircle } from "@/lib/ui/icons";
+import {
+  ShieldCheck,
+  PencilSimple,
+  LockOpen,
+  UserCircle,
+  CalendarPlus,
+  ChatCircle,
+  DotsThree,
+  ArrowsClockwise,
+  UsersThree,
+} from "@/lib/ui/icons";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { ChipDeEtiqueta } from "@/components/tags/ChipDeEtiqueta";
@@ -42,7 +54,8 @@ import { AnonymizeDialog } from "@/components/contacts/AnonymizeDialog";
 import { NiveisDaOrigemGoogle } from "@/components/contacts/NiveisDaOrigemGoogle";
 import { origemGoogleAds } from "@/lib/leads/origem-google-ads";
 import { PropostasDeDado } from "@/components/contacts/PropostasDeDado";
-import { ConversaNoDossie } from "@/components/kanban/ConversaNoDossie";
+import { ConsultasDoContato } from "@/components/contacts/ConsultasDoContato";
+import { rotuloDaOrigem } from "@/components/contacts/ComparacaoDeFichas";
 import { CanaisDoContato } from "@/components/contacts/CanaisDoContato";
 import {
   ehClienteParaOFunil,
@@ -51,7 +64,7 @@ import {
 } from "@/lib/contacts/cliente-para-o-funil";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { CpfDoContato } from "@/components/contacts/CpfDoContato";
-import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import { telefoneLegivel } from "@/lib/channels/phone-variants";
 import { DialButton } from "@/components/voice/DialButton";
 
 import { FinanceiroDoContato } from "@/components/contacts/FinanceiroDoContato";
@@ -79,6 +92,10 @@ export function ContactDetailClient({ contactId }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [anonOpen, setAnonOpen] = useState(false);
   const [juntarOpen, setJuntarOpen] = useState(false);
+  // O menu "Mais" e a confirmação que um item dele abriu. As confirmações moram
+  // FORA do menu: fechar o menu desmontaria um diálogo aberto dentro dele.
+  const [maisAberto, setMaisAberto] = useState(false);
+  const [confirmando, setConfirmando] = useState<"sempreHumano" | "reiniciar" | null>(null);
   // Desfazer o descadastro é o override da regra W-02 — só admin, e auditado.
   // O hook fica ANTES dos early returns: chamá-lo depois mudaria a ordem dos
   // hooks entre renderizações e o React reprova.
@@ -125,6 +142,16 @@ export function ContactDetailClient({ contactId }: Props) {
   // "Sempre atendimento humano" é edição do contato: agent+, como as outras.
   const podeMarcarSempreHumano = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent;
   const marcadoSempreHumano = contact.ai_opt_out === true;
+  // "Marcar consulta" é a ação principal da ficha (decisão do André, 18/11):
+  // mesmo piso da Agenda (`podeMarcar`, agent+). A Agenda abre o painel de
+  // marcação sozinha com `?contato=`, e com a conversa quando ela existe.
+  const podeMarcarConsulta = !!activeOrg && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent;
+  const hrefMarcar = `/app/agenda?contato=${contactId}${contact.conversa ? `&conversa=${contact.conversa.id}` : ""}`;
+  const ITEM = "w-full justify-start gap-2 px-2";
+  const doMenu = (fn: () => void) => () => {
+    setMaisAberto(false);
+    fn();
+  };
 
   return (
     <div className="space-y-4">
@@ -152,7 +179,7 @@ export function ContactDetailClient({ contactId }: Props) {
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             {contact.email && <span>{contact.email}</span>}
             {contact.email && contact.phone_number && <span>•</span>}
-            {contact.phone_number && <span>{phoneForDisplay(contact.phone_number)}</span>}
+            {contact.phone_number && <span>{telefoneLegivel(contact.phone_number)}</span>}
           </div>
           <div className="mt-2 flex flex-wrap gap-1">
             {contact.tags.map((t) => (
@@ -166,6 +193,30 @@ export function ContactDetailClient({ contactId }: Props) {
         </div>
         {!contact.is_anonymized && user.support?.access_mode !== "support_readonly" && (
           <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {podeMarcarConsulta && (
+              <Button asChild className="shrink-0">
+                <Link href={hrefMarcar}>
+                  <CalendarPlus size={16} weight="bold" aria-hidden />
+                  <span>{t("Marcar consulta")}</span>
+                </Link>
+              </Button>
+            )}
+            {contact.conversa && (
+              <Button asChild variant="outline" className="shrink-0">
+                <Link href={`/app/inbox?id=${contact.conversa.id}`}>
+                  <ChatCircle size={16} weight="bold" aria-hidden />
+                  <span>{t("Conversar")}</span>
+                  {contact.conversa.unread > 0 && (
+                    <span
+                      className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground tabular-nums"
+                      aria-label={`${contact.conversa.unread} ${t("sem ler")}`}
+                    >
+                      {contact.conversa.unread}
+                    </span>
+                  )}
+                </Link>
+              </Button>
+            )}
             {/* O CAMINHO DE VOLTA do descadastro. Sem ele, o contato que pediu
                 para sair — ou que caiu num falso positivo — ficava preso para
                 sempre: `before-send` recusa todo envio, o funil não cria lead,
@@ -205,89 +256,76 @@ export function ContactDetailClient({ contactId }: Props) {
                 </AlertDialogContent>
               </AlertDialog>
             )}
-            {/* A marca permanente: a IA nunca atende este contato, e nenhuma
-                devolução ao automático a desfaz. Tirar a marca não devolve o
-                atendimento; isso continua sendo o "Devolver ao automático". */}
-            {podeMarcarSempreHumano && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" disabled={sempreHumano.isPending} className="shrink-0">
-                    <UserCircle size={16} weight="bold" aria-hidden />
-                    <span>{marcadoSempreHumano ? t("Tirar sempre humano") : t("Sempre atendimento humano")}</span>
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {marcadoSempreHumano
-                        ? t("Tirar a marca de sempre atendimento humano?")
-                        : t("Marcar como sempre atendimento humano?")}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {marcadoSempreHumano
-                        ? t("A IA continua parada neste contato até alguém clicar em Devolver ao automático na conversa. A mudança fica registrada no seu nome.")
-                        : t("A IA para agora e nunca mais responde este contato, nem por follow-up. Só a equipe atende, e os lembretes de consulta continuam saindo. Devolver ao automático não desfaz a marca. A mudança fica registrada no seu nome.")}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => sempreHumano.mutate(!marcadoSempreHumano)}>
-                      {marcadoSempreHumano ? t("Tirar a marca") : t("Marcar como sempre humano")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-            {podeReiniciarTeste && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" disabled={reiniciarTeste.isPending} className="shrink-0">
-                    <span>{t("Reiniciar teste")}</span>
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>{t("Reiniciar o teste deste contato?")}</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t("A próxima mensagem deste número será tratada pela IA como uma conversa nova. As mensagens antigas, o card do funil e os agendamentos continuam no CRM. Se houver consulta futura marcada, a IA ainda vai saber dela: cancele o agendamento para testar a marcação do zero. Só funciona para números que estão na lista de teste do canal.")}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => reiniciarTeste.mutate()}>
-                      {t("Reiniciar teste")}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-            {/* Ocultar do Inbox (migration 0372): agent+ oculta; manager+ traz de volta. */}
-            <OcultarDoInbox
-              contactId={contactId}
-              nome={displayName}
-              oculto={Boolean(contact.inbox_hidden_at)}
-              variante="botao"
-            />
             <DialButton contactId={contactId} hasPhone={!!contact.phone_number} />
-            {podeJuntar && (
-              <Button
-                variant="outline"
-                onClick={() => setJuntarOpen(true)}
-                className="shrink-0"
-                data-testid="juntar-com-outra-ficha"
-              >
-                <span>{t("Juntar com outra ficha")}</span>
-              </Button>
-            )}
-            <Button variant="outline" onClick={() => setEditOpen(true)} className="shrink-0">
-              <PencilSimple size={16} weight="bold" aria-hidden />
-              <span>{t("Editar")}</span>
-            </Button>
+            {/* O RESTO num menu, aberto por clique. Popover e não DropdownMenu,
+                como o ⋯ da conversa: "Ocultar do Inbox" abre a própria
+                confirmação e precisa continuar montado. */}
+            <Popover open={maisAberto} onOpenChange={setMaisAberto}>
+              <PopoverTrigger asChild>
+                <Button variant={maisAberto ? "secondary" : "outline"} className="shrink-0">
+                  <DotsThree size={16} weight="bold" aria-hidden />
+                  <span>{t("Mais")}</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="flex w-64 flex-col gap-0.5 p-1.5" data-testid="menu-da-ficha">
+                <Button variant="ghost" size="sm" className={ITEM} onClick={doMenu(() => setEditOpen(true))}>
+                  <PencilSimple size={16} aria-hidden />
+                  {t("Editar")}
+                </Button>
+                {podeJuntar && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={ITEM}
+                    onClick={doMenu(() => setJuntarOpen(true))}
+                    data-testid="juntar-com-outra-ficha"
+                  >
+                    <UsersThree size={16} aria-hidden />
+                    {t("Juntar com outra ficha")}
+                  </Button>
+                )}
+                {/* A marca permanente: a IA nunca atende este contato, e nenhuma
+                    devolução ao automático a desfaz. Tirar a marca não devolve o
+                    atendimento; isso continua sendo o "Devolver ao automático". */}
+                {podeMarcarSempreHumano && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={ITEM}
+                    disabled={sempreHumano.isPending}
+                    onClick={doMenu(() => setConfirmando("sempreHumano"))}
+                  >
+                    <UserCircle size={16} aria-hidden />
+                    {marcadoSempreHumano ? t("Tirar sempre humano") : t("Sempre atendimento humano")}
+                  </Button>
+                )}
+                {podeReiniciarTeste && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={ITEM}
+                    disabled={reiniciarTeste.isPending}
+                    onClick={doMenu(() => setConfirmando("reiniciar"))}
+                  >
+                    <ArrowsClockwise size={16} aria-hidden />
+                    {t("Reiniciar teste")}
+                  </Button>
+                )}
+                {/* Ocultar do Inbox (migration 0372): agent+ oculta; manager+ traz de volta. */}
+                <OcultarDoInbox
+                  contactId={contactId}
+                  nome={displayName}
+                  oculto={Boolean(contact.inbox_hidden_at)}
+                  variante="item"
+                />
+              </PopoverContent>
+            </Popover>
           </div>
         )}
       </header>
 
-      <ConversaNoDossie conversa={contact.conversa} />
+      {/* No topo: a primeira pergunta de quem abre a ficha é "quando ela vem?". */}
+      <ConsultasDoContato consultas={contact.consultas} />
 
       {/* ANTES das abas, e não dentro de uma delas: é o único conteúdo desta
           tela que PEDE uma ação. Enterrado numa aba, viraria pendência que só
@@ -304,7 +342,7 @@ export function ContactDetailClient({ contactId }: Props) {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">{t("Visão geral")}</TabsTrigger>
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
+          <TabsTrigger value="timeline">{t("Linha do tempo")}</TabsTrigger>
           {podeVerFinanceiro && !contact.is_anonymized && <TabsTrigger value="financeiro">{t("Financeiro")}</TabsTrigger>}
           {isAdmin && <TabsTrigger value="lgpd">LGPD</TabsTrigger>}
         </TabsList>
@@ -317,11 +355,11 @@ export function ContactDetailClient({ contactId }: Props) {
                 <dd className="mt-1">{contact.name ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-xs uppercase text-muted-foreground">Display name</dt>
+                <dt className="text-xs uppercase text-muted-foreground">{t("Nome de exibição")}</dt>
                 <dd className="mt-1">{contact.display_name ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-xs uppercase text-muted-foreground">Email</dt>
+                <dt className="text-xs uppercase text-muted-foreground">{t("E-mail")}</dt>
                 <dd className="mt-1">{contact.email ?? "—"}</dd>
               </div>
               <div>
@@ -331,7 +369,7 @@ export function ContactDetailClient({ contactId }: Props) {
               <div>
                 <dt className="text-xs uppercase text-muted-foreground">{t("Telefone")}</dt>
                 <dd className="mt-1">
-                  {contact.phone_number ? phoneForDisplay(contact.phone_number) : "—"}
+                  {contact.phone_number ? telefoneLegivel(contact.phone_number) : "—"}
                 </dd>
               </div>
               <div>
@@ -350,7 +388,7 @@ export function ContactDetailClient({ contactId }: Props) {
               </div>
               <div>
                 <dt className="text-xs uppercase text-muted-foreground">{t("Origem")}</dt>
-                <dd className="mt-1">{contact.source}</dd>
+                <dd className="mt-1">{rotuloDaOrigem(contact.source, t)}</dd>
               </div>
               {origemGoogle && <NiveisDaOrigemGoogle origem={origemGoogle} />}
               <div>
@@ -435,16 +473,6 @@ export function ContactDetailClient({ contactId }: Props) {
                   </dd>
                 </div>
               )}
-              <div>
-                <dt className="text-xs uppercase text-muted-foreground">Tags</dt>
-                <dd className="mt-1 flex flex-wrap gap-1">
-                  {contact.tags.length === 0
-                    ? "—"
-                    : contact.tags.map((t) => (
-                        <ChipDeEtiqueta key={t} tag={t} />
-                      ))}
-                </dd>
-              </div>
             </dl>
           </Card>
           <div className="mt-4">
@@ -486,6 +514,42 @@ export function ContactDetailClient({ contactId }: Props) {
         )}
       </Tabs>
 
+      <AlertDialog open={confirmando === "sempreHumano"} onOpenChange={(v) => !v && setConfirmando(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {marcadoSempreHumano
+                ? t("Tirar a marca de sempre atendimento humano?")
+                : t("Marcar como sempre atendimento humano?")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {marcadoSempreHumano
+                ? t("A IA continua parada neste contato até alguém clicar em Devolver ao automático na conversa. A mudança fica registrada no seu nome.")
+                : t("A IA para agora e nunca mais responde este contato, nem por follow-up. Só a equipe atende, e os lembretes de consulta continuam saindo. Devolver ao automático não desfaz a marca. A mudança fica registrada no seu nome.")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => sempreHumano.mutate(!marcadoSempreHumano)}>
+              {marcadoSempreHumano ? t("Tirar a marca") : t("Marcar como sempre humano")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={confirmando === "reiniciar"} onOpenChange={(v) => !v && setConfirmando(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("Reiniciar o teste deste contato?")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("A próxima mensagem deste número será tratada pela IA como uma conversa nova. As mensagens antigas, o card do funil e os agendamentos continuam no CRM. Se houver consulta futura marcada, a IA ainda vai saber dela: cancele o agendamento para testar a marcação do zero. Só funciona para números que estão na lista de teste do canal.")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Cancelar")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => reiniciarTeste.mutate()}>{t("Reiniciar teste")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <EditContactDialog
         contact={contact}
         open={editOpen}

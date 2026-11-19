@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 
-import { CartaoDoJev } from "./_components/CartaoDoJev";
 import { PainelDeProvedores } from "./_components/PainelDeProvedores";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +29,9 @@ export default async function ProvedoresPage() {
   return (
     <>
       <PainelDeProvedores />
-      <CartaoDoJev />
+      {/* Cartão do Jev escondido (resposta 18 do André, 18/11): a decisão é não
+          usar roteador de terceiros com dados de pacientes. O componente
+          continua em `_components/CartaoDoJev.tsx`. */}
     </>
   );
 }

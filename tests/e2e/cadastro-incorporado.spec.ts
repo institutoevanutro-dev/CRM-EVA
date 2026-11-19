@@ -134,7 +134,9 @@ test("[P0] admin conecta pelo botão e a aba mostra Conectado", async ({ page })
   await botao.click();
   const conectado = page.getByTestId("canal-conectado");
   await expect(conectado).toContainText("Clínica E2E");
-  await expect(conectado).toContainText("WORKING");
+  // O estado vem traduzido (`rotuloDoEstadoDoCanal`, lote 10): WORKING é "Conectado".
+  await expect(conectado).toContainText("Conectado");
+  await expect(conectado).not.toContainText("WORKING");
   // Um `smb_app_data` por tipo, contatos antes do histórico; pedidos aceitos não deixam aviso.
   expect(pedidos.map((p) => new URLSearchParams(p).get("sync_type"))).toEqual(["smb_app_state_sync", "history"]);
   await expect(page.getByTestId("historico-nao-pedido")).toHaveCount(0);

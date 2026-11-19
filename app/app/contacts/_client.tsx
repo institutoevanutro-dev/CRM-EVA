@@ -133,7 +133,9 @@ export function ContactsListClient() {
         {/*
           A estrutura é a da main (o "Importar CSV" do PR #313); o `shrink-0`
           vem do PR #267, e vale para os DOIS botões agora: numa tela de 390px
-          uma linha de dois botões sem isso comprime os rótulos.
+          uma linha de dois botões sem isso comprime os rótulos. No celular os
+          dois secundários ficam só no ícone (o rótulo segue para o leitor de
+          tela): com os três rótulos, "Novo contato", o principal, saía da tela.
         */}
         <div className="flex shrink-0 items-center gap-2">
           {/*
@@ -144,11 +146,11 @@ export function ContactsListClient() {
           */}
           <Button variant="outline" onClick={() => setDuplicadosOpen(true)}>
             <UsersThree size={16} weight="bold" aria-hidden />
-            <span>{t("Duplicados")}</span>
+            <span className="sr-only sm:not-sr-only">{t("Duplicados")}</span>
           </Button>
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <UploadSimple size={16} weight="bold" aria-hidden />
-            <span>{t("Importar planilha")}</span>
+            <span className="sr-only sm:not-sr-only">{t("Importar planilha")}</span>
           </Button>
           <Button onClick={() => setCreateOpen(true)}>
             <Plus size={16} weight="bold" aria-hidden />

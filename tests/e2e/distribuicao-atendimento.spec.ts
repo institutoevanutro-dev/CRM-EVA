@@ -48,6 +48,12 @@ async function login(page: Page, email: string): Promise<void> {
   await page.waitForURL(/\/app\//);
 }
 
+/** Os blocos da tela vêm em sanfonas fechadas: abre todas, como quem clica em cada título. */
+async function abrirSanfonas(page: Page): Promise<void> {
+  const fechada = page.locator("details:not([open]) > summary");
+  while ((await fechada.count()) > 0) await fechada.first().click();
+}
+
 /** O estado marcado vem do atributo que o próprio componente escreve. */
 async function marcada(page: Page, nome: string, valor: string): Promise<boolean> {
   return (
@@ -83,6 +89,7 @@ test.describe("distribuição de atendimento — a tela que liga o rodízio e a 
     await expect(porta).toBeVisible();
     await porta.click();
     await page.waitForURL(/\/app\/settings\/atendimento/);
+    await abrirSanfonas(page);
 
     await expect(
       page.getByRole("heading", { name: "Distribuição de atendimento" }),
@@ -107,6 +114,7 @@ test.describe("distribuição de atendimento — a tela que liga o rodízio e a 
     await expect(page.getByText(/Distribuição de atendimento salva/i)).toBeVisible();
 
     await page.reload();
+    await abrirSanfonas(page);
     expect(await marcada(page, "modo", "round_robin")).toBe(true);
     expect(await marcada(page, "visibilidade", "own")).toBe(true);
     await expect(page.locator("#max_retries")).toBeVisible();
@@ -128,6 +136,7 @@ test.describe("distribuição de atendimento — a tela que liga o rodízio e a 
     // achando que está sendo restritivo.
     await login(page, creds.users.manager!.email);
     await page.goto("/app/settings/atendimento");
+    await abrirSanfonas(page);
 
     await page.getByTestId("opcao-modo-manual").click();
     await page.getByTestId("opcao-visibilidade-own").click();
@@ -145,6 +154,7 @@ test.describe("distribuição de atendimento — a tela que liga o rodízio e a 
     await page.request.patch("/api/v1/settings/atendimento/pausa-da-ia", { data: { minutos: 5 } });
     const distribuicaoAntes = await (await page.request.get("/api/v1/settings/routing")).json();
     await page.goto("/app/settings/atendimento");
+    await abrirSanfonas(page);
 
     // O padrão do produto: quem nunca mexeu vê 5 minutos.
     const campo = page.getByLabel(/Quanto tempo a IA fica fora da conversa depois que uma pessoa responde/);
@@ -162,6 +172,7 @@ test.describe("distribuição de atendimento — a tela que liga o rodízio e a 
 
     // O valor tem de voltar do BANCO, não do estado do React.
     await page.reload();
+    await abrirSanfonas(page);
     await expect(
       page.getByLabel(/Quanto tempo a IA fica fora da conversa depois que uma pessoa responde/),
     ).toHaveValue("120");

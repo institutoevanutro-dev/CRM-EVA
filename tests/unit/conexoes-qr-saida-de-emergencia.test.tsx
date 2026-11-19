@@ -79,10 +79,10 @@ function wrap(ui: React.ReactNode) {
 async function abrirODialogoDoQr() {
   render(wrap(<ConnectionsClient wahaConfigured />));
   fireEvent.click(screen.getByRole("button", { name: /Reconectar/ }));
-  await waitFor(() => expect(screen.getByText(/Preparando o código…|Gerar novo QR/)).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByText(/Preparando o código…|gerar novo QR/)).toBeInTheDocument());
 }
 
-const saidaOferecida = () => screen.queryByRole("button", { name: /Gerar novo QR/ }) !== null;
+const saidaOferecida = () => screen.queryByRole("button", { name: /gerar novo QR/ }) !== null;
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -123,7 +123,7 @@ describe("laço STARTING que a sondagem nunca vê falhar", () => {
     await abrirODialogoDoQr();
     await vi.advanceTimersByTimeAsync((SEGUNDOS_ATE_OFERECER_NOVO_PAREAMENTO + 6) * 1000);
 
-    fireEvent.click(screen.getByRole("button", { name: /Gerar novo QR/ }));
+    fireEvent.click(screen.getByRole("button", { name: /gerar novo QR/ }));
 
     await waitFor(() =>
       expect(postMock).toHaveBeenCalledWith("/api/v1/channel-sessions/canal-1/reconnect", { force: true }),

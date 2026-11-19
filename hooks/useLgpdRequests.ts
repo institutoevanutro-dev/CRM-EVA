@@ -25,7 +25,8 @@ export interface LgpdRequest {
   emergency: boolean;
   scope: "contact" | "tenant";
   error_message: string | null;
-  sla_bucket: SlaBucket;
+  /** `null` no pedido encerrado: o relógio parou. */
+  sla_bucket: SlaBucket | null;
   /** Quem pediu, já resolvido no servidor (`lib/lgpd/titular.ts`). */
   titular: string;
   /** A data e o estado do prazo, no fuso da organização (`rotuloDoPrazo`). */
@@ -47,6 +48,8 @@ interface LgpdRequestsResponse {
     page: number;
     limit: number;
     has_more: boolean;
+    /** Contagem dos pedidos ABERTOS da organização inteira, não só da página. */
+    alertas: { criticos: number; em_alerta: number };
   };
 }
 

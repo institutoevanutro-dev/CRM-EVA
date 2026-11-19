@@ -9,6 +9,7 @@ import type { FlowNode } from "@/lib/followup/graph-schema";
 import type { RFNode, RFNodeData } from "@/lib/followup/graph-mappers";
 import { Trash } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import { ConfirmarNaTela } from "@/components/inbox/ConfirmarNaTela";
 
 import { ActionForm } from "./forms/ActionForm";
 import { EditLeadTagForm } from "./forms/EditLeadTagForm";
@@ -42,6 +43,7 @@ interface Props {
  */
 export function NodeConfigPanel({ node, onChange, onDelete, ramosLigados }: Props) {
   const t = useT();
+  const [confirmandoExcluir, setConfirmandoExcluir] = useState(false);
   const type = node.type as FlowNode["type"];
   const visual = NODE_VISUALS[type];
   const Icon = visual.icon;
@@ -149,11 +151,21 @@ export function NodeConfigPanel({ node, onChange, onDelete, ramosLigados }: Prop
           size="sm"
           className="w-full text-destructive"
           data-testid="delete-node"
-          onClick={onDelete}
+          onClick={() => setConfirmandoExcluir(true)}
         >
           <Trash size={14} aria-hidden className="mr-1" />
-          {t("Excluir nó")}
+          {t("Excluir bloco")}
         </Button>
+        {/* Mesma pergunta do botão da barra: apagar um bloco não tem desfazer. */}
+        <ConfirmarNaTela
+          aberto={confirmandoExcluir}
+          onAbertoChange={setConfirmandoExcluir}
+          titulo={t("Excluir este bloco?")}
+          descricao={t("Este bloco e as ligações dele são apagados. Não é possível desfazer.")}
+          acao={t("Excluir")}
+          destrutiva
+          onConfirmar={onDelete}
+        />
       </div>
     </div>
   );

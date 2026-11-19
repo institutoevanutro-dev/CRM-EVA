@@ -40,6 +40,7 @@ import { Button } from "@/components/ui/button";
 import { SourceStatusBadge, deriveBadgeStatus } from "@/components/ai/SourceStatusBadge";
 import { TrechosDoMaterialDialog } from "@/components/ai/TrechosDoMaterialDialog";
 import { EditarFaqDialog } from "@/components/ai/EditarFaqDialog";
+import { ConfirmarNaTela } from "@/components/inbox/ConfirmarNaTela";
 import {
   TIPO_DE_FONTE_POR_ID,
   canonizarTipoDeFonte,
@@ -98,6 +99,7 @@ export function KnowledgeSourceCard({
   const tagDoIdioma = useTagDeIdioma();
   const [vendoTrechos, setVendoTrechos] = useState(false);
   const [editando, setEditando] = useState(false);
+  const [confirmandoArquivar, setConfirmandoArquivar] = useState(false);
 
   const tipo = canonizarTipoDeFonte(source.source_type) ?? "faq";
   const meta = TIPO_DE_FONTE_POR_ID.get(tipo);
@@ -244,15 +246,36 @@ export function KnowledgeSourceCard({
         ) : null}
 
         {!arquivado ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onArquivar}
-            data-testid={`material-arquivar-${source.id}`}
-          >
-            <Trash2 className="mr-2 h-3.5 w-3.5" aria-hidden />
-            {t("Arquivar")}
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmandoArquivar(true)}
+              data-testid={`material-arquivar-${source.id}`}
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" aria-hidden />
+              {t("Arquivar")}
+            </Button>
+            {/* Arquivar tira o material de TODOS os assistentes: a confirmação
+                diz quem para de saber daquilo (preços, regras). */}
+            <ConfirmarNaTela
+              aberto={confirmandoArquivar}
+              onAbertoChange={setConfirmandoArquivar}
+              titulo={`${t("Arquivar")} "${source.name}"?`}
+              descricao={
+                uso === null
+                  ? t("Nenhum assistente vai consultar este material. Dá para desarquivar depois.")
+                  : `${t("Deixam de consultar")}: ${
+                      uso.disponivelPara.length > 0
+                        ? uso.disponivelPara.join(", ")
+                        : t("nenhum assistente usa hoje")
+                    }. ${t("Dá para desarquivar depois.")}`
+              }
+              acao={t("Arquivar")}
+              destrutiva
+              onConfirmar={onArquivar}
+            />
+          </>
         ) : null}
       </CardFooter>
     </Card>

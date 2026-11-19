@@ -13,9 +13,18 @@ import { Warning } from "@/lib/ui/icons";
  *
  * Tons de erro, ícone e `role="alert"` para não parecer informação comum, e
  * "Tentar de novo" como saída: `router.refresh()` refaz a leitura do servidor
- * sem perder o que está na tela.
+ * sem perder o que está na tela. Tela que lê pelo cliente (React Query) passa
+ * `onRetry` — o `refresh` do servidor não refaz uma consulta do navegador.
  */
-export function ErroDeLeitura({ texto, testId = "erro-de-leitura" }: { texto: string; testId?: string }) {
+export function ErroDeLeitura({
+  texto,
+  testId = "erro-de-leitura",
+  onRetry,
+}: {
+  texto: string;
+  testId?: string;
+  onRetry?: () => void;
+}) {
   const t = useT();
   const router = useRouter();
   return (
@@ -26,7 +35,7 @@ export function ErroDeLeitura({ texto, testId = "erro-de-leitura" }: { texto: st
     >
       <Warning aria-hidden size={24} weight="duotone" />
       <p>{texto}</p>
-      <Button type="button" size="sm" variant="outline" onClick={() => router.refresh()}>
+      <Button type="button" size="sm" variant="outline" onClick={onRetry ?? (() => router.refresh())}>
         {t("Tentar de novo")}
       </Button>
     </div>

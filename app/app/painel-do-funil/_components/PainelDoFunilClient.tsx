@@ -57,15 +57,20 @@ function Numero({
   regua: ReactNode;
   extra?: ReactNode;
 }) {
+  const t = useT();
   return (
     <Card data-numero={id}>
-      <CardContent className="flex flex-col gap-1 p-4">
+      <CardContent className="flex flex-col gap-1 p-3 sm:p-4">
         <span className="text-sm text-muted-foreground">{titulo}</span>
-        <span className="text-2xl font-semibold tabular-nums" data-valor>
+        <span className="text-xl font-semibold tabular-nums break-words sm:text-2xl" data-valor>
           {valor}
         </span>
         {extra ? <span className="text-sm">{extra}</span> : null}
-        <span className="text-xs text-muted-foreground">{regua}</span>
+        {/* A explicação fica em sanfona: aberta, eram 12 parágrafos antes do gráfico no celular. */}
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer">{t("Como é contado")}</summary>
+          <p className="mt-1">{regua}</p>
+        </details>
       </CardContent>
     </Card>
   );
@@ -282,7 +287,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
       ) : null}
 
       <section
-        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+        className="grid grid-cols-2 gap-3 lg:grid-cols-4"
         aria-label={t("Números do período")}
       >
         <Numero
@@ -298,7 +303,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
           id="leads"
           titulo={t("Contatos novos")}
           valor={n.leads}
-          regua={t("Cards criados neste funil no período.")}
+          regua={t("Negócios criados neste funil no período.")}
         />
         <Numero
           id="interagiram"
@@ -310,7 +315,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
               ? t(
                   "Nenhuma etapa deste funil está ligada ao passo Primeiro contato do agente. Ligue uma em CRM › Etapas do funil.",
                 )
-              : `${t("Cards criados no período que chegaram à etapa ligada ao passo Primeiro contato do agente, ou além.")} (${n.etapa_interacao})`
+              : `${t("Negócios criados no período que chegaram à etapa ligada ao passo Primeiro contato do assistente (IA), ou além.")} (${n.etapa_interacao})`
           }
         />
         <Numero
@@ -319,7 +324,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
           valor={n.ganhos}
           extra={n.sem_valor ? `${n.sem_valor} ${t("sem valor")}` : undefined}
           regua={t(
-            "Cards deste funil ganhos com fechamento no período, inclusive os criados antes. Um card que foi de perdido direto para ganho fica com a data da perda.",
+            "Negócios deste funil ganhos com fechamento no período, inclusive os criados antes. Um negócio que foi de perdido direto para ganho fica com a data da perda.",
           )}
         />
         <Numero
@@ -367,7 +372,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
           valor={n.agendados}
           extra={n.cancelados ? `${n.cancelados} ${t("cancelados")}` : undefined}
           regua={t(
-            "Compromissos com início no período ligados a um card deste funil. Não conta cancelados.",
+            "Compromissos com início no período ligados a um negócio deste funil. Não conta cancelados.",
           )}
         />
         <Numero
@@ -398,7 +403,7 @@ export function PainelDoFunilClient({ podeConectar }: { podeConectar: boolean })
           <CardTitle className="text-base">{t("Até onde chegaram")}</CardTitle>
           <p className="text-xs text-muted-foreground">
             {t(
-              "Cards criados no período que chegaram a cada etapa ou além, até agora. Um card que avançou e voltou continua contando onde chegou. Etapa arquivada não conta.",
+              "Negócios criados no período que chegaram a cada etapa ou além, até agora. Um negócio que avançou e voltou continua contando onde chegou. Etapa arquivada não conta.",
             )}
           </p>
         </CardHeader>

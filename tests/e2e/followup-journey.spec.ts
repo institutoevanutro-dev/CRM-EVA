@@ -337,6 +337,8 @@ test.describe("followup — jornada completa (Task 8.3)", () => {
     expect(trigCfgRes.status()).toBe(200);
 
     await page.getByTestId("publish-button").click();
+
+    await page.getByRole("alertdialog").getByRole("button", { name: "Publicar" }).click();
     await expect(page.getByText("Fluxo publicado.")).toBeVisible();
     await expect(page.locator('[aria-label="status: Ativo"]')).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "followup-8.3-01-flow-published.png"), fullPage: true });

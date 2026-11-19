@@ -185,7 +185,7 @@ export function QueueTab({ canWrite }: Props) {
           <Clock size={36} className="text-text-muted" aria-hidden />
           <h2 className="font-medium">{t("Nenhum item na fila")}</h2>
           <p className="max-w-sm text-sm text-text-muted">
-            {t("Enrollments ativos e promessas de retorno agendadas pela IA aparecem aqui.")}
+            {t("Pacientes em fluxos ativos e promessas de retorno agendadas pela IA aparecem aqui.")}
           </p>
         </div>
       ) : (

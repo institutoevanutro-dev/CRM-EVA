@@ -128,10 +128,20 @@ test.describe("Perguntas frequentes — o gestor cadastra, liga e revisa", () =>
     await page.goto("/app/ai/perguntas-frequentes");
     const chave = page.getByRole("switch", { name: "Responder sem IA" });
     await expect(chave).toBeVisible({ timeout: 60_000 });
+    // O interruptor grava na hora; o rigor tem o próprio "Salvar rigor".
     await chave.click();
+    await expect(chave).toHaveAttribute("aria-checked", "true");
     await page.getByLabel("Rigor do reconhecimento").fill("0.88");
-    await page.getByRole("button", { name: "Salvar configuração" }).click();
-    await expect(page.getByText("Configuração salva.")).toBeVisible();
+    // O rigor é uma régua "mais solto/mais rígido" com gravação própria. O aviso
+    // "Configuração salva." do interruptor ainda está na tela, então ele não
+    // prova este salvamento: espera a resposta do PUT antes de recarregar.
+    const salvouRigor = page.waitForResponse(
+      (r) => r.url().includes("/config") && r.request().method() === "PUT" &&
+        (r.request().postData() ?? "").includes("0.88"),
+    );
+    await page.getByRole("button", { name: "Salvar rigor" }).click();
+    expect((await salvouRigor).ok(), "salvar o rigor foi recusado").toBe(true);
+    await expect(page.getByText("Configuração salva.").first()).toBeVisible();
 
     await page.reload();
     await expect(page.getByRole("switch", { name: "Responder sem IA" })).toHaveAttribute("aria-checked", "true", {

@@ -137,3 +137,22 @@ export function useArquivarSource() {
     },
   });
 }
+
+export function useDesarquivarSource() {
+  const t = useT();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: ["ai", "knowledge", "sources", "desarquivar"],
+    mutationFn: async (id: string) => {
+      await apiClient.patch(`/api/v1/ai/knowledge/sources/${id}`, { restaurar: true });
+      return id;
+    },
+    onSuccess: () => {
+      toast.success(t("Material de volta. Os assistentes voltam a consultá-lo."));
+    },
+    onError: (err) => showApiError(err),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: sourcesQueryKey() });
+    },
+  });
+}

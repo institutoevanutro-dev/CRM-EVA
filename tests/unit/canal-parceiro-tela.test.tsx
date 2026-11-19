@@ -101,10 +101,16 @@ describe("estado inicial", () => {
     expect(campo).toHaveAttribute("type", "password");
   });
 
-  it("falha ao ler o estado não trava a tela — o formulário continua servindo", async () => {
-    getMock.mockRejectedValue(new Error("500"));
+  // Auditoria 17/11, item 119: o formulário com "Não conectado" no lugar do erro
+  // convidava a reconectar quem já estava conectado. Falha vira erro com saída.
+  it("falha ao ler o estado mostra o erro com 'Tentar de novo', e não 'Não conectado'", async () => {
+    getMock.mockRejectedValueOnce(new Error("500")).mockResolvedValue(conectado);
     render(<CanalParceiroClient />);
-    expect(await screen.findByLabelText(/Chave de API/)).toBeInTheDocument();
+    expect(await screen.findByText("Não foi possível carregar o provedor parceiro.")).toBeInTheDocument();
+    expect(screen.queryByText("Não conectado")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    expect(await screen.findByText("MP wp")).toBeInTheDocument();
   });
 });
 

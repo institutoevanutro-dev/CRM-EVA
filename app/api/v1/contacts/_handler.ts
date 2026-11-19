@@ -31,7 +31,7 @@ import {
 } from "@/lib/contacts/conflito-unico";
 import { idsComProntuario } from "@/lib/contacts/cliente-pela-agenda";
 import { indiceDoCpf, MSG_CPF_SEM_CIFRA, parDoCpf, type ParDoCpf } from "@/lib/contacts/cpf";
-import type { Contact } from "@/lib/types/contacts";
+import type { ConsultaDoContato, Contact } from "@/lib/types/contacts";
 import { ensureConversation, sessaoProntaParaEnvio } from "@/lib/automation/start-conversation";
 import type {
   ContactCreate,
@@ -327,6 +327,39 @@ async function withConversas(
   };
 }
 
+/**
+ * As consultas da ficha: as 3 próximas e as 3 últimas, sem canceladas. Cliente
+ * do usuário (RLS de `calendar_appointments`: a profissional só vê as dela) e
+ * `organization_id` explícito. Falha vira `null`, não derruba a ficha.
+ */
+async function consultasDoContato(
+  supabase: SB,
+  organizationId: string,
+  contactId: string,
+): Promise<ConsultaDoContato[] | null> {
+  const agora = new Date().toISOString();
+  const base = () =>
+    supabase
+      .from("calendar_appointments")
+      .select("id, title, starts_at, status")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .neq("status", "cancelled");
+  try {
+    const [proximas, ultimas] = await Promise.all([
+      base().gte("starts_at", agora).order("starts_at", { ascending: true }).limit(3),
+      base().lt("starts_at", agora).order("starts_at", { ascending: false }).limit(3),
+    ]);
+    if (proximas.error || ultimas.error) throw new Error((proximas.error ?? ultimas.error)?.message);
+    return [...(proximas.data ?? []), ...(ultimas.data ?? [])] as ConsultaDoContato[];
+  } catch (e) {
+    logger.warn("[contacts.get] consultas indisponíveis", {
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // get
 // ---------------------------------------------------------------------------
@@ -430,6 +463,7 @@ export async function getContactHandler(
 
   return {
     ...contactWithConversa!,
+    consultas: await consultasDoContato(supabase, ctx.organization_id, contact.id),
     cpf_decrypted: cpfDecrypted,
     cpf_decrypt_denied: cpfDecryptDenied || undefined,
   };

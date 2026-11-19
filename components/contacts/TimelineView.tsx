@@ -3,7 +3,7 @@
 import type { Locale } from "date-fns";
 
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
 import { ChatCircle, Users, Storefront, Robot, Gear } from "@/lib/ui/icons";
@@ -173,15 +173,7 @@ export function TimelineView({ contactId, types }: Props) {
                         </span>
                         <span className="text-xs text-muted-foreground">{time}</span>
                       </div>
-                      {corpo && (
-                        // `title` dá o texto completo em hover/foco — sem ele o
-                        // truncamento de uma linha só cortava nota sem nenhum
-                        // jeito de ler o resto (o valor já vem limitado a 200
-                        // caracteres em `summarizePayload`, então nem é raro).
-                        <p className="mt-1 truncate text-sm text-muted-foreground" title={corpo}>
-                          {corpo}
-                        </p>
-                      )}
+                      {corpo && <CorpoDaAtividade corpo={corpo} />}
                     </div>
                   </li>
                 );
@@ -201,6 +193,35 @@ export function TimelineView({ contactId, types }: Props) {
             {q.isFetchingNextPage ? t("Carregando…") : t("Carregar mais")}
           </Button>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * O texto da atividade: até 3 linhas, com "Ver mais" para o resto. Era uma
+ * linha só com o resto no `title`, que o toque (iPhone) não alcança.
+ */
+// ponytail: o "Ver mais" aparece por tamanho do texto, não por medida do corte;
+// medir com ResizeObserver se aparecer botão sem ter o que abrir.
+function CorpoDaAtividade({ corpo }: { corpo: string }) {
+  const t = useT();
+  const [aberto, setAberto] = useState(false);
+  const longo = corpo.length > 140 || corpo.includes("\n");
+  return (
+    <div className="mt-1">
+      <p className={cn("whitespace-pre-line break-words text-sm text-muted-foreground", !aberto && "line-clamp-3")}>
+        {corpo}
+      </p>
+      {longo && (
+        <button
+          type="button"
+          className="mt-0.5 min-h-11 text-xs font-medium text-accent underline-offset-2 hover:underline lg:min-h-0"
+          aria-expanded={aberto}
+          onClick={() => setAberto((v) => !v)}
+        >
+          {aberto ? t("Ver menos") : t("Ver mais")}
+        </button>
       )}
     </div>
   );

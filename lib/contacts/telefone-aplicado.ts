@@ -4,7 +4,7 @@ import type { Actor } from "@/lib/api/handlers/types";
 import { resolveActiveLeadForContact, type LeadCandidate } from "@/lib/leads/active-lead";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { logger } from "@/lib/logger";
-import { telefoneDeFichaVaziaLigado } from "@/lib/schemas/settings";
+import { cadastroDeFichaVaziaLigado, telefoneDeFichaVaziaLigado } from "@/lib/schemas/settings";
 
 /**
  * O INTERRUPTOR E O RASTRO do telefone aplicado sozinho (#2593).
@@ -34,6 +34,27 @@ export async function lerTelefoneDeFichaVazia(
   db: SupabaseClient,
   organizationId: string,
 ): Promise<boolean> {
+  return lerInterruptor(db, organizationId, telefoneDeFichaVaziaLigado, "telefone-de-ficha-vazia");
+}
+
+/**
+ * A irmã da de cima para o CADASTRO de ficha vazia (nome completo, CPF, e-mail,
+ * nascimento, endereço — `settings.crm.cadastro_de_ficha_vazia`). Mesma régua:
+ * desligada por padrão, e falha lê como desligada.
+ */
+export async function lerCadastroDeFichaVazia(
+  db: SupabaseClient,
+  organizationId: string,
+): Promise<boolean> {
+  return lerInterruptor(db, organizationId, cadastroDeFichaVaziaLigado, "cadastro-de-ficha-vazia");
+}
+
+async function lerInterruptor(
+  db: SupabaseClient,
+  organizationId: string,
+  ligado: (settings: unknown) => boolean,
+  rotulo: string,
+): Promise<boolean> {
   const { data, error } = await db
     .from("organizations")
     .select("settings")
@@ -41,14 +62,14 @@ export async function lerTelefoneDeFichaVazia(
     .maybeSingle();
 
   if (error) {
-    logger.warn("[telefone-de-ficha-vazia] leitura do interruptor falhou", {
+    logger.warn(`[${rotulo}] leitura do interruptor falhou`, {
       organization_id: organizationId,
       error: error.message,
     });
     return false;
   }
   if (!data) return false;
-  return telefoneDeFichaVaziaLigado((data as { settings?: unknown }).settings);
+  return ligado((data as { settings?: unknown }).settings);
 }
 
 /** O módulo de origem da linha, e o ator quando não há agente identificado. */

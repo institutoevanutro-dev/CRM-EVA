@@ -124,4 +124,11 @@ describe("cartão da conexão do Google", () => {
     expect(screen.getByTestId("o-que-falta").textContent).toContain("GOOGLE_CALENDAR_CLIENT_ID");
     expect(screen.queryByTestId("desconectar-google")).toBeNull();
   });
+
+  it("sem as credenciais, a explicação vem RECOLHIDA (item 131 da auditoria de 17/11)", () => {
+    render(<CartaoDaConexaoGoogle configurado={false} falta={["GOOGLE_CALENDAR_CLIENT_ID"]} />);
+    const cartao = screen.getByTestId("google-nao-configurado");
+    expect(cartao.tagName).toBe("DETAILS");
+    expect(cartao.hasAttribute("open")).toBe(false);
+  });
 });

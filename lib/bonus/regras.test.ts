@@ -29,6 +29,11 @@ describe("regras do bônus", () => {
     expect(r.success).toBe(false);
   });
 
+  it("o mês aceita meta em só um critério: os outros ficam sem meta, não 0", () => {
+    const r = regrasSchema.parse({ metas_por_mes: { "2026-12": { comparecimento: { basica: 40, alta: 50 } } } });
+    expect(r.metas_por_mes["2026-12"]).toEqual({ comparecimento: { basica: 40, alta: 50 } });
+  });
+
   it("mês com formato errado é recusado", () => {
     expect(regrasSchema.safeParse({ meses_de_teste: { "2026-13": { garantia_resultados_cents: 1 } } }).success).toBe(false);
   });

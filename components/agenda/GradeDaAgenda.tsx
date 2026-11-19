@@ -49,6 +49,11 @@ import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
  */
 const ALTURA_DA_HORA = 48;
 
+/** No toque, quanto tempo parado sobre a consulta até ela poder ser arrastada. */
+export const TOQUE_LONGO_MS = 400;
+/** No toque, quanto o dedo pode tremer antes do toque longo sem virar rolagem. */
+const FOLGA_DO_TOQUE_PX = 8;
+
 /** A janela PADRÃO que a grade desenha. Fora dela, rola. */
 const PRIMEIRA_HORA = 7;
 const ULTIMA_HORA = 21;
@@ -636,7 +641,12 @@ function BlocoDeAgendamento({
         // `grab` só quando remarcar é possível: o cursor é a única pista de que
         // o card se move, e prometê-la num card que não se move (ocupação do
         // Google, compromisso cancelado) é o controle decorativo de novo.
-        arraste && !doGoogle && !cancelado && "cursor-grab active:cursor-grabbing touch-none",
+        // SEM `touch-none` (item 130 da auditoria de 17/11): ele tirava do dedo a
+        // rolagem sobre qualquer consulta, e deslizar para rolar virava
+        // "Remarcar X para Y?". No toque o arraste nasce de um toque longo (ver
+        // `aoApontar`); `select-none` e sem callout para o toque longo não
+        // selecionar texto nem abrir o menu do iOS.
+        arraste && !doGoogle && !cancelado && "cursor-grab select-none [-webkit-touch-callout:none] active:cursor-grabbing",
         // ⚠️ CANCELADO NÃO INTERCEPTA O PONTEIRO — e isto é conserto de produto,
         // achado pela spec em tela.
         //
@@ -1195,6 +1205,7 @@ export function GradeDaAgenda({
   onAbrirAgendamento,
   onAbrirDia,
   interacao,
+  janelaSobre,
   className,
 }: {
   visao: VisaoDaAgenda;
@@ -1229,6 +1240,12 @@ export function GradeDaAgenda({
   onAbrirDia?: (dia: Date) => void;
   /** Ausente = grade só de leitura, como a vitrine a monta. Ver `InteracaoDaGrade`. */
   interacao?: InteracaoDaGrade;
+  /**
+   * Os compromissos do período INTEIRO, antes do filtro de pessoas: a janela de
+   * horas é calculada sobre eles junto com os desenhados, e não pula ao trocar
+   * quem aparece (item 136). Ausente = só os desenhados (a vitrine).
+   */
+  janelaSobre?: Agendamento[];
   className?: string;
 }) {
   const t = useT();
@@ -1263,7 +1280,10 @@ export function GradeDaAgenda({
   } | null>(null);
 
   // Só os dias DESENHADOS alargam a janela: no Mês esta parte nem aparece.
-  const janela = React.useMemo(() => janelaDoPeriodo(agendamentos, fuso), [agendamentos, fuso]);
+  const janela = React.useMemo(
+    () => janelaDoPeriodo(janelaSobre ? [...janelaSobre, ...agendamentos] : agendamentos, fuso),
+    [janelaSobre, agendamentos, fuso],
+  );
   const limites = { primeiro: janela.primeira * 60, ultimo: (janela.ultima + 1) * 60 };
 
   /** A proposta para um instante — a mesma conta para o ponteiro e para o teclado. */
@@ -1349,7 +1369,37 @@ export function GradeDaAgenda({
       gesto.current = g;
       el.setPointerCapture(e.pointerId);
 
+      // NO TOQUE, O ARRASTE PEDE UM TOQUE LONGO (item 130). O dedo que desliza
+      // sobre uma consulta quer ROLAR a agenda; só quem segura parado por
+      // `TOQUE_LONGO_MS` quer mover. Antes disso, mexer mais que
+      // `FOLGA_DO_TOQUE_PX` desiste do gesto e a rolagem segue com o navegador
+      // (que também manda `pointercancel`, e o `soltar` limpa tudo).
+      const toque = e.pointerType !== "mouse";
+      let armado = !toque;
+      const timer = toque
+        ? window.setTimeout(() => {
+            armado = true;
+          }, TOQUE_LONGO_MS)
+        : undefined;
+      // Depois de armado, o dedo é do arraste: sem `preventDefault` no
+      // `touchmove` (não passivo), o Safari rolaria a página junto.
+      const travarRolagem = (ev: TouchEvent) => {
+        if (armado) ev.preventDefault();
+      };
+      // O toque longo no Android abre o menu de contexto.
+      const semMenu = (ev: Event) => ev.preventDefault();
+      if (toque) {
+        window.addEventListener("touchmove", travarRolagem, { passive: false });
+        window.addEventListener("contextmenu", semMenu);
+      }
+
       const mover = (ev: PointerEvent) => {
+        if (!armado) {
+          if (Math.abs(ev.clientY - g.y0) > FOLGA_DO_TOQUE_PX || Math.abs(ev.clientX - g.x0) > FOLGA_DO_TOQUE_PX) {
+            soltar(ev);
+          }
+          return;
+        }
         // Limiar de 4px: sem ele, o tremor de um clique comum já criaria uma
         // proposta e o card abriria a confirmação em vez do compromisso.
         if (!g.moveu && Math.abs(ev.clientY - g.y0) < 4 && Math.abs(ev.clientX - g.x0) < 4) return;
@@ -1357,9 +1407,12 @@ export function GradeDaAgenda({
         setProposta(propostaSobPonto(g.id, ev.clientX, ev.clientY - g.deslocamentoNoCard));
       };
       const soltar = (ev: PointerEvent) => {
+        window.clearTimeout(timer);
         window.removeEventListener("pointermove", mover);
         window.removeEventListener("pointerup", soltar);
         window.removeEventListener("pointercancel", soltar);
+        window.removeEventListener("touchmove", travarRolagem);
+        window.removeEventListener("contextmenu", semMenu);
         const houve = g.moveu;
         const p = houve ? propostaSobPonto(g.id, ev.clientX, ev.clientY - g.deslocamentoNoCard) : null;
         setProposta(null);

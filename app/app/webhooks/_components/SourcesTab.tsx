@@ -27,9 +27,14 @@ export function SourcesTab() {
   const t = useT();
   const { data, isLoading } = useWebhookSources();
   const [createOpen, setCreateOpen] = React.useState(false);
-  const [selected, setSelected] = React.useState<WebhookSourceRow | null>(null);
+  const [escolhida, setSelected] = React.useState<WebhookSourceRow | null>(null);
 
   const sources = data?.data ?? [];
+  // O painel lê a fonte da LISTA, e não do objeto guardado no clique: guardado,
+  // ele era a foto de quando o painel abriu, e pausar mostrava "Fonte pausada"
+  // com o interruptor de volta em ligado. A foto só vale até a lista trazer a
+  // fonte (a recém-criada ainda não está nela).
+  const selected = escolhida ? (sources.find((s) => s.id === escolhida.id) ?? escolhida) : null;
 
   if (isLoading) {
     return (
@@ -82,8 +87,17 @@ export function SourcesTab() {
         {sources.map((s) => (
           <Card
             key={s.id}
-            className="cursor-pointer transition-colors hover:border-accent"
+            role="button"
+            tabIndex={0}
+            aria-label={`${t("Abrir fonte")} ${s.name}`}
+            className="cursor-pointer transition-colors hover:border-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500"
             onClick={() => setSelected(s)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setSelected(s);
+              }
+            }}
           >
             <CardHeader className="space-y-2">
               <div className="flex items-center justify-between gap-2">

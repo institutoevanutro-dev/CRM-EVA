@@ -148,10 +148,12 @@ describe("LoginForm — a espera tem teto", () => {
 describe("LoginForm — com o EvaLink ligado", () => {
   beforeEach(() => vi.mocked(signInWithPassword).mockReset());
 
-  it("a senha vira porta da administração: rótulo, sem cursor no e-mail e sem segundo botão principal", () => {
+  it("a senha vira porta da administração: recolhida, sem cursor no e-mail e sem segundo botão principal", () => {
     render(<LoginForm evalink />);
-    expect(screen.getByRole("heading", { name: "Entrar com senha (administração)" })).toBeInTheDocument();
-    // Um só campo responde por "senha" (o rótulo da seção não é rótulo de campo).
+    // Desde 18/11 (lote 17) a porta é o link recolhido "Entrar com senha", e não
+    // mais um título visível — ver `tests/unit/onboarding-lote-17.test.tsx`.
+    expect(screen.getByText("Entrar com senha").tagName).toBe("SUMMARY");
+    // Um só campo responde por "senha" (o texto da porta não é rótulo de campo).
     expect(screen.getAllByLabelText(/senha/i)).toHaveLength(1);
     expect(screen.getByLabelText("Email")).not.toHaveFocus();
     expect(screen.getByRole("button", { name: "Entrar" }).className).not.toMatch(/\bbg-primary\b/);
@@ -178,7 +180,7 @@ describe("LoginForm — com o EvaLink ligado", () => {
 
   it("CONTROLE — sem EvaLink, o formulário aparece aberto e o cursor começa no e-mail", () => {
     render(<LoginForm />);
-    expect(screen.queryByText("Entrar com senha (administração)")).toBeNull();
+    expect(screen.queryByText("Entrar com senha")).toBeNull();
     expect(screen.getByLabelText("Email")).toHaveFocus();
   });
 });

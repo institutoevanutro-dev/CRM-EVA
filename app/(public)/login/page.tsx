@@ -170,7 +170,11 @@ export default async function LoginPage({
           )}
         </div>
       )}
-      <LoginForm next={next} evalink={evalinkLigado} />
+      <LoginForm
+        next={next}
+        evalink={evalinkLigado}
+        senhaAberta={process.env.EVALINK_SENHA_ABERTA === "1"}
+      />
       <div className="space-y-2 text-center text-sm">
         <p>
           <Link

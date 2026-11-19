@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { audit } from "@/lib/audit";
 import { cookieSecure } from "@/lib/supabase/cookie-secure";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { InvitePayload } from "@/lib/auth/invite-token";
+import { INVITE_TTL_SECONDS, type InvitePayload } from "@/lib/auth/invite-token";
 
 /**
  * O ATO de virar membro: grava o vínculo, audita e escolhe a organização ativa.
@@ -72,7 +72,7 @@ export async function aplicarConvite(params: {
     p_role: payload.role,
     p_invited_by: payload.invited_by ?? null,
     p_issued_at: payload.iat ? new Date(payload.iat * 1000).toISOString() : null,
-    p_invited_at: new Date((payload.iat ?? payload.exp - 86400) * 1000).toISOString(),
+    p_invited_at: new Date((payload.iat ?? payload.exp - INVITE_TTL_SECONDS) * 1000).toISOString(),
   });
 
   if (error) {

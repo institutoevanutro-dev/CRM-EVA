@@ -25,8 +25,8 @@ export default async function MetricsPage() {
         <h1 className="titulo-tela">{t("Desempenho")}</h1>
         <p className="text-sm text-muted-foreground">
           {canCompare
-            ? t("Atrito, funil e performance por atendente nos últimos 30 dias.")
-            : t("Atrito, seu funil e sua performance nos últimos 30 dias.")}
+            ? t("Custo do atendimento, funil e desempenho de cada atendente nos últimos 30 dias.")
+            : t("Custo do atendimento, seu funil e seu desempenho nos últimos 30 dias.")}
         </p>
       </header>
 

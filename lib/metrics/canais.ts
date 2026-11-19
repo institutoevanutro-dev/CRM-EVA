@@ -16,7 +16,7 @@
  *    cálculo (o `filter` da RPC é quem garante), e o resultado de "não medido"
  *    chega como `null`. Trocar `null` por `0` transformaria "ninguém respondeu"
  *    em "respondeu na hora zero" — a leitura mais gentil possível do vazamento.
- *    Quem pinta usa `formatDuration`, que devolve `—`.
+ *    Quem pinta usa `formatarDuracao` (lib/metrics/atrito), que devolve `—`.
  * 2. **O vazamento fica VISÍVEL e separado.** `sem_resposta` é coluna própria;
  *    somá-lo nas conversas ou descontá-lo da média mudaria os dois números ao
  *    mesmo tempo.
@@ -82,19 +82,6 @@ export function montarLinhas(brutas: LinhaCanalBruta[] | null | undefined): Linh
  */
 export function totalDeConversas(linhas: LinhaCanal[]): number {
   return linhas.reduce((acc, l) => acc + l.conversations_handled, 0);
-}
-
-/**
- * A duração como a tabela por atendente pinta: `—` para "não medido" (o
- * `null` da média), nunca `0s`.
- */
-export function formatarDuracao(seconds: number | null): string {
-  if (seconds == null) return "—";
-  const s = Math.round(seconds);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const rest = s % 60;
-  return rest === 0 ? `${m}min` : `${m}min ${rest}s`;
 }
 
 /**

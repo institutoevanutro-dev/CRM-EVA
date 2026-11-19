@@ -11,6 +11,7 @@ import {
   chaveQueryKey,
   sourcesQueryKey,
   useArquivarSource,
+  useDesarquivarSource,
   useEstadoDaChave,
   useKnowledgeSources,
   useReindexSource,
@@ -43,6 +44,7 @@ export function AcervoClient({ initialSources, initialChave, uso }: Props) {
   const { data: chave } = useEstadoDaChave(initialChave);
   const reindex = useReindexSource();
   const arquivar = useArquivarSource();
+  const desarquivar = useDesarquivarSource();
 
   const recarregar = useCallback(() => {
     qc.invalidateQueries({ queryKey: sourcesQueryKey() });
@@ -127,8 +129,17 @@ export function AcervoClient({ initialSources, initialChave, uso }: Props) {
           </p>
           <ul className="mt-3 space-y-1 text-sm">
             {arquivados.map((s) => (
-              <li key={s.id} className="text-text-muted">
-                {s.name}
+              <li key={s.id} className="flex items-center justify-between gap-2 text-text-muted">
+                <span>{s.name}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={desarquivar.isPending}
+                  onClick={() => desarquivar.mutate(s.id)}
+                  data-testid={`material-desarquivar-${s.id}`}
+                >
+                  {t("Desarquivar")}
+                </Button>
               </li>
             ))}
           </ul>

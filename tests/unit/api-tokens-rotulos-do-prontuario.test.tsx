@@ -30,7 +30,7 @@ describe("rótulos de escopo da tela de tokens", () => {
   it("os escopos do prontuário dizem só \"Prontuário\"", async () => {
     const user = userEvent.setup();
     render(<ApiTokensClient />);
-    await user.click(screen.getByRole("button", { name: "Criar token" }));
+    await user.click(screen.getByRole("button", { name: "Criar chave" }));
 
     // O rótulo de cada escopo mora no `title` do botão dele.
     expect(screen.getByTitle("Prontuário: pesquisar cadastro de contatos")).toBeInTheDocument();

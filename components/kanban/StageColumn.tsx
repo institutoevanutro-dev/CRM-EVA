@@ -124,7 +124,8 @@ export function StageColumn({
                 etapa é um objeto — o mesmo lugar onde já se lê a contagem dela.
                 Indeterminado quando a seleção é parcial: "alguns" e "nenhum" não
                 podem ter a mesma aparência num controle que o próximo clique
-                inverte. */}
+                inverte. O `label` dá 44 px de toque sem mudar o desenho. */}
+            <label className="flex shrink-0 items-center toque:-m-3.5 toque:p-3.5">
             <input
               type="checkbox"
               checked={todosSelecionados}
@@ -148,6 +149,7 @@ export function StageColumn({
                   "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/etapa:opacity-100",
               )}
             />
+            </label>
             <span
               className={cn(
                 "h-2 w-2 rounded-full",

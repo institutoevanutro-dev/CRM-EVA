@@ -222,6 +222,7 @@ test.describe("nó de espera — o modo Adaptativo tem de decidir de verdade", (
     await page.getByRole("button", { name: "Salvar" }).click();
     await expect(page.getByTestId("dirty-indicator")).toHaveCount(0, { timeout: PRAZO_SOB_CARGA });
     await page.getByTestId("publish-button").click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Publicar" }).click();
     // O selo do fluxo passa a "Ativo" (FlowStatusBadge) e a barra confirma
     // "Fluxo publicado." — não existe rótulo "Publicado" em lugar nenhum.
     await expect(page.getByText("Fluxo publicado.")).toBeVisible({ timeout: PRAZO_SOB_CARGA });

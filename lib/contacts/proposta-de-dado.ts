@@ -21,8 +21,23 @@
  *
  * O que esta exceção NÃO abre: número existente nunca é substituído (a trava é
  * `phone_number is null` DENTRO do UPDATE — a mesma leitura que a rota de
- * decisão usa no `status pending`), nenhum outro campo grava sem decisão
- * humana, e valor que não vira E.164 continua só como proposta.
+ * decisão usa no `status pending`), e valor que não vira E.164 continua só
+ * como proposta.
+ *
+ * ─── A SEGUNDA EXCEÇÃO: CADASTRO DE FICHA VAZIA ──────────────────────────────
+ *
+ * Medido em produção (18/11): a IA marcou a consulta, a paciente mandou nome
+ * completo, CPF, e-mail, nascimento e endereço, nasceram 5 propostas — e
+ * ninguém abriu a fila. A agenda seguiu com "Falta o nome completo", o
+ * prontuário não abriu o atendimento e as propostas venceram. Por isso, com
+ * `organizations.settings.crm.cadastro_de_ficha_vazia` LIGADA (nasce desligada;
+ * quem lê é `lerCadastroDeFichaVazia`, e falha lê como desligada), `name`,
+ * `cpf`, `email`, `birthdate` e `endereco` são GRAVADOS quando o campo está
+ * VAZIO — com a trava "ainda vazio" DENTRO do UPDATE, as mesmas duas trilhas
+ * e o valor validado por `valorAceitavel`. Campo preenchido continua sendo
+ * proposta: nada é substituído sem decisão humana. O nome só grava sozinho se
+ * for COMPLETO (`ehNomeCompleto`): um primeiro nome gravado ocuparia o campo e
+ * empurraria o nome completo, depois, para a fila de novo.
  *
  * A gravação deixa DUAS trilhas, e elas são diferentes de propósito:
  * a auditoria `contact.field_auto_applied` (quem audita) e a atividade
@@ -42,8 +57,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { indiceDoCpf, mascararCpf, mascararCpfsNoTexto, normalizeCpf, parDoCpf } from "@/lib/contacts/cpf";
+import { ehNomeCompleto, nomeCompletoLimpo } from "@/lib/contacts/rotulo-do-contato";
 import {
+  lerCadastroDeFichaVazia,
   lerTelefoneDeFichaVazia,
+  registrarDadoAplicadoNaTimeline,
   registrarTelefoneAplicadoNaTimeline,
 } from "@/lib/contacts/telefone-aplicado";
 import { logger } from "@/lib/logger";
@@ -69,6 +87,18 @@ import { normalizePhoneBR } from "@/lib/webhooks/inbound";
 export const CAMPOS_PROPONIVEIS = ["email", "name", "phone_number", "birthdate", "cpf", "endereco"] as const;
 export type CampoProponivel = (typeof CAMPOS_PROPONIVEIS)[number];
 
+/** Os campos que `settings.crm.cadastro_de_ficha_vazia` deixa gravar na ficha vazia. */
+export type CampoDeCadastro = Exclude<CampoProponivel, "phone_number">;
+
+/** Como cada campo aparece para quem opera, na linha do tempo. */
+const NOME_DO_CAMPO: Record<CampoDeCadastro, string> = {
+  name: "Nome completo",
+  email: "E-mail",
+  birthdate: "Data de nascimento",
+  cpf: "CPF",
+  endereco: "Endereço",
+};
+
 export type MotivoSemProposta =
   | "contato_nao_encontrado"
   | "contato_anonimizado" // L-04: dado de quem exerceu o esquecimento não volta
@@ -85,7 +115,12 @@ export type ResultadoDaProposta =
    * E.164. Motivo fora de `MotivoSemProposta` de propósito: quem lê o tipo
    * precisa ver que este desfecho tem `telefone` e que ele não é uma recusa.
    */
-  | { criada: false; motivo: "aplicado_automaticamente"; telefone: string };
+  | { criada: false; motivo: "aplicado_automaticamente"; telefone: string }
+  /**
+   * Cadastro de ficha vazia — o campo estava VAZIO e foi GRAVADO. `valor` é o
+   * que entrou, e no CPF é a MÁSCARA: o número não sai daqui em claro.
+   */
+  | { criada: false; motivo: "aplicado_automaticamente"; campo: CampoDeCadastro; valor: string };
 
 export interface DadosDaProposta {
   organizationId: string;
@@ -221,7 +256,8 @@ export async function proporDadoDoContato(
 
   // CPF: o par cifrado tem dono próprio (`propostaDeCpf`) — nem o valor atual
   // nem o proposto saem daqui em claro.
-  if (campo === "cpf") return propostaDeCpf(db, dados, valor);
+  const consentAtual = ((contato as Record<string, unknown>).consent as Record<string, unknown> | null) ?? null;
+  if (campo === "cpf") return propostaDeCpf(db, dados, valor, consentAtual);
 
   const atual =
     campo === "endereco"
@@ -237,8 +273,8 @@ export async function proporDadoDoContato(
   //
   // Só TELEFONE, só ficha SEM número, só valor que vira E.164 — E só com a
   // opção da organização LIGADA. Quem JÁ tem número nem chega aqui (`atual` não
-  // é vazio) — trocar telefone continua exigindo decisão humana, e os outros
-  // campos (e-mail, nome, nascimento) continuam só como proposta.
+  // é vazio) — trocar telefone continua exigindo decisão humana. Os outros
+  // campos têm a sua própria opção (cadastro de ficha vazia, logo abaixo).
   //
   // ⚠️ A ORDEM DAS DUAS CONDIÇÕES É O DESENHO: o interruptor é lido DEPOIS de
   // as condições de dado se cumprirem (para não custar uma leitura de
@@ -273,6 +309,31 @@ export async function proporDadoDoContato(
         });
         return { criada: false, motivo: "aplicado_automaticamente", telefone: e164 };
       }
+    }
+  }
+
+  // ── CADASTRO DE FICHA VAZIA VIRA ESCRITA, NÃO FILA ────────────────────────
+  //
+  // Só campo VAZIO (`atual === null`), só valor que passou por `valorAceitavel`
+  // (lá em cima), nome só se COMPLETO — e só com a opção LIGADA, lida por
+  // último pelo mesmo motivo do telefone. Qualquer desfecho que não seja UMA
+  // linha gravada (corrida perdida, e-mail de outro contato → 23505, erro) cai
+  // na proposta de sempre.
+  if (campo !== "phone_number" && atual === null && (campo !== "name" || ehNomeCompleto(valor))) {
+    if (await lerCadastroDeFichaVazia(db, organizationId)) {
+      const gravar = campo === "name" ? nomeCompletoLimpo(valor) : valor;
+      const custom = (contato as { custom_fields?: Record<string, unknown> | null }).custom_fields ?? {};
+      const gravado = await gravarCampoDeFichaVazia(db, {
+        organizationId,
+        contactId,
+        // ponytail: o merge de custom_fields lê-e-grava (como a extração
+        // silenciosa); uma edição concorrente de OUTRA chave pode se perder.
+        // Uma RPC com jsonb_set fecharia, mas pede migration.
+        patch: campo === "endereco" ? { custom_fields: { ...custom, endereco: gravar } } : { [campo]: gravar },
+        colunaVazia: campo === "endereco" ? "custom_fields->>endereco" : campo,
+        consentAtual,
+      });
+      if (gravado) return aplicado(db, dados, campo, gravar);
     }
   }
 
@@ -337,6 +398,7 @@ async function propostaDeCpf(
   db: SupabaseClient,
   dados: DadosDaProposta,
   digitos: string,
+  consentAtual: Record<string, unknown> | null,
 ): Promise<ResultadoDaProposta> {
   const admin = createAdminClient();
   const { data: atual, error } = await admin
@@ -356,6 +418,20 @@ async function propostaDeCpf(
 
   const par = await parDoCpf(admin, digitos);
   if (!par) return { criada: false, motivo: "erro", detalhe: "cifra de CPF indisponível" };
+
+  // Cadastro de ficha vazia: CPF ausente + opção ligada → grava o PAR cifrado
+  // (a constraint `contacts_cpf_consistency` exige os dois juntos), com a trava
+  // `cpf_hash is null` no UPDATE. Pelo client de serviço, filtrado pela org.
+  if (!hashAtual && (await lerCadastroDeFichaVazia(db, dados.organizationId))) {
+    const gravado = await gravarCampoDeFichaVazia(admin, {
+      organizationId: dados.organizationId,
+      contactId: dados.contactId,
+      patch: { ...par },
+      colunaVazia: "cpf_hash",
+      consentAtual,
+    });
+    if (gravado) return aplicado(db, dados, "cpf", mascararCpf(digitos));
+  }
 
   const expiraEm = new Date(
     Date.now() + (dados.diasDePrazo ?? PRAZO_PADRAO_DIAS) * 24 * 3600_000,
@@ -382,6 +458,81 @@ async function propostaDeCpf(
     return { criada: false, motivo: "erro", detalhe: erroInsert.message.slice(0, 120) };
   }
   return { criada: true, id: (criada as { id: string }).id, valorAnterior: null };
+}
+
+/**
+ * A ESCRITA do cadastro de ficha vazia — mesma forma da do telefone (abaixo):
+ * UM UPDATE com a coluna "ainda vazia" DENTRO dele, `is_anonymized = false`
+ * no mesmo WHERE (a anonimização pode chegar entre a leitura e a escrita) e a
+ * base legal `transactional` em merge no mesmo ato.
+ *
+ * @returns `true` só quando UMA linha foi gravada.
+ */
+async function gravarCampoDeFichaVazia(
+  db: SupabaseClient,
+  p: {
+    organizationId: string;
+    contactId: string;
+    patch: Record<string, unknown>;
+    colunaVazia: string;
+    consentAtual: Record<string, unknown> | null;
+  },
+): Promise<boolean> {
+  const { data, error } = await db
+    .from("contacts")
+    .update({
+      ...p.patch,
+      consent: {
+        ...(p.consentAtual ?? {}),
+        transactional: {
+          granted: true,
+          granted_at: new Date().toISOString(),
+          source: "informado pelo titular em atendimento; aplicado automaticamente sem decisão humana",
+        },
+      },
+    })
+    .eq("organization_id", p.organizationId)
+    .eq("id", p.contactId)
+    .eq("is_anonymized", false)
+    .is(p.colunaVazia, null)
+    .select("id");
+  if (error) {
+    // Só o código: a mensagem do Postgres pode trazer o valor (23505 de e-mail).
+    logger.warn("[cadastro-de-ficha-vazia] campo não gravado — segue como proposta", {
+      organization_id: p.organizationId,
+      contact_id: p.contactId,
+      code: (error as { code?: string }).code ?? null,
+    });
+    return false;
+  }
+  return Array.isArray(data) && data.length === 1;
+}
+
+/**
+ * O desfecho "gravado" do cadastro de ficha vazia, com o rastro na linha do
+ * tempo (que nunca lança). `exibivel` já vem mascarado no CPF; o `trecho` do
+ * cliente vai com todo CPF mascarado — a timeline é lida por quem opera.
+ */
+async function aplicado(
+  db: SupabaseClient,
+  dados: DadosDaProposta,
+  campo: CampoDeCadastro,
+  exibivel: string,
+): Promise<ResultadoDaProposta> {
+  await registrarDadoAplicadoNaTimeline(db, {
+    organizationId: dados.organizationId,
+    contactId: dados.contactId,
+    agentId: dados.agentId ?? null,
+    reason: `${NOME_DO_CAMPO[campo]} gravado na ficha pelo assistente: ${exibivel}`,
+    payload: {
+      campo,
+      valor: exibivel,
+      automatico: true,
+      origem: "cadastro_de_ficha_vazia",
+      trecho: dados.trecho ? mascararCpfsNoTexto(dados.trecho) : null,
+    },
+  });
+  return { criada: false, motivo: "aplicado_automaticamente", campo, valor: exibivel };
 }
 
 /**

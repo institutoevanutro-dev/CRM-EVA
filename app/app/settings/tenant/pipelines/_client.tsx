@@ -112,6 +112,9 @@ export function tipoTemOpcoes(tipo: CustomFieldDef["type"]): boolean {
   return tipo === "select" || tipo === "multiselect";
 }
 
+/** Contador das linhas novas de campo: só é lido no clique, nunca no render. */
+let proximaLinha = 0;
+
 function readLostReasons(settings: Record<string, unknown> | null): string[] {
   if (!settings) return [];
   const r = (settings as { lost_reasons?: unknown }).lost_reasons;
@@ -128,15 +131,14 @@ export function PipelinesClient({
 }) {
   const t = useT();
   if (pipelines.length === 0) {
-    // ⚠️ NÃO PROMETA UM CAMINHO QUE NÃO EXISTE. Criar funil não é feito por
-    // nenhuma tela, rota ou action deste produto — só por script de instalação;
-    // e como o instalador não provisiona funil, ESTE é o estado de toda
-    // instalação nova. O texto anterior mandava "crie um no quadro", e o quadro
-    // vazio manda "Ir para Configurações": pingue-pongue fechado, com o usuário
-    // procurando um botão que não existe em lugar nenhum.
+    // O caminho para criar funil é Funis › Novo funil (`app/app/kanban`). O
+    // texto antigo dizia "direto no banco", de quando esse botão não existia.
     return (
       <Card className="p-6 text-sm leading-relaxed text-muted-foreground">
-        {t("Você ainda não tem nenhum funil. Enquanto for assim, o agente atende normalmente, mas não tem para onde levar o card de ninguém — não há etapas para onde mover. Criar o funil é feito por quem instalou o sistema, direto no banco; depois ele aparece aqui para você escolher a etapa de cada passo.")}
+        {t("Você ainda não tem nenhum funil. Enquanto for assim, o agente atende normalmente, mas não tem para onde levar o card de ninguém.")}{" "}
+        <a href="/app/kanban" className="font-medium text-accent-strong underline">
+          {t("Criar em Funis › Novo funil")}
+        </a>
       </Card>
     );
   }
@@ -169,7 +171,11 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
   const [won, setWon] = useState(v.won ?? "Ganho");
   const [lost, setLost] = useState(v.lost ?? "Perdido");
   const [reasonsText, setReasonsText] = useState(readLostReasons(pipeline.settings).join(", "));
-  const [fields, setFields] = useState<CustomFieldDef[]>(camposDoFunil(pipeline.settings));
+  const camposIniciais = camposDoFunil(pipeline.settings);
+  const [fields, setFields] = useState<CustomFieldDef[]>(camposIniciais);
+  // A `key` de cada linha é um id que nasce com ela, nunca a chave digitada:
+  // com `f.key` na `key`, cada letra remontava a linha e o campo perdia o foco.
+  const [idsDasLinhas, setIdsDasLinhas] = useState<string[]>(() => fields.map((_, i) => `inicial-${i}`));
   const [isPending, startTransition] = useTransition();
 
   function handleSave() {
@@ -252,7 +258,7 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
           {t("Aparecem no dossiê do negócio. No follow-up, você escolhe em qual campo gravar a resposta.")}
         </p>
         {fields.map((f, i) => (
-          <div key={`${f.key}-${i}`} className="grid gap-2 rounded-md border border-border p-2 md:grid-cols-[1fr_1fr_8rem_auto]">
+          <div key={idsDasLinhas[i]} className="grid gap-2 rounded-md border border-border p-2 md:grid-cols-[1fr_1fr_8rem_auto]">
             <Input
               aria-label={`${t("Chave do campo")} ${i + 1}`}
               placeholder={t("chave (endereco)")}
@@ -297,7 +303,10 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
               variant="ghost"
               size="sm"
               aria-label={`${t("Remover campo")} ${f.label || i + 1}`}
-              onClick={() => setFields(fields.filter((_, j) => j !== i))}
+              onClick={() => {
+                setFields(fields.filter((_, j) => j !== i));
+                setIdsDasLinhas(idsDasLinhas.filter((_, j) => j !== i));
+              }}
             >
               <Trash size={14} aria-hidden />
             </Button>
@@ -438,12 +447,13 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() =>
+            onClick={() => {
               setFields([
                 ...fields,
                 { key: `campo_${fields.length + 1}`, label: t("Novo campo"), type: "text" },
-              ])
-            }
+              ]);
+              setIdsDasLinhas([...idsDasLinhas, `nova-${proximaLinha++}`]);
+            }}
           >
             <Plus size={14} aria-hidden className="mr-1" /> {t("Adicionar campo")}
           </Button>

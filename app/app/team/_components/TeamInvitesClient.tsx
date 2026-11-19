@@ -46,6 +46,12 @@ interface Props {
   canManage: boolean;
 }
 
+/**
+ * No celular a tabela de 9 colunas rolava de lado e o "⋯" ficava fora da tela.
+ * Lá ficam só e-mail, papel, status e ações; o resto aparece do `md` para cima.
+ */
+const SO_NO_COMPUTADOR = "hidden md:table-cell";
+
 const BADGE_VARIANT: Record<StatusConvite, "default" | "outline" | "secondary" | "destructive"> = {
   aceito: "default",
   pendente: "outline",
@@ -75,6 +81,22 @@ export function TeamInvitesClient({ canManage }: Props) {
     else toast.error(t("Não foi possível copiar. Copie da barra do navegador."));
   }
 
+  // Reenviar renova o prazo. Diz a verdade sobre o e-mail: sem envio
+  // configurado, o caminho é copiar o link novo e mandar por fora.
+  async function reenviar(id: string) {
+    try {
+      const res = await resend.mutateAsync(id);
+      const url = res.data.accept_url;
+      if (res.data.email_dispatched) toast.success(t("Convite reenviado por e-mail."));
+      else if (url)
+        toast.warning(t("Convite renovado, mas o e-mail não saiu. Copie o link e envie você."), {
+          action: { label: t("Copiar link"), onClick: () => void copyLink(url) },
+        });
+    } catch {
+      /* showApiError já disparou */
+    }
+  }
+
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>;
   }
@@ -101,12 +123,12 @@ export function TeamInvitesClient({ canManage }: Props) {
               <TableRow>
                 <TableHead>{t("E-mail")}</TableHead>
                 <TableHead>{t("Papel")}</TableHead>
-                <TableHead>{t("Interface")}</TableHead>
+                <TableHead className={SO_NO_COMPUTADOR}>{t("Interface")}</TableHead>
                 <TableHead>{t("Status")}</TableHead>
-                <TableHead>{t("E-mail enviado")}</TableHead>
-                <TableHead>{t("Enviado em")}</TableHead>
-                <TableHead>{t("Expira em")}</TableHead>
-                <TableHead>{t("Convidado por")}</TableHead>
+                <TableHead className="hidden sm:table-cell">{t("E-mail enviado")}</TableHead>
+                <TableHead className={SO_NO_COMPUTADOR}>{t("Enviado em")}</TableHead>
+                <TableHead className={SO_NO_COMPUTADOR}>{t("Expira em")}</TableHead>
+                <TableHead className={SO_NO_COMPUTADOR}>{t("Convidado por")}</TableHead>
                 {canManage ? <TableHead className="w-[60px]" /> : null}
               </TableRow>
             </TableHeader>
@@ -119,7 +141,7 @@ export function TeamInvitesClient({ canManage }: Props) {
                     <TableCell>
                       <Badge variant="secondary">{t(rotuloDoPapel(inv.role))}</Badge>
                     </TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell className={`text-sm ${SO_NO_COMPUTADOR}`}>
                       {inv.interface_settings?.destinos
                         ? t("Personalizada")
                         : inv.interface_settings?.preset === "simplificada"
@@ -129,7 +151,7 @@ export function TeamInvitesClient({ canManage }: Props) {
                     <TableCell>
                       <Badge variant={BADGE_VARIANT[inv.status]}>{STATUS_LABEL[inv.status]}</Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       {inv.email_dispatched ? (
                         <span className="text-sm text-muted-foreground">{t("Sim")}</span>
                       ) : (
@@ -138,7 +160,7 @@ export function TeamInvitesClient({ canManage }: Props) {
                             <Warning size={14} weight="fill" />
                             {t("Não saiu")}
                           </span>
-                          {emAberto && inv.accept_url ? (
+                          {inv.accept_url ? (
                             <Button
                               variant="outline"
                               size="sm"
@@ -152,7 +174,7 @@ export function TeamInvitesClient({ canManage }: Props) {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className={`text-sm text-muted-foreground ${SO_NO_COMPUTADOR}`}>
                       {new Date(inv.last_sent_at).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" })}
                       {inv.resend_count > 0 ? (
                         <span className="ml-1 text-xs">
@@ -160,12 +182,12 @@ export function TeamInvitesClient({ canManage }: Props) {
                         </span>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className={`text-sm text-muted-foreground ${SO_NO_COMPUTADOR}`}>
                       {inv.status === "aceito"
                         ? "—"
                         : new Date(inv.expires_at).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" })}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className={`text-sm text-muted-foreground ${SO_NO_COMPUTADOR}`}>
                       {inv.inviter_name ?? "—"}
                     </TableCell>
                     {canManage ? (
@@ -186,14 +208,7 @@ export function TeamInvitesClient({ canManage }: Props) {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
                                 disabled={resend.isPending}
-                                onClick={async () => {
-                                  try {
-                                    await resend.mutateAsync(inv.id);
-                                    toast.success(t("Convite reenviado."));
-                                  } catch {
-                                    /* showApiError já disparou */
-                                  }
-                                }}
+                                onClick={() => void reenviar(inv.id)}
                               >
                                 <ArrowsClockwise size={16} />
                                 {t("Reenviar")}

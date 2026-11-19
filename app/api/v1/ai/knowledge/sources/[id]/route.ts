@@ -33,6 +33,8 @@ const patchSourceSchema = z.object({
   name: z.string().min(2).max(120).optional(),
   items: z.array(faqItemSchema).optional(),
   source_metadata: z.record(z.string(), z.unknown()).optional(),
+  /** Desfaz o arquivar (DELETE). O material volta ao estado do último preparo. */
+  restaurar: z.literal(true).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -134,7 +136,7 @@ export async function PATCH(
   const supabase = await createClient();
   const { data: existing, error: fetchErr } = await supabase
     .from("ai_knowledge_sources")
-    .select("id, source_type, agent_id")
+    .select("id, source_type, agent_id, last_index_status")
     .eq("id", sourceId)
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
@@ -147,13 +149,24 @@ export async function PATCH(
     return fail("not_found", "Fonte de conhecimento não encontrada.", 404, { requestId });
   }
 
-  const ksRow = existing as { id: string; source_type: string; agent_id: string | null };
+  const ksRow = existing as {
+    id: string;
+    source_type: string;
+    agent_id: string | null;
+    last_index_status: string | null;
+  };
   const tipo = canonizarTipoDeFonte(ksRow.source_type);
 
   // Build update payload (only provided fields).
   const updatePayload: Record<string, unknown> = {};
   if (input.name !== undefined) updatePayload.name = input.name;
   if (input.source_metadata !== undefined) updatePayload.source_metadata = input.source_metadata;
+  // Desarquivar: os trechos nunca foram apagados (arquivar é soft-delete), então
+  // o material volta como estava no último preparo.
+  if (input.restaurar) {
+    updatePayload.status = ksRow.last_index_status === "failed" ? "failed" : "ready";
+    updatePayload.is_active = true;
+  }
 
   const admin = createAdminClient();
 
