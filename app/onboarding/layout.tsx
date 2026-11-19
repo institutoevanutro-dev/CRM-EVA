@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
 
+import { signOut } from "@/app/actions/auth/signOut";
+import { traduzir } from "@/lib/i18n/dicionario";
+
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { loadOnboardingState } from "@/app/actions/onboarding/_shared";
 import { Stepper } from "./_components/Stepper";
@@ -8,7 +11,7 @@ import { SkipToEnd } from "./_components/SkipToEnd";
 import { SimboloDoProduto } from "@/components/branding/MarcaDoProduto";
 import { marcaEhADoProduto } from "@/lib/branding";
 import { marcaDaSaida } from "@/lib/branding/saida";
-import { passosVisiveis } from "@/lib/onboarding/passos";
+import { montaOAssistente, passosVisiveis } from "@/lib/onboarding/passos";
 import { env } from "@/lib/env";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 
@@ -24,6 +27,8 @@ export default async function OnboardingLayout({ children }: { children: React.R
 
   const { state, onboardedAt } = await loadOnboardingState(activeOrg.orgId);
   if (onboardedAt) redirect("/app/inbox");
+  // Quem não monta o assistente não tem o que fazer nele (item 176).
+  if (!montaOAssistente(activeOrg.role, user)) redirect("/app/inbox");
 
   // Os passos que ESTA instalação oferece, com o que já foi resolvido. O
   // indicador não decide mais nada sozinho — ele desenha o que recebe.
@@ -65,6 +70,15 @@ export default async function OnboardingLayout({ children }: { children: React.R
                   .map((o) => ({ id: o.organization_id, nome: o.organization_name }))}
               />
               {isDev ? <SkipToEnd /> : null}
+              {/* Quem entrou com a conta errada precisa de saída (auditoria 17/11, item 179). */}
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="min-h-11 rounded-md px-3 text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                >
+                  {traduzir("Sair", user.idioma)}
+                </button>
+              </form>
             </div>
           </div>
           <div className="mx-auto w-full max-w-3xl px-4 pb-2">

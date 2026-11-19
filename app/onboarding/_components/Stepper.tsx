@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -38,16 +39,16 @@ export function Stepper({ passos }: { passos: PassoVisivel[] }) {
   return (
     <ol
       aria-label="onboarding steps"
-      className="flex w-full items-center justify-between gap-2 px-2 py-3"
+      // `items-start`: um rótulo que quebra em duas linhas deixava o seu círculo
+      // mais baixo que os outros (auditoria 17/11, item 178).
+      className="flex w-full items-start justify-between gap-2 px-2 py-3"
     >
       {passos.map((p, i) => {
         const isActive = i === idx;
-        return (
-          <li
-            key={p.segmento}
-            aria-current={isActive ? "step" : undefined}
-            className="flex flex-1 flex-col items-center text-xs"
-          >
+        // Passo feito vira link: dá para voltar e ajustar (item 178).
+        const volta = !isActive && p.cumprido;
+        const conteudo = (
+          <>
             <div
               className={cn(
                 "flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-medium",
@@ -60,19 +61,37 @@ export function Stepper({ passos }: { passos: PassoVisivel[] }) {
             </div>
             {/* Some visualmente abaixo de `sm`: os rótulos são frases (`Quem
                 trabalha com ele`, `Onde ele organiza`), não palavras — com 7
-                passos espremidos num celular de 375px, cada um ganha ~45px e
-                o `truncate` cortava quase tudo, sem nenhum jeito de ler o
-                resto. A tela de cada passo já mostra o título por extenso
-                (`<h2>`), então o rótulo aqui é reforço, não a única fonte —
-                `sr-only` mantém ele lido por leitor de tela mesmo escondido. */}
+                passos espremidos num celular de 375px, cada um ganha ~45px.
+                A tela de cada passo já mostra o título por extenso (`<h2>`),
+                então o rótulo aqui é reforço — `sr-only` mantém ele lido por
+                leitor de tela mesmo escondido. */}
             <span
               className={cn(
-                "sr-only mt-1 truncate sm:not-sr-only",
+                "sr-only mt-1 text-center sm:not-sr-only",
                 isActive ? "font-medium text-foreground" : "text-muted-foreground",
+                volta && "underline-offset-2 group-hover:underline",
               )}
             >
               {t(p.rotulo)}
             </span>
+          </>
+        );
+        return (
+          <li
+            key={p.segmento}
+            aria-current={isActive ? "step" : undefined}
+            className="flex flex-1 flex-col items-center text-xs"
+          >
+            {volta ? (
+              <Link
+                href={`/onboarding/${p.segmento}`}
+                className="group flex flex-col items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {conteudo}
+              </Link>
+            ) : (
+              conteudo
+            )}
           </li>
         );
       })}

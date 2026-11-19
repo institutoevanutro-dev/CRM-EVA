@@ -253,7 +253,7 @@ export async function aplicarQuadro(formData: FormData): Promise<ResultadoDoQuad
     })),
   });
 
-  if (error) return { ok: false, erro: `Não consegui salvar o quadro: ${error.message}` };
+  if (error) return { ok: false, erro: "Não consegui salvar o quadro agora. Tente de novo em instantes." };
 
   const r = (resposta ?? {}) as { ok?: boolean; motivo?: string; quantos?: number };
   if (!r.ok) {

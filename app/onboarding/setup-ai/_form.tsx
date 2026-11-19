@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { fraseDoErro, rodarOuAvisar } from "../_components/erros";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,7 +79,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
           setRegrasNaoSalvas(null);
           const res = await createDefaultAgent(formData);
           if (res && !res.ok) {
-            toast.error(`${t("Falha ao criar agente:")} ${res.error}`);
+            toast.error(t(fraseDoErro(res.error)));
             return;
           }
           if (res?.regras_nao_salvas) setRegrasNaoSalvas(res.regras_nao_salvas);
@@ -204,7 +205,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
       {regrasNaoSalvas && (
         <div
           role="alert"
-          className="space-y-2 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20"
+          className="space-y-2 rounded-md border border-warning/40 bg-warning-bg p-4"
         >
           <p className="text-sm font-medium">
             {t("O atendente foi criado, mas as")} <strong>{t("regras da casa")}</strong>{" "}
@@ -220,7 +221,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
       {causa === "chave" && (
         <div
           role="alert"
-          className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20"
+          className="space-y-3 rounded-md border border-warning/40 bg-warning-bg p-4"
         >
           <p className="text-sm font-medium">
             {t("Seu atendente foi criado, mas ficou como")} <strong>{t("rascunho")}</strong>{" "}
@@ -257,7 +258,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
       {causa === "modelo" && (
         <div
           role="alert"
-          className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20"
+          className="space-y-3 rounded-md border border-warning/40 bg-warning-bg p-4"
         >
           <p className="text-sm font-medium">
             {t("Seu atendente foi criado, mas ficou como")} <strong>{t("rascunho")}</strong>{" "}
@@ -302,7 +303,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
       {naoPublicado && (
         <div
           role="alert"
-          className="space-y-3 rounded-md border border-amber-300/60 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-950/20"
+          className="space-y-3 rounded-md border border-warning/40 bg-warning-bg p-4"
         >
           <p className="text-sm font-medium">
             {t("Seu agente foi criado, mas ficou como")} <strong>{t("rascunho")}</strong>:{" "}
@@ -337,7 +338,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
           type="button"
           variant="ghost"
           disabled={pending}
-          onClick={() => startTransition(() => void skipAi())}
+          onClick={() => startTransition(() => rodarOuAvisar(skipAi, t))}
         >
           {t("Pular")}
         </Button>

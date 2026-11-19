@@ -160,6 +160,9 @@ EVALINK_CLIENT_ID=cliente-ficticio
 EVALINK_CLIENT_SECRET=segredo-ficticio
 EVALINK_SEGREDO_AVISO=e2e-placeholder-segredo-do-aviso-nao-e-segredo
 EVALINK_ORG_PADRAO=e7a1e2e0-0000-4000-8000-000000000001
+# A senha recolhida em "Entrar com senha" (padrão com o EvaLink ligado) pediria
+# um clique a mais em cada spec que entra pela senha; aqui ela já abre.
+EVALINK_SENHA_ABERTA=1
 NEXT_TELEMETRY_DISABLED=1
 # Telemetria DESLIGADA na suíte, explícita. Desde 2026-09-29 vazio também
 # desliga (\`lib/sentry/dsn.ts\` não tem mais DSN fixo), mas a suíte não pode

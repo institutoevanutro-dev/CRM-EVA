@@ -5651,7 +5651,7 @@ export const DICIONARIO: Traducoes = {
   "Sua sessão terminou. Entre de novo para voltar à tela onde estava.": {
     es: "Tu sesión terminó. Inicia sesión de nuevo para volver a la pantalla donde estabas.",
   },
-  "Entrar com senha (administração)": { es: "Entrar con contraseña (administración)" },
+  "Entrar com senha": { es: "Entrar con contraseña" },
   "Se você entra pelo EvaLink, use o botão acima.": { es: "Si entras con EvaLink, usa el botón de arriba." },
   "Confirme seu e-mail pelo link que enviamos antes de entrar.": {
     es: "Confirma tu correo con el enlace que te enviamos antes de entrar.",
@@ -6308,6 +6308,21 @@ export const DICIONARIO: Traducoes = {
   },
   "Escolher outra forma": { es: "Elegir otra forma" },
   "Falha ao pular:": { es: "Fallo al saltar:" },
+  "Não consegui pular este passo. Tente de novo.": { es: "No pude saltar este paso. Inténtalo de nuevo." },
+  "Sua sessão terminou. Entre de novo para continuar.": {
+    es: "Tu sesión terminó. Inicia sesión de nuevo para continuar.",
+  },
+  "Só quem administra a clínica pode fazer este passo.": {
+    es: "Solo quien administra la clínica puede hacer este paso.",
+  },
+  "Não achei a sua clínica. Recarregue a página.": { es: "No encontré tu clínica. Recarga la página." },
+  "Confira os campos e tente de novo.": { es: "Revisa los campos e inténtalo de nuevo." },
+  "Não consegui salvar agora. Tente de novo em instantes.": {
+    es: "No pude guardar ahora. Inténtalo de nuevo en unos instantes.",
+  },
+  "Não consegui salvar o quadro agora. Tente de novo em instantes.": {
+    es: "No pude guardar el tablero ahora. Inténtalo de nuevo en unos instantes.",
+  },
   "Pular por enquanto": { es: "Saltar por ahora" },
   "Falha ao marcar passo:": { es: "Fallo al marcar el paso:" },
   "Conectei em outro lugar": { es: "Me conecté en otro lugar" },
@@ -6550,6 +6565,7 @@ export const DICIONARIO: Traducoes = {
     es: "y seguir desde aquí mismo — lo que armaste está guardado.",
   },
   "Não consegui salvar este passo.": { es: "No pude guardar este paso." },
+  "Voltar e treinar": { es: "Volver y entrenar" },
 
   // ─── Onboarding: invite-team ───
   "Quem trabalha com ele": { es: "Quién trabaja con él" },
