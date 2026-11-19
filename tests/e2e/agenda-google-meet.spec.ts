@@ -176,10 +176,10 @@ async function book(page: Page, f: Fixture) {
   await inbound(f, "Quero marcar minha reunião");
   await login(page, f);
   await page.goto(`/app/inbox/${f.conversation}`);
-  // "Marcar compromisso" mora no painel do contato, que nasce recolhido
+  // "Marcar consulta" mora no painel do contato, que nasce recolhido
   // (18/11/2026): abre pelo trilho, como quem usa.
   await abrirPainelDoContato(page);
-  await page.getByRole("link", { name: "Marcar compromisso", exact: true }).click();
+  await page.getByRole("link", { name: "Marcar consulta", exact: true }).click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible();
   await expect(page.getByTestId("paciente-escolhido")).toHaveAttribute("data-contact-id", f.contact);
   await expect(page.getByLabel("Conversa vinculada (opcional)")).toHaveValue(f.conversation);

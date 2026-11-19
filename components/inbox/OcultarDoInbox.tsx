@@ -135,12 +135,12 @@ export function OcultarDoInbox({ contactId, conversationId, nome, oculto, varian
               <div className="space-y-2 text-sm text-text-muted">
                 <p>
                   {t(
-                    "As conversas deste contato saem do Inbox, das contagens, da Fila, do radar e do Início. A IA não responde, follow-ups e automações não mandam mensagem e ele não ganha card novo no funil.",
+                    "As conversas desta pessoa saem da Fila, das contagens e do Início. O automático não responde, nenhuma mensagem automática sai e ela não vira negócio novo no funil.",
                   )}
                 </p>
                 <p>
                   {t(
-                    "Nada é apagado: as mensagens continuam guardadas. Um gerente pode trazê-lo de volta em Inbox › Mais › Ocultos.",
+                    "Nada é apagado: as mensagens continuam guardadas. Um gestor pode trazê-la de volta em Mais › Ocultos.",
                   )}
                 </p>
               </div>

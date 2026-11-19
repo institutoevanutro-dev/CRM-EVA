@@ -52,8 +52,10 @@ describe("faixa de abas do Inbox: uma linha que rola, nunca aba escondida", () =
       "Minhas8",
       "Todas130",
     ]);
-    // Com uma aba do "Mais" ativa, o gatilho mostra o nome e a contagem dela.
-    expect(screen.getByRole("button", { name: "Mais abas" }).textContent).toContain("Automático");
-    expect(screen.getByRole("button", { name: "Mais abas" }).textContent).toContain("267");
+    // Com uma aba do "Mais" ativa, o gatilho mostra o nome e a contagem dela — e
+    // é esse nome que o leitor de tela anuncia, não "Mais abas" (item 215).
+    const gatilho = screen.getByRole("button", { name: /^Automático/ });
+    expect(gatilho.textContent).toContain("267");
+    expect(screen.queryByRole("button", { name: "Mais abas" })).toBeNull();
   });
 });

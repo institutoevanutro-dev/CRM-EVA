@@ -8,16 +8,12 @@ interface Props {
 }
 
 const BINDINGS: { keys: string; description: string }[] = [
-  { keys: "j", description: "Próxima conversa" },
-  { keys: "k", description: "Conversa anterior" },
   { keys: "r", description: "Focar resposta" },
   // O atalho mais usado do inbox não estava aqui — vivia só no placeholder do
   // composer, que some no instante em que você começa a escrever, ou seja,
   // exatamente quando ia precisar dele para quebrar linha.
   { keys: "Enter", description: "Enviar a mensagem" },
   { keys: "Shift + Enter", description: "Quebrar linha sem enviar" },
-  { keys: "a", description: "Assumir conversa" },
-  { keys: "e", description: "Fechar conversa" },
   { keys: "?", description: "Mostrar atalhos" },
 ];
 
@@ -29,10 +25,9 @@ export function ShortcutsHelpDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>{t("Atalhos de teclado")}</DialogTitle>
         </DialogHeader>
-        {/* Item 29: as letras não disparam enquanto se escreve, nem com o
-            cursor fora da lista. */}
+        {/* Item 29: a, e, j, k saíram (decisão de 18/11); o "r" só vale na lista. */}
         <p className="text-sm text-muted-foreground">
-          {t("As letras valem com o cursor na lista de conversas.")}
+          {t("O r vale com o cursor na lista de conversas.")}
         </p>
         <ul className="space-y-2 text-sm">
           {BINDINGS.map((b) => (

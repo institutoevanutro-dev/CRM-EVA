@@ -334,7 +334,7 @@ test("testa sem enviar, pausa preserva publicação e duas aprovações entregam
       .getByLabel("Resposta sugerida")
       .fill("Maria, confirmei as informações e posso ajudar por aqui.");
     await panel(page)
-      .getByLabel("Feedback para a próxima sugestão")
+      .getByLabel("O que melhorar na próxima sugestão")
       .fill("Usar linguagem curta e clara.");
     await capture(page, panel(page), info, "revisao-desktop");
     const approved = page.waitForResponse(

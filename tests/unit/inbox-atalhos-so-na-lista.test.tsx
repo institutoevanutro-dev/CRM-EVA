@@ -104,7 +104,7 @@ function tecla(letra: string) {
 }
 const campo = () => screen.getByRole("textbox", { name: "Mensagem" });
 
-describe("item 29 — atalho de uma letra só com o cursor na lista", () => {
+describe("item 29 — a, e, j, k desligados (decisão de 18/11)", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/app/inbox");
     assumir.mockClear();
@@ -127,38 +127,20 @@ describe("item 29 — atalho de uma letra só com o cursor na lista", () => {
     expect(assumir).not.toHaveBeenCalled();
   });
 
-  it("com o foco fora da lista (no corpo da página), 'a' e 'e' não fazem nada", () => {
-    montar(CONV_A);
-    act(() => (document.activeElement as HTMLElement | null)?.blur());
-    expect(document.activeElement).toBe(document.body);
-    tecla("a");
-    tecla("e");
-    expect(assumir).not.toHaveBeenCalled();
-    expect(screen.queryByRole("alertdialog")).toBeNull();
-  });
-
-  it("com o foco na lista, 'a' assume e 'e' pergunta — com o foco no Cancelar", () => {
+  it("nem com o foco na lista 'a', 'e', 'j' e 'k' fazem alguma coisa", () => {
     montar(CONV_A);
     act(() => screen.getByRole("button", { name: "Abrir A" }).focus());
-    tecla("a");
-    expect(assumir).toHaveBeenCalledTimes(1);
-
-    tecla("e");
-    const dialogo = screen.getByRole("alertdialog");
-    expect(dialogo).toHaveTextContent("Fechar esta conversa?");
-    expect(screen.getByRole("button", { name: "Cancelar" })).toHaveFocus();
-    // O Enter (ou espaço) seguinte cai no Cancelar: nada fecha.
-    fireEvent.click(document.activeElement as HTMLElement);
+    for (const letra of ["a", "e", "j", "k"]) tecla(letra);
+    expect(assumir).not.toHaveBeenCalled();
     expect(fechar).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.getByTestId("fio")).toHaveAttribute("data-conversa", CONV_A);
   });
 
-  it("j pela lista abre a próxima e o foco FICA na lista, para o próximo j", () => {
+  it("'r' com o foco na lista leva ao campo de mensagem", () => {
     montar(CONV_A);
-    const botaoA = screen.getByRole("button", { name: "Abrir A" });
-    act(() => botaoA.focus());
-    tecla("j");
-    expect(screen.getByTestId("fio")).toHaveAttribute("data-conversa", CONV_B);
-    expect(campo()).not.toHaveFocus();
-    expect(botaoA).toHaveFocus();
+    act(() => screen.getByRole("button", { name: "Abrir A" }).focus());
+    tecla("r");
+    expect(campo()).toHaveFocus();
   });
 });

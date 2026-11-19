@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useT } from "@/hooks/i18n/useT";
 import { chaveDosRascunhos, useRascunhoAssistido } from "@/hooks/inbox/useRascunhoAssistido";
 import { textoDaSugestaoQueFalhou } from "@/lib/agent-engine/agent/sugestao-de-resposta";
+import { catalogEntry } from "@/lib/mcp/tools/catalogo";
 /**
  * O bloco da assistência do agente. Só é montado quando HÁ sugestão (porte do
  * original #3234): sem ela, o `Composer` mostra o botão de ícone "Sugerir
@@ -65,7 +66,7 @@ export function ReplyReviewPanel({
       toast.success(
         action === "approve"
           ? t("Resposta aprovada. Acompanhe o envio aqui.")
-          : t("Sugestão rejeitada. O feedback será usado na próxima sugestão."),
+          : t("Sugestão rejeitada. O comentário será usado na próxima sugestão."),
       );
       await qc.invalidateQueries({ queryKey: key });
     } catch (e) {
@@ -130,7 +131,8 @@ export function ReplyReviewPanel({
           <p>{t("Abra a ação correspondente no CRM ou na agenda para confirmar.")}</p>
           <ul>
             {draft.proposals.map((p, i) => (
-              <li key={i}>{p.tool}</li>
+              // Nome da tela, não o da máquina (item 214): "Agendar um retorno…", não "crm_schedule_followup".
+              <li key={i}>{catalogEntry(p.tool) ? t(catalogEntry(p.tool)!.rotulo) : p.tool}</li>
             ))}
           </ul>
         </details>
@@ -138,8 +140,8 @@ export function ReplyReviewPanel({
       {draft.status === "pending" && (
         <>
           <Input
-            aria-label={t("Feedback para a próxima sugestão")}
-            placeholder={t("Feedback para a próxima sugestão")}
+            aria-label={t("O que melhorar na próxima sugestão")}
+            placeholder={t("O que melhorar na próxima sugestão")}
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
             maxLength={1000}

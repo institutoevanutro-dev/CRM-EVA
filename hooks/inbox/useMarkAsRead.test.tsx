@@ -24,12 +24,12 @@ function mudarVisibilidade(v: DocumentVisibilityState) {
   document.dispatchEvent(new Event("visibilitychange"));
 }
 
-function montar() {
+function montar(responsavel: string | null = null) {
   const qc = new QueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  return renderHook(() => useMarkAsRead("conv-1", 2), { wrapper });
+  return renderHook(() => useMarkAsRead("conv-1", 2, responsavel), { wrapper });
 }
 
 describe("useMarkAsRead — só com a aba à vista", () => {
@@ -77,5 +77,17 @@ describe("useMarkAsRead — só com a aba à vista", () => {
     montar();
     await act(async () => vi.advanceTimersByTime(5000));
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it("⭐ conversa de outra pessoa: quem só abre para conferir não marca", async () => {
+    montar("u-2");
+    await act(async () => vi.advanceTimersByTime(5000));
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("conversa minha: marca", async () => {
+    montar("u-1");
+    await act(async () => vi.advanceTimersByTime(1600));
+    expect(post).toHaveBeenCalledTimes(1);
   });
 });

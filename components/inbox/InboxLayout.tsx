@@ -9,8 +9,6 @@ import { estadoDaJanela, formatarDecorrido } from "@/lib/channels/janela";
 import { canalRespondePeloCrm, capabilitiesOf } from "@/lib/channels/capabilities";
 import type { ChannelProvider } from "@/lib/channels/types";
 import { JanelaFechadaAviso } from "@/components/inbox/JanelaFechadaAviso";
-import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
-import { useCloseConversation } from "@/hooks/inbox/useCloseConversation";
 import { useMarkAsRead } from "@/hooks/inbox/useMarkAsRead";
 import { gravarFiltrosLembrados, lerFiltrosLembrados } from "@/lib/inbox/filtros-lembrados";
 import {
@@ -31,7 +29,6 @@ import { RetentionNotice } from "./RetentionNotice";
 import { CRMSidePanel } from "./CRMSidePanel";
 import type { Message as ConversationMensagem } from "@/lib/types/messaging";
 import { InboxKeyboardShortcuts } from "./InboxKeyboardShortcuts";
-import { ConfirmarNaTela } from "./ConfirmarNaTela";
 import { ComentariosPainel } from "./comentarios/ComentariosPainel";
 
 import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
@@ -357,7 +354,6 @@ export function InboxLayout({
   }, [tab, setFilterValue]);
 
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
-  const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
   /** A ficha do contato como painel deslizante — só existe abaixo do `xl`. */
   const [fichaAberta, setFichaAberta] = useState(false);
@@ -545,8 +541,6 @@ export function InboxLayout({
     if (selectedId) soltarFocoEscondido(listaRef.current);
   }, [selectedId]);
 
-  const claim = useClaimConversation();
-  const close = useCloseConversation();
   // Encaminhar: o gesto abre a escolha do destino, e a execução é um POST que
   // reusa o caminho de envio do Inbox. Quem não responde não encaminha.
   const encaminhar = useEncaminharMensagem();
@@ -591,6 +585,7 @@ export function InboxLayout({
   useMarkAsRead(
     selectedConversation?.id ?? null,
     selectedConversation?.unread_count_for_assignee ?? 0,
+    selectedConversation?.assigned_to_user_id,
   );
 
   // Aceita `null`: é o VOLTAR do celular, que limpa a seleção e devolve a lista.
@@ -602,12 +597,8 @@ export function InboxLayout({
   // desfazem esse passo (`navegarNoInbox`), em vez de o gesto sair do Inbox. No
   // computador a seleção continua sendo estado da tela, como sempre foi aqui: o
   // voltar do navegador não passeia pelas conversas clicadas.
-  // Quem abriu pelo j/k continua navegando pela lista: o foco não vai ao campo
-  // (o próximo j cairia lá como letra). Os outros caminhos abrem com o cursor no
-  // campo, no computador (item 29).
-  const [abertaPeloTeclado, setAbertaPeloTeclado] = useState(false);
-  const handleSelect = useCallback((id: string | null, origem?: "teclado") => {
-    setAbertaPeloTeclado(origem === "teclado");
+  // Abrir uma conversa põe o cursor no campo, no computador (item 29).
+  const handleSelect = useCallback((id: string | null) => {
     // Sem isto, escolher "responder" numa conversa e trocar para outra levaria
     // a citação junto — e a resposta sairia citando mensagem de outro cliente.
     setRespondendo(null);
@@ -632,24 +623,7 @@ export function InboxLayout({
     }
     setSelectedId(id);
   }, [selectedId, searchParams, pathname]);
-  const handleVisibleChange = useCallback((ids: string[]) => setVisibleIds(ids), []);
   const handleFocusReply = useCallback(() => composerRef.current?.focus(), []);
-  const handleClaim = useCallback(() => {
-    if (!selectedConversation) return;
-    claim.mutate({
-      conversation_id: selectedConversation.id,
-      expected_assignee: selectedConversation.assigned_to_user_id,
-    });
-  }, [claim, selectedConversation]);
-  // O atalho `e` pede; a confirmação na tela decide (I6), com o foco no
-  // "Cancelar" (item 29): um espaço ou Enter a mais não fecha nada. O alvo é a conversa
-  // do MOMENTO do atalho — com o diálogo aberto a seleção não muda (os atalhos
-  // ficam desligados), mas a foto não depende disso.
-  const [fechandoPeloAtalho, setFechandoPeloAtalho] = useState<string | null>(null);
-  const handleClose = () => {
-    if (!selectedConversation || selectedConversation.status === "closed") return;
-    setFechandoPeloAtalho(selectedConversation.id);
-  };
 
   // A janela vence SOZINHA com a aba aberta. Sem este relógio, quem deixa o
   // inbox aberto a tarde inteira seguiria com o composer liberado numa conversa
@@ -1025,7 +999,6 @@ export function InboxLayout({
             filters={filters}
             selectedId={selectedId}
             onSelect={handleSelect}
-            onVisibleChange={handleVisibleChange}
             onLimparFiltros={limparFiltrosAuxiliares}
             selecionados={selecao.selecionados}
             onAlternarSelecao={podeAgirEmLote ? selecao.alternar : undefined}
@@ -1174,7 +1147,7 @@ export function InboxLayout({
                 ref={composerRef}
                 conversationId={selectedConversation.id}
                 rascunhos={rascunhos}
-                focarAoAbrir={!abertaPeloTeclado}
+                focarAoAbrir
                 agendamentoLigado={
                   Boolean(selectedConversation.contacts?.id && selectedConversation.channel_session_id) && !supportReadonly
                 }
@@ -1307,24 +1280,8 @@ export function InboxLayout({
       )}
 
       <InboxKeyboardShortcuts
-        visibleIds={visibleIds}
-        selectedId={selectedId}
-        onSelect={(id) => handleSelect(id, "teclado")}
         onFocusReply={handleFocusReply}
-        onClaim={supportReadonly || !podeEncaminhar ? () => {} : handleClaim}
-        onClose={supportReadonly || !podeEncaminhar ? () => {} : handleClose}
         onToggleHelp={() => setHelpOpen((v) => !v)}
-        enabled={fechandoPeloAtalho === null}
-      />
-      <ConfirmarNaTela
-        aberto={fechandoPeloAtalho !== null}
-        onAbertoChange={(aberto) => !aberto && setFechandoPeloAtalho(null)}
-        titulo={t("Fechar esta conversa?")}
-        descricao={t("O atendimento termina. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.")}
-        acao={t("Fechar conversa")}
-        onConfirmar={() => {
-          if (fechandoPeloAtalho) close.mutate({ conversation_id: fechandoPeloAtalho });
-        }}
       />
       <ShortcutsHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <EncaminharDialog

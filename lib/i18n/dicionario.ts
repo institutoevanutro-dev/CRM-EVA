@@ -592,8 +592,8 @@ export const DICIONARIO: Traducoes = {
   "Novos canais começam em modo de teste, sem respostas automáticas até você autorizar números ou liberar o público.": { es: "Los canales nuevos empiezan en modo de prueba, sin respuestas automáticas hasta que autorices números o habilites al público." },
   "Assistência do agente": { es: "Asistencia del agente" },
   "Resposta aprovada. Acompanhe o envio aqui.": { es: "Respuesta aprobada. Sigue el envío aquí." },
-  "Sugestão rejeitada. O feedback será usado na próxima sugestão.": {
-    es: "Sugerencia rechazada. Los comentarios se usarán en la próxima sugerencia.",
+  "Sugestão rejeitada. O comentário será usado na próxima sugestão.": {
+    es: "Sugerencia rechazada. El comentario se usará en la próxima sugerencia.",
   },
   "Sua edição foi preservada. Confira se a conversa mudou antes de aprovar novamente.": {
     es: "Tu edición se conservó. Comprueba si la conversación cambió antes de aprobar de nuevo.",
@@ -629,7 +629,7 @@ export const DICIONARIO: Traducoes = {
   "Abra a ação correspondente no CRM ou na agenda para confirmar.": {
     es: "Abre la acción correspondiente en el CRM o en el calendario para confirmar.",
   },
-  "Feedback para a próxima sugestão": { es: "Comentarios para la próxima sugerencia" },
+  "O que melhorar na próxima sugestão": { es: "Qué mejorar en la próxima sugerencia" },
   "Aprovar e enviar": { es: "Aprobar y enviar" },
   Rejeitar: { es: "Rechazar" },
   "Confira a configuração do agente e tente gerar novamente.": {
@@ -750,7 +750,7 @@ export const DICIONARIO: Traducoes = {
   "Remover esta conta": { es: "Quitar esta cuenta" },
   "Remover esta conta do Google? As agendas dela deixam de ocupar seus horários.": { es: "¿Quitar esta cuenta de Google? Sus calendarios dejarán de ocupar sus horarios." },
   "Ocupação do Google ainda não verificada neste período.": { es: "La ocupación de Google aún no se ha verificado en este período." },
-  "Marcar compromisso": {es:"Programar cita"},
+  "Marcar consulta": { es: "Agendar consulta" },
   "Recuperação encerrada. Revise o próximo passo.": {es:"Recuperación finalizada. Revise el siguiente paso."},
   "Acompanhamento encerrado sem novo envio": {es:"Seguimiento finalizado sin nuevo envío"},
   "Só começa após falta confirmada pela equipe. Remarcação, cancelamento ou nova resposta interrompem a recuperação. Outro acompanhamento ativo impede o início.": {es:"Solo comienza tras una ausencia confirmada por el equipo. Reprogramar, cancelar o una nueva respuesta interrumpen la recuperación. Otro seguimiento activo impide el inicio."},
@@ -920,8 +920,8 @@ export const DICIONARIO: Traducoes = {
   "Confirmar desfecho": { es: "Confirmar resultado" },
   "Demanda vigente neste canal": { es: "Solicitud vigente en este canal" },
   "Memória do contato": { es: "Memoria del contacto" },
-  "Fatos duráveis registrados nas notas. Pendências pertencem à demanda vigente.": { es: "Hechos duraderos registrados en las notas. Las tareas pendientes pertenecen a la solicitud vigente." },
-  "Nenhum fato durável registrado.": { es: "No hay hechos duraderos registrados." },
+  "O que vale guardar sobre a pessoa, tirado das notas.": { es: "Lo que vale la pena guardar sobre la persona, sacado de las notas." },
+  "Nada guardado ainda.": { es: "Nada guardado todavía." },
   "Histórico encerrado — sem tarefas pendentes": { es: "Historial cerrado — sin tareas pendientes" },
 
   "Interface": { es: "Interfaz" },
@@ -1107,7 +1107,10 @@ export const DICIONARIO: Traducoes = {
 
   // ─── Inbox: cabeçalho e ações da conversa ───
   Assumir: { es: "Asumir" },
-  Liberar: { es: "Liberar" },
+  "Deixar com o automático": { es: "Dejar al automático" },
+  "Você deixa de ser o responsável e o automático volta a responder.": {
+    es: "Dejas de ser el responsable y el automático vuelve a responder.",
+  },
   Transferir: { es: "Transferir" },
   Lembrar: { es: "Recordar" },
   Fechar: { es: "Cerrar" },
@@ -1119,7 +1122,6 @@ export const DICIONARIO: Traducoes = {
   "conversas selecionadas": { es: "conversaciones seleccionadas" },
   "Marcar como lida": { es: "Marcar como leída" },
   "Mais ações": { es: "Más acciones" },
-  "Pausar IA": { es: "Pausar IA" },
   "Transferir para…": { es: "Transferir a…" },
   "Transferir a conversa selecionada": { es: "Transferir la conversación seleccionada" },
   "Cada conversa é transferida pelo mesmo caminho de sempre, com evento e auditoria próprios.": {
@@ -1142,8 +1144,8 @@ export const DICIONARIO: Traducoes = {
   "Os atendimentos terminam. Se o paciente escrever de novo, a conversa volta para a fila, e o automático pode responder.": {
     es: "Las atenciones terminan. Si el paciente vuelve a escribir, la conversación vuelve a la cola y el automático puede responder.",
   },
-  "As letras valem com o cursor na lista de conversas.": {
-    es: "Las letras funcionan con el cursor en la lista de conversaciones.",
+  "O r vale com o cursor na lista de conversas.": {
+    es: "La r funciona con el cursor en la lista de conversaciones.",
   },
   "Selecionar todas as conversas visíveis": { es: "Seleccionar todas las conversaciones visibles" },
   Máximo: { es: "Máximo" },
@@ -1223,7 +1225,6 @@ export const DICIONARIO: Traducoes = {
   "Sem etiquetas.": { es: "Sin etiquetas." },
   "Sem leads.": { es: "Sin leads." },
   "Nenhum negócio aberto.": { es: "Ningún negocio abierto." },
-  "Sem pedidos.": { es: "Sin pedidos." },
   "Sem atividade.": { es: "Sin actividad." },
   "Nova etiqueta…": { es: "Nueva etiqueta…" },
   "Sem próximo passo definido": { es: "Sin próximo paso definido" },
@@ -5929,7 +5930,6 @@ export const DICIONARIO: Traducoes = {
   "Nenhuma demanda aberta.": { es: "No hay demandas abiertas." },
   "Demandas abertas": { es: "Demandas abiertas" },
   "Leads recentes": { es: "Leads recientes" },
-  "Pedidos recentes": { es: "Pedidos recientes" },
   "O que acontece a seguir?": { es: "¿Qué pasa a continuación?" },
   "Próximo passo desta demanda": { es: "Próximo paso de esta demanda" },
   "Não consegui salvar o próximo passo. Tente de novo.": {
@@ -6013,8 +6013,6 @@ export const DICIONARIO: Traducoes = {
   "Transferindo…": { es: "Transfiriendo…" },
   Gestor: { es: "Gestor" },
   "Atalhos de teclado": { es: "Atajos de teclado" },
-  "Próxima conversa": { es: "Siguiente conversación" },
-  "Conversa anterior": { es: "Conversación anterior" },
   "Focar resposta": { es: "Enfocar respuesta" },
   "Enviar a mensagem": { es: "Enviar el mensaje" },
   "Quebrar linha sem enviar": { es: "Salto de línea sin enviar" },
@@ -6075,7 +6073,8 @@ export const DICIONARIO: Traducoes = {
   "Essa pessoa ainda não escreveu para este perfil. A Meta só deixa responder depois que ela mandar uma mensagem.": {
     es: "Esta persona aún no escribió a este perfil. Meta solo permite responder después de que ella envíe un mensaje.",
   },
-  "Lembrete ativo": { es: "Recordatorio activo" },
+  "Lembrete às": { es: "Recordatorio a las" },
+  "Vou lembrar às": { es: "Te recordaré a las" },
   "Cancelar lembrete": { es: "Cancelar recordatorio" },
   "Em 1 hora": { es: "En 1 hora" },
   "Em 3 horas": { es: "En 3 horas" },
@@ -12128,18 +12127,18 @@ export const DICIONARIO: Traducoes = {
   "Quem a equipe tirar do Inbox aparece aqui. As mensagens dessas pessoas continuam guardadas, e um gerente pode trazê-las de volta.": {
     es: "Quien el equipo saque del Inbox aparece aquí. Los mensajes de esas personas siguen guardados, y un gerente puede traerlas de vuelta.",
   },
-  "As conversas deste contato saem do Inbox, das contagens, da Fila, do radar e do Início. A IA não responde, follow-ups e automações não mandam mensagem e ele não ganha card novo no funil.": {
-    es: "Las conversaciones de este contacto salen del Inbox, de los conteos, de la Fila, del radar y del Inicio. La IA no responde, los seguimientos y automatizaciones no envían mensajes y no gana una tarjeta nueva en el embudo.",
+  "As conversas desta pessoa saem da Fila, das contagens e do Início. O automático não responde, nenhuma mensagem automática sai e ela não vira negócio novo no funil.": {
+    es: "Las conversaciones de esta persona salen de la Fila, de los conteos y del Inicio. El automático no responde, no sale ningún mensaje automático y no se convierte en un negocio nuevo en el embudo.",
   },
-  "Nada é apagado: as mensagens continuam guardadas. Um gerente pode trazê-lo de volta em Inbox › Mais › Ocultos.": {
-    es: "No se borra nada: los mensajes siguen guardados. Un gerente puede traerlo de vuelta en Inbox › Más › Ocultos.",
+  "Nada é apagado: as mensagens continuam guardadas. Um gestor pode trazê-la de volta em Mais › Ocultos.": {
+    es: "No se borra nada: los mensajes siguen guardados. Un gestor puede traerla de vuelta en Más › Ocultos.",
   },
   "Ocultar do Inbox o contato da conversa selecionada?": {
     es: "¿Ocultar del Inbox el contacto de la conversación seleccionada?",
   },
   "Ocultar do Inbox os contatos de": { es: "¿Ocultar del Inbox los contactos de" },
-  "As conversas desses contatos saem do Inbox, das contagens, da Fila, do radar e do Início. A IA não responde, follow-ups e automações não mandam mensagem, e as mensagens continuam guardadas. Um gerente pode trazê-los de volta em Inbox › Mais › Ocultos.": {
-    es: "Las conversaciones de esos contactos salen del Inbox, de los conteos, de la Fila, del radar y del Inicio. La IA no responde, los seguimientos y automatizaciones no envían mensajes, y los mensajes siguen guardados. Un gerente puede traerlos de vuelta en Inbox › Más › Ocultos.",
+  "As conversas dessas pessoas saem da Fila, das contagens e do Início. O automático não responde e nenhuma mensagem automática sai. Nada é apagado: as mensagens continuam guardadas, e um gestor pode trazê-las de volta em Mais › Ocultos.": {
+    es: "Las conversaciones de esas personas salen de la Fila, de los conteos y del Inicio. El automático no responde y no sale ningún mensaje automático. No se borra nada: los mensajes siguen guardados, y un gestor puede traerlas de vuelta en Más › Ocultos.",
   },
   "Conversa inválida.": { es: "Conversación inválida." },
   "Não foi possível mudar o contato no Inbox.": { es: "No fue posible cambiar el contacto en el Inbox." },

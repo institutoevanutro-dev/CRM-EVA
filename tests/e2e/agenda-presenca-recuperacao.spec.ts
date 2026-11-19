@@ -303,10 +303,10 @@ test("Inbox marca cliente/conversa; detalhe antigo confirma presença com evidê
   await inbound(f, p, "Preciso marcar uma consulta");
   await login(page, f.email);
   await page.goto(`/app/inbox/${p.conversation}`);
-  // "Marcar compromisso" mora no painel do contato, que nasce recolhido
+  // "Marcar consulta" mora no painel do contato, que nasce recolhido
   // (18/11/2026): abre pelo trilho, como quem usa.
   await abrirPainelDoContato(page);
-  await page.getByRole("link", { name: "Marcar compromisso", exact: true }).click();
+  await page.getByRole("link", { name: "Marcar consulta", exact: true }).click();
   const panel = page.getByTestId("painel-de-marcacao");
   await expect(panel).toBeVisible();
   await expect(page.getByTestId("paciente-escolhido")).toHaveAttribute("data-contact-id", p.contact);
@@ -514,10 +514,10 @@ test("ir para a Agenda pelo menu apaga o cliente da conversa — \"Novo agendame
   await inbound(f, p, "Preciso marcar uma consulta");
   await login(page, f.email);
   await page.goto(`/app/inbox/${p.conversation}`);
-  // "Marcar compromisso" mora no painel do contato, que nasce recolhido
+  // "Marcar consulta" mora no painel do contato, que nasce recolhido
   // (18/11/2026): abre pelo trilho, como quem usa.
   await abrirPainelDoContato(page);
-  await page.getByRole("link", { name: "Marcar compromisso", exact: true }).click();
+  await page.getByRole("link", { name: "Marcar consulta", exact: true }).click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible();
   await expect(page.getByTestId("paciente-escolhido")).toHaveAttribute("data-contact-id", p.contact);
   await page.keyboard.press("Escape");

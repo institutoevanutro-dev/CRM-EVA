@@ -15,11 +15,25 @@ const DEBOUNCE_MS = 1500;
  * fundo comia o sinal de mensagem nova da recepção. Com a aba escondida o
  * relógio espera ela voltar. Quem não pode responder (visualizador) não marca:
  * a rota recusa, e a tentativa só gerava erro.
+ *
+ * SÓ O RESPONSÁVEL MARCA AO ABRIR (decisão do André em 18/11). O gestor que abre
+ * para conferir não apaga o sinal da recepção. Sem responsável, quem abrir
+ * marca. "Marcar como lida" em lote continua valendo para qualquer um: é gesto
+ * explícito, não efeito de abrir.
  */
-export function useMarkAsRead(conversationId: string | null, unread: number) {
+export function deveMarcarAoAbrir(responsavelId: string | null | undefined, eu: string): boolean {
+  return !responsavelId || responsavelId === eu;
+}
+
+export function useMarkAsRead(
+  conversationId: string | null,
+  unread: number,
+  responsavelId: string | null | undefined,
+) {
   const { user } = useAuth();
   const podeMarcar = usePermission("inbox.reply");
-  const readonly = user.support?.access_mode === "support_readonly" || !podeMarcar;
+  const readonly =
+    user.support?.access_mode === "support_readonly" || !podeMarcar || !deveMarcarAoAbrir(responsavelId, user.id);
   const qc = useQueryClient();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
