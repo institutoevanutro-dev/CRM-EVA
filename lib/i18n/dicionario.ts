@@ -7547,9 +7547,11 @@ export const DICIONARIO: Traducoes = {
   "Enviar convites": { es: "Enviar invitaciones" },
   "Enviados": { es: "Enviados" },
   "Email enviado.": { es: "Correo enviado." },
-  "Resend não configurado — link copiável abaixo (DEV).": {
-    es: "Resend no configurado — enlace copiable abajo (DEV).",
+  "O e-mail não saiu. Copie o link e envie você.": {
+    es: "El correo no salió. Copia el enlace y envíalo tú.",
   },
+  "Confira estes e-mails:": { es: "Revisa estos correos:" },
+  "E-mails": { es: "Correos" },
   "Falhas": { es: "Fallas" },
   "Resultados aparecerão aqui após o envio.": { es: "Los resultados aparecerán aquí después del envío." },
   "Erro ao carregar membros.": { es: "Error al cargar miembros." },
