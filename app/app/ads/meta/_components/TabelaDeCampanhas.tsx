@@ -48,14 +48,31 @@ const ESTADO_LEGIVEL: Record<string, string> = {
   PENDING_BILLING_INFO: "Aguardando dados de cobrança",
 };
 
-/** Verde só para quem está realmente entregando; âmbar para o que pede atenção. */
+/** Verde só para quem está realmente entregando; âmbar para o que pede atenção. Só tokens. */
 const TOM_DO_ESTADO: Record<string, string> = {
-  ACTIVE: "text-emerald-600 dark:text-emerald-400",
-  WITH_ISSUES: "text-amber-600 dark:text-amber-400",
-  DISAPPROVED: "text-red-600 dark:text-red-400",
-  PENDING_BILLING_INFO: "text-amber-600 dark:text-amber-400",
-  PENDING_REVIEW: "text-amber-600 dark:text-amber-400",
+  ACTIVE: "text-success-fg",
+  WITH_ISSUES: "text-warning-fg",
+  DISAPPROVED: "text-error-fg",
+  PENDING_BILLING_INFO: "text-warning-fg",
+  PENDING_REVIEW: "text-warning-fg",
 };
+
+/**
+ * Coluna com nome do dia a dia e a sigla do Gerenciador ao lado, com ⓘ. O nome
+ * vem primeiro porque o `title` da sigla não abre no toque (iPhone): a
+ * explicação é bônus, o nome já tem de bastar.
+ */
+function ColunaComSigla({ nome, sigla, explicacao }: { nome: string; sigla: string; explicacao: string }) {
+  const t = useT();
+  return (
+    <TableHead className="text-right">
+      {t(nome)}
+      <abbr title={t(explicacao)} className="ml-1 font-normal text-muted-foreground no-underline">
+        ({t(sigla)} <span aria-hidden>ⓘ</span>)
+      </abbr>
+    </TableHead>
+  );
+}
 
 const TRACO = "—";
 
@@ -148,31 +165,45 @@ export function TabelaDeCampanhas({ linhas, moeda }: Props) {
         <TableHeader>
           <TableRow>
             <TableHead className="sticky left-0 z-10 bg-bg">{t("Campanha")}</TableHead>
-            <TableHead>{t("Status")}</TableHead>
+            <TableHead>{t("Situação")}</TableHead>
             <TableHead>{t("Veiculação")}</TableHead>
             <TableHead className="text-right">{t("Resultado")}</TableHead>
             <TableHead className="text-right">{t("Custo por Resultado")}</TableHead>
             <TableHead className="text-right">{t("Valor Gasto")}</TableHead>
             <TableHead className="text-right">{t("Impressões")}</TableHead>
             <TableHead className="text-right">{t("Alcance")}</TableHead>
-            <TableHead className="text-right">{t("CPM")}</TableHead>
-            <TableHead className="text-right">{t("CTR")}</TableHead>
+            <ColunaComSigla
+              nome="Custo por mil exibições"
+              sigla="CPM"
+              explicacao="Quanto custou cada mil vezes que o anúncio apareceu."
+            />
+            <ColunaComSigla
+              nome="Taxa de cliques"
+              sigla="CTR"
+              explicacao="De cada 100 pessoas que viram o anúncio, quantas clicaram."
+            />
             <TableHead className="text-right">{t("Frequência")}</TableHead>
-            <TableHead className="text-right">{t("CPC")}</TableHead>
+            <ColunaComSigla
+              nome="Custo por clique"
+              sigla="CPC"
+              explicacao="Quanto custou, em média, cada clique."
+            />
             {/*
-              O rótulo diz o numerador de propósito. O Hook Rate de mercado usa
+              A explicação diz o numerador de propósito. O Hook Rate de mercado usa
               reproduções de 3 segundos, e esse campo FOI REMOVIDO da v22.0 —
-              sobrou o total de reproduções, que dá um número maior. Uma coluna
-              "Hook Rate" pelada não bateria com o Gerenciador e não explicaria
-              por quê; com o numerador escrito, bate a conta na hora.
+              sobrou o total de reproduções, que dá um número maior. Com o
+              numerador escrito, bate a conta com o Gerenciador na hora.
             */}
-            <TableHead className="text-right" title={t("Reproduções de vídeo ÷ impressões")}>
-              {t("Hook Rate")}
-              <span className="ml-1 font-normal text-muted-foreground">
-                {t("(reproduções)")}
-              </span>
-            </TableHead>
-            <TableHead className="text-right">{t("ThruPlays")}</TableHead>
+            <ColunaComSigla
+              nome="Começaram o vídeo"
+              sigla="Hook Rate"
+              explicacao="Reproduções de vídeo ÷ impressões"
+            />
+            <ColunaComSigla
+              nome="Viram o vídeo até o fim"
+              sigla="ThruPlays"
+              explicacao="Reproduções até o fim, ou de pelo menos 15 segundos."
+            />
           </TableRow>
         </TableHeader>
         <TableBody>

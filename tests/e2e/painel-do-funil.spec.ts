@@ -244,7 +244,7 @@ test("o gestor lê o funil do período com a régua de cada número", async ({ p
   );
   // Cada número diz a régua.
   await expect(page.locator('[data-numero="leads"]')).toContainText(
-    "Cards criados neste funil no período.",
+    "Negócios criados neste funil no período.",
   );
 
   // O número não se esconde atrás do cartão: medido, não a olho.

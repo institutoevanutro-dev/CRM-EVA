@@ -72,19 +72,33 @@ const STATUS_DA_CONTA: Record<number, string> = {
   101: "encerrada",
 };
 
-function comoData(d: Date): string {
-  return d.toISOString().slice(0, 10);
+/**
+ * Datas como `aaaa-mm-dd` no calendário da CLÍNICA. Em UTC, depois das 21h de
+ * Brasília "ontem" já era hoje, e "últimos 7 dias" entrava com o dia incompleto.
+ */
+function hojeNoFuso(fuso: string): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: fuso });
+}
+
+function somaDias(chave: string, n: number): string {
+  const [a, m, d] = chave.split("-").map(Number) as [number, number, number];
+  return new Date(Date.UTC(a, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
 /** Ontem — nunca hoje. O dia corrente está incompleto e a plataforma ainda o reprocessa. */
-function ontem(): Date {
-  return new Date(Date.now() - 24 * 60 * 60 * 1000);
+function ontem(fuso: string): string {
+  return somaDias(hojeNoFuso(fuso), -1);
 }
 
-function haDias(dias: number): { de: string; ate: string } {
-  const fim = ontem();
-  const inicio = new Date(fim.getTime() - (dias - 1) * 24 * 60 * 60 * 1000);
-  return { de: comoData(inicio), ate: comoData(fim) };
+export function haDias(dias: number, fuso: string): { de: string; ate: string } {
+  const fim = ontem(fuso);
+  return { de: somaDias(fim, -(dias - 1)), ate: fim };
+}
+
+/** `2026-11-10` → `10/11/2026`. */
+export function dataLegivel(chave: string): string {
+  const [a, m, d] = chave.split("-");
+  return a && m && d ? `${d}/${m}/${a}` : chave;
 }
 
 const PERSONALIZADO = "personalizado";
@@ -92,9 +106,11 @@ const PERSONALIZADO = "personalizado";
 interface Props {
   contaPadrao: string | null;
   idioma: Idioma;
+  /** Fuso IANA da clínica (`organizations.timezone`, já validado). */
+  fuso: string;
 }
 
-export function MetaAdsClient({ contaPadrao }: Props) {
+export function MetaAdsClient({ contaPadrao, fuso }: Props) {
   const t = useT();
   // O carimbo "lido em" é uma DATA, e data segue o idioma de quem lê — fixar
   // "pt-BR" deixaria a tela em espanhol com a hora em português.
@@ -102,7 +118,7 @@ export function MetaAdsClient({ contaPadrao }: Props) {
 
   const [conta, setConta] = useState<string | null>(contaPadrao);
   const [preset, setPreset] = useState<string>("7");
-  const [intervalo, setIntervalo] = useState(() => haDias(7));
+  const [intervalo, setIntervalo] = useState(() => haDias(7, fuso));
 
   const contas = useMetaAdAccounts(true);
 
@@ -138,7 +154,7 @@ export function MetaAdsClient({ contaPadrao }: Props) {
 
   function trocarPreset(valor: string) {
     setPreset(valor);
-    if (valor !== PERSONALIZADO) setIntervalo(haDias(Number(valor)));
+    if (valor !== PERSONALIZADO) setIntervalo(haDias(Number(valor), fuso));
   }
 
   function mensagemDeErro(erro: unknown): string {
@@ -215,7 +231,7 @@ export function MetaAdsClient({ contaPadrao }: Props) {
                 className="w-40"
                 value={intervalo.ate}
                 min={intervalo.de}
-                max={comoData(ontem())}
+                max={ontem(fuso)}
                 onChange={(e) => setIntervalo((i) => ({ ...i, ate: e.target.value }))}
               />
             </div>
@@ -277,7 +293,7 @@ export function MetaAdsClient({ contaPadrao }: Props) {
             justamente "número de agora".
           */}
           <p className="text-xs text-muted-foreground">
-            {t("Período")}: {intervalo.de} {t("a")} {intervalo.ate} · {t("lido em")}{" "}
+            {t("Período")}: {dataLegivel(intervalo.de)} {t("a")} {dataLegivel(intervalo.ate)} · {t("lido em")}{" "}
             {new Date(campanhas.data.data.lido_em).toLocaleString(tagDoIdioma, { dateStyle: "short", timeStyle: "short" })}
           </p>
         </>

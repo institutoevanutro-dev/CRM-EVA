@@ -29,7 +29,8 @@ import {
 } from "@/components/ui/table";
 import { useT } from "@/hooks/i18n/useT";
 import { useChannelMetrics } from "@/hooks/metrics/useChannelMetrics";
-import { formatarDuracao, rotuloCanal, totalDeConversas } from "@/lib/metrics/canais";
+import { formatarDuracao } from "@/lib/metrics/atrito";
+import { rotuloCanal, totalDeConversas } from "@/lib/metrics/canais";
 
 interface Props {
   /** O filtro de atendente da página (`null` = todos); a RLS escopa quem olha. */

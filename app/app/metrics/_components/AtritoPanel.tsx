@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState } from "react";
 
+import { ErroDeLeitura } from "@/components/empty/ErroDeLeitura";
 import { useT } from "@/hooks/i18n/useT";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -131,15 +132,15 @@ function ReguaAbandono({ horas, padrao, podeEditar }: { horas: number; padrao: n
 
 export function AtritoPanel({ podeEditarRegua }: { podeEditarRegua: boolean }) {
   const t = useT();
-  const { data, isLoading, isError } = useAtritoMetrics();
+  const { data, isLoading, isError, refetch } = useAtritoMetrics();
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">{t("Carregando o índice de atrito…")}</p>;
+    return <p className="text-sm text-muted-foreground">{t("Carregando o custo do atendimento…")}</p>;
   }
   // Falha aberta na informação: dizer que não carregou é melhor que sumir com a
   // seção — seção ausente lê-se como "não há atrito" (doutrina cap. 4.5).
   if (isError || !data) {
-    return <p className="text-sm text-destructive">{t("Erro ao carregar o índice de atrito.")}</p>;
+    return <ErroDeLeitura texto={t("Erro ao carregar o custo do atendimento.")} onRetry={() => refetch()} />;
   }
 
   const { escopo, pares, regua } = data.data;
@@ -150,16 +151,16 @@ export function AtritoPanel({ podeEditarRegua }: { podeEditarRegua: boolean }) {
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h2 className="text-base font-medium">{t("Atrito")}</h2>
+        <h2 className="text-base font-medium">{t("Custo do atendimento")}</h2>
         <p className="text-sm text-muted-foreground">
           {t("O que o resultado custou para os dois lados.")}{" "}
           {escopo.demandas === 0 ? (
-            <>{t("Nenhuma demanda encerrada no período — os números abaixo ainda não têm base.")}</>
+            <>{t("Nenhum atendimento encerrado no período — os números abaixo ainda não têm base.")}</>
           ) : (
             <>
               {t("Base:")} {escopo.demandas}{" "}
-              {escopo.demandas === 1 ? t("demanda encerrada") : t("demandas encerradas")}{" "}
-              {t("nos últimos 30 dias, e")} {escopo.demandas_abertas} {t("ainda abertas.")}
+              {escopo.demandas === 1 ? t("atendimento encerrado") : t("atendimentos encerrados")}{" "}
+              {t("nos últimos 30 dias, e")} {escopo.demandas_abertas} {t("ainda abertos.")}
             </>
           )}
         </p>
