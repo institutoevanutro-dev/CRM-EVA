@@ -212,6 +212,10 @@ export type ActivityType =
    * e "isso entrou sozinho" é exatamente o que ele precisa saber para não
    * achar que alguém digitou.
    *
+   * Também o cadastro de ficha vazia (`settings.crm.cadastro_de_ficha_vazia`:
+   * nome completo, CPF mascarado, e-mail, nascimento, endereço) e a extração
+   * silenciosa, pelo `registrarDadoAplicadoNaTimeline`.
+   *
    * Emitida por `registrarTelefoneAplicadoNaTimeline` — junto e não dentro do
    * UPDATE do telefone, porque a linha é rastro: falhar nela não pode desfazer
    * a escrita que ela descreve.

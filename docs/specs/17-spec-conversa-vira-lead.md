@@ -107,6 +107,11 @@ hipotético: `contactPatchSchema` aceita e-mail livre, o handler não lê o valo
 sobrescrever, e o audit grava só os NOMES dos campos alterados — um e-mail dito de brincadeira
 substituiria o correto e **o valor antigo não existiria em lugar nenhum**.
 
+> **Exceções opcionais, desligadas por padrão** (Configurações › Distribuição de atendimento): o
+> telefone de uma ficha sem número (`settings.crm.telefone_de_ficha_vazia`, #2593) e o nome
+> completo, CPF, e-mail, nascimento e endereço de campo **vazio** (`settings.crm.cadastro_de_ficha_vazia`)
+> são gravados na hora, com auditoria e linha do tempo. Valor já preenchido nunca é trocado: segue a fila.
+
 Note a assimetria que ficaria sem esta decisão: o `pushName` do WhatsApp é CONGELADO pelo
 `coalesce` do upsert, e o e-mail dito ao robô seria sobrescrevível à vontade.
 

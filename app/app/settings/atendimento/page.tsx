@@ -32,11 +32,12 @@ import { createClient } from "@/lib/supabase/server";
 import { loadChannelRoutingSettings } from "@/lib/routing/channel-policies";
 import { configAssinatura } from "@/lib/messaging/assinatura";
 import { podeAdministrarEmpresa } from "@/lib/auth/pode-administrar-empresa";
-import { extracaoSilenciosaLigada, telefoneDeFichaVaziaLigado } from "@/lib/schemas/settings";
+import { cadastroDeFichaVaziaLigado, extracaoSilenciosaLigada, telefoneDeFichaVaziaLigado } from "@/lib/schemas/settings";
 import { AssinaturaForm } from "./_assinatura-form";
 import { ChannelRoutingForm } from "./_channels-form";
 import { AtendimentoForm } from "./_form";
 import { PausaDaIaForm } from "./_pausa-form";
+import { CadastroDeFichaVazia } from "./_cadastroDeFichaVazia";
 import { ExtracaoSilenciosa } from "./_extracaoSilenciosa";
 import { TelefoneDeFichaVazia } from "./_telefoneDeFichaVazia";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -73,6 +74,7 @@ export default async function AtendimentoSettingsPage() {
   // (`telefoneDeFichaVaziaLigado`): a tela não pode mostrar ligado o que o
   // `proporDadoDoContato` lê como desligado.
   const telefoneDeFichaVazia = telefoneDeFichaVaziaLigado({ crm: settings.crm });
+  const cadastroDeFichaVazia = cadastroDeFichaVaziaLigado({ crm: settings.crm });
   // 0407: mesma régua que a extração aplica no worker.
   const extracaoSilenciosa = extracaoSilenciosaLigada({ crm: settings.crm });
 
@@ -109,6 +111,11 @@ export default async function AtendimentoSettingsPage() {
           <AssinaturaForm initial={{ humanos: assinatura.humanos, ia: assinatura.ia, nome_ia: assinatura.nomeIa }} />
           <TelefoneDeFichaVazia
             ligada={telefoneDeFichaVazia}
+            idioma={idioma}
+            podeMudar={podeAdministrarEmpresa(user, activeOrg)}
+          />
+          <CadastroDeFichaVazia
+            ligada={cadastroDeFichaVazia}
             idioma={idioma}
             podeMudar={podeAdministrarEmpresa(user, activeOrg)}
           />
