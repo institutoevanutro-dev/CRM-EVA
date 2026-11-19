@@ -8,6 +8,56 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.25.0] — 2026-11-19
+
+### Alterado
+
+- **Conversas mais seguras de usar e mais fáceis de ler** - Os atalhos de uma letra que agiam sozinhos (a, e, j, k) saíram; ao abrir uma conversa o cursor já está no campo.
+  - Abrir uma conversa de outra pessoa só para conferir não a marca como lida; sem responsável, quem abrir marca. Com a aba escondida, nada é marcado.
+  - Painel do contato: "Marcar consulta" é o botão do topo e "Pedidos recentes" saiu.
+  - "Lembrar" diz a hora e confirma; "Liberar" virou "Deixar com o automático".
+  - A sugestão da IA mostra as ações em português e pede "O que melhorar".
+  - No celular, botões com 44 px e "Sugerir resposta" dentro do "+"; na Fila o tempo aparece uma vez só.
+
+- **Tela do agente de IA mais clara** A tela do agente mostra o nome, a situação e "← Agentes" acima das abas. A Configuração virou uma
+  coluna só, em sanfonas: na edição, o que se mexe pouco começa fechado. O selo de risco das ações
+  fica discreto e só ganha cor forte quando a ação está ligada. O custo aparece em US$, o comparar
+  do Histórico usa os nomes da tela (e passa a mostrar materiais, funis e horário), e saíram termos
+  em inglês como dry-run, tokens, steps e revert. Botões pequenos ganharam 44 px no toque.
+
+- **Menu e busca — atalhos do dia no menu recolhido e busca de contatos e conversas** O menu recolhido mostra direto Início, Agenda, Conversas, Contatos e Central de avisos. "Inbox"
+  passa a se chamar "Conversas" e "Alertas", "Central de avisos", como nas telas. A busca (⌘K) acha
+  também contatos e conversas pelo nome ou telefone, respeitando organização e papel; as setas rolam
+  a lista, a linha escolhida fica legível e escolher fecha a gaveta do celular. Campanhas só aparece
+  para gerente. A página de Configurações não mostra mais Nuvemshop nem Plano e cobrança. Nova
+  variável opcional `ESCONDER_ATUALIZAR_AGORA=true` esconde o botão "Atualizar agora" (vazia, nada muda).
+
+### Corrigido
+
+- **Produtos da Precificação travados e Respostas rápidas melhores no celular** Em Produtos, item que vem da Precificação não deixa mais mudar código, nome, categoria, preço, custo nem desativar: altere na Precificação (antes dizia "salvo" e a sincronização desfazia). A lista mostra "Da Precificação" no lugar do código técnico e as ações ficam num menu "⋯". Editar um produto desativado não o reativa mais. Em Respostas rápidas, a alça de arrastar e o "X" da imagem ficaram maiores no toque, e o formulário fala "Textos prontos", com exemplo "paciente".
+
+- **Início, Tarefas e Radar mais claros** No Início, recepção e gerência veem a agenda do dia da clínica inteira (a profissional segue vendo
+  só a dela), o compromisso abre direto, as seções recolhem e lembram o que ficou aberto, os plurais
+  seguem o número e o quadro Sistema diz qual serviço caiu. Em Tarefas, apagar desarma sozinho, erro
+  aparece na linha, concluídas vêm das mais recentes, reabrir uma tarefa vencida avisa do efeito no
+  bônus e o calendário funciona com teclado e para quem só lê. O Radar diz "mostrando N de total",
+  busca mais e cada demanda sem próximo passo abre o contato.
+
+- **Central de avisos, sino e notificações mais certos** A Central mostra só os avisos: o "Lembrete de caso parado" foi para Configurações › Distribuição
+  de atendimento. A lista diz "Mostrando 50 de 144" com "Ver mais", e "Marcar todos resolvidos"
+  confirma com a contagem. O sino conta só os avisos de quem está logado, como o Início. Em
+  Notificações, o aviso do sistema só aparece ligado com a permissão do navegador, a tela não dá mais
+  erro ao abrir, diz que as escolhas valem neste aparelho, tirou a coluna de e-mail e fala português;
+  o passo a passo do servidor fica recolhido para quem administra. Quem ganha, perde ou assume um
+  lead não é mais avisado da própria ação; com a aba em foco sai só o aviso na tela; conversa do
+  atendimento automático não avisa a equipe; e "Abrir conversa" não recarrega o sistema.
+
+- **Avisos seguem o tema escuro e a marca; cores fixas viram tokens** Os avisos (toasts) passam a seguir o tema escuro e as cores da marca, e os de erro não mostram mais
+  "ID: <código>": o código fica recolhido em "Detalhes técnicos". As últimas cores fixas (painel da
+  plataforma, faixas de aviso) passam a usar os tokens de aviso, perigo e sucesso.
+
+- **Abas, interruptores, campos e nomes de papel mais consistentes** No celular, a fila de abas que não cabe começa na primeira aba em vez de cortar o começo. Os interruptores ganharam área de toque de 44 px, sem mudar o desenho. O texto de exemplo dos campos ficou mais legível. O menu mostra o papel com o mesmo nome da Equipe ("Atendente" no lugar de "Colaborador"). O lembrete de caso parado usa a lista do sistema, que o Safari desenha igual.
+
 ## [5.24.0] — 2026-11-19
 
 ### Adicionado
@@ -9546,7 +9596,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.24.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.25.0...HEAD
+[5.25.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.24.0...v5.25.0
 [5.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.23.0...v5.24.0
 [5.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.22.1...v5.23.0
 [5.22.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.22.0...v5.22.1
