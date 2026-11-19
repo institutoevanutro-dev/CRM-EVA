@@ -94,6 +94,7 @@ export function AgendaClient({
   enderecoDeRetorno,
   faltaNoGoogle,
   linkDeConfiguracaoDoGoogle,
+  administra = false,
   tiposIniciais,
   agendamentosIniciais,
   podeMarcar,
@@ -119,6 +120,8 @@ export function AgendaClient({
   faltaNoGoogle: string[];
   /** Preenchido só para quem administra a instalação — ver `page.tsx`. */
   linkDeConfiguracaoDoGoogle?: string;
+  /** Administra a organização ou a instalação: vê o cartão do Google sem credencial. */
+  administra?: boolean;
   /** Tipos ativos, resolvidos no servidor: não há rota que os liste ainda. */
   tiposIniciais: Array<{
     id: string;
@@ -708,13 +711,16 @@ export function AgendaClient({
 
       {/* O cartão do Google vem DEPOIS do título: a tela começava por uma caixa
           de integração, antes até de dizer que era a Agenda (print de 08/10). */}
-      <CartaoDaConexaoGoogle
+      {/* Sem as credenciais da instalação, o cartão só aparece a quem
+          administra (item 131): para a equipe ele era um aviso sobre algo que
+          ela não resolve, com nomes de chave e endereço do servidor. */}
+      {(googleConfigurado || administra) && <CartaoDaConexaoGoogle
         configurado={googleConfigurado}
         falta={faltaNoGoogle}
         linkDeConfiguracao={linkDeConfiguracaoDoGoogle}
         contaConectada={contaConectada}
         enderecoDeRetorno={enderecoDeRetorno}
-      />
+      />}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
@@ -1250,6 +1256,11 @@ export function AgendaClient({
           if (tipo) parametros.set("tipo", tipo.id);
           parametros.set("compromisso", id);
           router.push(`/app/agenda?${parametros.toString()}`);
+        }}
+        // A recusa do arraste oferece o Remarcar do próprio compromisso (item 137).
+        onRemarcar={(id) => {
+          setRemarcandoId(id);
+          setMarcando(true);
         }}
         // A7: no Mês, tocar no dia abre aquele dia. A data da célula já é do
         // calendário da grade; `ancoraLocalDoDia` a põe ao meio-dia, como a
