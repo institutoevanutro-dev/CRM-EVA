@@ -62,3 +62,20 @@ describe("a grade desenha a hora que cresceu", () => {
     expect(container.textContent).toContain("22h");
   });
 });
+
+describe("a janela não pula com o filtro de pessoas (item 136, 17/11)", () => {
+  it("o compromisso escondido pelo filtro ainda segura a janela", () => {
+    const { container } = render(
+      <GradeDaAgenda
+        visao="dia"
+        ancora={new Date(`${DIA}T12:00:00`)}
+        agora={new Date(`${DIA}T05:00:00-03:00`)}
+        fuso={FUSO}
+        pessoas={[{ id: "p1", nome: "Ana", trilha: 1 }]}
+        agendamentos={[ag("dela", "10:00", "10:30")]}
+        janelaSobre={[ag("dela", "10:00", "10:30"), { ...ag("outra", "06:00", "06:30"), responsavelId: "p2" }]}
+      />,
+    );
+    expect(container.textContent).toContain("06h");
+  });
+});

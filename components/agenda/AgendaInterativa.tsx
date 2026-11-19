@@ -5,6 +5,7 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 
 import { differenceInMinutes, format } from "date-fns";
+import Link from "next/link";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -65,7 +66,9 @@ export function AgendaInterativa({
   onEscolherTipo,
   onMarcarEm,
   onAbrirAgendamento,
+  onRemarcar,
   onAbrirDia,
+  janelaSobre,
   className,
 }: {
   visao: VisaoDaAgenda;
@@ -126,8 +129,12 @@ export function AgendaInterativa({
    */
   onMarcarEm?: (instante: string) => void;
   onAbrirAgendamento?: (id: string) => void;
+  /** Abre o Remarcar do compromisso — o caminho que a recusa do arraste oferece. */
+  onRemarcar?: (id: string) => void;
   /** Mês: a célula abre o dia (A7). */
   onAbrirDia?: (dia: Date) => void;
+  /** Repassado à grade: o período inteiro, antes do filtro de pessoas (item 136). */
+  janelaSobre?: Agendamento[];
   className?: string;
 }) {
   const localeDaData = useLocaleDeData();
@@ -173,7 +180,8 @@ export function AgendaInterativa({
   // ─── REMARCAR: proposta → confirmação → otimismo → volta atrás ─────────
   const remarcar = useRemarcarAgendamento();
   const [pendente, setPendente] = React.useState<{ id: string; instante: string } | null>(null);
-  const [recusa, setRecusa] = React.useState<string | null>(null);
+  /** `id`: o compromisso recusado, para o botão "Remarcar" na própria recusa (item 137). */
+  const [recusa, setRecusa] = React.useState<{ texto: string; id?: string } | null>(null);
   /**
    * O card na posição NOVA antes de o servidor confirmar.
    *
@@ -234,13 +242,13 @@ export function AgendaInterativa({
       // NÃO diz é que o card voltou. Sem esta linha o aviso some junto com o
       // toast e a tela fica sem registro de que a remarcação não valeu.
       setOtimista(null);
-      setRecusa(
-        `A remarcação não foi aceita — o compromisso voltou para ${format(
+      setRecusa({
+        texto: `A remarcação não foi aceita — o compromisso voltou para ${format(
           dataDeParede(new Date(antes.comeca), fuso),
           "EEEE, d 'de' MMMM 'às' HH:mm",
           { locale: localeDaData },
         )}.`,
-      );
+      });
     });
   }, [agendamentos, pendente, remarcar, localeDaData, fuso]);
 
@@ -287,7 +295,7 @@ export function AgendaInterativa({
               aria-label={t("Tipo de atendimento dos horários livres")}
               value={tipo?.id ?? ""}
               onChange={(e) => onEscolherTipo(e.target.value)}
-              className="min-w-0 max-w-[260px] rounded-full border border-border bg-transparent px-2.5 py-0.5 text-xs text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500"
+              className="min-w-0 max-w-[260px] rounded-full border border-border bg-transparent px-2.5 py-0.5 text-xs max-lg:min-h-11 text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500"
             >
               {tipos.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -304,7 +312,7 @@ export function AgendaInterativa({
                 aria-pressed={t.id === tipo?.id}
                 onClick={() => onEscolherTipo(t.id)}
                 className={cn(
-                  "rounded-full border px-2.5 py-0.5 transition-colors duration-fast",
+                  "rounded-full border px-2.5 py-0.5 transition-colors duration-fast max-lg:min-h-11",
                   t.id === tipo?.id
                     ? "border-transparent bg-accent text-accent-foreground"
                     : "border-border hover:border-border-strong hover:text-text",
@@ -343,11 +351,26 @@ export function AgendaInterativa({
             </>
           ) : motivo === "erro" ? (
             <>
-              <span className="font-semibold text-text">{t("Não consegui carregar os horários.")}</span> {t("Os blocos ficam bloqueados até eu conseguir — é mais seguro que oferecer um horário que talvez não exista.")}
+              <span className="font-semibold text-text">{t("Não foi possível carregar os horários.")}</span> {t("Os blocos ficam bloqueados até carregar — é mais seguro que oferecer um horário que talvez não exista.")}
             </>
           ) : (
             <>
               <span className="font-semibold text-text">{t("Nenhum horário livre neste período.")}</span> {t("Os blocos vazios continuam aqui, e o que estiver publicado fica clicável.")}
+            </>
+          )}
+          {/* UM AVISO SÓ, e com a porta (item 131): sem jornada ou com falha, o
+              caminho é o mesmo do painel de marcação. Só para quem marca —
+              quem só lê não tem o que configurar. */}
+          {onMarcarEm && motivo !== "sem-vaga" && (
+            <>
+              {" "}
+              <Link
+                href="/app/team?aba=atendimento"
+                data-testid="motivo-da-grade-configurar"
+                className="font-medium text-accent underline underline-offset-2 hover:text-accent-strong"
+              >
+                {t("Configurar horários")}
+              </Link>
             </>
           )}
         </div>
@@ -383,14 +406,30 @@ export function AgendaInterativa({
           role="status"
           className="flex items-center justify-between gap-2 rounded-sm border border-warning/40 bg-warning-bg px-3 py-2"
         >
-          <p className="text-xs leading-4 text-text">{recusa}</p>
-          <button
-            type="button"
-            onClick={() => setRecusa(null)}
-            className="shrink-0 text-xs font-medium text-text-muted underline underline-offset-2 hover:text-text"
-          >
-            Entendi
-          </button>
+          <p className="text-xs leading-4 text-text">{recusa.texto}</p>
+          <div className="flex shrink-0 items-center gap-2">
+            {recusa.id && onRemarcar && (
+              <Button
+                size="sm"
+                variant="outline"
+                data-testid="remarcacao-recusada-remarcar"
+                onClick={() => {
+                  const id = recusa.id!;
+                  setRecusa(null);
+                  onRemarcar(id);
+                }}
+              >
+                {t("Remarcar")}
+              </Button>
+            )}
+            <button
+              type="button"
+              onClick={() => setRecusa(null)}
+              className="shrink-0 text-xs font-medium text-text-muted underline underline-offset-2 hover:text-text"
+            >
+              {t("Entendi")}
+            </button>
+          </div>
         </div>
       )}
 
@@ -404,6 +443,7 @@ export function AgendaInterativa({
         fechamentos={fechamentos}
         onAbrirAgendamento={onAbrirAgendamento}
         onAbrirDia={onAbrirDia}
+        janelaSobre={janelaSobre}
         className="min-h-0 flex-1"
         interacao={
           tipo && onMarcarEm
@@ -429,9 +469,10 @@ export function AgendaInterativa({
                       (donoDosHorarios && arrastado.responsavelId && arrastado.responsavelId !== donoDosHorarios))
                   ) {
                     setPendente(null);
-                    setRecusa(
-                      t("A grade mostra os horários de outro profissional ou procedimento. Use Remarcar neste compromisso."),
-                    );
+                    setRecusa({
+                      texto: t("A grade mostra os horários de outro profissional ou procedimento. Use Remarcar neste compromisso."),
+                      id,
+                    });
                     return;
                   }
                   if (!instante) {
@@ -439,7 +480,12 @@ export function AgendaInterativa({
                     // está na disponibilidade publicada. Remarcar assim mesmo
                     // criaria um compromisso que o motor não teria oferecido.
                     setPendente(null);
-                    setRecusa(`Não dá para remarcar para esse horário — ${razao}.`);
+                    // Pelo dicionário, frase E razão: antes saía em português
+                    // cru até na conta em espanhol (item 137).
+                    setRecusa({
+                      texto: t("Não dá para remarcar para esse horário — {razao}.").replace("{razao}", t(razao)),
+                      id,
+                    });
                     return;
                   }
                   setRecusa(null);

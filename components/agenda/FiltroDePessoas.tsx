@@ -24,6 +24,8 @@ import type { Pessoa } from "./tipos";
  * caberem ao lado do título sem virar uma barra de rolagem horizontal — e o
  * anel na cor da superfície é o que mantém cada uma legível por cima da outra.
  */
+const COM_NOME_ATE = 5;
+
 export function FiltroDePessoas({
   pessoas,
   selecionadas,
@@ -43,6 +45,11 @@ export function FiltroDePessoas({
   if (pessoas.length < 2) return null;
 
   const todos = selecionadas.length === 0;
+  // Até `COM_NOME_ATE` pessoas, cada avatar leva o nome ao lado e nada se
+  // sobrepõe (item 134): o nome é a legenda das cores, desfaz iniciais iguais
+  // ("EA" e "EA") e aparece no toque, onde o `title` não existe. Acima disso o
+  // empilhamento volta, para a fileira caber ao lado do título.
+  const comNome = pessoas.length <= COM_NOME_ATE;
 
   return (
     <div
@@ -52,7 +59,7 @@ export function FiltroDePessoas({
       aria-label={t("Profissionais na agenda")}
       className={cn("flex items-center gap-2", className)}
     >
-      <div className="flex -space-x-2">
+      <div className={comNome ? "flex flex-wrap items-center gap-1" : "flex -space-x-2"}>
         {pessoas.map((p) => {
           const marcada = selecionadas.includes(p.id);
           return (
@@ -71,6 +78,9 @@ export function FiltroDePessoas({
               }
               className={cn(
                 "rounded-full transition-transform duration-fast ease-out",
+                comNome &&
+                  "flex items-center gap-1.5 py-0.5 pl-0.5 pr-2.5 text-xs text-text-muted hover:bg-surface-elevated max-lg:min-h-11",
+                comNome && marcada && "bg-surface-elevated text-text",
                 "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
                 // Sobe 2px em vez de crescer: escala mudaria a sobreposição e
                 // faria os vizinhos parecerem se mexer junto.
@@ -78,6 +88,7 @@ export function FiltroDePessoas({
               )}
             >
               <AvatarDaPessoa pessoa={p} ativo={todos || marcada} />
+              {comNome && <span className="max-w-[9rem] truncate">{p.nome}</span>}
             </button>
           );
         })}

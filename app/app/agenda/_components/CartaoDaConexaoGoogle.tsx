@@ -52,11 +52,16 @@ export function CartaoDaConexaoGoogle({
 
   if (!configurado) {
     return (
-      <div
+      // RECOLHIDO (item 131): a tela chega a quem administra (ver `_client`), e
+      // a explicação com nomes de chave e endereço de retorno abre só quando ela
+      // quer resolver. Fechado, é uma linha acima da grade, e não um cartão.
+      <details
         data-testid="google-nao-configurado"
-        className="rounded-lg border border-border bg-surface-elevated/50 p-3"
+        className="group rounded-lg border border-border bg-surface-elevated/50 p-3"
       >
-        <p className="text-sm font-medium text-text">{t("Sincronizar com o Google ainda não está disponível")}</p>
+        <summary className="cursor-pointer text-sm font-medium text-text">
+          {t("Sincronizar com o Google ainda não está disponível")}
+        </summary>
         {/*
           DUAS FRASES, porque são duas pessoas.
           
@@ -115,7 +120,7 @@ export function CartaoDaConexaoGoogle({
         <p className="mt-2 text-xs leading-4 text-text-muted">
           {t("Até lá a agenda funciona normalmente, só não troca compromissos com o Google.")}
         </p>
-      </div>
+      </details>
     );
   }
 

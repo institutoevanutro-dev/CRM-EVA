@@ -171,6 +171,9 @@ export const DICIONARIO: Traducoes = {
   "A grade mostra os horários de outro profissional ou procedimento. Use Remarcar neste compromisso.": {
     es: "La grilla muestra los horarios de otro profesional o procedimiento. Use Reprogramar en esta cita.",
   },
+  // Auditoria de 17/11, lote 12: a recusa do arraste traduzida.
+  "Não dá para remarcar para esse horário — {razao}.": { es: "No se puede reprogramar para ese horario — {razao}." },
+  "Entendi": { es: "Entendido" },
   "Paciente": { es: "Paciente" },
   "Buscar pelo nome ou telefone": { es: "Buscar por nombre o teléfono" },
   // Configurações › Conversões (migration 0391): aviso de agendamento.
@@ -8540,8 +8543,9 @@ export const DICIONARIO: Traducoes = {
   "Sem eles ninguém consegue marcar — nem quem atende, nem o agente.": { es: "Sin ellos nadie puede agendar — ni quien atiende, ni el agente." },
   "Os nomes da equipe na agenda pedem um papel acima de Somente leitura. A grade continua funcionando.": { es: "Los nombres del equipo en la agenda requieren un rol superior a Solo lectura. La grilla sigue funcionando." },
   "Sem eles ninguém consegue marcar clicando na grade — nem você, nem o agente.": { es: "Sin ellos nadie puede agendar haciendo clic en la grilla — ni tú, ni el agente." },
-  "Não consegui carregar os horários.": { es: "No pude cargar los horarios." },
-  "Os blocos ficam bloqueados até eu conseguir — é mais seguro que oferecer um horário que talvez não exista.": { es: "Los bloques quedan bloqueados hasta que lo logre — es más seguro que ofrecer un horario que quizá no exista." },
+  "Não foi possível carregar os horários.": { es: "No fue posible cargar los horarios." },
+  "Os blocos ficam bloqueados até carregar — é mais seguro que oferecer um horário que talvez não exista.": { es: "Los bloques quedan bloqueados hasta que carguen — es más seguro que ofrecer un horario que quizá no exista." },
+  "Configurar horários": { es: "Configurar horarios" },
   "Nenhum horário livre neste período.": { es: "Ningún horario libre en este período." },
   "Os blocos vazios continuam aqui, e o que estiver publicado fica clicável.": { es: "Los bloques vacíos siguen aquí, y lo que esté publicado queda clicable." },
   "Remarcar": { es: "Reprogramar" },
@@ -9405,6 +9409,9 @@ export const DICIONARIO: Traducoes = {
   "fora deste mês": { es: "fuera de este mes" },
   "você ainda não publicou seus horários": { es: "todavía no publicaste tus horarios" },
   "não consegui carregar os horários": { es: "no pude cargar los horarios" },
+  "este horário já passou": { es: "este horario ya pasó" },
+  "já há um compromisso neste horário": { es: "ya hay una cita en este horario" },
+  "fora dos horários que você publicou": { es: "fuera de los horarios que publicaste" },
   "nenhum horário livre neste dia": { es: "ningún horario libre en este día" },
   // O encaixe no painel de marcação (#858): a pessoa digita um horário fora da grade.
   "Outro horário": { es: "Otro horario" },
