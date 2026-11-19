@@ -162,7 +162,7 @@ export function ConditionForm({
           <p className="text-xs leading-snug text-warning-fg">
             {t("Trocar de modo deixa")} {trocaPendente.orfas}{" "}
             {trocaPendente.orfas === 1 ? t("ligação sem saída") : t("ligações sem saída")}{" "}
-            {t("neste nó. Elas continuam desenhadas, mas param de levar a lugar nenhum até você religá-las.")}
+            {t("neste bloco. Elas continuam desenhadas, mas param de levar a lugar nenhum até você religá-las.")}
           </p>
           <div className="flex gap-2">
             <Button type="button" size="sm" onClick={() => aplicarModo(trocaPendente.modo)}>

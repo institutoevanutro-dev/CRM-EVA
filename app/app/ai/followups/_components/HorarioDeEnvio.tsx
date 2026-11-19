@@ -90,7 +90,9 @@ export function HorarioDeEnvio({
           <p className="text-xs text-muted-foreground">
             {form.ligado
               ? t("Fora deste horário a mensagem espera e sai na próxima abertura.")
-              : t("Sem limite: as mensagens dos fluxos saem a qualquer hora, inclusive de madrugada.")}
+              : // O envio já respeita a janela do número (`channel_knobs`, 7h às 22h por
+                // padrão; ver `lib/followup/enviar-texto-fixo.ts`): "de madrugada" era falso.
+                t("Sem limite próprio: vale a janela do número, em Conexões (7h às 22h por padrão).")}
           </p>
         </div>
         <Switch

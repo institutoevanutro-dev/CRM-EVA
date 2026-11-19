@@ -119,4 +119,11 @@ describe("TestPanel do roteador", () => {
     expect(screen.getByText("Agente Vendas")).toBeInTheDocument();
     expect(screen.queryByText("O que o roteador viu sobre o contato")).not.toBeInTheDocument();
   });
+
+  it("com mudança não salva, avisa que o teste usa o que está salvo", () => {
+    const { rerender } = render(<TestPanel routerId="r1" canTest />);
+    expect(screen.queryByTestId("teste-usa-o-salvo")).not.toBeInTheDocument();
+    rerender(<TestPanel routerId="r1" canTest naoSalvo />);
+    expect(screen.getByTestId("teste-usa-o-salvo")).toHaveTextContent("Salve para testar as mudanças");
+  });
 });

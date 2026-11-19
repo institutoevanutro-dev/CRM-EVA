@@ -269,7 +269,13 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
           {summaryLabel(triggerConfig, etapaSalva ?? null, t)}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80" align="end" data-testid="trigger-config-panel">
+      {/* Teto de altura com rolagem: com muitos tipos de compromisso, o "Salvar
+          gatilho" saía da tela (pior no iPhone). */}
+      <PopoverContent
+        className="max-h-[min(80vh,var(--radix-popover-content-available-height))] w-80 overflow-y-auto"
+        align="end"
+        data-testid="trigger-config-panel"
+      >
         <div className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="trigger-kind">{t("Tipo de gatilho")}</Label>
@@ -334,7 +340,9 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
               ? t("Só começa após falta confirmada pela equipe. Remarcação, cancelamento ou nova resposta interrompem a recuperação. Outro acompanhamento ativo impede o início.")
               : t("Começa quando a equipe marca que o paciente compareceu. Para contar os dias a partir da consulta, use esperas contadas «Da data da consulta». Se a presença for desfeita, o acompanhamento é cancelado. Outro acompanhamento ativo impede o início.")}</p>
             <p className="text-xs">{t("Tipos de compromisso (nenhum selecionado = todos)")}</p>
+            <div className="max-h-40 space-y-1 overflow-y-auto">
             {eventTypes.data?.map(type=><label key={type.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.eventTypeIds.includes(type.id)} onChange={e=>setForm(f=>({...f,eventTypeIds:e.target.checked?[...f.eventTypeIds,type.id]:f.eventTypeIds.filter(id=>id!==type.id)}))}/>{type.name}</label>)}
+            </div>
             {eventTypes.isError?<p role="alert">{t("Não foi possível carregar os tipos de compromisso.")}</p>:null}
             <Label htmlFor="trigger-channel">{t("Enviar pelo número/canal")}</Label>
             <Select
@@ -452,6 +460,7 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
           >
             {update.isPending ? t("Salvando…") : t("Salvar gatilho")}
           </Button>
+          <p className="text-xs text-muted-foreground">{t("Vale na hora, no fluxo que está no ar.")}</p>
         </div>
       </PopoverContent>
     </Popover>

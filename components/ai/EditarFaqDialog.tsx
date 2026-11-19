@@ -54,11 +54,16 @@ export function EditarFaqDialog({ sourceId, nome, aberto, onFechar, onSalvo }: P
   const [texto, setTexto] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  // Leitura que falhou NÃO vira caixa vazia editável: "Salvar" trocaria a FAQ
+  // inteira pelo pouco digitado. Fica bloqueado até ler de verdade.
+  const [falhou, setFalhou] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
     if (!aberto) return;
     let vivo = true;
     setCarregando(true);
+    setFalhou(false);
     apiClient
       .get<{ data: { items: ItemDaFaq[] } }>(`/api/v1/ai/knowledge/sources/${sourceId}`)
       .then((res) => {
@@ -66,7 +71,9 @@ export function EditarFaqDialog({ sourceId, nome, aberto, onFechar, onSalvo }: P
         setTexto(paraMarkdown(res.data.items ?? []));
       })
       .catch((err) => {
-        if (vivo) showApiError(err);
+        if (!vivo) return;
+        setFalhou(true);
+        showApiError(err);
       })
       .finally(() => {
         if (vivo) setCarregando(false);
@@ -74,7 +81,7 @@ export function EditarFaqDialog({ sourceId, nome, aberto, onFechar, onSalvo }: P
     return () => {
       vivo = false;
     };
-  }, [aberto, sourceId]);
+  }, [aberto, sourceId, tentativa]);
 
   async function salvar(): Promise<void> {
     const itens = parseFaqMarkdown(texto);
@@ -126,8 +133,21 @@ export function EditarFaqDialog({ sourceId, nome, aberto, onFechar, onSalvo }: P
             rows={14}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
-            disabled={carregando || salvando}
+            disabled={carregando || salvando || falhou}
           />
+          {falhou ? (
+            <div role="alert" className="flex items-center gap-2 text-sm text-error-fg">
+              <span>{t("Não consegui ler o conteúdo atual.")}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setTentativa((n) => n + 1)}
+                data-testid="faq-editar-tentar-de-novo"
+              >
+                {t("Tentar de novo")}
+              </Button>
+            </div>
+          ) : null}
           <p className="text-xs text-text-muted">
             {t("Uma linha")} <code>## Pergunta:</code> {t("e uma")} <code>## Resposta:</code>{" "}
             {t("por item, separados por uma linha em branco.")}
@@ -140,7 +160,7 @@ export function EditarFaqDialog({ sourceId, nome, aberto, onFechar, onSalvo }: P
           </Button>
           <Button
             onClick={salvar}
-            disabled={carregando || salvando}
+            disabled={carregando || salvando || falhou}
             data-testid="faq-editar-salvar"
           >
             {salvando ? t("Salvando…") : t("Salvar conteúdo")}

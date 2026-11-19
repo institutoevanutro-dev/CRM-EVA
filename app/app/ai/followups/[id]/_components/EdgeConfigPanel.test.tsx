@@ -23,7 +23,7 @@ const destino: FlowNode = {
 };
 
 describe("EdgeConfigPanel — excluir aresta", () => {
-  it("oferece Excluir aresta e dispara onDelete", async () => {
+  it("oferece Excluir ligação e dispara onDelete", async () => {
     const onDelete = vi.fn();
     render(
       <EdgeConfigPanel
@@ -36,7 +36,7 @@ describe("EdgeConfigPanel — excluir aresta", () => {
     );
 
     const botao = screen.getByTestId("delete-edge");
-    expect(botao).toHaveTextContent("Excluir aresta");
+    expect(botao).toHaveTextContent("Excluir ligação");
     await userEvent.setup({ delay: null }).click(botao);
     expect(onDelete).toHaveBeenCalledOnce();
   });

@@ -71,7 +71,9 @@ export function CaseDetail({ caseId }: { caseId: string | null }) {
         </div>
       </div>
 
-      <CaseReplyPanel caseId={data.id} status={data.status} />
+      {/* key por caso: sem ela, o texto e a opção escolhidos num caso ficavam na
+          tela ao abrir outro, e "Enviar" respondia ao paciente errado. */}
+      <CaseReplyPanel key={data.id} caseId={data.id} status={data.status} />
 
       <div>
         <h3 className="mb-2 text-sm font-semibold">{t("Linha do tempo")}</h3>

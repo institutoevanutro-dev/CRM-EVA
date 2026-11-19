@@ -409,7 +409,7 @@ function ResumoDoGrupo({ pontos }: { pontos: Ponto[] }) {
         ))}
       </div>
       {comAviso > 0 && (
-        <p className="mt-2 text-sm text-amber-600 dark:text-amber-500" data-testid="grupo-com-aviso">
+        <p className="mt-2 text-sm text-warning-fg" data-testid="grupo-com-aviso">
           {comAviso === 1
             ? t("1 ponto deste grupo precisa da sua atenção.")
             : `${comAviso} ${t("pontos deste grupo precisam da sua atenção.")}`}
@@ -514,7 +514,7 @@ function CartaoDoPonto({
       {ponto.avisos.map((a) => (
         <p
           key={a}
-          className="mt-2 rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-500"
+          className="mt-2 rounded-md bg-warning-bg p-2 text-xs text-warning-fg"
           data-testid={`aviso-${ponto.id}`}
         >
           {t(a)}

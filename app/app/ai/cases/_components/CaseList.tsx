@@ -30,9 +30,26 @@ export function CaseList() {
   const [selectedId, setSelectedId] = useState<string | null>(idDaUrl);
   const { data, isLoading, isError, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useCases(tab);
 
+  // Lista em cima, detalhe na largura toda (regra: navegação em cima, conteúdo
+  // embaixo). Lado a lado, no iPhone sobravam ~14 px para ler e responder.
+  if (selectedId) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        <button
+          type="button"
+          onClick={() => setSelectedId(null)}
+          className="self-start text-sm text-accent-strong underline-offset-2 hover:underline"
+        >
+          ← {t("Voltar aos casos")}
+        </button>
+        <CaseDetail caseId={selectedId} />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-0 flex-1 gap-6">
-      <div className="flex w-full max-w-xs shrink-0 flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex w-full flex-col gap-4">
         <Tabs value={tab} onValueChange={(v) => setTab(v as "open" | "resolved")}>
           <TabsList>
             <TabsTrigger value="open">{t("Abertos")}{data ? ` (${data.open_count})` : ""}</TabsTrigger>
@@ -94,10 +111,6 @@ export function CaseList() {
             )}
           </>
         )}
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <CaseDetail caseId={selectedId} />
       </div>
     </div>
   );

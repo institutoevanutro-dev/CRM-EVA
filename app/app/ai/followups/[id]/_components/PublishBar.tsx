@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
+import { ConfirmarNaTela } from "@/components/inbox/ConfirmarNaTela";
 import { ApiError } from "@/lib/api/types";
 import type { FlowGraph } from "@/lib/followup/graph-schema";
 import type { PublishValidationError } from "@/lib/followup/validate-publish";
@@ -56,9 +57,9 @@ interface Props {
 }
 
 const HANDOFF_LABEL: Record<FollowupFlowDetailRow["handoff_policy"], string> = {
-  pause: "Pausar durante handoff",
-  cancel: "Cancelar durante handoff",
-  allow: "Permitir durante handoff",
+  pause: "Pausar quando a equipe assume",
+  cancel: "Cancelar quando a equipe assume",
+  allow: "Seguir mesmo com a equipe atendendo",
 };
 
 export function PublishBar({
@@ -76,6 +77,9 @@ export function PublishBar({
 }: Props) {
   const t = useT();
   const [openDeleteSelection, setOpenDeleteSelection] = useState(false);
+  // Publicar manda mensagens a pacientes; desativar e voltar de versão mudam o
+  // que está no ar. Nenhum dos três vale com um clique só.
+  const [confirmar, setConfirmar] = useState<"publicar" | "desativar" | "voltar" | null>(null);
   const save = useSaveFollowupFlowDraft(flowId);
   const publish = usePublishFollowupFlow(flowId);
   const disable = useDisableFollowupFlow(flowId);
@@ -114,7 +118,7 @@ export function PublishBar({
             else flowLevel.push(e.message);
           }
           onPublishErrors(byNode);
-          toast.error(t("Fluxo reprovado na validação — corrija os nós destacados."), {
+          toast.error(t("O fluxo tem pendências — corrija os blocos destacados."), {
             description: flowLevel.length > 0 ? flowLevel.join(" ") : undefined,
           });
           return;
@@ -147,10 +151,13 @@ export function PublishBar({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        {/* O gatilho e a regra da equipe gravam na hora, no fluxo que está no
+            ar; os blocos só passam a valer com "Publicar". */}
+        <span className="text-xs text-muted-foreground">{t("Valem na hora:")}</span>
         <TriggerConfigControl flowId={flowId} triggerConfig={flow.trigger_config} />
 
         <Select value={flow.handoff_policy} onValueChange={(v) => handoffPolicy.mutate(v as FollowupFlowDetailRow["handoff_policy"])}>
-          <SelectTrigger className="w-56" aria-label={t("Política de handoff")}>
+          <SelectTrigger className="w-56" aria-label={t("Quando a equipe assume a conversa")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -165,7 +172,7 @@ export function PublishBar({
         <Button type="button" variant="secondary" size="sm" disabled={!dirty || busy} onClick={onSave}>
           {save.isPending ? t("Salvando…") : t("Salvar")}
         </Button>
-        <Button type="button" size="sm" disabled={busy} onClick={onPublish} data-testid="publish-button">
+        <Button type="button" size="sm" disabled={busy} onClick={() => setConfirmar("publicar")} data-testid="publish-button">
           {publish.isPending ? t("Publicando…") : t("Publicar")}
         </Button>
         <Button
@@ -173,7 +180,7 @@ export function PublishBar({
           variant="outline"
           size="sm"
           disabled={busy || flow.status === "disabled"}
-          onClick={onDisable}
+          onClick={() => setConfirmar("desativar")}
         >
           {t("Desativar")}
         </Button>
@@ -182,11 +189,42 @@ export function PublishBar({
           variant="outline"
           size="sm"
           disabled={busy || !canRollback}
-          onClick={onRollback}
+          onClick={() => setConfirmar("voltar")}
           data-testid="rollback-button"
         >
-          {t("Rollback")}
+          {t("Voltar à versão anterior")}
         </Button>
+        <ConfirmarNaTela
+          aberto={confirmar !== null}
+          onAbertoChange={(v) => !v && setConfirmar(null)}
+          titulo={
+            confirmar === "publicar"
+              ? t("Publicar este fluxo?")
+              : confirmar === "desativar"
+                ? t("Desativar este fluxo?")
+                : t("Voltar à versão anterior?")
+          }
+          descricao={
+            confirmar === "publicar"
+              ? t("Os blocos passam a valer agora e as mensagens começam a sair para os pacientes que entrarem no fluxo.")
+              : confirmar === "desativar"
+                ? t("Nenhuma mensagem deste fluxo sai mais até você publicar de novo.")
+                : t("O fluxo no ar volta a ser a versão publicada antes desta.")
+          }
+          acao={
+            confirmar === "publicar"
+              ? t("Publicar")
+              : confirmar === "desativar"
+                ? t("Desativar")
+                : t("Voltar à versão anterior")
+          }
+          destrutiva={confirmar === "desativar"}
+          onConfirmar={() => {
+            if (confirmar === "publicar") void onPublish();
+            else if (confirmar === "desativar") onDisable();
+            else onRollback();
+          }}
+        />
         {onAutoFit && (
           <Button
             type="button"
@@ -211,18 +249,18 @@ export function PublishBar({
               onClick={() => setOpenDeleteSelection(true)}
             >
               <Trash size={14} aria-hidden className="mr-1" />
-              {selection === "node" ? t("Excluir nó") : t("Excluir aresta")}
+              {selection === "node" ? t("Excluir bloco") : t("Excluir ligação")}
             </Button>
             <AlertDialog open={openDeleteSelection} onOpenChange={setOpenDeleteSelection}>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>
-                    {selection === "node" ? t("Excluir este nó?") : t("Excluir esta aresta?")}
+                    {selection === "node" ? t("Excluir este bloco?") : t("Excluir esta ligação?")}
                   </AlertDialogTitle>
                   <AlertDialogDescription>
                     {selection === "node"
-                      ? t("Este nó e as arestas ligadas a ele são apagados. Não é possível desfazer.")
-                      : t("A aresta entre os dois nós é apagada. Não é possível desfazer.")}
+                      ? t("Este bloco e as ligações dele são apagados. Não é possível desfazer.")
+                      : t("A ligação entre os dois blocos é apagada. Não é possível desfazer.")}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

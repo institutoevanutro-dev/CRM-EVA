@@ -128,10 +128,12 @@ test.describe("Perguntas frequentes — o gestor cadastra, liga e revisa", () =>
     await page.goto("/app/ai/perguntas-frequentes");
     const chave = page.getByRole("switch", { name: "Responder sem IA" });
     await expect(chave).toBeVisible({ timeout: 60_000 });
+    // O interruptor grava na hora; o rigor tem o próprio "Salvar rigor".
     await chave.click();
+    await expect(chave).toHaveAttribute("aria-checked", "true");
     await page.getByLabel("Rigor do reconhecimento").fill("0.88");
-    await page.getByRole("button", { name: "Salvar configuração" }).click();
-    await expect(page.getByText("Configuração salva.")).toBeVisible();
+    await page.getByRole("button", { name: "Salvar rigor" }).click();
+    await expect(page.getByText("Configuração salva.").first()).toBeVisible();
 
     await page.reload();
     await expect(page.getByRole("switch", { name: "Responder sem IA" })).toHaveAttribute("aria-checked", "true", {

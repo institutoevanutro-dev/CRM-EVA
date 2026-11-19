@@ -31,6 +31,8 @@ import {
   type OrgMemoryVersionMeta,
 } from "@/hooks/ai/useOrgMemory";
 import { useT } from "@/hooks/i18n/useT";
+import { FUSO_PADRAO } from "@/lib/tempo/fusos";
+import { ConfirmarNaTela } from "@/components/inbox/ConfirmarNaTela";
 
 interface Props {
   initialState: OrgMemoryState;
@@ -43,6 +45,9 @@ function formatDate(iso: string, idioma: string): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    // Fuso fixo: renderizada no servidor (UTC), a hora saía errada e diferente
+    // da do navegador (erro de hidratação).
+    timeZone: FUSO_PADRAO,
   });
 }
 
@@ -58,6 +63,7 @@ export function OrgMemoryClient({ initialState }: Props) {
   const [content, setContent] = React.useState(document?.content ?? "");
   const [historyTarget, setHistoryTarget] = React.useState<OrgMemoryVersionMeta | null>(null);
   const [showArchived, setShowArchived] = React.useState(false);
+  const [confirmandoPublicar, setConfirmandoPublicar] = React.useState(false);
   const [formOpen, setFormOpen] = React.useState(false);
   const [title, setTitle] = React.useState("");
   const [body, setBody] = React.useState("");
@@ -171,11 +177,19 @@ export function OrgMemoryClient({ initialState }: Props) {
                 </span>
               )}
               <Button
-                onClick={handlePublish}
+                onClick={() => setConfirmandoPublicar(true)}
                 disabled={!canSubmitPublish || publish.isPending}
               >
                 {publish.isPending ? t("Publicando…") : t("Publicar versão")}
               </Button>
+              <ConfirmarNaTela
+                aberto={confirmandoPublicar}
+                onAbertoChange={setConfirmandoPublicar}
+                titulo={t("Publicar nova versão da memória?")}
+                descricao={t("Vale na hora para todos os agentes, em todas as conversas.")}
+                acao={t("Publicar versão")}
+                onConfirmar={handlePublish}
+              />
             </div>
           </div>
 

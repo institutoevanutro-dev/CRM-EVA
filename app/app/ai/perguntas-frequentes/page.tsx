@@ -28,6 +28,13 @@ export default async function PerguntasFrequentesPage() {
             idioma,
           )}
         </p>
+        {/* Resposta 17 do André (18/11): não juntar as duas FAQs, só explicar. */}
+        <p className="text-sm text-muted-foreground">
+          {traduzir(
+            "Diferente de “Perguntas e respostas” em O que o agente sabe: lá a IA lê o conteúdo e responde com as palavras dela; aqui sai o seu texto, igual, sem IA.",
+            idioma,
+          )}
+        </p>
       </header>
       <PerguntasFrequentesClient />
     </div>
