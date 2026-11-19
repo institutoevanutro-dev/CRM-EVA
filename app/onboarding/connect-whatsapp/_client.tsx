@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { randomId } from "@/lib/random-id";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { fraseDoErro } from "../_components/erros";
 
 import { Button } from "@/components/ui/button";
 import { skipWhatsapp, markWhatsappConfigured } from "@/app/actions/onboarding/skipWhatsapp";
@@ -185,7 +186,7 @@ function Saidas({ status, sessionName }: { status: Status; sessionName: string }
               await skipWhatsapp();
             } catch (err) {
               if (isRedirectError(err)) throw err;
-              toast.error(`${t("Falha ao pular:")} ${String(err)}`);
+              toast.error(t("Não consegui pular este passo. Tente de novo."));
             }
           })
         }
@@ -204,7 +205,7 @@ function Saidas({ status, sessionName }: { status: Status; sessionName: string }
               );
             } catch (err) {
               if (isRedirectError(err)) throw err;
-              toast.error(`${t("Falha ao marcar passo:")} ${String(err)}`);
+              toast.error(t(fraseDoErro(undefined)));
             }
           })
         }
@@ -321,7 +322,7 @@ export function ConnectWhatsappClient({
         await markWhatsappConfigured(confirmedSession, "WORKING");
       } catch (err) {
         if (isRedirectError(err)) throw err;
-        toast.error(`${t("Falha ao avançar:")} ${String(err)}`);
+        toast.error(t(fraseDoErro(undefined)));
       }
     });
   }, [status, info.session, t]);

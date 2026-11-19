@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { rodarOuAvisar } from "../_components/erros";
 
 import { Button } from "@/components/ui/button";
 import { connectNuvemshop } from "@/app/actions/integrations/connectNuvemshop";
@@ -61,7 +62,7 @@ export function ConnectNuvemshopClient() {
           type="button"
           variant="ghost"
           disabled={pending}
-          onClick={() => startTransition(() => void skipNuvemshop())}
+          onClick={() => startTransition(() => rodarOuAvisar(skipNuvemshop, t))}
         >
           {t("Pular por enquanto")}
         </Button>

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { fraseDoErro } from "../_components/erros";
 
 import { copyToClipboard } from "@/lib/clipboard";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ export function InviteTeamForm() {
     startTransition(async () => {
       if (skip) {
         const res = await sendOnboardingInvites({ invitations: [], skip: true });
-        if (res && !res.ok) toast.error(`${t("Falha:")} ${res.error}`);
+        if (res && !res.ok) toast.error(t(fraseDoErro(res.error)));
         return;
       }
       const emails = Array.from(
@@ -53,7 +54,7 @@ export function InviteTeamForm() {
         invitations: emails.map((email) => ({ email, role })),
       });
       if (res && !res.ok) {
-        toast.error(`${t("Falha:")} ${res.error}`);
+        toast.error(t(fraseDoErro(res.error)));
         return;
       }
       if (res && res.ok && res.undelivered?.length) {

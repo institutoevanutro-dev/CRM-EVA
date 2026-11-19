@@ -8,7 +8,7 @@ import { SkipToEnd } from "./_components/SkipToEnd";
 import { SimboloDoProduto } from "@/components/branding/MarcaDoProduto";
 import { marcaEhADoProduto } from "@/lib/branding";
 import { marcaDaSaida } from "@/lib/branding/saida";
-import { passosVisiveis } from "@/lib/onboarding/passos";
+import { montaOAssistente, passosVisiveis } from "@/lib/onboarding/passos";
 import { env } from "@/lib/env";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 
@@ -24,6 +24,8 @@ export default async function OnboardingLayout({ children }: { children: React.R
 
   const { state, onboardedAt } = await loadOnboardingState(activeOrg.orgId);
   if (onboardedAt) redirect("/app/inbox");
+  // Quem não monta o assistente não tem o que fazer nele (item 176).
+  if (!montaOAssistente(activeOrg.role, user)) redirect("/app/inbox");
 
   // Os passos que ESTA instalação oferece, com o que já foi resolvido. O
   // indicador não decide mais nada sozinho — ele desenha o que recebe.

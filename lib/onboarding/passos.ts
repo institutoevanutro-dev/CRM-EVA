@@ -17,6 +17,7 @@
  * aparece em lugar nenhum — nem como pendência, nem como culpa.
  */
 import type { OnboardingState } from "@/lib/schemas/onboarding";
+import { escreveComoPlatformAdmin, type AuthUser } from "@/lib/auth/types";
 
 export interface PassoDoOnboarding {
   /** Segmento da rota em `app/onboarding/<segmento>`. */
@@ -147,4 +148,17 @@ export function resumoDoOnboarding(
     feito: p.cumprido(state) && !p.pulado(state),
     pulado: p.pulado(state),
   }));
+}
+
+/**
+ * Quem monta o assistente: o admin da organização, ou o dono da instalação com
+ * escrita. É a mesma regra de `requireOnboardingCtx`; o resto da equipe entra
+ * direto no app, mesmo com o assistente por terminar (auditoria 17/11, item
+ * 176) — antes caía nele e lia "Falha: forbidden" em cada botão.
+ */
+export function montaOAssistente(
+  papel: string | null | undefined,
+  user: Pick<AuthUser, "is_platform_admin" | "platform_admin_scope">,
+): boolean {
+  return papel === "admin" || escreveComoPlatformAdmin(user);
 }

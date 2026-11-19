@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { rodarOuAvisar } from "../_components/erros";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -236,7 +237,7 @@ export function QuadroClient({
           type="button"
           variant="ghost"
           disabled={pending}
-          onClick={() => startTransition(async () => void (await pularQuadro()))}
+          onClick={() => startTransition(() => rodarOuAvisar(pularQuadro, t))}
         >
           {t("Pular por enquanto")}
         </Button>
@@ -257,7 +258,7 @@ export function QuadroClient({
               fd.set("origem", origem);
               const res = await aplicarQuadro(fd);
               // Sucesso redireciona no servidor; só o desfecho ruim volta.
-              if (res && !res.ok) toast.error(res.erro);
+              if (res && !res.ok) toast.error(t(res.erro));
             })
           }
         >

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { rodarOuAvisar } from "../_components/erros";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -184,7 +185,7 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
           type="button"
           variant="ghost"
           disabled={pending}
-          onClick={() => startTransition(() => void pularTeste())}
+          onClick={() => startTransition(() => rodarOuAvisar(pularTeste, t))}
         >
           {t("Pular")}
         </Button>

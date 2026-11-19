@@ -6229,6 +6229,21 @@ export const DICIONARIO: Traducoes = {
   },
   "Escolher outra forma": { es: "Elegir otra forma" },
   "Falha ao pular:": { es: "Fallo al saltar:" },
+  "Não consegui pular este passo. Tente de novo.": { es: "No pude saltar este paso. Inténtalo de nuevo." },
+  "Sua sessão terminou. Entre de novo para continuar.": {
+    es: "Tu sesión terminó. Inicia sesión de nuevo para continuar.",
+  },
+  "Só quem administra a clínica pode fazer este passo.": {
+    es: "Solo quien administra la clínica puede hacer este paso.",
+  },
+  "Não achei a sua clínica. Recarregue a página.": { es: "No encontré tu clínica. Recarga la página." },
+  "Confira os campos e tente de novo.": { es: "Revisa los campos e inténtalo de nuevo." },
+  "Não consegui salvar agora. Tente de novo em instantes.": {
+    es: "No pude guardar ahora. Inténtalo de nuevo en unos instantes.",
+  },
+  "Não consegui salvar o quadro agora. Tente de novo em instantes.": {
+    es: "No pude guardar el tablero ahora. Inténtalo de nuevo en unos instantes.",
+  },
   "Pular por enquanto": { es: "Saltar por ahora" },
   "Falha ao marcar passo:": { es: "Fallo al marcar el paso:" },
   "Conectei em outro lugar": { es: "Me conecté en otro lugar" },

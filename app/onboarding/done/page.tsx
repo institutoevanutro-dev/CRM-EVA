@@ -1,7 +1,12 @@
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { redirect } from "next/navigation";
-import { loadOnboardingState } from "@/app/actions/onboarding/_shared";
-import { resumoDoOnboarding } from "@/lib/onboarding/passos";
+import {
+  concluirOnboarding,
+  loadOnboardingState,
+  requireOnboardingCtx,
+} from "@/app/actions/onboarding/_shared";
+import { logger } from "@/lib/logger";
+import { proximoPasso, resumoDoOnboarding } from "@/lib/onboarding/passos";
 import { createClient } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
 import { oQueMaisExiste } from "@/lib/onboarding/o-que-mais-existe";
@@ -21,6 +26,22 @@ export default async function DonePage() {
   // (pulado)" em instalações que nunca ofereceram esse passo — o wizard
   // acusando a pessoa de não fazer o que ninguém lhe pediu.
   const itens = resumoDoOnboarding(state, { lojaLigada: env.NUVEMSHOP_ENABLED });
+
+  // Último passo resolvido = onboarding concluído, sem esperar o clique em
+  // "Começar a usar" (auditoria 17/11, item 176). Sem isso, a equipe convidada
+  // caía no assistente e os links de "O que mais tem aqui" voltavam para cá.
+  // Quem digita o endereço antes da hora não conclui nada: só com todos feitos.
+  if (!proximoPasso(state, { lojaLigada: env.NUVEMSHOP_ENABLED })) {
+    // O botão "Começar a usar" tenta de novo; a tela não precisa cair por isso.
+    try {
+      const r = await concluirOnboarding(await requireOnboardingCtx());
+      if (!r.ok) logger.warn("onboarding: conclusão na tela final falhou", { detail: r.details });
+    } catch (err) {
+      logger.warn("onboarding: conclusão na tela final falhou", {
+        detail: err instanceof Error ? err.message.slice(0, 120) : "desconhecido",
+      });
+    }
+  }
 
   const supabase = await createClient();
   // SE O ATENDENTE ESTÁ NO AR vem do banco, não das pendências: publicar é o

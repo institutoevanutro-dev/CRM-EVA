@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { fraseDoErro } from "../_components/erros";
 
 import { Button } from "@/components/ui/button";
 import { finishOnboarding } from "@/app/actions/onboarding/finishOnboarding";
@@ -150,7 +151,7 @@ export function DoneClient({
           onClick={() =>
             startTransition(async () => {
               const res = await finishOnboarding();
-              if (res && !res.ok) toast.error(`${t("Falha:")} ${res.error}`);
+              if (res && !res.ok) toast.error(t(fraseDoErro(res.error)));
             })
           }
         >

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
+import { fraseDoErro, rodarOuAvisar } from "../_components/erros";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,7 +79,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
           setRegrasNaoSalvas(null);
           const res = await createDefaultAgent(formData);
           if (res && !res.ok) {
-            toast.error(`${t("Falha ao criar agente:")} ${res.error}`);
+            toast.error(t(fraseDoErro(res.error)));
             return;
           }
           if (res?.regras_nao_salvas) setRegrasNaoSalvas(res.regras_nao_salvas);
@@ -337,7 +338,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
           type="button"
           variant="ghost"
           disabled={pending}
-          onClick={() => startTransition(() => void skipAi())}
+          onClick={() => startTransition(() => rodarOuAvisar(skipAi, t))}
         >
           {t("Pular")}
         </Button>
