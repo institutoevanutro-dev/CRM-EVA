@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { AgentInboxList } from "@/app/app/ai/inbox/_components/AgentInboxList";
 import { useAgentInbox, useResolveAllInboxItems, useUpdateInboxItem, type AgentInboxItem } from "@/hooks/ai/useAgentInbox";
 import { ApiError } from "@/lib/api/types";
-vi.mock("@/hooks/ai/useAgentInbox", () => ({ useAgentInbox: vi.fn(), useUpdateInboxItem: vi.fn(), useResolveAllInboxItems: vi.fn() }));
+vi.mock("@/hooks/ai/useAgentInbox", () => ({ AVISOS_POR_PAGINA: 50, useAgentInbox: vi.fn(), useUpdateInboxItem: vi.fn(), useResolveAllInboxItems: vi.fn() }));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));
 vi.mock("@/hooks/i18n/useLocaleDeData", () => ({ useLocaleDeData: () => undefined }));
 const mutate = vi.fn();

@@ -1475,10 +1475,10 @@ export const DICIONARIO: Traducoes = {
   "Menu do usuário": { es: "Menú del usuario" },
   Sair: { es: "Cerrar sesión" },
   "Central de avisos": { es: "Central de avisos" },
-  // Lembrete de caso parado na Central (migration 0397; porte do original #3399, ideia de @Atlasads no #2584).
+  // Lembrete de caso parado, em Configurações › Distribuição de atendimento (migration 0397; porte do original #3399, ideia de @Atlasads no #2584).
   "Lembrete de caso parado": { es: "Recordatorio de caso detenido" },
-  "Quando um caso espera uma decisão da equipe, esta Central volta a avisar. O relógio começa quando o caso chega à equipe e recomeça quando o cliente responde.": {
-    es: "Cuando un caso espera una decisión del equipo, esta Central vuelve a avisar. El reloj empieza cuando el caso llega al equipo y se reinicia cuando el cliente responde.",
+  "Quando um caso espera uma decisão da equipe, a Central de avisos volta a avisar. O relógio começa quando o caso chega à equipe e recomeça quando o cliente responde.": {
+    es: "Cuando un caso espera una decisión del equipo, la Central de avisos vuelve a avisar. El reloj empieza cuando el caso llega al equipo y se reinicia cuando el cliente responde.",
   },
   "Lembrar a equipe dos casos parados": { es: "Recordar al equipo los casos detenidos" },
   "Lembrar a cada": { es: "Recordar cada" },
@@ -1490,7 +1490,7 @@ export const DICIONARIO: Traducoes = {
   "1 hora": { es: "1 hora" },
   "{n} dias": { es: "{n} días" },
   "{n} horas": { es: "{n} horas" },
-  "em aberto": { es: "abiertos" },
+  "para você": { es: "para ti" },
   // ─── Agentes de IA: lista ───
   "Agents de IA": { es: "Agentes de IA" },
   "Configure o comportamento dos agents que respondem no WhatsApp.": {
@@ -2991,6 +2991,13 @@ export const DICIONARIO: Traducoes = {
   "Linha do tempo do aprendizado": { es: "Línea de tiempo del aprendizaje" },
   "Marcar resolvido": { es: "Marcar resuelto" },
   "Marcar todos resolvidos": { es: "Marcar todos como resueltos" },
+  "Marcar {n} avisos como resolvidos?": { es: "¿Marcar {n} avisos como resueltos?" },
+  "Marcar 1 aviso como resolvido?": { es: "¿Marcar 1 aviso como resuelto?" },
+  "Todos os avisos em aberto saem da lista, inclusive os que não aparecem na tela.": {
+    es: "Todos los avisos abiertos salen de la lista, incluso los que no aparecen en la pantalla.",
+  },
+  "Marcar resolvidos": { es: "Marcar resueltos" },
+  "Mostrando {n} de {total}": { es: "Mostrando {n} de {total}" },
   "Não foi possível resolver todos os avisos. Confira a lista e tente novamente.": {
     es: "No se pudieron resolver todos los avisos. Revisa la lista e inténtalo de nuevo.",
   },
@@ -3056,8 +3063,8 @@ export const DICIONARIO: Traducoes = {
   "O que fazer:": { es: "Qué hacer:" },
   "O que mudou no resultado": { es: "Lo que cambió en el resultado" },
   "O que o agente deve saber": { es: "Lo que el agente debe saber" },
-  "O que o assistente precisou escalar para o time: conexões caídas, tarefas que falharam, atendimentos passados a humanos.": {
-    es: "Lo que el asistente necesitó escalar al equipo: conexiones caídas, tareas que fallaron, atenciones pasadas a humanos.",
+  "O que o assistente passou para a equipe: conexões caídas, tarefas que falharam, atendimentos passados a pessoas.": {
+    es: "Lo que el asistente pasó al equipo: conexiones caídas, tareas que fallaron, atenciones pasadas a personas.",
   },
   "O que os clientes mais quiseram, segundo o que o roteador entendeu de cada conversa.": {
     es: "Lo que los clientes más quisieron, según lo que el enrutador entendió de cada conversación.",
@@ -5492,7 +5499,14 @@ export const DICIONARIO: Traducoes = {
     es: "El nombre y el color que tu empresa muestra para quien trabaja aquí dentro.",
   },
   // ─── Configurações: Notificações ───
-  "Canais e categorias.": { es: "Canales y categorías." },
+  "Escolha como ser avisado. As escolhas valem só neste aparelho e neste navegador.": {
+    es: "Elige cómo recibir los avisos. Las elecciones valen solo en este dispositivo y en este navegador.",
+  },
+  "Na tela": { es: "En pantalla" },
+  "na tela": { es: "en pantalla" },
+  "Notificação": { es: "Notificación" },
+  "notificação": { es: "notificación" },
+  "Na Central de avisos": { es: "En la Central de avisos" },
   "Preferências de notificação em breve. Por enquanto, alertas críticos são enviados por email.": {
     es: "Preferencias de notificación próximamente. Por ahora, las alertas críticas se envían por correo.",
   },
@@ -8630,9 +8644,11 @@ export const DICIONARIO: Traducoes = {
   "Aqui a IA lê o material e responde com as palavras dela; para uma resposta que sai igual, sem IA, use Perguntas frequentes.": { es: "Aquí la IA lee el material y responde con sus palabras; para una respuesta que sale igual, sin IA, usa Preguntas frecuentes." },
   " — edição bloqueada.": { es: " — edición bloqueada." },
   "O navegador bloqueou as notificações. Libere-as nas configurações do site e recarregue.": { es: "El navegador bloqueó las notificaciones. Habilítalas en la configuración del sitio y recarga." },
-  "Email ainda não está disponível. In-app (toast) e Push (Chrome) já funcionam, inclusive com a aba fechada.": { es: "El email todavía no está disponible. In-app (toast) y Push (Chrome) ya funcionan, incluso con la pestaña cerrada." },
+  "Os avisos chegam aqui mesmo com a aba fechada, depois que você liga a Notificação abaixo.": { es: "Los avisos llegan aquí incluso con la pestaña cerrada, después de que activas la Notificación de abajo." },
   "Nesta instalação, os avisos só aparecem com o site aberto.": { es: "En esta instalación, los avisos solo aparecen con el sitio abierto." },
-  "Ligar o Push abaixo já faz o aviso aparecer na bandeja do sistema enquanto você está com o site aberto numa aba. Para receber também com a aba fechada, quem administra o servidor precisa gerar um par de chaves uma única vez e reiniciar:": { es: "Activar el Push de abajo ya hace que el aviso aparezca en la bandeja del sistema mientras tienes el sitio abierto en una pestaña. Para recibirlo también con la pestaña cerrada, quien administra el servidor necesita generar un par de claves una sola vez y reiniciar:" },
+  "Ligar a Notificação abaixo já faz o aviso aparecer na bandeja do sistema enquanto o site está aberto numa aba. Para receber também com a aba fechada, quem administra o servidor precisa configurar uma vez.": { es: "Activar la Notificación de abajo ya hace que el aviso aparezca en la bandeja del sistema mientras el sitio está abierto en una pestaña. Para recibirlo también con la pestaña cerrada, quien administra el servidor necesita configurarlo una vez." },
+  "Como configurar no servidor": { es: "Cómo configurarlo en el servidor" },
+  "Gere um par de chaves uma única vez e reinicie:": { es: "Genera un par de claves una sola vez y reinicia:" },
   "VAPID_PUBLIC_KEY": { es: "VAPID_PUBLIC_KEY" },
   "VAPID_PRIVATE_KEY": { es: "VAPID_PRIVATE_KEY" },
   ". Email ainda não está disponível.": { es: ". El email todavía no está disponible." },

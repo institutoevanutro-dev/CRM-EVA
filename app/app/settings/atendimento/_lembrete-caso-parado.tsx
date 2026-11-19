@@ -9,6 +9,7 @@ import {
 } from "@/app/actions/settings/atualizarLembreteDeCasoParado";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { useT } from "@/hooks/i18n/useT";
 
 const INTERVALOS_EM_HORAS = [1, 2, 4, 8, 12, 24, 48, 72];
@@ -20,9 +21,10 @@ function comOGravado(opcoes: number[], gravado: number): number[] {
 }
 
 /**
- * O lembrete de caso parado da organização (migration 0397), na própria
- * Central — é nela que o lembrete aparece. Só quem administra vê o cartão; a
- * página decide isso com o mesmo `podeAdministrarEmpresa` da action.
+ * O lembrete de caso parado da organização (migration 0397). Mora em
+ * Configurações › Distribuição de atendimento, junto da pausa da IA: a Central
+ * mostra só os avisos (decisão do André, 18/11). Só quem administra vê o
+ * cartão; a página decide isso com o mesmo `podeAdministrarEmpresa` da action.
  *
  * O padrão (ligado, a cada 24 horas, três avisos por espera) é o comportamento
  * de antes desta tela existir.
@@ -60,16 +62,11 @@ export function LembreteDeCasoParado({ inicial }: { inicial: Lembrete }) {
       <h2 className="text-sm font-medium">{t("Lembrete de caso parado")}</h2>
       <p className="text-xs text-muted-foreground">
         {t(
-          "Quando um caso espera uma decisão da equipe, esta Central volta a avisar. O relógio começa quando o caso chega à equipe e recomeça quando o cliente responde.",
+          "Quando um caso espera uma decisão da equipe, a Central de avisos volta a avisar. O relógio começa quando o caso chega à equipe e recomeça quando o cliente responde.",
         )}
       </p>
-      <label className="flex items-start gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={valor.ligado}
-          onChange={(e) => setValor({ ...valor, ligado: e.target.checked })}
-          className="mt-1"
-        />
+      <label className="flex items-center gap-2 text-sm">
+        <Switch checked={valor.ligado} onCheckedChange={(ligado) => setValor({ ...valor, ligado })} />
         <span>{t("Lembrar a equipe dos casos parados")}</span>
       </label>
       <div className="flex flex-wrap gap-3">

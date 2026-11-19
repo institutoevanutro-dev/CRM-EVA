@@ -57,12 +57,17 @@ const vapidPronto = vi.hoisted(() => vi.fn<() => boolean>());
 // este arquivo mede é o texto sobre Push; a seção de sons tem teste próprio.
 vi.mock("@/app/app/settings/notifications/_sons", () => ({ SonsDosAvisos: () => null }));
 vi.mock("@/lib/notifications/vapid", () => ({ vapidPronto }));
-vi.mock("@/lib/auth/server", () => ({ requireAuth: vi.fn().mockResolvedValue({}) }));
+const usuario = vi.hoisted(() => ({ atual: {} as Record<string, unknown> }));
+vi.mock("@/lib/auth/server", () => ({ requireAuth: vi.fn(async () => usuario.atual) }));
 vi.mock("@/app/app/settings/notifications/_client", () => ({
   NotificationPrefsClient: () => <table />,
 }));
 
-async function telaCom(chaves: boolean): Promise<string> {
+/** Quem administra a instalação: é a única pessoa que vê o passo a passo do servidor. */
+const ADMIN_DA_INSTALACAO = { is_platform_admin: true, support: false };
+
+async function telaCom(chaves: boolean, quem: Record<string, unknown> = ADMIN_DA_INSTALACAO): Promise<string> {
+  usuario.atual = quem;
   vapidPronto.mockReturnValue(chaves);
   const { default: NotificationsPage } = await import(
     "@/app/app/settings/notifications/page"
@@ -104,6 +109,13 @@ describe("tela de Notificações — o que ela afirma sobre esta instalação", 
     expect(html).toContain("npx web-push generate-vapid-keys");
     expect(html).toContain("VAPID_PUBLIC_KEY");
     expect(html).toContain("VAPID_PRIVATE_KEY");
+  });
+
+  it("SEM o par VAPID, para a equipe: diz o limite, sem comando de servidor", async () => {
+    const html = await telaCom(false, {});
+    expect(html).toMatch(/só aparecem com o site aberto/i);
+    expect(html).not.toContain("npx web-push generate-vapid-keys");
+    expect(html).not.toContain("VAPID_PUBLIC_KEY");
   });
 
   it("⭐ SEM o par VAPID: NÃO afirma que o Push já funciona", async () => {

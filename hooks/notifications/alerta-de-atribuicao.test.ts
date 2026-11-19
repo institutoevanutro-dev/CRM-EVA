@@ -39,6 +39,7 @@ import {
   type EstadoVisto,
 } from "./aviso-de-negocio";
 import { useCrmAlerts } from "./useCrmAlerts";
+import { ECO_DE_ASSUMIR, limparEcosLocais, liberarEcoLocal, marcarEcoLocal } from "@/lib/kanban/local-echo";
 
 const VENDEDOR = "vendedor-1";
 const OUTRO = "outro-vendedor";
@@ -256,5 +257,26 @@ describe("o hook real, alimentado pelo canal do Realtime", () => {
     );
     expect(entregarAvisoFalso).toHaveBeenCalledTimes(1);
     expect(entregarAvisoFalso).toHaveBeenCalledWith(expect.objectContaining({ category: "lead_assigned" }));
+  });
+
+  it("a própria ação não avisa: ganhar na própria aba fica quieto; assumir não vira 'atribuído a você'", () => {
+    limparEcosLocais();
+    aoAtualizarNegocio(eventoUpdate(negocio({ id: "lead-9", owner_user_id: VENDEDOR, status: "open" }), { id: "lead-9" }));
+    marcarEcoLocal("lead-9");
+    aoAtualizarNegocio(eventoUpdate(negocio({ id: "lead-9", owner_user_id: VENDEDOR, status: "won" }), { id: "lead-9" }));
+    liberarEcoLocal("lead-9");
+    expect(entregarAvisoFalso).not.toHaveBeenCalled();
+
+    aoAtualizarNegocio(eventoUpdate(negocio({ id: "lead-8", owner_user_id: null }), { id: "lead-8" }));
+    marcarEcoLocal(ECO_DE_ASSUMIR);
+    aoAtualizarNegocio(eventoUpdate(negocio({ id: "lead-8", owner_user_id: VENDEDOR }), { id: "lead-8" }));
+    liberarEcoLocal(ECO_DE_ASSUMIR);
+    expect(entregarAvisoFalso).not.toHaveBeenCalled();
+    limparEcosLocais();
+
+    // Controle: a mesma atribuição feita por OUTRA pessoa avisa.
+    aoAtualizarNegocio(eventoUpdate(negocio({ id: "lead-7", owner_user_id: null }), { id: "lead-7" }));
+    aoAtualizarNegocio(eventoUpdate(negocio({ id: "lead-7", owner_user_id: VENDEDOR }), { id: "lead-7" }));
+    expect(entregarAvisoFalso).toHaveBeenCalledTimes(1);
   });
 });
