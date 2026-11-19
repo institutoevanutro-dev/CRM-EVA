@@ -8,6 +8,13 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.26.1] — 2026-11-19
+
+### Alterado
+
+- **Seções da tela do agente começam abertas** Na Configuração do agente, todas as sanfonas começam abertas, também na edição. Fechar uma seção
+  continua sendo escolha de quem está mexendo.
+
 ## [5.26.0] — 2026-11-19
 
 ### Adicionado
@@ -9604,7 +9611,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.1...HEAD
+[5.26.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.0...v5.26.1
 [5.26.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.25.0...v5.26.0
 [5.25.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.24.0...v5.25.0
 [5.24.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.23.0...v5.24.0
