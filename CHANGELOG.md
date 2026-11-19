@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.23.0] — 2026-11-19
+
+### Adicionado
+
+- **Campo "Como chegou" na ficha do contato** A ficha do contato (Editar) ganhou o campo "Como chegou": Anúncio Meta, Anúncio Google, Indicação
+  ou Orgânico. O funil por origem do Marketing usa essa escolha quando o contato não tem a marca
+  automática do anúncio, e ela vale acima das etiquetas do lead.
+
 ## [5.22.1] — 2026-11-18
 
 ### Alterado
@@ -9435,7 +9443,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.22.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.23.0...HEAD
+[5.23.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.22.1...v5.23.0
 [5.22.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.22.0...v5.22.1
 [5.22.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.21.0...v5.22.0
 [5.21.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.20.1...v5.21.0
