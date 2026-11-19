@@ -41,16 +41,26 @@ async function entrar(page: Page, creds: Creds, papel: "manager" | "agent") {
   await page.waitForURL(/\/app(\/|$)/, { timeout: 20_000 });
 }
 
+/** As seções do Início, menos o "Meu dia", nascem fechadas: abre pelo título, como a pessoa faria. */
+async function abrirSecao(page: Page, titulo: string) {
+  const cabecalho = page.getByRole("heading", { name: titulo, exact: true });
+  await expect(cabecalho).toBeVisible({ timeout: 20_000 });
+  await cabecalho.click();
+  await expect(page.locator("details").filter({ has: cabecalho })).toHaveAttribute("open", "");
+}
+
 test("gerente cai no Início e vê Meu dia + Visão da clínica + Gestão", async ({ page }) => {
   await entrar(page, lerCreds(), "manager");
   await page.goto("/app");
   await expect(page).toHaveURL(/\/app\/inicio$/, { timeout: 20_000 });
   await expect(page.getByRole("heading", { name: "Meu dia" })).toBeVisible({ timeout: 20_000 });
-  for (const titulo of ["Pacientes esperando resposta", "Minha agenda de hoje", "Avisos, separados por assunto"]) {
+  // O gerente não atende: o cartão da agenda é o da clínica (lote 19, resposta 10).
+  for (const titulo of ["Pacientes esperando resposta", "Agenda de hoje da clínica", "Avisos, separados por assunto"]) {
     await expect(page.getByRole("heading", { name: titulo })).toBeVisible();
   }
   // Visão da clínica (spec 2026-11-11-inicio-claro): três blocos com o período no título.
-  await expect(page.getByRole("heading", { name: "Visão da clínica" })).toBeVisible({ timeout: 20_000 });
+  // Nasce em sanfona fechada (lote 19, item 187) — o gerente abre.
+  await abrirSecao(page, "Visão da clínica");
   for (const titulo of [
     "A clínica hoje",
     "Atendimento · últimos 30 dias",
@@ -65,8 +75,8 @@ test("gerente cai no Início e vê Meu dia + Visão da clínica + Gestão", asyn
   await expect(page.getByText("Tempo até a primeira resposta")).toBeVisible();
   await expect(page.getByText("Esperando resposta agora")).toBeVisible();
   await expect(page.getByText("Não foi possível carregar este painel.")).toHaveCount(0);
-  // Gestão: três quadros pequenos.
-  await expect(page.getByRole("heading", { name: "Gestão" })).toBeVisible();
+  // Gestão: três quadros pequenos, também em sanfona fechada.
+  await abrirSecao(page, "Gestão");
   for (const titulo of ["Sistema", "Gasto com IA no mês", "Para arrumar"]) {
     await expect(page.getByRole("heading", { name: titulo, exact: true })).toBeVisible();
   }
@@ -85,6 +95,7 @@ test("tipo de atendimento sem responsável aparece em Para arrumar e leva à age
   const tipoId = (await criado.json()).data.id as string;
   try {
     await page.goto("/app/inicio");
+    await abrirSecao(page, "Gestão");
     // O quadro pequeno conta; a lista por tipo, logo abaixo, nomeia e dá a porta.
     await expect(page.getByText(/Agenda sem responsável: \d+/)).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole("heading", { name: /Atendimentos sem responsável na agenda/ })).toBeVisible();
