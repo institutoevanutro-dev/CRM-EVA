@@ -8,6 +8,15 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.26.3] — 2026-11-19
+
+### Corrigido
+
+- **A IA para de responder a robô que só devolve menu** Quando o outro lado manda a segunda mensagem com cara de menu automático em 30 minutos
+  ("selecione uma das opções", "opção inválida", lista "1 - … 2 - …"), a IA para de responder
+  naquela conversa, sem avisar o contato, e abre aviso na Central. Uma lista numerada escrita
+  uma vez por paciente não dispara. Se for uma pessoa, a equipe devolve a conversa à IA.
+
 ## [5.26.2] — 2026-11-19
 
 ### Corrigido
@@ -9620,7 +9629,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.2...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.3...HEAD
+[5.26.3]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.2...v5.26.3
 [5.26.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.1...v5.26.2
 [5.26.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.0...v5.26.1
 [5.26.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.25.0...v5.26.0
