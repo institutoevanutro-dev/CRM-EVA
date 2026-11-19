@@ -25,6 +25,11 @@ import {
 } from "@/components/contacts/EtiquetasDoContato";
 import type { Contact } from "@/lib/types/contacts";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import {
+  ORIGENS_INFORMADAS,
+  ROTULO_DA_ORIGEM_INFORMADA,
+  origemInformadaDe,
+} from "@/lib/contacts/origem-informada";
 
 interface FormShape {
   name?: string;
@@ -35,6 +40,8 @@ interface FormShape {
   endereco?: string;
   /** As etiquetas do contato: o seletor com autocompletar grava esta lista. */
   tags?: string[];
+  /** "Como chegou" — vazio = não informado. */
+  origem_informada?: string;
   custom_fields?: Record<string, unknown>;
 }
 
@@ -71,6 +78,7 @@ export function EditContactDialog({
       cpf: "",
       endereco: typeof contact.custom_fields?.endereco === "string" ? contact.custom_fields.endereco : "",
       tags: contact.tags,
+      origem_informada: origemInformadaDe(contact.source_metadata) ?? "",
       custom_fields: contact.custom_fields ?? {},
     },
   });
@@ -93,6 +101,7 @@ export function EditContactDialog({
         cpf: "",
         endereco: typeof contact.custom_fields?.endereco === "string" ? contact.custom_fields.endereco : "",
         tags: contact.tags,
+        origem_informada: origemInformadaDe(contact.source_metadata) ?? "",
         custom_fields: contact.custom_fields ?? {},
       });
     }
@@ -139,6 +148,9 @@ export function EditContactDialog({
     for (const [k, v] of Object.entries(campos)) if (v !== undefined) payload[k] = v;
     if (values.cpf?.trim()) payload.cpf = values.cpf.trim();
     payload.tags = tags;
+    const origemGravada = origemInformadaDe(contact.source_metadata);
+    const origemEscolhida = values.origem_informada || null;
+    if (origemEscolhida !== origemGravada) payload.origem_informada = origemEscolhida;
     // Sempre no payload, mesmo vazio: o PATCH SUBSTITUI, e é assim que apagar um
     // campo pela tela chega ao banco.
     const customFields = { ...values.custom_fields };
@@ -195,6 +207,22 @@ export function EditContactDialog({
           <div className="space-y-2">
             <Label htmlFor="ec-endereco">{t("Endereço")}</Label>
             <Textarea id="ec-endereco" rows={2} {...form.register("endereco")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ec-origem">{t("Como chegou")}</Label>
+            <select
+              id="ec-origem"
+              {...form.register("origem_informada")}
+              disabled={update.isPending}
+              className="h-11 w-full rounded-md border border-input bg-background px-2 text-base focus:outline-hidden focus:ring-1 focus:ring-ring md:text-sm lg:h-9"
+            >
+              <option value="">{t("Não informado")}</option>
+              {ORIGENS_INFORMADAS.map((o) => (
+                <option key={o} value={o}>
+                  {t(ROTULO_DA_ORIGEM_INFORMADA[o])}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="space-y-2">
             <Label htmlFor="ec-tags">{t("Etiquetas")}</Label>

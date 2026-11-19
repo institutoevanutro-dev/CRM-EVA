@@ -16,6 +16,12 @@ describe("origemDe", () => {
     expect(origemDe({ adPlatform: "google_ads", tags: ["Meta"] })).toBe("google");
     expect(origemDe({ adPlatform: null, tags: ["meta_ads"] })).toBe("organico"); // a origem crua do lead não muda de regra
   });
+  it("\"Como chegou\" da ficha vale acima das etiquetas e abaixo da marca automática do anúncio", () => {
+    expect(origemDe({ adPlatform: null, tags: [], informada: "google" })).toBe("google");
+    expect(origemDe({ adPlatform: null, tags: ["Meta"], informada: "indicacao" })).toBe("indicacao");
+    expect(origemDe({ adPlatform: null, tags: ["Meta"], informada: "organico" })).toBe("organico");
+    expect(origemDe({ adPlatform: "meta_ads", tags: [], informada: "google" })).toBe("meta");
+  });
   it("o resto é orgânico, inclusive plataforma desconhecida", () => {
     expect(origemDe({ adPlatform: null, tags: ["Meta_ads_antigo"] })).toBe("organico");
     expect(origemDe({ adPlatform: "tiktok", tags: [] })).toBe("organico");
@@ -84,7 +90,7 @@ describe("consultaFunilPorOrigem com vendas", () => {
     const vazio = { data: [], error: null };
     const tabela = (nome: string) => {
       const q: Record<string, unknown> = {};
-      const fim = () => Promise.resolve(nome === "contacts" ? { data: [{ id: bom, ad_platform: "meta_ads" }, { id: legado, ad_platform: null }], error: null } : vazio);
+      const fim = () => Promise.resolve(nome === "contacts" ? { data: [{ id: bom, source_metadata: { ad_platform: "meta_ads" } }, { id: legado, source_metadata: {} }], error: null } : vazio);
       for (const k of ["select", "eq", "in", "gte", "lte", "lt", "gt", "is", "not", "order", "range", "limit", "neq", "or", "filter"]) q[k] = () => q;
       q.then = (ok: (v: unknown) => unknown, nao: (e: unknown) => unknown) => fim().then(ok, nao);
       return q;

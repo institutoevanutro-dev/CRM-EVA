@@ -6,6 +6,7 @@
  * - Lançam `ApiError` em caso de erro estruturado; sucesso retorna data.
  * - Audit + emit_event são responsabilidade do handler (DRY entre REST e MCP).
  */
+import { CHAVE_ORIGEM_INFORMADA } from "@/lib/contacts/origem-informada";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -620,7 +621,7 @@ export async function patchContactHandler(
     // patch dele passou a ser MERGE (ver abaixo), e merge precisa do estado
     // anterior.
     .select(
-      "id, organization_id, is_anonymized, is_blocked, tags, email, phone_number, name, display_name, consent, custom_fields",
+      "id, organization_id, is_anonymized, is_blocked, tags, email, phone_number, name, display_name, consent, custom_fields, source_metadata",
     )
     .eq("organization_id", ctx.organization_id)
     .eq("id", contactId)
@@ -684,6 +685,16 @@ export async function patchContactHandler(
   if (input.tags !== undefined) patch.tags = input.tags;
   if (input.source !== undefined) patch.source = input.source;
   if (input.source_metadata !== undefined) patch.source_metadata = input.source_metadata;
+  // "Como chegou": MERGE de uma chave só, para não apagar a marca automática do
+  // anúncio (`ad_platform`) nem o resto do `source_metadata`.
+  if (input.origem_informada !== undefined) {
+    const base = (patch.source_metadata ??
+      (existing as { source_metadata?: Record<string, unknown> }).source_metadata ??
+      {}) as Record<string, unknown>;
+    const { [CHAVE_ORIGEM_INFORMADA]: _antiga, ...resto } = base;
+    patch.source_metadata =
+      input.origem_informada === null ? resto : { ...resto, [CHAVE_ORIGEM_INFORMADA]: input.origem_informada };
+  }
   // SUBSTITUIÇÃO, não merge — ao contrário de `consent`. O editor da tela manda
   // o objeto inteiro que ele renderizou a partir do schema do funil; um merge
   // aqui tornaria IMPOSSÍVEL apagar um campo pela tela, porque a chave removida

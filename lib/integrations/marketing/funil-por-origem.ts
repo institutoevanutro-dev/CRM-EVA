@@ -38,6 +38,7 @@ import { emLotes, lerComparecimentos, lerEventosDoPeriodo, type Contato } from "
 import type { VendaPorContato } from "@/lib/integrations/financeiro/cliente";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
+import { origemInformadaDe, type OrigemInformada } from "@/lib/contacts/origem-informada";
 
 const UUID_RFC = z.string().uuid();
 
@@ -76,9 +77,11 @@ export interface FunilPorOrigem { currency: "BRL"; origens: LinhaDoFunil[] }
 
 const semAcento = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
 
-export function origemDe({ adPlatform, tags }: { adPlatform: string | null; tags: string[] }): Origem {
+export function origemDe({ adPlatform, tags, informada = null }: { adPlatform: string | null; tags: string[]; informada?: OrigemInformada | null }): Origem {
   if (adPlatform === "meta_ads") return "meta";
   if (adPlatform === "google_ads") return "google";
+  // "Como chegou", escolhido na ficha do contato: vale acima das etiquetas.
+  if (informada) return informada;
   // Correção à mão (18/11): sem a marca automática do anúncio, a recepção põe a etiqueta "Meta" ou
   // "Google" (ou "Anúncio Meta"/"Anúncio Google") no lead de quem disse que veio do anúncio.
   const t = tags.map(semAcento);
@@ -126,17 +129,22 @@ export async function consultaFunilPorOrigem(admin: SupabaseClient, org: string,
   const contatos = [...new Set([...leads, ...agendamentos, ...comparecimentos, ...ganhos, ...sinais].map((x) => x.contactId).filter((x): x is string => Boolean(x)))];
   const plataforma = new Map<string, string | null>();
   const etiquetas = new Map<string, string[]>();
+  const informadas = new Map<string, OrigemInformada | null>();
   for (const lote of emLotes(contatos)) {
     const [c, l] = await Promise.all([
-      admin.from("contacts").select("id, ad_platform:source_metadata->>ad_platform").eq("organization_id", org).in("id", lote),
+      admin.from("contacts").select("id, source_metadata").eq("organization_id", org).in("id", lote),
       admin.from("crm_leads").select("contact_id, tags, source").eq("organization_id", org).in("contact_id", lote),
     ]);
     if (c.error || l.error) throw new Error("funil_por_origem: contatos");
-    for (const x of (c.data ?? []) as { id: string; ad_platform: string | null }[]) plataforma.set(x.id, x.ad_platform);
+    for (const x of (c.data ?? []) as { id: string; source_metadata: Record<string, unknown> | null }[]) {
+      const ad = x.source_metadata?.ad_platform;
+      plataforma.set(x.id, typeof ad === "string" ? ad : null);
+      informadas.set(x.id, origemInformadaDe(x.source_metadata));
+    }
     for (const x of (l.data ?? []) as { contact_id: string; tags: string[] | null; source: string | null }[])
       etiquetas.set(x.contact_id, [...(etiquetas.get(x.contact_id) ?? []), ...(x.tags ?? []), ...(x.source ? [x.source] : [])]);
   }
-  const origens = new Map(contatos.map((id) => [id, origemDe({ adPlatform: plataforma.get(id) ?? null, tags: etiquetas.get(id) ?? [] })]));
+  const origens = new Map(contatos.map((id) => [id, origemDe({ adPlatform: plataforma.get(id) ?? null, tags: etiquetas.get(id) ?? [], informada: informadas.get(id) ?? null })]));
 
   const funil = montarFunil({ leads, agendamentos, comparecimentos, sinais, ganhos }, origens);
   // Só ids no formato que a rota do Financeiro aceita (UUID RFC). Contato antigo com id fora do formato
