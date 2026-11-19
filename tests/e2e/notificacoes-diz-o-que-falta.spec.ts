@@ -178,7 +178,7 @@ test.describe("Notificações — a tela conta a verdade sobre esta instalação
     await page.goto("/app/settings/notifications");
 
     const linhaMensagem = page.getByRole("row", { name: /Nova mensagem/i });
-    const interruptorPush = linhaMensagem.getByRole("switch", { name: /via push/i });
+    const interruptorPush = linhaMensagem.getByRole("switch", { name: /: notificação/i });
 
     // 1 · O controle não sumiu da tela por falta de VAPID.
     await expect(interruptorPush).toBeVisible();
