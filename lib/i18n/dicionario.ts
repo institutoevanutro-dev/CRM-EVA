@@ -8393,6 +8393,8 @@ export const DICIONARIO: Traducoes = {
   "1ª resposta (média)": { es: "1ª respuesta (promedio)" },
   "Custo do atendimento, funil e desempenho de cada atendente nos últimos 30 dias.": { es: "Costo de la atención, embudo y rendimiento de cada agente en los últimos 30 días." },
   "Custo do atendimento, seu funil e seu desempenho nos últimos 30 dias.": { es: "Costo de la atención, tu embudo y tu rendimiento en los últimos 30 días." },
+  "Custo do atendimento e desempenho de cada atendente nos últimos 30 dias. O funil mostra os cartões abertos agora.": { es: "Costo de la atención y rendimiento de cada agente en los últimos 30 días. El embudo muestra las tarjetas abiertas ahora." },
+  "Custo do atendimento e seu desempenho nos últimos 30 dias. O funil mostra os seus cartões abertos agora.": { es: "Costo de la atención y tu rendimiento en los últimos 30 días. El embudo muestra tus tarjetas abiertas ahora." },
   "Nenhuma demanda em risco": { es: "Ninguna demanda en riesgo" },
   "Toda demanda aberta teve atividade recente ou já tem um retorno agendado.": { es: "Toda demanda abierta tuvo actividad reciente o ya tiene un retorno agendado." },
   "demanda aberta sem próximo passo": { es: "demanda abierta sin próximo paso" },
@@ -8481,6 +8483,9 @@ export const DICIONARIO: Traducoes = {
   "Respostas barradas pelas regras (média por resposta)": { es: "Respuestas bloqueadas por las reglas (promedio por respuesta)" },
   "do atendente": { es: "del agente" },
   "aberto": { es: "abierto" },
+  "aberto agora": { es: "abierto ahora" },
+  "abertos agora": { es: "abiertos ahora" },
+  "Nenhum cartão aberto agora.": { es: "Ninguna tarjeta abierta ahora." },
   "abertos": { es: "abiertos" },
 
   // ─── O que a main de 1.8.0 trouxe: acervo de conhecimento, push, agenda ───

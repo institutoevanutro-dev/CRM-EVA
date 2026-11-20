@@ -40,6 +40,7 @@ interface Props {
 export function MetricsClient({ canCompare, currentUserId }: Props) {
   const t = useT();
   const [owner, setOwner] = useState<string>(ALL);
+  const [funilEscolhido, setFunilEscolhido] = useState<string | null>(null);
   const selectedOwner = owner === ALL ? null : owner;
   const { data, isLoading, isError, refetch } = useAttendantMetrics(selectedOwner);
   // Opções do filtro: só manager+ (a rota /team é manager+). Agent nem vê o filtro.
@@ -50,8 +51,12 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
     return <ErroDeLeitura texto={t("Erro ao carregar métricas.")} onRetry={() => refetch()} />;
 
   const metrics = data.data;
-  const funnelTotal = metrics.funnel.reduce((acc, s) => acc + s.count, 0);
-  const maxCount = Math.max(1, ...metrics.funnel.map((s) => s.count));
+  // Item 159: um funil por vez (o padrão primeiro), sem as etapas de ganho e perda.
+  const funilAtual =
+    metrics.funis.find((f) => f.pipeline_id === funilEscolhido) ?? metrics.funis[0] ?? null;
+  const etapas = funilAtual?.etapas ?? [];
+  const funnelTotal = etapas.reduce((acc, s) => acc + s.count, 0);
+  const maxCount = Math.max(1, ...etapas.map((s) => s.count));
 
   return (
     <div className="flex flex-col gap-6">
@@ -84,17 +89,31 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
       <AtritoPanel podeEditarRegua={canCompare} />
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
           <CardTitle className="text-base">
             {t("Funil")} {selectedOwner ? t("do atendente") : ""} · {funnelTotal}{" "}
-            {funnelTotal === 1 ? t("aberto") : t("abertos")}
+            {funnelTotal === 1 ? t("aberto agora") : t("abertos agora")}
           </CardTitle>
+          {metrics.funis.length > 1 && funilAtual ? (
+            <Select value={funilAtual.pipeline_id} onValueChange={setFunilEscolhido}>
+              <SelectTrigger className="w-64" aria-label={t("Funil")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {metrics.funis.map((f) => (
+                  <SelectItem key={f.pipeline_id} value={f.pipeline_id}>
+                    {f.pipeline_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {metrics.funnel.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("Nenhuma etapa configurada.")}</p>
+          {etapas.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("Nenhum cartão aberto agora.")}</p>
           ) : (
-            metrics.funnel.map((s) => (
+            etapas.map((s) => (
               <div key={s.stage_id} className="flex items-center gap-3">
                 <span className="w-40 shrink-0 truncate text-sm">{s.stage_name}</span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">

@@ -1,6 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
+import type { FunilAgrupado } from "@/lib/metrics/funil-por-pipeline";
 
 export interface FunnelStage {
   stage_id: string;
@@ -23,6 +24,8 @@ export interface AttendantMetrics {
   window: { from: string; to: string };
   owner_user_id: string | null;
   funnel: FunnelStage[];
+  /** O mesmo funil, repartido por funil e sem as etapas de ganho/perda. */
+  funis: FunilAgrupado[];
   attendants: AttendantMetric[];
 }
 
