@@ -5981,13 +5981,62 @@ revoke execute on function public.fn_can_view_conversation(uuid, uuid) from anon
 grant execute on function public.fn_can_view_conversation(uuid, uuid)
   to authenticated, service_role;
 
+-- Escopo da conversa por organização, uma vez por consulta (migration 0420, porte do original #3199).
+create or replace function public.fn_conversation_scope()
+returns table (organization_id uuid, org_wide_read boolean, sees_unassigned boolean)
+language sql stable security definer
+set search_path = public
+as $$
+  -- Membro = a mesma regra de fn_user_org_ids(), escrita aqui para só chamar
+  -- fn_support_context() quando HÁ sessão de suporte aberta (como
+  -- fn_user_role_in_org; vigiado por rls-sem-custo-por-linha.test.ts).
+  select x.organization_id,
+         x.papel in ('viewer','manager','admin')
+           or (x.papel <> 'provider' and x.modo = 'all'),
+         x.papel <> 'provider' and x.modo = 'own_and_unassigned'
+  from (
+    select o.organization_id,
+           public.fn_user_role_in_org(o.organization_id) as papel,
+           coalesce((select z.settings->>'visibility_mode' from public.organizations z
+                     where z.id = o.organization_id), 'own_and_unassigned') as modo
+      from (
+        select u.organization_id from public.user_organizations u
+         where u.user_id = auth.uid() and u.revoked_at is null
+        union
+        select (c.s->>'organization_id')::uuid
+          from (select public.fn_support_context() as s
+                 where exists (select 1 from public.platform_support_sessions p
+                                where p.actor_user_id = auth.uid() and p.ended_at is null)) c
+         where c.s->>'status' = 'active'
+      ) o
+  ) x;
+$$;
+
+do $janela$ begin
+  revoke all on function public.fn_conversation_scope() from public, anon;
+  grant execute on function public.fn_conversation_scope() to authenticated, service_role;
+end $janela$;
+
 do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
 if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'conversations' and policyname = 'conversations_select'
-    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '8919c5626faea1466ea141b427dc48ec') then
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = '6e53d04ea52a8fea3e52686099afb110') then
 drop policy if exists "conversations_select" on public.conversations;
 create policy "conversations_select" on public.conversations
   for select using (
-    public.fn_can_view_conversation(organization_id, assigned_to_user_id)
+    (select public.fn_is_platform_admin())
+    or organization_id in (
+         select s.organization_id from public.fn_conversation_scope() s where s.org_wide_read
+       )
+    or (
+         assigned_to_user_id = auth.uid()
+         and organization_id in (select s.organization_id from public.fn_conversation_scope() s)
+       )
+    or (
+         assigned_to_user_id is null
+         and organization_id in (
+              select s.organization_id from public.fn_conversation_scope() s where s.sees_unassigned
+            )
+       )
   );
 end if;
 end $politica$;
@@ -38965,6 +39014,49 @@ create or replace trigger trg_canal_marca_acesso_da_ia
   execute function public.fn_canal_marca_acesso_da_ia();
 -- ---- fim: silencio sem retroativo (migration 0418) ----
 
+-- ---- escopo da conversa uma vez por consulta (migration 0420) ----
+-- Derivado de supabase/migrations/20261120000000_0420_escopo_da_conversa_uma_vez_por_consulta.sql
+-- (porte do original #3199; motivo e a diferença do papel provider no cabeçalho de lá).
+-- A função nasce com este corpo na primeira definição (junto de
+-- fn_can_view_conversation) e a policy `conversations_select` nasce uma vez, no
+-- bloco `do $politica$` de lá, que a recria em quem atualiza quando a impressão
+-- digital não confere. Aqui só se repete o corpo final.
+create or replace function public.fn_conversation_scope()
+returns table (organization_id uuid, org_wide_read boolean, sees_unassigned boolean)
+language sql stable security definer
+set search_path = public
+as $$
+  -- Membro = a mesma regra de fn_user_org_ids(), escrita aqui para só chamar
+  -- fn_support_context() quando HÁ sessão de suporte aberta (como
+  -- fn_user_role_in_org; vigiado por rls-sem-custo-por-linha.test.ts).
+  select x.organization_id,
+         x.papel in ('viewer','manager','admin')
+           or (x.papel <> 'provider' and x.modo = 'all'),
+         x.papel <> 'provider' and x.modo = 'own_and_unassigned'
+  from (
+    select o.organization_id,
+           public.fn_user_role_in_org(o.organization_id) as papel,
+           coalesce((select z.settings->>'visibility_mode' from public.organizations z
+                     where z.id = o.organization_id), 'own_and_unassigned') as modo
+      from (
+        select u.organization_id from public.user_organizations u
+         where u.user_id = auth.uid() and u.revoked_at is null
+        union
+        select (c.s->>'organization_id')::uuid
+          from (select public.fn_support_context() as s
+                 where exists (select 1 from public.platform_support_sessions p
+                                where p.actor_user_id = auth.uid() and p.ended_at is null)) c
+         where c.s->>'status' = 'active'
+      ) o
+  ) x;
+$$;
+
+do $janela$ begin
+  revoke all on function public.fn_conversation_scope() from public, anon;
+  grant execute on function public.fn_conversation_scope() to authenticated, service_role;
+end $janela$;
+-- ---- fim: escopo da conversa uma vez por consulta (migration 0420) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
@@ -39565,3 +39657,4 @@ create index if not exists prontuario_contact_links_linked_by_api_token_id_idx
   on public.prontuario_contact_links (linked_by_api_token_id)
   where linked_by_api_token_id is not null;
 -- ---- fim: índice das FKs de api_tokens (migration 0419) ----
+

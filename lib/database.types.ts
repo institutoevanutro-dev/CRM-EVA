@@ -8463,6 +8463,14 @@ export type Database = {
         Args: { p_org: string; p_owner_user_id: string }
         Returns: boolean
       }
+      fn_conversation_scope: {
+        Args: never
+        Returns: {
+          organization_id: string
+          org_wide_read: boolean
+          sees_unassigned: boolean
+        }[]
+      }
       fn_claim_due_followup_enrollments: {
         Args: { p_lease_seconds: number; p_limit: number }
         Returns: {

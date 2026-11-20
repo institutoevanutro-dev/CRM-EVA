@@ -259,10 +259,7 @@ describe("A3 — provider só vê o que é dele", () => {
   // O ramo do provider somou uma TERCEIRA chamada de fn_user_role_in_org por
   // linha (~0,3 ms cada): o Radar do agent, que varre 500+ leads, estourou o
   // timeout da tela no e2e. A régua é a contagem de chamadas, não o relógio.
-  it.each([
-    ["crm_leads", "fn_can_view_lead"],
-    ["conversations", "fn_can_view_conversation"],
-  ])("%s: a RLS lê o papel UMA vez por linha (%s)", (tabela) => {
+  it.each([["crm_leads", "fn_can_view_lead"]])("%s: a RLS lê o papel UMA vez por linha (%s)", (tabela) => {
     const saida = sql(`
       begin;
       set local track_functions = 'all';
@@ -276,6 +273,31 @@ describe("A3 — provider só vê o que é dele", () => {
     expect(visiveis).not.toBe("0");
     expect(Number(escaneadas)).toBeGreaterThan(1);
     expect(chamadas).toBe(escaneadas);
+  });
+  // Migration 0420 (porte do original #3199): a policy de conversas resolve o
+  // escopo por ORGANIZAÇÃO, uma vez por consulta (`fn_conversation_scope`). O
+  // papel é lido no máximo uma vez por organização do usuário em cada uma das
+  // três disjunções da policy — nunca por linha.
+  it("conversations: a RLS lê o papel por organização, não por linha (fn_conversation_scope)", () => {
+    const medir = (filtro: string): string[] =>
+      sql(`
+      begin;
+      set local track_functions = 'all';
+      set local role authenticated;
+      select set_config('request.jwt.claims', '{"sub":"${AGENT_A}","role":"authenticated"}', true);
+      select count(*) from public.conversations where ${filtro};
+      select coalesce(pg_stat_get_xact_function_calls('public.fn_user_role_in_org(uuid)'::regprocedure), 0);
+      select coalesce(pg_stat_get_xact_function_calls('public.fn_can_view_conversation(uuid,uuid)'::regprocedure), 0);
+      commit;`).split("\n").filter((l) => /^\d+$/.test(l));
+    const [visiveis, papelTodas, porLinha] = medir(`organization_id = '${ORG_A}'`);
+    const [, papelUma] = medir(`id = '${CONV_SEM_DONO}'`);
+    const escaneadas = sql(`select count(*) from public.conversations where organization_id = '${ORG_A}';`);
+    expect(visiveis).not.toBe("0");
+    expect(Number(escaneadas)).toBeGreaterThan(1);
+    expect(porLinha).toBe("0");
+    // O custo não cresce com o número de linhas: ler 1 ou todas chama o papel
+    // o mesmo número de vezes.
+    expect(papelTodas).toBe(papelUma);
   });
 });
 
