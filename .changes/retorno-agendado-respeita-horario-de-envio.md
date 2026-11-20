@@ -1,6 +1,6 @@
 ---
 impacto: capacidade_nova
-secao: mudado
+secao: alterado
 titulo: Retorno agendado pela IA respeita o horário de envio dos follow-ups
 ---
 
