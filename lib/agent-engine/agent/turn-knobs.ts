@@ -57,6 +57,8 @@ export function turnKnobsFromEnv(env: Env): InboundTurnKnobs {
       janelaRepeticaoMs: env.BOT_LOOP_REPEAT_WINDOW_MS,
       rajadaIaMax: env.BOT_LOOP_AI_BURST_MAX,
       janelaRajadaMs: env.BOT_LOOP_AI_BURST_WINDOW_MS,
+      tetoRespostas: env.BOT_LOOP_REPLY_CAP,
+      janelaTetoMs: env.BOT_LOOP_REPLY_CAP_WINDOW_MS,
     },
     repeticao: {
       janelaMs: env.AI_REPEAT_GUARD_WINDOW_MS,

@@ -40,6 +40,31 @@
  *    respondeu no máximo duas vezes. UMA lista numerada de paciente ("1 - dor de
  *    cabeça 2 - febre") não dispara sozinha — é a combinação que conta.
  *
+ * D. **Teto de respostas da IA por conversa** (padrão 50 em 60 min). Porte do
+ *    DeskcommCRM #4611/#4863. Lá, o outro lado era o atendimento automático de
+ *    um banco: 216 respostas da IA em 1 hora, uma a cada ~18 s. Esse ritmo fica
+ *    ABAIXO de B (~17 envios por 5 min, e B só dispara acima de 20) e o texto do
+ *    robô variava, então nem A nem C pegavam. D não olha o texto nem o ritmo:
+ *    conta as linhas `sent_via='ai'` não falhadas da conversa na última hora
+ *    (cada bolha e cada foto conta uma, como no original). Corte com handoff
+ *    devolvido, como as outras assinaturas.
+ *
+ *    Por que 50, e não os 20 do original: aqui um turno manda até
+ *    `MAX_SENDS_PER_TURN` (3) bolhas, e uma conversa longa de paciente (dúvida
+ *    de procedimento, preço, fotos, horário, confirmação) passa de 20 bolhas da
+ *    IA numa hora sem nada de errado. 50 exige ~17–25 trocas completas em
+ *    sessenta minutos, além do que uma conversa real de clínica faz, e ainda
+ *    corta o laço medido em ~15 min (50 × 18 s). Quem precisar de mais sobe
+ *    `BOT_LOOP_REPLY_CAP`. Diferente de A/B/C, aqui do outro lado PODE ser uma
+ *    pessoa, por isso o aviso da Central tem título próprio, que pede para
+ *    conferir e devolver a conversa à IA se for paciente.
+ *
+ *    ponytail: a contagem sai das linhas lidas (limite 500, mais recentes
+ *    primeiro). Para subcontar seria preciso >450 mensagens recebidas na mesma
+ *    hora; o erro, se houver, é para o lado de NÃO disparar. Um turno pode
+ *    passar do teto em até 2 bolhas (ele é conferido antes do turno, não por
+ *    envio, como no gate do original).
+ *
  * ## O corte da janela
  *
  * A janela começa no que for mais recente: `agora - janela` ou
@@ -74,6 +99,10 @@ export interface RoboKnobs {
   janelaRepeticaoMs: number;
   rajadaIaMax: number;
   janelaRajadaMs: number;
+  /** D — respostas da IA na conversa que fecham o teto (dispara em `>=`). */
+  tetoRespostas: number;
+  /** D — largura da janela do teto. */
+  janelaTetoMs: number;
 }
 
 /** Defaults — os mesmos de `lib/agent-engine/env.ts` (BOT_LOOP_*). */
@@ -82,6 +111,8 @@ export const ROBO_KNOBS_PADRAO: RoboKnobs = {
   janelaRepeticaoMs: 10 * 60_000,
   rajadaIaMax: 20,
   janelaRajadaMs: 5 * 60_000,
+  tetoRespostas: 50,
+  janelaTetoMs: 60 * 60_000,
 };
 
 /** Abaixo disto, repetir é coisa de gente ("oi", "ok", "sim, pode ser"). */
@@ -115,11 +146,17 @@ export interface MensagemRecente {
   sent_via: string;
   body: string | null;
   sent_at: Date;
+  /** Só D usa: envio `failed` não chegou ao cliente e não é resposta. Ausente = não falhou. */
+  status?: string | null;
 }
 
 export type SinalDeRobo =
   | { robo: false }
-  | { robo: true; sinal: 'inbound_repetido' | 'menu_repetido' | 'rajada_da_ia'; contagem: number };
+  | {
+      robo: true;
+      sinal: 'inbound_repetido' | 'menu_repetido' | 'rajada_da_ia' | 'teto_de_respostas';
+      contagem: number;
+    };
 
 export function detectarRoboDoOutroLado(
   mensagens: readonly MensagemRecente[],
@@ -156,11 +193,21 @@ export function detectarRoboDoOutroLado(
   const humano = janelaB.some((m) => ENVIO_HUMANO.has(m.sent_via));
   if (!humano && daIa > knobs.rajadaIaMax) return { robo: true, sinal: 'rajada_da_ia', contagem: daIa };
 
+  // D — teto de respostas da IA na conversa (porte do DeskcommCRM #4611).
+  const respostas = desde(knobs.janelaTetoMs).filter(
+    (m) => m.direction === 'outbound' && m.sent_via === 'ai' && m.status !== 'failed',
+  ).length;
+  if (respostas >= knobs.tetoRespostas) return { robo: true, sinal: 'teto_de_respostas', contagem: respostas };
+
   return { robo: false };
 }
 
 export const TITULO_DO_AVISO_DE_ROBO =
   'Possível robô do outro lado — a IA parou de responder; se for uma pessoa, devolva a conversa à IA';
+
+/** Título próprio do teto (D): do outro lado pode ser um paciente, não só um robô. */
+export const TITULO_DO_AVISO_DO_TETO =
+  'A IA parou de responder esta conversa: muitas respostas em pouco tempo — confira se é um robô ou um paciente';
 
 /**
  * Lê a janela, decide e, se for robô, silencia pelo caminho do handoff. `true`
@@ -175,15 +222,15 @@ export async function pararSeForRoboDoOutroLado(
   const knobs = opts.knobs ?? ROBO_KNOBS_PADRAO;
   let sinal: SinalDeRobo;
   try {
-    const janelaMs = Math.max(knobs.janelaRepeticaoMs, knobs.janelaRajadaMs, JANELA_MENU_MS);
+    const janelaMs = Math.max(knobs.janelaRepeticaoMs, knobs.janelaRajadaMs, JANELA_MENU_MS, knobs.janelaTetoMs);
     const { rows } = await pool.query<MensagemRecente>(
-      `select m.direction, m.sent_via, m.body, m.sent_at
+      `select m.direction, m.sent_via, m.body, m.sent_at, m.status
          from messages m
          join conversations c on c.organization_id = m.organization_id and c.id = m.conversation_id
         where m.organization_id = $1 and m.conversation_id = $2
           and m.sent_at >= greatest($3::timestamptz, coalesce(c.last_handoff_at, '-infinity'::timestamptz))
         order by m.sent_at desc
-        limit 200`,
+        limit 500`,
       [ids.tenantId, ids.conversationId, new Date(opts.agora.getTime() - janelaMs).toISOString()],
     );
     sinal = detectarRoboDoOutroLado(
@@ -206,13 +253,18 @@ export async function pararSeForRoboDoOutroLado(
       ? `o contato mandou a mesma mensagem ${sinal.contagem}x em ${Math.round(knobs.janelaRepeticaoMs / 60_000)} min`
       : sinal.sinal === 'menu_repetido'
         ? `o contato mandou ${sinal.contagem} mensagens com cara de menu automático ("selecione uma opção") em ${Math.round(Math.max(knobs.janelaRepeticaoMs, JANELA_MENU_MS) / 60_000)} min`
-        : `a IA mandou ${sinal.contagem} mensagens em ${Math.round(knobs.janelaRajadaMs / 60_000)} min sem nenhuma pessoa da equipe na conversa`;
+        : sinal.sinal === 'rajada_da_ia'
+          ? `a IA mandou ${sinal.contagem} mensagens em ${Math.round(knobs.janelaRajadaMs / 60_000)} min sem nenhuma pessoa da equipe na conversa`
+          : `a IA já mandou ${sinal.contagem} mensagens nesta conversa em ${Math.round(knobs.janelaTetoMs / 60_000)} min (teto: ${knobs.tetoRespostas})`;
+  const teto = sinal.sinal === 'teto_de_respostas';
   await performHumanHandoff(pool, ids, {
-    reason: 'suspected_bot_loop',
-    inboxTitle: TITULO_DO_AVISO_DE_ROBO,
-    conversationSummary:
-      `Detecção automática: ${porque} — assinatura de resposta automática. ` +
-      'A IA parou de responder e o contato NÃO foi avisado. Se for uma pessoa, devolva a conversa à IA.',
+    reason: teto ? 'reply_cap_reached' : 'suspected_bot_loop',
+    inboxTitle: teto ? TITULO_DO_AVISO_DO_TETO : TITULO_DO_AVISO_DE_ROBO,
+    conversationSummary: teto
+      ? `Detecção automática: ${porque}. Pode ser um atendimento automático do outro lado ou um paciente muito ativo. ` +
+        'A IA parou de responder e o contato NÃO foi avisado. Se for um paciente, assuma ou devolva a conversa à IA.'
+      : `Detecção automática: ${porque} — assinatura de resposta automática. ` +
+        'A IA parou de responder e o contato NÃO foi avisado. Se for uma pessoa, devolva a conversa à IA.',
     log: opts.log,
   });
   opts.log.info('possível robô do outro lado — bot silenciado sem resposta e escalado ao humano', {

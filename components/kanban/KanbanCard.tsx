@@ -1,6 +1,6 @@
 "use client";
 import { Draggable } from "@hello-pangea/dnd";
-import type { MouseEvent } from "react";
+import { memo, type MouseEvent } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { cn } from "@/lib/utils";
 import type { Lead } from "@/lib/types/leads";
@@ -73,8 +73,11 @@ function formatBRL(cents: number | null, currency: string | null): string | null
  * dados, ele TROCA de estado.
  *
  * Cor só aparece na borda esquerda, e só quando o estado pede (Lei C).
+ *
+ * `memo` (porte do #4801 do original): com props iguais o card não redesenha —
+ * marcar, pulsar ou mover um card redesenha só ele, não a coluna inteira.
  */
-export function KanbanCard({
+export const KanbanCard = memo(function KanbanCard({
   card,
   lead,
   index,
@@ -349,4 +352,4 @@ export function KanbanCard({
       )}
     </Draggable>
   );
-}
+});

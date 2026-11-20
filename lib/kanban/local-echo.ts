@@ -19,8 +19,15 @@
  * tamanho diferente por fluxo**, então qualquer constante calibrada no arrasto
  * estaria errada nos outros — e numa VPS modesta, errada em todos.
  *
+ * A marca decide DUAS coisas, não uma: o pulso e a releitura. Desde o porte do
+ * #4911 do original, `useBoard` também não relê o quadro para um evento marcado
+ * como eco — quem reconcilia o meu arraste é a resposta do servidor, fundida no
+ * card. O custo: um evento de COLEGA no mesmo lead, dentro da janela da marca,
+ * também é tomado por eco, e aquele card fica velho até o próximo evento do
+ * funil ou a rede de segurança (`useRefetchDeSeguranca`).
+ *
  * Memória de processo, sem persistência: se a aba recarregar, o eco se perde e
- * o pior caso é um pulso a mais — nunca um evento remoto silenciado.
+ * o pior caso é um pulso e uma releitura a mais.
  */
 interface Marca {
   /**
@@ -64,8 +71,8 @@ const FOLGA_MS = 1_000;
  * `onSettled` que não roda). Sem isto a marca ficaria para sempre e o lead
  * pararia de pulsar de vez, que é o erro caro.
  *
- * 4 s, e não um número justo: errar para cá custa **um pulso perdido** — falha
- * cosmética, e o dado atualiza igual. Errar para menos ressuscita o defeito do
+ * 4 s, e não um número justo: errar para cá custa um pulso perdido e a
+ * releitura pulada para aquele lead (ver o cabeçalho). Errar para menos ressuscita o defeito do
  * `12.c`, intermitente e só sob carga. Entre o barato e o caro, o desenho
  * escolhe o barato.
  */

@@ -286,18 +286,24 @@ export function KanbanCardActions({ lead, pipelineId, stages }: KanbanCardAction
         </AlertDialogContent>
       </AlertDialog>
 
-      <LoseLeadDialog
-        open={loseOpen}
-        onOpenChange={setLoseOpen}
-        leadId={lead.id}
-        pipelineId={pipelineId}
-      />
-      <EditLeadDialog
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        lead={lead}
-        pipelineId={pipelineId}
-      />
+      {/* Cada diálogo só existe aberto (porte do #4801 do original): fechados,
+          eram dois diálogos com hooks próprios em CADA card do quadro. */}
+      {loseOpen && (
+        <LoseLeadDialog
+          open={loseOpen}
+          onOpenChange={setLoseOpen}
+          leadId={lead.id}
+          pipelineId={pipelineId}
+        />
+      )}
+      {editOpen && (
+        <EditLeadDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          lead={lead}
+          pipelineId={pipelineId}
+        />
+      )}
     </span>
   );
 }

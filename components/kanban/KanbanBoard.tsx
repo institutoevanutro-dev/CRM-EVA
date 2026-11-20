@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -91,6 +91,8 @@ export function KanbanBoard({
   // — preenchido pela página sem filtro — que o `after` do arrasto é lido.
   const qc = useQueryClient();
   const moveCard = useMoveCard(pipelineId);
+  // `mutate` é estável; o objeto `moveCard` muda a cada render.
+  const mutarMove = moveCard.mutate;
   const { data: members } = useAssignableMembers(true);
   const ownerNames = useMemo(
     () => new Map((members ?? []).map((m) => [m.user_id, m.full_name])),
@@ -139,13 +141,30 @@ export function KanbanBoard({
     [selectedIds, internalSelected],
   );
 
-  const data = useExternal
-    ? {
-        pipeline: pipelineProp ?? ({} as Pipeline),
-        stages: stagesProp,
-        leads: leadsProp,
-      }
-    : queryResult.data;
+  // `useMemo` (porte do #4801 do original): um objeto novo a cada render
+  // invalidava o `grouped` e as etapas que chegam aos cards — o quadro inteiro
+  // redesenhava.
+  const data = useMemo(
+    () =>
+      useExternal
+        ? {
+            pipeline: pipelineProp ?? ({} as Pipeline),
+            stages: stagesProp,
+            leads: leadsProp,
+          }
+        : queryResult.data,
+    [useExternal, pipelineProp, stagesProp, leadsProp, queryResult.data],
+  );
+  // A seleção chega ao `handleSelectMany` por ref: com ela nas dependências,
+  // cada clique de seleção trocava a função de todos os cards e redesenhava o
+  // quadro.
+  const selecaoAtual = useRef(selectedLeadIds);
+  useEffect(() => {
+    selecaoAtual.current = selectedLeadIds;
+  }, [selectedLeadIds]);
+  // O último card solto pelo arraste fica visível mesmo além do corte de
+  // ganho/perda (`lib/kanban/limite-da-coluna.ts`).
+  const [soltoId, setSoltoId] = useState<string | null>(null);
   const isLoading = useExternal ? false : queryResult.isLoading;
   const isError = useExternal ? false : queryResult.isError;
   const error = useExternal ? null : queryResult.error;
@@ -174,12 +193,12 @@ export function KanbanBoard({
         return next;
       };
       if (onSelectionChange) {
-        onSelectionChange(Array.from(apply(selectedLeadIds)));
+        onSelectionChange(Array.from(apply(selecaoAtual.current)));
       } else {
         setInternalSelected((prev) => apply(prev));
       }
     },
-    [onSelectionChange, selectedLeadIds],
+    [onSelectionChange],
   );
 
   const handleDragEnd = useCallback(
@@ -231,14 +250,15 @@ export function KanbanBoard({
         toast.info(t("Havia cartões na mesma posição nesta etapa: este ficou logo depois deles."));
       }
 
-      moveCard.mutate({
+      setSoltoId(lead.id);
+      mutarMove({
         leadId: lead.id,
         stageId: destStageId,
         positionInStage: newPosition,
         expectedUpdatedAt: lead.updated_at,
       });
     },
-    [data, grouped, moveCard, qc, pipelineId, t],
+    [data, grouped, mutarMove, qc, pipelineId, t],
   );
 
   if (isLoading) {
@@ -296,6 +316,8 @@ export function KanbanBoard({
             selectedLeadIds={selectedLeadIds}
             onSelectMany={handleSelectMany}
             onOpen={setDossieId}
+            soltoId={soltoId}
+            abertoId={dossieId}
           />
         ))}
       </div>

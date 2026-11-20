@@ -49,6 +49,22 @@ function idDoEvento(payload: unknown): string | null {
 }
 
 /**
+ * O FUNIL do evento, quando o payload o traz.
+ *
+ * O canal já assina com `filter: pipeline_id=eq.<funil>`, então na prática só
+ * chega o que é deste quadro. Ler o campo mesmo assim é a guarda que não depende
+ * do servidor ter aplicado o filtro: um canal sem filtro entregaria o funil do
+ * vizinho, e reler o quadro inteiro por causa de outro funil é exatamente o
+ * custo que a #4788 do original manda tirar do caminho.
+ */
+function funilDoEvento(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const p = payload as { new?: { pipeline_id?: unknown }; old?: { pipeline_id?: unknown } };
+  const funil = p.new?.pipeline_id ?? p.old?.pipeline_id;
+  return typeof funil === "string" ? funil : null;
+}
+
+/**
  * A CHAVE DE CACHE DO QUADRO — uma só, e exportada.
  *
  * `useMotivosDePerdaDoFunil` lê o quadro pela cache em vez de buscar de novo. Com
@@ -84,16 +100,24 @@ export function useBoard(pipelineId: string | null) {
 
   const onChange = useCallback(
     (payload: unknown) => {
-      // Conservative: invalidate the board on any change. Optimistic patches
-      // arrive faster via useMoveCard's onMutate; this just reconciles
-      // cross-user changes within ~250ms.
-      // Por prefixo: alcança também os fechados antigos, se abertos.
-      invalidar(queryKey);
+      // Evento de outro funil não é assunto deste quadro. A guarda é do
+      // payload, e não da assinatura do canal: quem entrega o evento não é
+      // quem decide se ele interessa a esta tela.
+      const funil = funilDoEvento(payload);
+      if (funil !== null && funil !== pipelineId) return;
 
       const leadId = idDoEvento(payload);
       // Janela, não marca gasta por evento: uma ação minha chega aqui em DUAS
       // parcelas (o movimento e o carimbo de `last_activity_at` da atividade).
-      if (!leadId || ehEcoLocal(leadId)) return;
+      // Eco da MINHA ação não relê o funil: o `onSuccess` do move já fundiu a
+      // resposta do servidor no card. O pulso também não entra.
+      const eco = leadId !== null && ehEcoLocal(leadId);
+
+      // A rajada vira UMA releitura (`useInvalidacaoAgrupada`, com teto). Por
+      // prefixo: alcança também os fechados antigos, se abertos.
+      if (!eco) invalidar(queryKey);
+
+      if (!leadId || eco) return;
 
       // CONTADOR, não booleano. Com um Set, o segundo evento remoto no mesmo
       // card dentro da janela não mudava nada: o id já estava lá, a classe
@@ -123,7 +147,7 @@ export function useBoard(pipelineId: string | null) {
         }, PULSE_MS),
       );
     },
-    [invalidar, queryKey],
+    [invalidar, queryKey, pipelineId],
   );
 
   // O STATUS DO CANAL NÃO PODE SER DESCARTADO. `useRealtimeChannel` calcula

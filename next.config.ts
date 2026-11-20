@@ -96,6 +96,23 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // Porte do #4686 do original. O proxy na frente não manda HSTS (o Caddy do
+          // kit não define cabeçalho nenhum; medido em produção em 19/11/2026: sem
+          // HSTS e sem CSP): quem responde pelo transporte é a origem. Sem
+          // includeSubDomains (o domínio é do cliente e pode ser o apex) e sem
+          // preload (é compromisso que não se desfaz pela origem).
+          { key: "Strict-Transport-Security", value: "max-age=31536000" },
+          // CSP curta de propósito: `frame-ancestors 'none'` repete o DENY acima
+          // para navegador que só entende CSP (nada embute o painel: o DENY já
+          // valia em toda rota), `base-uri` impede tag injetada de mudar a base dos
+          // links relativos e `form-action` impede formulário forjado para fora
+          // (os fluxos externos, EvaLink e Google, saem por link, não por form).
+          // `script-src`/`style-src` ficam de fora: o Next injeta bootstrap inline
+          // — política sem nonce quebraria a tela.
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+          },
           // microphone=(self): o gravador de voz do composer (PTT estilo WhatsApp)
           // usa getUserMedia({audio}); microphone=() bloquearia em TODA origem,
           // inclusive a própria — daria "microphone is not allowed in this document".

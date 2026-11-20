@@ -73,6 +73,7 @@ import {
   STATUS_SAUDAVEL,
   sincronizarSaudeDaConexao,
 } from "@/lib/channels/health";
+import { restartsEsgotados } from "@/lib/channels/starting-preso";
 import {
   CHAVE_DO_VIGIA,
   avisoDeSurdez,
@@ -115,6 +116,14 @@ type LinhaDeSessao = ChannelSessionRef & {
 };
 
 type Admin = ReturnType<typeof createAdminClient>;
+
+/** Segundos desde o carimbo, ou `null` quando ele não veio/é ilegível. */
+function segundosDesde(carimbo: string | null | undefined, agoraMs: number): number | null {
+  if (!carimbo) return null;
+  const ms = Date.parse(carimbo);
+  if (!Number.isFinite(ms)) return null;
+  return Math.max(0, Math.floor((agoraMs - ms) / 1000));
+}
 
 /**
  * Grava `metadata.vigia_surdez` sem pisar nas outras chaves (`ai_gate`,
@@ -507,8 +516,11 @@ async function handle(req: NextRequest): Promise<Response> {
       // ou empilhar outro por cima (inalcançável). Só o empurrão mexe nele.
       if (presaPeloCelular) continue;
       let statusFinal = s.status;
+      /** O status mudou NESTA rodada — a idade do status anterior não vale mais. */
+      let mudouAgora = false;
       if (saude.reachable && saude.status && saude.status !== s.status) {
         statusFinal = saude.status;
+        mudouAgora = true;
         const agora = new Date().toISOString();
         await admin
           .from("channel_sessions")
@@ -521,7 +533,15 @@ async function handle(req: NextRequest): Promise<Response> {
       const desfecho = await sincronizarSaudeDaConexao(
         admin,
         { id: s.id, organization_id: s.organization_id, status: statusFinal, provider: s.provider },
-        saude,
+        // A IDADE do status vai junto: é o que separa um boot de trinta segundos
+        // de uma sessão presa em `STARTING` há três dias (porte do DeskcommCRM
+        // #4875). O contador do vigia (`vigia_starting.esgotado`) sobe o aviso
+        // para crítico quando as tentativas automáticas de restart acabaram.
+        {
+          ...saude,
+          segundosNoStatus: mudouAgora ? 0 : segundosDesde(s.last_status_change_at, Date.now()),
+          restartsEsgotados: restartsEsgotados(s.metadata),
+        },
         apelido,
       );
       desfechos[desfecho] = (desfechos[desfecho] ?? 0) + 1;

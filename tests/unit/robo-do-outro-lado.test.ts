@@ -10,6 +10,7 @@ import {
   ehMenuDeRobo,
   ROBO_KNOBS_PADRAO,
   TITULO_DO_AVISO_DE_ROBO,
+  TITULO_DO_AVISO_DO_TETO,
   type MensagemRecente,
 } from '@/lib/agent-engine/agent/robo-do-outro-lado';
 
@@ -119,6 +120,52 @@ describe('detectarRoboDoOutroLado — assinatura C (menu de robô repetido)', ()
   });
 });
 
+describe('detectarRoboDoOutroLado — assinatura D (teto de respostas por conversa, porte do #4611)', () => {
+  // n respostas da IA espalhadas por `minutos`, cada uma depois de uma pergunta do
+  // paciente com texto diferente (A e C não disparam), e no ritmo de gente (B não dispara).
+  const conversa = (n: number, minutos: number, extra: Partial<MensagemRecente> = {}): MensagemRecente[] =>
+    Array.from({ length: n }, (_, i) => {
+      const t = minutos - (i * minutos) / n;
+      return [
+        entra(`Pergunta número ${i} sobre o procedimento e o horário`, t + 0.1),
+        { ...sai('ai', t), ...extra },
+      ];
+    }).flat();
+
+  it('⭐ o laço do original (1 resposta a cada ~18 s) passa por baixo de B e para no teto', () => {
+    // 50 respostas em 15 min = ~16 por 5 min: abaixo dos 20 de B.
+    const msgs = conversa(50, 15);
+    expect(detectarRoboDoOutroLado(msgs, AGORA, { ...ROBO_KNOBS_PADRAO, tetoRespostas: 1_000 }).robo).toBe(false);
+    expect(detectarRoboDoOutroLado(msgs, AGORA)).toEqual({ robo: true, sinal: 'teto_de_respostas', contagem: 50 });
+  });
+
+  it('⭐ fronteira: 49 respostas na hora não param; a 50ª para', () => {
+    expect(detectarRoboDoOutroLado(conversa(49, 55), AGORA).robo).toBe(false);
+    expect(detectarRoboDoOutroLado(conversa(50, 55), AGORA)).toMatchObject({ robo: true, sinal: 'teto_de_respostas' });
+  });
+
+  it('⭐ conversa longa e real de paciente (20 trocas com 2 bolhas em 1 h = 40) não para', () => {
+    const msgs = Array.from({ length: 20 }, (_, i) => {
+      const t = 58 - i * 2.9;
+      return [entra(`Dúvida ${i}: quanto custa e quanto tempo dura a sessão?`, t + 0.5), sai('ai', t), sai('ai', t - 0.05)];
+    }).flat();
+    expect(detectarRoboDoOutroLado(msgs, AGORA).robo).toBe(false);
+  });
+
+  it('respostas fora da janela de 1 h não contam', () => {
+    const msgs = conversa(60, 60).map((m) => ({ ...m, sent_at: new Date(m.sent_at.getTime() - 61 * 60_000) }));
+    expect(detectarRoboDoOutroLado(msgs, AGORA).robo).toBe(false);
+  });
+
+  it('envio falhado não é resposta e não conta', () => {
+    expect(detectarRoboDoOutroLado(conversa(50, 55, { status: 'failed' }), AGORA).robo).toBe(false);
+  });
+
+  it('fala de pessoa da equipe não conta como resposta da IA', () => {
+    expect(detectarRoboDoOutroLado(conversa(50, 55, { sent_via: 'crm' }), AGORA).robo).toBe(false);
+  });
+});
+
 // ── a fiação: o handler de inbound para ANTES do roteador ───────────────────
 
 const mocks = vi.hoisted(() => ({
@@ -186,6 +233,21 @@ describe('createInboundTurnHandler — disjuntor antes do modelo', () => {
     expect(params[0]).toBe(ids.org);
   });
 
+  it('⭐ teto de respostas → handoff com motivo e título próprios, sem chegar ao roteador', async () => {
+    const muitas = Array.from({ length: 50 }, (_, i) => [
+      entra(`Pergunta número ${i} sobre o procedimento`, 55 - i + 0.1),
+      sai('ai', 55 - i),
+    ]).flat();
+    const p = pool(muitas);
+    await createInboundTurnHandler(deps)(job as never, p as never, { workerId: 'w' });
+    expect(mocks.router).not.toHaveBeenCalled();
+    expect(mocks.perform).toHaveBeenCalledWith(
+      p,
+      { tenantId: ids.org, leadId: ids.contact, conversationId: ids.conversation },
+      expect.objectContaining({ reason: 'reply_cap_reached', inboxTitle: TITULO_DO_AVISO_DO_TETO }),
+    );
+  });
+
   it('já em handoff → não reabre aviso, e o turno segue calado', async () => {
     mocks.inHandoff.mockResolvedValue(true);
     await createInboundTurnHandler(deps)(job as never, pool(laco) as never, { workerId: 'w' });
@@ -214,5 +276,8 @@ describe('createInboundTurnHandler — disjuntor antes do modelo', () => {
 });
 
 it('defaults documentados', () => {
-  expect(ROBO_KNOBS_PADRAO).toEqual({ repeticoes: 3, janelaRepeticaoMs: 600_000, rajadaIaMax: 20, janelaRajadaMs: 300_000 });
+  expect(ROBO_KNOBS_PADRAO).toEqual({
+    repeticoes: 3, janelaRepeticaoMs: 600_000, rajadaIaMax: 20, janelaRajadaMs: 300_000,
+    tetoRespostas: 50, janelaTetoMs: 3_600_000,
+  });
 });
