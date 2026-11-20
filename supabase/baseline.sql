@@ -39553,3 +39553,15 @@ end $$;
 comment on column public.calendar_appointments.booking_channel is
   'Como a equipe marcou a consulta: mensagem ou ligacao. Nula = legado ou marcada pela IA. Base do bônus por comparecimento. Migration 0417.';
 -- ---- fim: canal da marcação da consulta (migration 0417) ----
+
+-- ---- índice das FKs de api_tokens (migration 0419) ----
+-- Derivado de supabase/migrations/20261119230000_0419_indice_das_fks_de_api_tokens.sql
+-- (motivo no cabeçalho de lá). Só índices, idempotente.
+create index if not exists api_audit_log_actor_api_token_id_idx
+  on public.api_audit_log (actor_api_token_id)
+  where actor_api_token_id is not null;
+
+create index if not exists prontuario_contact_links_linked_by_api_token_id_idx
+  on public.prontuario_contact_links (linked_by_api_token_id)
+  where linked_by_api_token_id is not null;
+-- ---- fim: índice das FKs de api_tokens (migration 0419) ----
