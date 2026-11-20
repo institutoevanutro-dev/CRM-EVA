@@ -39565,3 +39565,48 @@ create index if not exists prontuario_contact_links_linked_by_api_token_id_idx
   on public.prontuario_contact_links (linked_by_api_token_id)
   where linked_by_api_token_id is not null;
 -- ---- fim: índice das FKs de api_tokens (migration 0419) ----
+
+-- ---- escopo da conversa uma vez por consulta (migration 0420) ----
+-- Derivado de supabase/migrations/20261120000000_0420_escopo_da_conversa_uma_vez_por_consulta.sql
+-- (porte do original #3199; motivo e a diferença do papel provider no cabeçalho de lá).
+-- Idempotente: create or replace + drop policy if exists.
+create or replace function public.fn_conversation_scope()
+returns table (organization_id uuid, org_wide_read boolean, sees_unassigned boolean)
+language sql stable security definer
+set search_path = public
+as $$
+  select x.organization_id,
+         x.papel in ('viewer','manager','admin')
+           or (x.papel <> 'provider' and x.modo = 'all'),
+         x.papel <> 'provider' and x.modo = 'own_and_unassigned'
+  from (
+    select o.organization_id,
+           public.fn_user_role_in_org(o.organization_id) as papel,
+           coalesce((select z.settings->>'visibility_mode' from public.organizations z
+                     where z.id = o.organization_id), 'own_and_unassigned') as modo
+      from public.fn_user_org_ids() as o(organization_id)
+  ) x;
+$$;
+
+revoke all on function public.fn_conversation_scope() from public, anon;
+grant execute on function public.fn_conversation_scope() to authenticated, service_role;
+
+drop policy if exists "conversations_select" on public.conversations;
+create policy "conversations_select" on public.conversations
+  for select using (
+    (select public.fn_is_platform_admin())
+    or organization_id in (
+         select s.organization_id from public.fn_conversation_scope() s where s.org_wide_read
+       )
+    or (
+         assigned_to_user_id = auth.uid()
+         and organization_id in (select s.organization_id from public.fn_conversation_scope() s)
+       )
+    or (
+         assigned_to_user_id is null
+         and organization_id in (
+              select s.organization_id from public.fn_conversation_scope() s where s.sees_unassigned
+            )
+       )
+  );
+-- ---- fim: escopo da conversa uma vez por consulta (migration 0420) ----
