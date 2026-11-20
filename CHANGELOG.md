@@ -8,6 +8,35 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.27.0] — 2026-11-20
+
+### Adicionado
+
+- **WhatsApp preso em "Conectando…" é religado, agenda do Google não trava em evento sem duração, e a IA tem teto de respostas por conversa** Três correções trazidas do projeto original:
+
+  - A conexão de WhatsApp que fica presa em "Conectando…" passa a ser religada sozinha (até 3 tentativas, sem pedir o QR de novo), e a Central avisa quando ela não volta. Ajustável por `WHATSAPP_STARTING_PRAZO_MS`, `WHATSAPP_STARTING_INTERVALO_MS` e `WHATSAPP_STARTING_LIMITE`; sem eles valem 5 min, 5 min e 3.
+  - Um evento de duração zero no Google Agenda (início igual ao fim) deixa de travar a sincronização para sempre: ele é ignorado. Quando um evento for recusado, a tela diz o dia e a hora dele.
+  - A IA para de responder uma conversa que recebeu 50 respostas dela em uma hora e abre um aviso na Central, para a equipe conferir se do outro lado é um robô ou um paciente. Ajustável por `BOT_LOOP_REPLY_CAP` e `BOT_LOOP_REPLY_CAP_WINDOW_MS`.
+
+  Nenhuma ação é necessária: sem as variáveis novas no `.env`, valem os padrões.
+
+### Alterado
+
+- **O quadro do funil abre e arrasta mais rápido em funis com muitos negócios** Arrastar um card não recarrega mais o funil inteiro: a tela usa a resposta do
+  servidor para aquele card. As colunas de ganho e de perda mostram os negócios
+  de 50 em 50, com o botão "Mostrar mais" no fim; o contador e o total continuam
+  contando todos. Marcar ou mover um card redesenha só aquele card. Nenhuma ação
+  é necessária na atualização.
+
+### Corrigido
+
+- **Seis correções trazidas do projeto original** - A reação com emoji do paciente não faz mais a IA deixar de responder ao texto que veio antes.
+  - Mensagem agendada continua agendada quando o sistema não consegue ler o estado da conexão, em vez de ser cancelada.
+  - Quando a fila de remoção de mídias (LGPD) não pode ser lida, o agendador registra a rodada como falha, e não como sucesso vazio.
+  - No WhatsApp oficial, a resposta que cita uma mensagem chega citando.
+  - A nota de voz gravada no Chrome do celular não é mais recusada pelo número oficial.
+  - O painel passa a exigir HTTPS (HSTS) e a recusar ser embutido em outro site também pela CSP.
+
 ## [5.26.5] — 2026-11-20
 
 ### Corrigido
@@ -9649,7 +9678,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.5...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.27.0...HEAD
+[5.27.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.5...v5.27.0
 [5.26.5]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.4...v5.26.5
 [5.26.4]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.3...v5.26.4
 [5.26.3]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.2...v5.26.3
