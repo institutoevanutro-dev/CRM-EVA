@@ -344,9 +344,16 @@ async function processEvent(
   // `not null default now()` hoje, mas o padrão do repo, ver migration 0027, não
   // confia nisso) com desempate por `created_at` (ordem de INGESTÃO, uma
   // mensagem por webhook) dá recência determinística.
+  //
+  // Porte do #4854 do original: a REAÇÃO (👍) é linha inbound, mas não é
+  // mensagem (o follow-up e a devolução já a tratam como "sem conteúdo").
+  // Contada aqui, ela tornava "superado" o texto que ela segue, e o turno ia
+  // para a reação (a guarda de repetição a lê como despedida). Com o filtro, o
+  // texto ganha o turno e o evento da própria reação sai superado.
   const { rows: ultimaInbound } = await pool.query<{ id: string }>(
     `select id from messages
      where organization_id = $1 and conversation_id = $2 and direction = 'inbound'
+       and type <> 'reaction'
      order by coalesce(sent_at, created_at) desc, created_at desc, id desc
      limit 1`,
     [event.organization_id, p.conversation_id],

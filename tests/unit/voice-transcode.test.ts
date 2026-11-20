@@ -75,10 +75,23 @@ describe("a conversão", () => {
     await transcodificarNotaDeVoz(webm, { run });
     expect(run).toHaveBeenCalled();
     const args = run.mock.calls[0]?.[0] ?? [];
-    // `-c:a copy`: o codec já é opus dos dois lados; o que muda é o container.
-    // Reencodar custaria tempo e qualidade para chegar ao mesmo lugar.
-    expect(args).toContain("copy");
+    // REENCODA, não copia: a cópia preservava o início negativo e o quadro do
+    // gravador do Chrome do celular, que o canal oficial recusa com 131053.
+    expect(args).not.toContain("copy");
+    expect(args).toEqual(expect.arrayContaining(["-c:a", "libopus", "-frame_duration", "20"]));
     expect(args).toContain("ogg");
+  });
+
+  it("zera o início: nota que começa em tempo negativo é recusada com 131053", async () => {
+    // O filtro vai DEPOIS do `-i`, senão o ffmpeg o aplica a nada.
+    const run = vi.fn(async (_args: string[], _cwd: string) => {});
+    await transcodificarNotaDeVoz(webm, { run });
+    const args = run.mock.calls[0]?.[0] ?? [];
+    const filtro = args.indexOf("aresample=first_pts=0");
+    // `asetpts=PTS-STARTPTS` NÃO serve: segue negativo com entrada negativa.
+    expect(args).not.toContain("asetpts=PTS-STARTPTS");
+    expect(filtro).toBeGreaterThan(args.indexOf("-i"));
+    expect(args[filtro - 1]).toBe("-af");
   });
 
   it("NÃO chama ffmpeg quando não precisa — conversão à toa é custo puro", async () => {
@@ -186,10 +199,12 @@ describe("nota de voz gravada no iPhone (porte do #3191)", () => {
     expect(r.buffer.toString()).toBe("ogg-opus");
   });
 
-  it("webm com notaDeVoz continua trocando só o container", async () => {
+  it("webm com notaDeVoz também é reencodado em quadros de 20 ms", async () => {
     const run = vi.fn(async (_args: string[], _cwd: string) => {});
     await transcodificarNotaDeVoz({ ...webm, notaDeVoz: true }, { run });
-    expect(run.mock.calls[0]?.[0]).toContain("copy");
+    const args = run.mock.calls[0]?.[0] ?? [];
+    expect(args).not.toContain("copy");
+    expect(args).toEqual(expect.arrayContaining(["-frame_duration", "20"]));
   });
 
   it("ffmpeg falhando no AAC devolve o original — o WAHA segue convertendo sozinho", async () => {

@@ -14,6 +14,7 @@ import type { NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api/wrappers";
 import { env } from "@/lib/env";
 import { drainStorageRedactionQueue } from "@/lib/lgpd/storage-redaction-queue";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,16 @@ export async function GET(req: NextRequest): Promise<Response> {
       ? Math.min(limitParam, MAX_LIMIT)
       : DEFAULT_LIMIT;
 
-  const stats = await drainStorageRedactionQueue({ limit });
-
-  return ok(stats, { requestId });
+  try {
+    const stats = await drainStorageRedactionQueue({ limit });
+    return ok(stats, { requestId });
+  } catch (error) {
+    // Fila ilegível vira rodada com erro, não um 200 vazio. O detalhe do banco
+    // fica no log (correlacionado pelo requestId), nunca no corpo.
+    logger.error("[storage-redaction] queue drain failed", {
+      requestId,
+      error_message: error instanceof Error ? error.message : String(error),
+    });
+    return fail("internal_error", "storage_redaction_failed", 500, { requestId });
+  }
 }
