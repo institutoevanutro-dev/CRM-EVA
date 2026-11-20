@@ -83,6 +83,22 @@ function mediaPayload(env: OutboundEnvelope): Record<string, unknown> | null {
   }
 }
 
+/**
+ * Citação → objeto `context` da Cloud API (porte do #4882 do original).
+ *
+ * O valor que chega em `replyToExternalId` JÁ é o identificador deste canal: o
+ * `wamid` que a Graph devolveu no envio e que o handler gravou na linha. Não há
+ * prefixo a montar — `idCompletoDaMensagem` existe no outro canal porque lá o id
+ * é curto; aqui, reformatar quebraria a citação.
+ *
+ * `null` quando o campo falta, é `null` ou chega em branco: `context: {}` não é
+ * "sem citação", é corpo inválido (a Meta recusa `context` sem `message_id`).
+ */
+export function contextPayload(env: OutboundEnvelope): { message_id: string } | null {
+  const citado = env.replyToExternalId?.trim();
+  return citado ? { message_id: citado } : null;
+}
+
 export const metaCloudAdapter: ChannelAdapter = {
   provider: "meta_cloud",
 
@@ -294,6 +310,7 @@ export const metaCloudAdapter: ChannelAdapter = {
       { type: "text", text: { body: envelope.body ?? "" } };
 
     await envelope.beforeSend?.();
+    const contexto = contextPayload(envelope);
     const res = await fetch(
       `https://graph.facebook.com/${creds.graphVersion}/${creds.phoneNumberId}/messages`,
       {
@@ -307,6 +324,10 @@ export const metaCloudAdapter: ChannelAdapter = {
           recipient_type: "individual",
           to: envelope.to,
           ...corpo,
+          // Citação: `context` mora no nível de `to`, irmão de `type` — dentro de
+          // `text`/`image` a Meta ignora e o cliente recebe a mensagem solta. Sem
+          // citação a chave não existe (nem vazia).
+          ...(contexto ? { context: contexto } : {}),
         }),
       },
     );
