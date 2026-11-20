@@ -65,7 +65,9 @@ export async function drainStorageRedactionQueue(
     logger.error("[lgpd-redact-worker] queue select failed", {
       error_message: error.message,
     });
-    return stats;
+    // Fila ilegível NÃO é lote vazio: lança para o cron responder 500 e o
+    // agendador registrar a rodada como falha (porte do #4776 do original).
+    throw new Error(`storage_redaction_queue_read_failed: ${error.message}`);
   }
 
   const queueRows = (rows ?? []) as QueueRow[];
