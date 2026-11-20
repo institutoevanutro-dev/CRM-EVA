@@ -169,6 +169,13 @@ const schema = z.object({
   // só depois de conferir que as entregas chegam assinadas
   // (webhook_events_log.valid_signature = true).
   WAHA_WEBHOOK_REQUIRE_SIGNATURE: z.string().optional().default("false"),
+  // Vigia da sessão presa em "Conectando…" (STARTING), porte do DeskcommCRM
+  // #4875. Texto cru de propósito: quem interpreta é `lib/channels/starting-preso.ts`,
+  // que cai no padrão (5 min, 5 min, 3) diante de vazio ou valor torto — um
+  // knob errado não pode derrubar o app nem o worker.
+  WHATSAPP_STARTING_PRAZO_MS: z.string().optional(),
+  WHATSAPP_STARTING_INTERVALO_MS: z.string().optional(),
+  WHATSAPP_STARTING_LIMITE: z.string().optional(),
   // Vigia de conexão surda (`lib/channels/vigia-de-surdez.ts`): quantos
   // reinícios automáticos uma conexão pode levar dentro da janela, em horas.
   // Vazio = padrão (2 em 6 h). `0` reinícios desliga o reinício e o vigia só

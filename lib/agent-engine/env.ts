@@ -265,6 +265,12 @@ const envSchema = z.object({
   BOT_LOOP_REPEAT_WINDOW_MS: z.coerce.number().int().positive().default(600_000),
   BOT_LOOP_AI_BURST_MAX: z.coerce.number().int().positive().default(20),
   BOT_LOOP_AI_BURST_WINDOW_MS: z.coerce.number().int().positive().default(300_000),
+  // Teto de respostas da IA por conversa (assinatura D, porte do DeskcommCRM
+  // #4611): com BOT_LOOP_REPLY_CAP mensagens da IA na conversa dentro da
+  // janela, a IA para e a Central avisa. Alto de propósito para não cortar
+  // conversa longa de paciente — ver o cabeçalho de `robo-do-outro-lado.ts`.
+  BOT_LOOP_REPLY_CAP: z.coerce.number().int().positive().default(50),
+  BOT_LOOP_REPLY_CAP_WINDOW_MS: z.coerce.number().int().positive().default(3_600_000),
   // Guarda de repetição (`guardrails/repeticao-na-conversa.ts`): no turno de
   // resposta, a IA não manda de novo, na MESMA conversa, uma fala quase igual
   // (Jaccard >= SIMILARITY sobre palavras sem acento, pontuação e o nome do
