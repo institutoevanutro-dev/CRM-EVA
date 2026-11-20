@@ -8,6 +8,26 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.26.5] — 2026-11-20
+
+### Corrigido
+
+- **Caixa de entrada carrega mais rápido** A permissão de ver cada conversa passa a ser calculada uma vez por consulta, não
+  uma vez por conversa. A lista e os contadores do inbox deixam de ficar mais lentos
+  à medida que as conversas se acumulam. Quem vê o quê não muda.
+
+- **Tela de chaves de integração carrega de verdade** A limpeza das chaves temporárias da IA, que entrou na 5.26.2, estourava o tempo
+  do banco e não apagava nada. Um índice novo faz ela concluir, e a tela de chaves
+  volta a carregar.
+
+## [5.26.4] — 2026-11-20
+
+### Corrigido
+
+- **Tela de chaves de integração carrega de verdade** A limpeza das chaves temporárias da IA, que entrou na 5.26.2, estourava o tempo
+  do banco e não apagava nada. Um índice novo faz ela concluir, e a tela de chaves
+  volta a carregar.
+
 ## [5.26.3] — 2026-11-19
 
 ### Corrigido
@@ -9629,7 +9649,9 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.3...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.5...HEAD
+[5.26.5]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.4...v5.26.5
+[5.26.4]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.3...v5.26.4
 [5.26.3]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.2...v5.26.3
 [5.26.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.1...v5.26.2
 [5.26.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.0...v5.26.1
