@@ -34,12 +34,16 @@ export type DesfechoDoEnvio =
   | { desfecho: "org_parada" };
 
 export async function sessaoEstaConectada(admin: SupabaseClient, organizationId: string, sessionId: string): Promise<boolean> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from("channel_sessions")
     .select("status")
     .eq("id", sessionId)
     .eq("organization_id", organizationId)
     .maybeSingle();
+  // Leitura que falhou não pode cancelar o envio como se a desconexão estivesse
+  // confirmada: lança, a rodada cai, e a trava de 5 min devolve o agendamento à
+  // fila (mesma regra de `autorAindaTemAcesso`).
+  if (error) throw new Error(`session_lookup_failed: ${error.message}`);
   return data?.status === "WORKING";
 }
 
