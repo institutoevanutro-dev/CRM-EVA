@@ -52,8 +52,11 @@ import {
   TEXTO_DO_BLOQUEIO,
   TEXTO_DO_PULO,
   conferirAntesDoEnvio,
+  dentroDaJanela,
   ehPassoFixoDoFluxo,
+  lerConfigDosBloqueios,
   passoFixoIgnoraPausaDaIA,
+  proximaAbertura,
   tipoDoPassoDoFluxo,
   type DecisaoDoEnvio,
 } from '../../followup/bloqueios-obrigatorios';
@@ -477,6 +480,20 @@ export function createFollowupTurnHandler(deps: FollowupTurnDeps) {
         hint: payload.hint,
         waits: payload.waits,
       });
+      return;
+    }
+
+    // Retorno agendado (sem fluxo) respeita o "Horário de envio" da organização,
+    // como os fluxos: fora dele, adia para a próxima abertura — nunca descarta.
+    // Configuração ilegível não cala o retorno (os fluxos falham fechados em
+    // `conferirAntesDoEnvio`; aqui a janela é camada nova sobre um envio que já saía).
+    const abertura = await aberturaDoHorarioDeEnvio(pool, tenantId, clock());
+    if (abertura !== null) {
+      await rescheduleReentry(pool, { tenantId, leadId, jobId: job.id, at: abertura, payload: job.payload });
+      withFields(deps.log, { job_id: job.id, tenant_id: tenantId, lead_id: leadId }).info(
+        'retorno agendado adiado para o horário de envio da organização',
+        { next_run_at: abertura.toISOString() },
+      );
       return;
     }
 
@@ -1261,6 +1278,17 @@ async function tentarModeloDeReserva(
   if (typeof saiu === 'object') return saiu;
   if (saiu === 'pulado') return { kind: 'pulado', reason: TEXTO_DO_BLOQUEIO.fora_das_24h_do_instagram };
   return { kind: 'skipped', reason: MOTIVO_RESERVA_RECUSADA };
+}
+
+/** Próxima abertura do "Horário de envio" quando `agora` cai fora dele; `null` = pode enviar já. */
+async function aberturaDoHorarioDeEnvio(pool: pg.Pool, tenantId: string, agora: Date): Promise<Date | null> {
+  const { rows } = await pool.query<{ settings: unknown }>(
+    `select settings from organizations where id = $1`,
+    [tenantId],
+  );
+  const janela = lerConfigDosBloqueios(rows[0]?.settings)?.janela ?? null;
+  if (janela === null || dentroDaJanela(janela, agora)) return null;
+  return proximaAbertura(janela, agora);
 }
 
 async function rescheduleReentry(
