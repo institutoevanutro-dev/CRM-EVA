@@ -31,6 +31,9 @@ returns table (organization_id uuid, org_wide_read boolean, sees_unassigned bool
 language sql stable security definer
 set search_path = public
 as $$
+  -- Membro = a mesma regra de fn_user_org_ids(), escrita aqui para só chamar
+  -- fn_support_context() quando HÁ sessão de suporte aberta (como
+  -- fn_user_role_in_org; vigiado por rls-sem-custo-por-linha.test.ts).
   select x.organization_id,
          x.papel in ('viewer','manager','admin')
            or (x.papel <> 'provider' and x.modo = 'all'),
@@ -40,12 +43,23 @@ as $$
            public.fn_user_role_in_org(o.organization_id) as papel,
            coalesce((select z.settings->>'visibility_mode' from public.organizations z
                      where z.id = o.organization_id), 'own_and_unassigned') as modo
-      from public.fn_user_org_ids() as o(organization_id)
+      from (
+        select u.organization_id from public.user_organizations u
+         where u.user_id = auth.uid() and u.revoked_at is null
+        union
+        select (c.s->>'organization_id')::uuid
+          from (select public.fn_support_context() as s
+                 where exists (select 1 from public.platform_support_sessions p
+                                where p.actor_user_id = auth.uid() and p.ended_at is null)) c
+         where c.s->>'status' = 'active'
+      ) o
   ) x;
 $$;
 
-revoke all on function public.fn_conversation_scope() from public, anon;
-grant execute on function public.fn_conversation_scope() to authenticated, service_role;
+do $janela$ begin
+  revoke all on function public.fn_conversation_scope() from public, anon;
+  grant execute on function public.fn_conversation_scope() to authenticated, service_role;
+end $janela$;
 
 drop policy if exists "conversations_select" on public.conversations;
 create policy "conversations_select" on public.conversations
