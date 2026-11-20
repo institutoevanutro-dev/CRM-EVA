@@ -6,7 +6,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Lead } from "@/lib/types/leads";
 import type { BoardData } from "@/lib/kanban/types";
 
-interface MoveArgs {
+export interface MoveArgs {
   leadId: string;
   stageId: string;
   positionInStage: number;

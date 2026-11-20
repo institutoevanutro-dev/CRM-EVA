@@ -7904,6 +7904,7 @@ export const DICIONARIO: Traducoes = {
   "Cadastre as perguntas que os pacientes mais fazem; o agente responde com o seu texto.": { es: "Registre las preguntas que los pacientes más hacen; el agente responde con su texto." },
   "Uma chave deixa outro sistema ler ou gravar no CRM sem a sua senha.": { es: "Una clave permite que otro sistema lea o escriba en el CRM sin tu contraseña." },
   "Solte um card aqui": { es: "Suelta una tarjeta aquí" },
+  "Mostrar mais": { es: "Mostrar más" },
   "Marcar como perdido": { es: "Marcar como perdido" },
   "Probabilidade recalculada automaticamente": { es: "Probabilidad recalculada automáticamente" },
   "Dados do negócio": { es: "Datos del negocio" },
