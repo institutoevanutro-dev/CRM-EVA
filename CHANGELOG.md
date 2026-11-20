@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.28.1] — 2026-11-20
+
+### Corrigido
+
+- **Desempenho mostra um funil por vez, só com os cartões abertos agora** O quadro "Funil" de Desempenho juntava as etapas de todos os funis e mostrava
+  "Ganho" e "Perdido" sempre zerados. Agora há um seletor de funil (o padrão vem
+  primeiro), as etapas de ganho e perda saíram e o título diz "abertos agora".
+
 ## [5.28.0] — 2026-11-20
 
 ### Alterado
@@ -9687,7 +9695,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.1...HEAD
+[5.28.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.0...v5.28.1
 [5.28.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.27.0...v5.28.0
 [5.27.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.5...v5.27.0
 [5.26.5]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.4...v5.26.5
