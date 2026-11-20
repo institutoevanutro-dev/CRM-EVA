@@ -448,3 +448,67 @@ it("anti-backlog: ordena a última inbound por coalesce(sent_at, created_at), n�
   expect(consultaUltima).toContain('coalesce(sent_at, created_at) desc');
   expect(consultaUltima).not.toContain('nulls last');
 });
+
+/**
+ * Porte do #4854 do original — a REAÇÃO não supera o texto que ela segue.
+ *
+ * O cliente escreve e, segundos depois, reage (👍) a uma mensagem anterior. A
+ * reação é linha `inbound` em `messages` (`type = 'reaction'`). Contada como
+ * "inbound mais recente", ela fazia o evento do texto sair como superado, sem
+ * job. O pool falso responde à consulta da última inbound a partir das linhas
+ * da conversa e só tira a reação quando a CONSULTA a exclui.
+ */
+const TEXTO_DO_EVENTO = '44444444-4444-4444-8444-444444444444';
+
+type LinhaDaConversa = { id: string; type: string; sent_at: string };
+
+function poolDaConversa(calls: string[], linhas: LinhaDaConversa[]) {
+  const base = poolElegibilidade(calls);
+  const query = vi.fn().mockImplementation((sql: string, params?: unknown[]) => {
+    if (sql.includes('select id from messages') && sql.includes("direction = 'inbound'")) {
+      calls.push(sql);
+      const excluiReacao = /\btype\s*(?:<>|!=)\s*'reaction'/.test(sql);
+      const ultima = linhas
+        .filter((l) => !(excluiReacao && l.type === 'reaction'))
+        .sort((a, b) => b.sent_at.localeCompare(a.sent_at))[0];
+      return { rows: ultima ? [{ id: ultima.id }] : [] };
+    }
+    if (sql.includes('select id from job_queue')) return { rows: [] };
+    if (sql.includes('insert into job_queue')) {
+      calls.push(sql);
+      return { rows: [{ id: 'job-do-texto' }] };
+    }
+    return base.query(sql, params);
+  });
+  return { query } as unknown as pg.Pool;
+}
+
+it('#4854: texto seguido de reação — o texto ainda ganha o inbound_turn', async () => {
+  const calls: string[] = [];
+  await drainTick(
+    poolDaConversa(calls, [
+      { id: TEXTO_DO_EVENTO, type: 'text', sent_at: '2026-11-13T23:01:21.000Z' },
+      { id: 'reacao-depois-do-texto', type: 'reaction', sent_at: '2026-11-13T23:01:29.000Z' },
+    ]),
+    knobs,
+    log,
+  );
+  expect(
+    calls.some((s) => s.includes('insert into job_queue')),
+    'a reação calou o texto: o evento saiu como superado, sem job',
+  ).toBe(true);
+});
+
+it('#4854, controle: um TEXTO mais novo depois da reação continua superando o evento', async () => {
+  const calls: string[] = [];
+  await drainTick(
+    poolDaConversa(calls, [
+      { id: TEXTO_DO_EVENTO, type: 'text', sent_at: '2026-11-13T23:01:21.000Z' },
+      { id: 'reacao-depois-do-texto', type: 'reaction', sent_at: '2026-11-13T23:01:29.000Z' },
+      { id: 'texto-mais-novo', type: 'text', sent_at: '2026-11-13T23:01:40.000Z' },
+    ]),
+    knobs,
+    log,
+  );
+  expect(calls.some((s) => s.includes('insert into job_queue')), 'o filtro da reação desligou o anti-backlog').toBe(false);
+});
