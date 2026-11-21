@@ -93,6 +93,7 @@ export function SidebarContent({
   // logo "escuro" da Conta); o da organização continua na frente, como sempre.
   const logo = activeOrg?.marca?.logoUrl || brand.logoEscuroUrl || brand.logoUrl;
   const marcaDoProduto = marcaEhADoProduto({ name: nome, logoUrl: logo ?? null });
+  const nomeDaClinica = activeOrg?.marca?.nome ?? activeOrg?.name ?? null;
 
   const estiloDoItem = (ativo: boolean) =>
     cn(
@@ -193,15 +194,15 @@ export function SidebarContent({
           // eslint-disable-next-line @next/next/no-img-element
           <span className="flex min-w-0 items-center gap-2.5">
             <img src={logo} alt={nome} className="h-8 w-auto max-w-[9rem] shrink-0 object-contain" />
-            {/* O nome ao lado do logo só quando a ORGANIZAÇÃO definiu nome próprio: o
-                logo da instalação costuma já trazer o nome escrito, e repetido ocuparia
-                a faixa duas vezes. Na serifa do site da clínica. */}
-            {activeOrg?.marca?.nome ? (
-              <span aria-hidden className="flex min-w-0 flex-col">
-                <span className="truncate font-titulo text-[19px] leading-6 font-medium text-sidebar-fg">{nome}</span>
-                <span className="mt-1 text-[10px] font-medium tracking-[0.3em] text-gold uppercase">{t("CRM")}</span>
-              </span>
-            ) : null}
+            {/* Ao lado do logo, "CRM" em dourado e, embaixo, o nome da clínica — o
+                mesmo topo dos outros módulos. Antes só aparecia quando a ORGANIZAÇÃO
+                tinha nome próprio, e o logo sozinho não dizia em que sistema se está. */}
+            <span aria-hidden className="flex min-w-0 flex-col">
+              <span className="font-titulo text-[19px] leading-6 font-medium text-gold">{t("CRM")}</span>
+              {nomeDaClinica ? (
+                <span className="nome-da-clinica mt-0.5 truncate text-gold">{nomeDaClinica}</span>
+              ) : null}
+            </span>
           </span>
         ) : marcaDoProduto ? (
           collapsed ? (
