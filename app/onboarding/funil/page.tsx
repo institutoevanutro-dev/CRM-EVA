@@ -10,10 +10,11 @@ export const dynamic = "force-dynamic";
 /**
  * "Onde ele organiza" — o quadro de clientes.
  *
- * O gatilho `trg_seed_default_pipeline_for_org` semeia o MESMO funil de
- * e-commerce em toda organização: "Carrinho abandonado", "Em separação",
- * "Enviado". A clínica que instalava o sistema abria o quadro dela e lia isso,
- * sem nunca ter sido perguntada em que ramo estava.
+ * O gatilho `trg_seed_default_pipeline_for_org` semeia em toda organização o
+ * quadro de clínica "Agendamentos" (migration 0421 — até ela era o funil de loja
+ * "Pedidos", com "Carrinho abandonado"). Este passo ajusta esse quadro ao
+ * negócio: a sugestão da IA ou um modelo pronto substitui as colunas, e os
+ * cartões que chegaram enquanto o onboarding corria vão para a primeira coluna.
  *
  * A sugestão é pedida no RENDER, não num clique: a pessoa chega no passo com a
  * proposta já na tela. Mandar clicar em "gerar sugestão" antes cobraria um passo

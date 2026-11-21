@@ -3,10 +3,12 @@
  *
  * ═══ O QUE ISTO RESOLVE ═══
  *
- * `trg_seed_default_pipeline_for_org` semeia o MESMO funil de e-commerce em toda
- * organização criada: "Carrinho abandonado", "Aguardando pagamento", "Em
- * separação", "Enviado". Uma clínica termina a instalação e abre o quadro dela
- * com uma coluna chamada "Carrinho abandonado".
+ * Até a migration 0421, `trg_seed_default_pipeline_for_org` semeava o MESMO
+ * funil de e-commerce em toda organização criada: "Carrinho abandonado",
+ * "Aguardando pagamento", "Em separação", "Enviado". Uma clínica terminava a
+ * instalação e abria o quadro dela com uma coluna chamada "Carrinho abandonado".
+ * Hoje o gatilho semeia o pacote de clínica "Agendamentos", com destino em
+ * todas as colunas; este passo continua ajustando o quadro ao negócio.
  *
  * E tem a metade que não se vê. Medido neste banco em 2026-08-13: **312 etapas
  * em 43 funis, 4 com `agent_stage_hint`** — e as 4 são de organizações de teste.

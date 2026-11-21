@@ -305,9 +305,9 @@ function explicarRecusa(motivo: string | undefined, quantos: number | undefined)
 export async function pularQuadro(): Promise<void> {
   const ctx = await requireOnboardingCtx();
   await patchOnboardingState(ctx.orgId, { funil: { skipped: true } });
-  // Pular também é decisão, e é a que deixa o quadro de e-commerce de pé numa
-  // clínica: sem registro, ninguém consegue explicar depois por que aquele
-  // tenant tem "Carrinho abandonado" no quadro.
+  // Pular também é decisão, e é a que deixa de pé o quadro que veio na
+  // instalação ("Agendamentos", desde a 0421): sem registro, ninguém consegue
+  // explicar depois por que aquele tenant ficou com as colunas genéricas.
   await audit({
     action: "onboarding.quadro_pulado",
     actorUserId: ctx.userId,

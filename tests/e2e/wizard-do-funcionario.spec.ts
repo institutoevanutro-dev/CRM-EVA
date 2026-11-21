@@ -289,7 +289,11 @@ test.describe("o wizard monta um funcionário", () => {
     await expect(page.getByText("obrigatória").first()).toBeVisible();
 
     // E o que a instalação trouxe fica à vista, para a troca não parecer mágica.
-    await expect(corpo).toContainText(/Carrinho abandonado/);
+    // Desde a 0421 o gatilho semeia o quadro de clínica — o de loja ("Pedidos",
+    // "Carrinho abandonado") não pode mais aparecer numa organização nova.
+    await expect(corpo).toContainText(/O que veio na instalação \(Agendamentos\)/);
+    await expect(corpo).toContainText(/Novo contato → Já respondi/);
+    await expect(corpo).not.toContainText(/Carrinho abandonado|loja online/);
   });
 
   test("dá para trocar por um modelo pronto sem depender de IA nenhuma", async ({ page }) => {
@@ -347,8 +351,8 @@ test.describe("o wizard monta um funcionário", () => {
       .order("position");
 
     const nomes = (etapas ?? []).map((e) => String(e.name));
-    // O quadro que o gatilho semeia em TODA organização, num produto que se
-    // vende como multi-nicho: a clínica abria o quadro dela e lia isto.
+    // O funil de loja que o gatilho semeava em TODA organização até a 0421: a
+    // clínica abria o quadro dela e lia isto.
     expect(nomes).not.toContain("Carrinho abandonado");
     expect(nomes).not.toContain("Em separação");
     expect(String(funil!.name)).not.toBe("Pedidos");

@@ -198,16 +198,35 @@ test.describe("Inbox — quem manda nesta conversa", () => {
     // pendurar a linha da timeline, e é a MESMA limitação que a ida e a volta
     // IA↔humano já têm. Semear o lead aqui é o que faz o passo (5) medir o
     // caminho que existe, em vez de reprovar por uma ausência que já era conhecida.
+    //
+    // A etapa tem de ser ABERTA, escolhida por `position`. O embed
+    // `crm_stages(id)` sem ordem devolvia as etapas em ordem alfabética: no
+    // funil de loja a primeira era "Aguardando pagamento" (aberta) por acaso; no
+    // de clínica (0421) é "Consulta marcada" — ganho, o gatilho fecha o negócio
+    // como `won`, a troca de comando não acha negócio aberto (`no_open_lead`) e
+    // a linha do passo (5) nunca nasce.
     const { data: funil } = await admin
       .from("crm_pipelines")
-      .select("id, crm_stages(id)")
+      .select("id")
       .eq("organization_id", creds.org_id)
+      .eq("is_default", true)
       .eq("is_archived", false)
-      .limit(1)
       .maybeSingle();
     const funilId = (funil as { id: string } | null)?.id;
-    const etapaId = (funil as { crm_stages?: Array<{ id: string }> } | null)?.crm_stages?.[0]?.id;
-    if (!funilId || !etapaId) throw new Error("a org de teste não tem funil com etapa");
+    const { data: etapa } = funilId
+      ? await admin
+          .from("crm_stages")
+          .select("id")
+          .eq("pipeline_id", funilId)
+          .eq("is_won", false)
+          .eq("is_lost", false)
+          .eq("is_archived", false)
+          .order("position")
+          .limit(1)
+          .maybeSingle()
+      : { data: null };
+    const etapaId = (etapa as { id: string } | null)?.id;
+    if (!funilId || !etapaId) throw new Error("a org de teste não tem funil padrão com etapa aberta");
 
     const { error: erroLead } = await admin.from("crm_leads").insert({
       organization_id: creds.org_id,
