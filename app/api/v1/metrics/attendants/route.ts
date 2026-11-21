@@ -17,6 +17,7 @@ import { isServiceRoleConfigured } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { agruparFunilPorPipeline } from "@/lib/metrics/funil-por-pipeline";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -85,6 +86,29 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const metrics = (data ?? { funnel: [], attendants: [] }) as unknown as MetricsPayload;
 
+  // Item 159: a lista do banco mistura os funis e traz ganho/perda (sempre 0,
+  // a contagem é só de abertos). Reparte por funil com as pistas de crm_stages.
+  const [etapasRes, funisRes] = await Promise.all([
+    supabase
+      .from("crm_stages")
+      .select("id, pipeline_id, is_won, is_lost")
+      .eq("organization_id", activeOrg.orgId)
+      .eq("is_archived", false),
+    supabase
+      .from("crm_pipelines")
+      .select("id, name, is_default, position")
+      .eq("organization_id", activeOrg.orgId)
+      .eq("is_archived", false),
+  ]);
+  if (etapasRes.error || funisRes.error) {
+    return fail("internal_error", (etapasRes.error ?? funisRes.error)!.message, 500, { requestId });
+  }
+  const funis = agruparFunilPorPipeline(
+    metrics.funnel,
+    etapasRes.data ?? [],
+    (funisRes.data ?? []).map((f) => ({ ...f, position: Number(f.position) })),
+  );
+
   // Enriquece cada atendente com nome/email (mesmo padrão de /api/v1/team).
   // Degrada com name=null quando o service role não está configurado (dev).
   const names = new Map<string, { name: string | null; email: string | null }>();
@@ -113,6 +137,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       window: { from: from.toISOString(), to: to.toISOString() },
       owner_user_id: parsed.data.owner_user_id ?? null,
       funnel: metrics.funnel,
+      funis,
       attendants,
     },
     { requestId },
