@@ -7,7 +7,7 @@
  * explicadas na tela (arquivar o padrão, arquivar o último).
  *
  * ⚠️ O PRIMEIRO CASO SÓ TEM PODER COM DUAS ORGANIZAÇÕES. `seed-e2e-funis.ts`
- * coloca o manager numa segunda org que também tem um funil "Pedidos" (o gatilho
+ * coloca o manager numa segunda org que também tem um funil "Agendamentos" (o gatilho
  * de seed cria um em toda org nova). Com uma org só, o caso passaria mesmo com o
  * filtro de `organization_id` apagado da página — mediria o seed, não o código.
  *
@@ -88,10 +88,10 @@ test.describe("gestão de funis", () => {
   test("a lista mostra só a organização ativa, mesmo com funil homônimo em outra", async ({
     page,
   }) => {
-    // O manager é membro de DUAS organizações, e as duas têm um funil "Pedidos".
+    // O manager é membro de DUAS organizações, e as duas têm um funil "Agendamentos".
     // Sem o filtro por organização, apareceriam as duas linhas — indistinguíveis,
     // cada uma levando a um quadro diferente.
-    await expect(page.getByText("Pedidos", { exact: true })).toHaveCount(1);
+    await expect(page.getByText("Agendamentos", { exact: true })).toHaveCount(1);
   });
 
   test("cria funil com colunas, edita, e as recusas aparecem explicadas", async ({ page }) => {
@@ -141,10 +141,10 @@ test.describe("gestão de funis", () => {
     });
 
     // ---- devolve o padrão e arquiva de verdade ----
-    const idPedidos = await idDoFunil(page, "Pedidos");
-    await page.getByTestId(`acoes-${idPedidos}`).click();
-    await page.getByTestId(`padrao-${idPedidos}`).click();
-    await expect(linhaDoFunil(page, "Pedidos").getByText("Padrão")).toBeVisible();
+    const idAgendamentos = await idDoFunil(page, "Agendamentos");
+    await page.getByTestId(`acoes-${idAgendamentos}`).click();
+    await page.getByTestId(`padrao-${idAgendamentos}`).click();
+    await expect(linhaDoFunil(page, "Agendamentos").getByText("Padrão")).toBeVisible();
 
     await page.getByTestId(`acoes-${id}`).click();
     await page.getByTestId(`arquivar-${id}`).click();
@@ -152,10 +152,10 @@ test.describe("gestão de funis", () => {
     await expect(linhaDoFunil(page, RENOMEADO)).toHaveCount(0);
 
     // ---- recusa: arquivar o último funil ----
-    await page.getByTestId(`acoes-${idPedidos}`).click();
-    await page.getByTestId(`arquivar-${idPedidos}`).click();
-    await page.getByTestId(`arquivar-confirmar-${idPedidos}`).click();
-    await expect(page.getByTestId(`arquivar-erro-${idPedidos}`)).toContainText(/único/i);
+    await page.getByTestId(`acoes-${idAgendamentos}`).click();
+    await page.getByTestId(`arquivar-${idAgendamentos}`).click();
+    await page.getByTestId(`arquivar-confirmar-${idAgendamentos}`).click();
+    await expect(page.getByTestId(`arquivar-erro-${idAgendamentos}`)).toContainText(/único/i);
     await page.screenshot({
       path: path.join(EVIDENCIA, "funis-05-recusa-ultimo.png"),
       fullPage: true,
@@ -175,7 +175,7 @@ test("quem não pode gerenciar vê a lista sem os controles de escrita", async (
   await login(page, creds.users.agent!.email);
   await page.goto("/app/kanban");
   await expect(page.getByRole("heading", { name: "Funis" })).toBeVisible();
-  await expect(page.getByText("Pedidos", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("Agendamentos", { exact: true })).toHaveCount(1);
   await expect(page.getByTestId("novo-funil")).toHaveCount(0);
   await expect(page.locator('[data-testid^="acoes-"]')).toHaveCount(0);
 });

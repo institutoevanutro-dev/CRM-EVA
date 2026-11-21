@@ -76,10 +76,10 @@ function contar(consulta: string): string {
 }
 
 describe("install.sh · a organização da instalação, num banco de verdade", () => {
-  it("sem ORG_NAME: Minha Empresa, slug minha-empresa, funil de pedidos e onboarding por fazer, como antes", () => {
+  it("sem ORG_NAME: Minha Empresa, slug minha-empresa, funil de clínica e onboarding por fazer, como antes", () => {
     instalar("dono-padrao@invariant.test");
     expect(organizacao("minha-empresa")).toBe("Minha Empresa|Minha Empresa|false");
-    expect(funilPadrao("minha-empresa")).toBe("Pedidos|pedidos|8");
+    expect(funilPadrao("minha-empresa")).toBe("Agendamentos|agendamentos|7");
   });
 
   it("Clínica D'Ávila com ORG_NICHO=clinica: nome exato, slug só ASCII, funil do pacote de clínica e onboarding feito", () => {
@@ -136,7 +136,7 @@ describe("install.sh · a organização da instalação, num banco de verdade", 
     // Não lança: a recusa da função vira aviso, e o dono segue promovido.
     instalar(dono, { ORG_NAME: "Loja Com Negócio", ORG_NICHO: "clinica" });
 
-    expect(funilPadrao("loja-com-negocio")).toBe("Pedidos|pedidos|8");
+    expect(funilPadrao("loja-com-negocio")).toBe("Agendamentos|agendamentos|7");
     expect(
       contar(`select 1 from public.crm_leads l join public.organizations o on o.id = l.organization_id
                where o.slug = 'loja-com-negocio'`),

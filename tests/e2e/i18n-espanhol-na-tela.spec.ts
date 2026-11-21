@@ -76,16 +76,23 @@ const TELAS = ["/app/inbox", "/app/kanban", "/app/contacts", "/app/metrics", "/a
  * Textos que a régua acusa e NÃO são vazamento: são DADO, e dado não se traduz.
  *
  * O comentário do cabeçalho diz que nenhum dado de banco coincide com uma chave
- * de interface por acaso. Coincidiu: "Entregue" é nome de etapa do funil
- * (`crm_stages.name`) semeado pelo e2e, e o produto o mostra exatamente como o
- * tenant o cadastrou — traduzir seria o erro. A afirmação do cabeçalho fica,
- * porque continua verdadeira como regra; esta lista é a exceção medida, com o
- * nome de quem a produz.
+ * de interface por acaso. Coincidiu: o quadro que o gatilho
+ * `fn_seed_default_pipeline_for_org` semeia em toda organização nova (migration
+ * 0421) tem nome e coluna que também são rótulos do dicionário, e o produto os
+ * mostra exatamente como o tenant os cadastrou — traduzir seria o erro. A
+ * afirmação do cabeçalho fica, porque continua verdadeira como regra; esta lista
+ * é a exceção medida, com o nome de quem a produz.
+ *
+ * Das outras coisas que a 0421 semeia, nenhuma casa com chave que muda no
+ * espanhol: as demais colunas não são chaves, as etiquetas são minúsculas, e do
+ * vocabulário só "Atendimento" é chave e não aparece sozinho nestas telas.
+ * ("Entregue", a coluna do antigo funil de loja, saiu com ele.)
  *
  * Ela SÓ ENCOLHE, e entrada nova precisa nomear a COLUNA de onde o texto vem.
  */
 const DADO_DO_TENANT = new Set([
-  "Entregue", // crm_stages.name, do seed de e2e
+  "Agendamentos", // crm_pipelines.name, do gatilho fn_seed_default_pipeline_for_org (0421)
+  "Novo contato", // crm_stages.name, do gatilho fn_seed_default_pipeline_for_org (0421)
 ]);
 
 const CHAVES_QUE_MUDAM = new Set(

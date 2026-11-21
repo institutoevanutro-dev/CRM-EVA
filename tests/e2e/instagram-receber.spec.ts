@@ -140,7 +140,7 @@ test("um Direct novo aparece no Inbox com @, canal e origem", async ({ page, req
   // "/app/kanban" é a LISTA de funis, não o quadro — entra no funil padrão
   // pela mesma porta que o menu usa ("Funis" → o funil marcado "Padrão").
   await page.goto("/app/kanban");
-  await page.getByRole("link", { name: /Pedidos Padrão/ }).click();
+  await page.getByRole("link", { name: /Agendamentos Padrão/ }).click();
   await page.waitForURL(/\/app\/pipelines\//);
 
   // O card ESPECÍFICO desta rodada — escopado pela mensagem que só ESTE
