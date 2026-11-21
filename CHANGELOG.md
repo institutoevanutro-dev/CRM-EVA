@@ -8,6 +8,19 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.29.0] — 2026-11-21
+
+### Alterado
+
+- **Novo agendamento mostra só o que é do profissional e confere o paciente** Escolhido o profissional, o "Novo agendamento" lista só os procedimentos
+  cadastrados para ele (o grupo "de outros profissionais" saiu) e só as unidades
+  da jornada dele — a única já vem escolhida. Profissional sem procedimento ganha
+  um aviso que aponta Tipos de agendamento. Ao escolher o paciente, um cartão
+  mostra telefone, e-mail, nascimento e idade, CPF mascarado e a última consulta,
+  e a busca separa homônimos pela idade. A rota de marcar passou a recusar
+  procedimento de outro profissional e unidade fora da jornada. Visual do modal
+  refinado (campos, calendário, rodapé), claro e escuro.
+
 ## [5.28.3] — 2026-11-21
 
 ### Corrigido
@@ -9713,7 +9726,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.3...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.29.0...HEAD
+[5.29.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.3...v5.29.0
 [5.28.3]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.2...v5.28.3
 [5.28.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.1...v5.28.2
 [5.28.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.0...v5.28.1
