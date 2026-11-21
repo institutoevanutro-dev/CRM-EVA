@@ -1163,13 +1163,13 @@ async function quemConverteu(
   if (userId === ctx.actor.id) return { kind: "user", userId };
   const { data: membro, error } = await supabase
     .from("user_organizations")
-    .select("user_id")
+    .select("user_id, revoked_at")
     .eq("organization_id", ctx.organization_id)
     .eq("user_id", userId)
-    .is("revoked_at", null)
     .maybeSingle();
   if (error) throw new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
-  if (!membro) {
+  // Revogado também é "de fora": não está mais na equipe.
+  if (!membro || membro.revoked_at) {
     throw new ApiError(
       422,
       "agenda_quem_converteu_fora_da_equipe",

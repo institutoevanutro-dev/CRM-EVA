@@ -37,6 +37,7 @@ const OUTRA_ORG = "ea750000-0000-4000-8000-000000000002";
 const RECEPCAO = "ea750000-1111-4000-8000-000000000001";
 const COLEGA = "ea750000-1111-4000-8000-000000000002";
 const DE_FORA = "ea750000-1111-4000-8000-000000000003";
+const REVOGADA = "ea750000-1111-4000-8000-000000000004";
 const FUSO = "America/Sao_Paulo";
 
 let tipo = "";
@@ -90,6 +91,7 @@ beforeAll(async () => {
     [RECEPCAO, "recepcao@quem-converteu.test", ORG],
     [COLEGA, "colega@quem-converteu.test", ORG],
     [DE_FORA, "fora@quem-converteu.test", OUTRA_ORG],
+    [REVOGADA, "revogada@quem-converteu.test", ORG],
   ] as const) {
     await pool.query(`insert into auth.users (id, email) values ($1, $2) on conflict (id) do nothing`, [id, email]);
     await pool.query(
@@ -97,6 +99,10 @@ beforeAll(async () => {
       [id, org],
     );
   }
+  await pool.query(`update user_organizations set revoked_at = now() where user_id = $1 and organization_id = $2`, [
+    REVOGADA,
+    ORG,
+  ]);
   await pool.query(
     `insert into attendant_availability (organization_id, user_id, schedule) values ($1, $2, $3::jsonb)
      on conflict (organization_id, user_id) do update set schedule = excluded.schedule`,
@@ -148,6 +154,12 @@ describe("quem converteu o lead", () => {
       quintaQueVem(12),
     ]);
     expect(linha.rows).toHaveLength(0);
+  });
+
+  it("quem saiu da equipe (revogado) também é recusado", async () => {
+    const r = await marcar(daRecepcao(), 13, { converted_by_kind: "user", converted_by_user_id: REVOGADA });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.e.code).toBe("agenda_quem_converteu_fora_da_equipe");
   });
 
   it("marcação pela IA é sempre `ai`, mesmo que o corpo diga outra pessoa", async () => {
