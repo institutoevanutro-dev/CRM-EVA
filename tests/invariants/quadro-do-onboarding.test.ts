@@ -46,17 +46,19 @@ function aplicar(org: string, pipeline: string, etapas = QUADRO): string {
 }
 
 describe("0156 · o quadro montado no onboarding", () => {
-  it("o funil semeado nasce SEM ensinar o assistente a percorrê-lo", () => {
-    // A precondição que o passo existe para corrigir. Medido no banco de
-    // desenvolvimento em 2026-08-13: 312 etapas, 4 com destino — e as 4 de
-    // organizações de teste. Se um dia o gatilho passar a semear os destinos,
-    // este caso vermelha e o passo do wizard precisa ser reavaliado.
-    const { pipeline } = criarTenant("inv-0156-seed");
+  it("o funil semeado já é o de clínica, com o destino de cada coluna (0421)", () => {
+    // Até a 0421 o gatilho semeava o funil de loja "Pedidos" (8 colunas, sem
+    // destino). Agora semeia o pacote de clínica do onboarding.
+    const { org, pipeline } = criarTenant("inv-0156-seed");
     const linha = lastLine(
-      sql(`select count(*)::text || '|' || count(*) filter (where agent_stage_hint is not null)::text
-             from public.crm_stages where pipeline_id = '${pipeline}'::uuid;`),
+      sql(`select p.name || '|' || count(*)::text || '|' || count(*) filter (where s.agent_stage_hint is not null)::text
+             from public.crm_stages s join public.crm_pipelines p on p.id = s.pipeline_id
+            where p.id = '${pipeline}'::uuid group by p.name;`),
     );
-    expect(linha).toBe("8|0");
+    expect(linha).toBe("Agendamentos|7|7");
+    expect(
+      lastLine(sql(`select settings->'canonical_conversation_tags' ? 'remarcação' from public.organizations where id='${org}'::uuid;`)),
+    ).toBe("t");
   });
 
   it("troca o quadro inteiro e ensina o destino de cada coluna", () => {
@@ -94,10 +96,10 @@ describe("0156 · o quadro montado no onboarding", () => {
     }
     expect(levantou, "o banco precisa recusar dois ganhos no mesmo funil").toBe(true);
 
-    // E o funil continua com as 8 colunas que tinha antes da tentativa.
+    // E o funil continua com as 7 colunas que tinha antes da tentativa.
     expect(
       lastLine(sql(`select count(*)::text from public.crm_stages where pipeline_id='${pipeline}'::uuid;`)),
-    ).toBe("8");
+    ).toBe("7");
   });
 
   it("recusa funil de OUTRA organização", () => {
@@ -109,16 +111,33 @@ describe("0156 · o quadro montado no onboarding", () => {
     // E o funil de B ficou intacto.
     expect(
       lastLine(sql(`select count(*)::text from public.crm_stages where pipeline_id='${b.pipeline}'::uuid;`)),
-    ).toBe("8");
+    ).toBe("7");
   });
 
-  it("recusa funil que já tem negócio — em vez de deixar o RESTRICT estourar", () => {
+  it("leva o cartão aberto que chegou durante o onboarding para a primeira coluna nova (0421)", () => {
     const { org, pipeline } = criarTenant("inv-0156-com-negocio");
     sql(`
       insert into public.crm_leads (organization_id, pipeline_id, stage_id, title, position_in_stage)
       select '${org}'::uuid, '${pipeline}'::uuid, s.id, 'Cliente de prova', 1000
         from public.crm_stages s
-       where s.pipeline_id = '${pipeline}'::uuid order by s.position limit 1;
+       where s.pipeline_id = '${pipeline}'::uuid and not s.is_won and not s.is_lost
+       order by s.position desc limit 1;
+    `);
+    expect(aplicar(org, pipeline)).toContain('"ok": true');
+    expect(
+      lastLine(sql(`select s.name || '|' || (select count(*) from public.crm_stages x where x.pipeline_id='${pipeline}'::uuid)::text
+                      from public.crm_leads l join public.crm_stages s on s.id = l.stage_id
+                     where l.organization_id='${org}'::uuid;`)),
+    ).toBe("Novo contato|4");
+  });
+
+  it("recusa quando há cartão em coluna de ganho ou perda — isso é decisão de alguém", () => {
+    const { org, pipeline } = criarTenant("inv-0156-com-ganho");
+    sql(`
+      insert into public.crm_leads (organization_id, pipeline_id, stage_id, title, position_in_stage)
+      select '${org}'::uuid, '${pipeline}'::uuid, s.id, 'Cliente de prova', 1000
+        from public.crm_stages s
+       where s.pipeline_id = '${pipeline}'::uuid and s.is_won limit 1;
     `);
     const r = aplicar(org, pipeline);
     expect(r).toContain("funil_com_negocios");

@@ -101,8 +101,10 @@ describe("o negócio de um funil que o assistente NÃO cuida", () => {
     // Sem mapeamento, o motivo seria `sem_mapeamento` e o teste passaria por
     // um caminho que não é o que se quer medir.
     const { rows } = await pool.query<{ n: string }>(
-      "select count(*) as n from crm_stages where organization_id = $1 and agent_stage_hint is not null",
-      [ORG],
+      // Só os dois funis do cenário: desde a 0421 o gatilho também semeia um
+      // funil de clínica já mapeado em toda organização nova.
+      "select count(*) as n from crm_stages where organization_id = $1 and pipeline_id = any($2::uuid[]) and agent_stage_hint is not null",
+      [ORG, [funilDele, funilAlheio]],
     );
     expect(Number(rows[0]!.n)).toBe(4);
   });
