@@ -35,6 +35,9 @@ const duble = vi.hoisted(() => ({
   getResposta: null as unknown,
   avisos: [] as string[],
   semNomeCompleto: false,
+  /** `attendant_availability` de quem tem jornada — de onde sai ONDE cada um atende. */
+  jornadas: [] as Array<{ user_id: string; schedule: unknown }>,
+  filtrosDaJornada: [] as Array<[string, unknown]>,
 }));
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
@@ -58,8 +61,14 @@ vi.mock("@/lib/supabase/admin", () => ({
         return Promise.resolve({ data, error: null }).then(res);
       },
     };
+    const jornadas = {
+      select: () => jornadas,
+      eq: (k: string, v: unknown) => (duble.filtrosDaJornada.push([k, v]), jornadas),
+      in: (k: string, v: unknown) => (duble.filtrosDaJornada.push([k, v]), jornadas),
+      then: (res: (v: unknown) => unknown) => Promise.resolve({ data: duble.jornadas, error: null }).then(res),
+    };
     return {
-      from: () => q,
+      from: (tabela: string) => (tabela === "attendant_availability" ? jornadas : q),
       auth: {
         admin: {
           getUserById: (id: string) =>
@@ -259,13 +268,49 @@ describe("(b) GET /api/v1/agenda/pessoas — a lista mínima da Agenda", () => {
 
     expect(status).toBe(200);
     expect(corpo.data?.map((p) => p.user_id)).toEqual(["u-dona", "u-recepcao", "u-gerente"]);
-    expect(corpo.data?.[0]).toEqual({ user_id: "u-dona", role: "provider", full_name: "Nome u-dona" });
+    expect(corpo.data?.[0]).toEqual({
+      user_id: "u-dona",
+      role: "provider",
+      full_name: "Nome u-dona",
+      // Sem jornada lida, não diz onde atende — e a marcação oferece todas.
+      jornada_unidades: [],
+      jornada_sem_unidade: false,
+    });
     expect(JSON.stringify(corpo)).not.toContain("@x.com");
     // organization_id do cookie validado, e revogado fora.
     expect(duble.filtros).toEqual([
       ["organization_id", "org-1"],
       ["revoked_at", null],
     ]);
+  });
+
+  it("ONDE cada um atende sai das janelas da jornada, só com ids, filtrado pela organização", async () => {
+    duble.filtrosDaJornada = [];
+    duble.jornadas = [
+      {
+        user_id: "u-dona",
+        schedule: {
+          timezone: "America/Sao_Paulo",
+          windows: [
+            { dow: 1, start: "09:00", end: "12:00", unit_id: "6f1c1f0e-7a52-4c1e-9d55-2d1e8d0a0001" },
+            { dow: 2, start: "09:00", end: "12:00", unit_id: "6f1c1f0e-7a52-4c1e-9d55-2d1e8d0a0001" },
+            { dow: 3, start: "14:00", end: "18:00" },
+          ],
+        },
+      },
+    ];
+    try {
+      sessao("agent", "u-recepcao");
+      const { corpo } = await pedirLista();
+      expect(corpo.data?.[0]).toMatchObject({
+        jornada_unidades: ["6f1c1f0e-7a52-4c1e-9d55-2d1e8d0a0001"],
+        jornada_sem_unidade: true,
+      });
+      expect(corpo.data?.[1]).toMatchObject({ jornada_unidades: [], jornada_sem_unidade: false });
+      expect(duble.filtrosDaJornada[0]).toEqual(["organization_id", "org-1"]);
+    } finally {
+      duble.jornadas = [];
+    }
   });
 
   it("o Prestador recebe só a si mesmo — ele trabalha só na própria agenda", async () => {

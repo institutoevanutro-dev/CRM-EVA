@@ -10,6 +10,7 @@ import { apiClient } from "@/lib/api/client";
 import { datasDoPeriodo } from "@/lib/agenda/marcacao-simples";
 import { cn } from "@/lib/utils";
 
+import { CAMPO, ROTULO, Seletor } from "./CampoDaMarcacao";
 import { emMinutos, type Excecao, faixa, type PessoaDaAgenda } from "./DiasBloqueados";
 
 /**
@@ -27,9 +28,6 @@ import { emMinutos, type Excecao, faixa, type PessoaDaAgenda } from "./DiasBloqu
 /** Dois meses de dias seguidos: mais que isso é quase sempre data digitada errado. */
 const TETO_DO_PERIODO = 62;
 
-const CAMPO =
-  "h-10 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-text outline-hidden focus:border-accent disabled:bg-surface-muted";
-const ROTULO = "mb-1 block text-xs font-medium text-text-muted";
 
 export function BloqueioDeHorario({
   pessoas,
@@ -127,10 +125,9 @@ export function BloqueioDeHorario({
           <label htmlFor="bloqueio-profissional" className={ROTULO}>
             {t("Profissional")} *
           </label>
-          <select
+          <Seletor
             id="bloqueio-profissional"
             data-testid="bloqueio-profissional"
-            className={CAMPO}
             value={quem}
             disabled={escolhiveis.length < 2}
             onChange={(e) => {
@@ -144,7 +141,7 @@ export function BloqueioDeHorario({
                 {p.id === euId ? `${p.nome} (${t("você")})` : p.nome}
               </option>
             ))}
-          </select>
+          </Seletor>
         </div>
         <div>
           <label htmlFor="bloqueio-de" className={ROTULO}>
@@ -164,13 +161,14 @@ export function BloqueioDeHorario({
         </div>
         <div>
           <label htmlFor="bloqueio-ate" className={ROTULO}>
-            {t("Até o dia")} <span className="font-normal opacity-70">({t("opcional")})</span>
+            {t("Até o dia")} <span className="font-normal text-text-subtle">({t("opcional")})</span>
           </label>
           <input
             id="bloqueio-ate"
             data-testid="bloqueio-ate"
             type="date"
-            className={cn(CAMPO, (periodoInvalido || periodoLongo) && "border-danger")}
+            className={CAMPO}
+            aria-invalid={periodoInvalido || periodoLongo || undefined}
             min={de || undefined}
             value={ate}
             onChange={(e) => setAte(e.target.value)}
@@ -209,7 +207,8 @@ export function BloqueioDeHorario({
                 id="bloqueio-hora-ate"
                 data-testid="bloqueio-hora-ate"
                 type="time"
-                className={cn(CAMPO, "tabular-nums", faixaInvalida && "border-danger")}
+                className={cn(CAMPO, "tabular-nums")}
+                aria-invalid={faixaInvalida || undefined}
                 value={horaAte}
                 onChange={(e) => setHoraAte(e.target.value)}
               />
@@ -218,7 +217,7 @@ export function BloqueioDeHorario({
         ) : null}
         <div className="sm:col-span-2">
           <label htmlFor="bloqueio-comentario" className={ROTULO}>
-            {t("Comentário")} <span className="font-normal opacity-70">({t("opcional")})</span>
+            {t("Comentário")} <span className="font-normal text-text-subtle">({t("opcional")})</span>
           </label>
           <input
             id="bloqueio-comentario"

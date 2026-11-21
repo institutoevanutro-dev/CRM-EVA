@@ -32,6 +32,8 @@ import {
   duracaoEscolhidaValida,
 } from "@/lib/agenda/duracao-escolhida";
 import { colide, type Slot } from "@/lib/agenda/horarios-livres";
+import { lerJornadaDoBanco } from "@/lib/agenda/jornada";
+import { atendeOProcedimento, unidadesDaJornada } from "@/lib/agenda/marcacao-simples";
 import { idsForaDaOrg } from "@/lib/tenancy/pertence-a-org";
 import {
   atividadeDaTransicao,
@@ -234,6 +236,21 @@ async function executarCriacaoDeAgendamento(
       `"${tipo.name}" não tem responsável definido, e sem responsável não há agenda.`,
     );
   }
+
+  // O PROCEDIMENTO É DO PROFISSIONAL: tipo com dono só se marca na agenda do
+  // dono; sem dono, na de qualquer um. A tela já não oferece o de outro
+  // (`procedimentosDoProfissional`); a recusa aqui vale para a REST e a IA, que
+  // passam pelo mesmo handler. Remarcar não passa por aqui (não troca dono nem tipo).
+  if (input.owner_user_id && !atendeOProcedimento(tipo.default_owner_user_id, input.owner_user_id)) {
+    throw new ApiError(
+      422,
+      "agenda_procedimento_de_outro_profissional",
+      undefined,
+      ctx.requestId,
+      `"${tipo.name}" não está cadastrado para este profissional. Escolha um procedimento dele.`,
+    );
+  }
+  if (input.unit_id) await exigeUnidadeDaJornada(supabase, ctx, donoId, input.unit_id);
 
   // O `contact_id` É INPUT EXTERNO E PRECISA SER RESOLVIDO, não repassado.
   //
@@ -989,6 +1006,37 @@ async function exigeHorarioLivre(
     );
   }
   return { fusoDaRegra: consulta.fusoDaRegra, slots: consulta.slots };
+}
+
+/**
+ * A unidade pedida é uma das que a JORNADA do profissional declara
+ * (`windows[].unit_id`)? Jornada que não declara unidade nenhuma não restringe:
+ * é a instalação que nunca ligou unidade à jornada, e recusar ali travaria toda
+ * marcação com unidade. É a mesma régua da tela (`ofertaDeUnidades`).
+ *
+ * Jornada ilegível ou ausente também não decide aqui: quem recusa esse caso, com
+ * o motivo certo, é `exigeHorarioLivre` logo depois.
+ */
+async function exigeUnidadeDaJornada(supabase: SB, ctx: HandlerCtx, donoId: string, unitId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from("attendant_availability")
+    .select("schedule")
+    .eq("organization_id", ctx.organization_id)
+    .eq("user_id", donoId)
+    .maybeSingle();
+  if (error) throw new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
+  const leitura = lerJornadaDoBanco(data?.schedule);
+  if (!leitura.ok) return;
+  const { unidades } = unidadesDaJornada(leitura.jornada.windows);
+  if (unidades.length > 0 && !unidades.includes(unitId)) {
+    throw new ApiError(
+      422,
+      "agenda_unidade_fora_da_jornada",
+      undefined,
+      ctx.requestId,
+      "Este profissional não atende nesta unidade. Escolha uma das unidades da jornada dele.",
+    );
+  }
 }
 
 /**

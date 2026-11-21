@@ -130,7 +130,6 @@ export const DICIONARIO: Traducoes = {
   "Escolha o profissional": { es: "Elija el profesional" },
   "Escolha o procedimento": { es: "Elija el procedimiento" },
   "Escolha antes o profissional": { es: "Elija antes el profesional" },
-  "Procedimentos de outros profissionais": { es: "Procedimientos de otros profesionales" },
   // Agenda: nome completo do paciente, que o prontuário pede para abrir o atendimento.
   "Nome completo do paciente": { es: "Nombre completo del paciente" },
   "Vai para o cadastro do paciente. Confira nome e sobrenome.": { es: "Va al registro del paciente. Revise nombre y apellido." },
@@ -2240,8 +2239,8 @@ export const DICIONARIO: Traducoes = {
   "Como calcular a espera": { es: "Cómo calcular la espera" },
   "Duração (minutos)": { es: "Duración (minutos)" },
   // Duração escolhida na marcação (porte do upstream #3714).
-  "Já vem com a duração do procedimento. Mude só se este atendimento precisar de mais ou menos tempo.": {
-    es: "Viene con la duración del procedimiento. Cámbiala solo si esta atención necesita más o menos tiempo.",
+  "Já vem do procedimento. Mude só se este atendimento precisar.": {
+    es: "Viene del procedimiento. Cámbiala solo si esta atención lo necesita.",
   },
   "Escolha uma duração entre 5 e 1440 minutos.": { es: "Elige una duración entre 5 y 1440 minutos." },
   // "Não atender em feriado nacional", desligada de fábrica (porte do upstream #4469).
@@ -11273,6 +11272,21 @@ export const DICIONARIO: Traducoes = {
   "Ex.: iv ou im": { es: "Ej.: iv o im" },
   "Unidade": { es: "Unidad" },
   "Teleconsulta ou sem unidade": { es: "Teleconsulta o sin unidad" },
+  // Novo agendamento: procedimento e unidade do profissional, e a conferência do paciente.
+  "Nenhum procedimento cadastrado": { es: "Ningún procedimiento registrado" },
+  "Este profissional": { es: "Este profesional" },
+  "ainda não tem procedimento cadastrado.": { es: "todavía no tiene procedimientos registrados." },
+  "Cadastre em Tipos de agendamento, no campo “Quem atende”.": {
+    es: "Regístrelos en Tipos de cita, en el campo “Quién atiende”.",
+  },
+  "A jornada deste profissional não diz em que unidade ele atende, por isso todas aparecem.": {
+    es: "La jornada de este profesional no indica en qué unidad atiende, por eso aparecen todas.",
+  },
+  "Definir na jornada": { es: "Definir en la jornada" },
+  "Escolha a unidade do atendimento.": { es: "Elija la unidad de la atención." },
+  "Nascimento": { es: "Nacimiento" },
+  "CPF": { es: "CPF" },
+  "Nenhuma ainda": { es: "Ninguna todavía" },
   "Unidades e salas": { es: "Unidades y salas" },
   "A agenda escolhe automaticamente uma sala ativa e compatível.": { es: "La agenda elige automáticamente una sala activa y compatible." },
   "Nenhuma sala cadastrada.": { es: "No hay salas registradas." },

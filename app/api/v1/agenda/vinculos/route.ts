@@ -21,6 +21,11 @@ import { condicoesDaBuscaDeContato } from "@/lib/contacts/busca";
  * para não receber mensagens não recebe o lembrete (`cron/agenda-reminder`
  * pula `contato_bloqueado`), e a marcação avisa a recepção para confirmar por
  * telefone. O filtro de `organization_id` é o mesmo de sempre.
+ *
+ * `email` e `birthdate` vão para desempatar homônimos NA LISTA da busca: dois
+ * "Marcelo" com o mesmo DDD se separam pela idade. São os mesmos campos que a
+ * ficha do contato já mostra a quem tem esta rota (agent+). CPF não vem: ele é
+ * cifrado e só sai pelo "Ver CPF" da ficha, auditado (`contact.cpf_viewed`).
  */
 export async function GET(req: Request) {
   const requestId = randomUUID();
@@ -33,7 +38,7 @@ export async function GET(req: Request) {
   const db = await createClient();
   let contacts = db
     .from("contacts")
-    .select("id,name,display_name,phone_number,is_blocked")
+    .select("id,name,display_name,phone_number,email,birthdate,is_blocked")
     .eq("organization_id", auth.org.orgId)
     .eq("is_anonymized", false)
     // Contato mesclado não é marcável: o vínculo iria para o registro morto,

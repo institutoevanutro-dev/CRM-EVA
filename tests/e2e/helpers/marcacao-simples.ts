@@ -43,8 +43,8 @@ export async function escolherProfissionalEProcedimento(
   const candidatos = donoId ? [donoId] : todos;
   for (const id of candidatos) {
     await profissional.selectOption(id);
-    // Só as opções de PRIMEIRO nível: as do grupo "de outros profissionais"
-    // existem para todo mundo, e escolher por elas pegaria a agenda errada.
+    // A lista já é só a DELE (e os sem dono): o grupo "de outros profissionais"
+    // saiu em 20/11. O `:scope > option` fica como cerca, se um grupo voltar.
     const rotulos = await lista.locator(":scope > option").allTextContents();
     const achado = rotulos.find((r) => procedimento.test(r));
     if (achado) {

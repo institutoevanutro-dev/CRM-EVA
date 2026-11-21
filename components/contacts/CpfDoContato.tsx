@@ -27,6 +27,11 @@ interface Props {
   disponivel: boolean;
   /** Papel do usuário alcança atendente ou acima. */
   podeVer: boolean;
+  /**
+   * O porquê que vai para a auditoria (`contact.cpf_viewed`, `decrypt_purpose`).
+   * A ficha é o padrão; a marcação da Agenda diz que foi para conferir o paciente.
+   */
+  finalidade?: string;
 }
 
 /** 529.982.247-25 — só para exibir; o dado gravado são os 11 dígitos. */
@@ -36,7 +41,7 @@ function formatarCpf(digitos: string): string {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
 }
 
-export function CpfDoContato({ contactId, disponivel, podeVer }: Props) {
+export function CpfDoContato({ contactId, disponivel, podeVer, finalidade = "ficha do contato" }: Props) {
   const t = useT();
   const [cpf, setCpf] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
@@ -74,7 +79,7 @@ export function CpfDoContato({ contactId, disponivel, podeVer }: Props) {
           try {
             const r = await apiClient.get<{ data: { cpf_decrypted?: string | null } }>(
               `/api/v1/contacts/${contactId}`,
-              { headers: { "X-Decrypt-Purpose": "ficha do contato" } },
+              { headers: { "X-Decrypt-Purpose": finalidade } },
             );
             const valor = r.data.cpf_decrypted;
             if (valor) setCpf(valor);

@@ -144,7 +144,74 @@ describe("VinculoDaMarcacao", () => {
     const opcoes = screen.getAllByRole("option");
     expect(opcoes).toHaveLength(2);
     expect(opcoes[0]).toHaveTextContent("Marcelo Souza");
-    expect(opcoes[0]).toHaveTextContent("+5511987654321");
+    // Telefone legível, como a recepção fala ("(11) 98765-4321"), não o E.164.
+    expect(opcoes[0]).toHaveTextContent("(11) 98765-4321");
+  });
+
+  it("homônimos se separam na lista pela idade e pelo e-mail", async () => {
+    const ano = new Date().getFullYear();
+    responderCom([
+      { ...SOUZA, name: "Marcelo Fictício", birthdate: `${ano - 40}-01-01`, email: "marcelo.a@exemplo.com" },
+      { ...LIMA, name: "Marcelo Fictício", birthdate: `${ano - 25}-01-01`, email: null },
+    ] as never);
+    const user = userEvent.setup();
+    envolver(<VinculoDaMarcacao contactId="" conversationId="" onChange={vi.fn()} />);
+    await user.type(screen.getByRole("combobox", { name: /Buscar cliente/i }), "Marcelo");
+    const opcoes = await screen.findAllByRole("option");
+    expect(opcoes[0]).toHaveTextContent("40 anos");
+    expect(opcoes[0]).toHaveTextContent("marcelo.a@exemplo.com");
+    expect(opcoes[1]).toHaveTextContent("25 anos");
+  });
+
+  it("escolhido, o cartão de conferência mostra o que temos dele — CPF só mascarado", async () => {
+    const ano = new Date().getFullYear();
+    const ficha = {
+      id: "c-1",
+      cpf_available: true,
+      consultas: [
+        { id: "a-1", title: "Retorno", starts_at: "2020-03-10T13:00:00Z", status: "completed" },
+        { id: "a-2", title: "Avaliação facial", starts_at: "2099-01-05T13:00:00Z", status: "confirmed" },
+      ],
+    };
+    get.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.startsWith("/api/v1/contacts/")
+          ? { data: ficha }
+          : {
+              data: {
+                contacts: [{ ...SOUZA, birthdate: `${ano - 34}-01-01`, email: "marcelo@exemplo.com" }],
+                conversations: [],
+              },
+            },
+      ),
+    );
+    envolver(<VinculoDaMarcacao contactId="c-1" conversationId="" onChange={vi.fn()} compacto />);
+
+    const cartao = await screen.findByTestId("paciente-escolhido");
+    await waitFor(() => expect(cartao).toHaveTextContent("Última consulta10/03/2020 · Retorno"));
+    expect(cartao).toHaveTextContent("Marcelo Souza");
+    expect(cartao).toHaveTextContent("(11) 98765-4321");
+    expect(cartao).toHaveTextContent("marcelo@exemplo.com");
+    expect(cartao).toHaveTextContent(`01/01/${ano - 34}`);
+    expect(cartao).toHaveTextContent("Próxima05/01/2099 · Avaliação facial");
+    // O CPF existe, e aparece mascarado: o número só sai pelo "Ver CPF" auditado.
+    expect(cartao).toHaveTextContent("•••.•••.•••-••");
+    expect(cartao).not.toHaveTextContent(/\d{3}\.\d{3}\.\d{3}-\d{2}/);
+    expect(get).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ headers: expect.anything() }));
+  });
+
+  it("paciente sem consulta anterior: o cartão diz que é a primeira vez", async () => {
+    get.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.startsWith("/api/v1/contacts/")
+          ? { data: { id: "c-1", cpf_available: false, consultas: [] } }
+          : { data: { contacts: [SOUZA], conversations: [] } },
+      ),
+    );
+    envolver(<VinculoDaMarcacao contactId="c-1" conversationId="" onChange={vi.fn()} compacto />);
+    const cartao = await screen.findByTestId("paciente-escolhido");
+    await waitFor(() => expect(cartao).toHaveTextContent("Última consultaNenhuma ainda"));
+    expect(cartao).not.toHaveTextContent("CPF");
   });
 
   it("clicar no paciente seleciona e mostra quem foi escolhido, com Trocar", async () => {

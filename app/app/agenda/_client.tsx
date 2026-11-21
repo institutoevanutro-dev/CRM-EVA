@@ -24,6 +24,7 @@ import { ancoraAoFecharPainel } from "@/lib/agenda/ancora-depois-de-marcar";
 import { duracaoDoBloco, duracaoDoCampo } from "@/lib/agenda/duracao-escolhida";
 import { dataDeParede, diaLocalISO, partesNoFuso } from "@/lib/agenda/fuso";
 import { janelaDoMesVisivel } from "@/lib/agenda/janela-do-mes-visivel";
+import { atendeOProcedimento } from "@/lib/agenda/marcacao-simples";
 import { resolverResponsavelDoPainel } from "@/lib/agenda/responsavel-do-painel";
 import { tipoDaRemarcacao } from "@/lib/agenda/tipo-da-remarcacao";
 import { ancoraLocalDoDia } from "@/lib/agenda/semana-semente";
@@ -582,6 +583,9 @@ export function AgendaClient({
             setFormDonoId("");
             setFormTipoId("");
             setDuracaoEditada(null);
+            // A unidade é do profissional (`ofertaDeUnidades`): a da vez anterior
+            // não vale para quem for escolhido na próxima.
+            setUnidadeId("");
             // E o próprio cliente, que é o pior dos quatro a sobrar: medido numa
             // instalação real em 2026-09-12, "Novo agendamento" abriu com um
             // contato JÁ selecionado, herdado de uma abertura anterior feita a
@@ -1243,7 +1247,9 @@ export function AgendaClient({
                 // já escolhidos, além do dia e da hora.
                 const dono = profissional?.id ?? tipo?.donoId ?? "";
                 setFormDonoId(dono);
-                setFormTipoId(dono && tipo ? tipo.id : "");
+                // Só se o procedimento da grade é DESTE profissional: o modal não
+                // oferece o de outro (`atendeOProcedimento`), e a rota recusaria.
+                setFormTipoId(tipo && atendeOProcedimento(tipo.donoId, dono) ? tipo.id : "");
                 // `abrirMarcacao` e não `setMarcando(true)`: clicar num bloco
                 // livre abre uma marcação NOVA, e ela nasce com o vínculo da rota.
                 abrirMarcacao();

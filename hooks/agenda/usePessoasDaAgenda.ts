@@ -18,6 +18,9 @@ interface MembroDto {
   full_name: string | null;
   calendar_trilha?: number | null;
   revoked_at?: string | null;
+  /** Unidades das janelas da jornada (servidor antigo não manda: a tela não filtra). */
+  jornada_unidades?: string[];
+  jornada_sem_unidade?: boolean;
 }
 
 /**
@@ -59,6 +62,8 @@ export function usePessoasDaAgenda() {
             // e-mail antes do @ ao gerente. O rótulo neutro é o que sobra.
             nome: m.full_name ?? "Sem nome",
             trilha: trilhas.get(m.user_id) ?? 1,
+            unidades: m.jornada_unidades,
+            atendeSemUnidade: m.jornada_sem_unidade,
           }));
       } catch (err) {
         // O 403 chegava como "Você não tem permissão para esta ação", sem dizer
