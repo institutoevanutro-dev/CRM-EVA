@@ -287,8 +287,8 @@ function explicarRecusa(motivo: string | undefined, quantos: number | undefined)
   switch (motivo) {
     case "funil_com_negocios":
       return (
-        `Este quadro já tem ${quantos ?? "alguns"} cliente(s) dentro, então trocar as colunas agora ` +
-        `deixaria eles sem lugar. Você pode ajustar as colunas depois, em Configurações › Funis.`
+        `Este quadro já tem ${quantos ?? "alguns"} cliente(s) marcado(s) como ganho ou perdido, e trocar ` +
+        `as colunas agora apagaria esse resultado. Você pode ajustar as colunas depois, em Configurações › Funis.`
       );
     case "etapa_em_uso_por_webhook":
       return (
