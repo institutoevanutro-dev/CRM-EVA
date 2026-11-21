@@ -8,6 +8,24 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.30.0] — 2026-11-21
+
+### Alterado
+
+- **Agenda mais limpa, com cor por profissional, e o agendamento diz quem converteu e a origem do lead** A grade da Agenda desenha só as horas das jornadas de atendimento (sem a
+  madrugada), com uma linha na meia hora e o horário dentro de cada vaga. O
+  bloqueio aparece uma vez só, como faixa "Bloqueado" com cadeado, os nomes e o
+  motivo; um feriado de vários profissionais vira uma faixa única. Cada consulta
+  tem a cor do profissional, mais forte, e a legenda diz de quem é cada cor.
+
+  No "Novo agendamento": só aparece quem tem procedimento cadastrado; "Marcada
+  por" já vem em Mensagem; a janela ficou mais larga; escolhido o paciente, a
+  busca some e um X desfaz a escolha. Dois campos novos: "Quem converteu" (alguém
+  da equipe ou a IA do atendimento; padrão: quem marca), gravado no agendamento e
+  mostrado no detalhe, e "Origem do lead", lida pela mesma regra do funil do
+  Marketing — mudar ali grava o "Como chegou" da ficha. Migration 0422 (colunas
+  novas em `calendar_appointments`); o `update.sh` reaplica o baseline.
+
 ## [5.29.0] — 2026-11-21
 
 ### Alterado
@@ -9726,7 +9744,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.29.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.30.0...HEAD
+[5.30.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.29.0...v5.30.0
 [5.29.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.3...v5.29.0
 [5.28.3]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.2...v5.28.3
 [5.28.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.1...v5.28.2
