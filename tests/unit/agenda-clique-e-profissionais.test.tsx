@@ -232,16 +232,10 @@ describe("clicar num horário vazio abre o Novo agendamento já preenchido", () 
     expect(painel).toHaveAttribute("data-instante", new Date(`${QUARTA}T14:30:00-03:00`).toISOString());
     expect(painel).toHaveAttribute("data-rotulo", "14:30");
     expect(painel).toHaveAttribute("data-profissional", "p-bia");
-    expect(painel).toHaveAttribute("data-tipo", "tipo-1");
-
-    fireEvent.click(screen.getByRole("button", { name: "confirmar" }));
-    expect(marcar).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event_type_id: "tipo-1",
-        owner_user_id: "p-bia",
-        starts_at: new Date(`${QUARTA}T14:30:00-03:00`).toISOString(),
-      }),
-    );
+    // O procedimento da grade é da Ana: a Bia não o atende, e ele NÃO vem escolhido
+    // (pedido do dono da clínica, 20/11 — o modal só oferece os dela, e a rota
+    // recusaria `agenda_procedimento_de_outro_profissional`). A recepção escolhe.
+    expect(painel).toHaveAttribute("data-tipo", "");
   });
 
   it("sem pessoa única no filtro, o profissional é o dono do tipo, e o POST o leva explícito", async () => {

@@ -1239,6 +1239,15 @@
   &[data-state="closed"] { animation: eva-gaveta-sai 200ms var(--ease-in-out); }
 }
 
+/* O que acabou de ser ESCOLHIDO aparece vindo de quem o escolheu: o cartão de
+   conferência do paciente desce 4 px a partir do campo de busca, sem sobressalto.
+   Um movimento só, de 200 ms; com movimento reduzido vira só o estado final
+   (regra global abaixo). */
+@keyframes eva-revela { from { opacity: 0; translate: 0 -4px; } }
+@utility anima-revela {
+  animation: eva-revela 200ms var(--ease-out);
+}
+
 /* Ponto de "conexão caída": pulsa 3 vezes e para (antes, `animate-pulse`
    infinito). Chamar a atenção uma vez é aviso; piscar para sempre é ruído. */
 @keyframes eva-pulso { 50% { opacity: 0.4; } }

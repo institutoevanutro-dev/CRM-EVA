@@ -45,6 +45,11 @@ export const ApiErrorCodes = {
   agenda_disponibilidade_invalida: "agenda_disponibilidade_invalida",
   agenda_ja_cancelado: "agenda_ja_cancelado",
   agenda_listagem_sem_recorte: "agenda_listagem_sem_recorte",
+  // 422: o profissional escolhido não atende este procedimento (o tipo tem outro
+  // dono) ou não atende nesta unidade (a jornada dele diz onde atende). A tela
+  // já não oferece nenhum dos dois; a rota recusa para a REST e a IA também.
+  agenda_procedimento_de_outro_profissional: "agenda_procedimento_de_outro_profissional",
+  agenda_unidade_fora_da_jornada: "agenda_unidade_fora_da_jornada",
   // 422: tipo com `requires_patient` (migration 0411) marcado sem `contact_id`.
   patient_required: "patient_required",
   // Código PRÓPRIO, e não o `unprocessable_entity` genérico: quem recebe isto

@@ -29,6 +29,13 @@ export type Pessoa = {
   nome: string;
   /** Atribuída na entrada da pessoa na organização, não sorteada a cada render. */
   trilha: TrilhaDeCor;
+  /**
+   * Onde atende: as unidades das janelas da jornada. Ausente ou vazio = a
+   * jornada não diz, e a marcação oferece todas (`ofertaDeUnidades`).
+   */
+  unidades?: string[];
+  /** Alguma janela da jornada não tem unidade (teleconsulta ou sem unidade). */
+  atendeSemUnidade?: boolean;
 };
 
 /**

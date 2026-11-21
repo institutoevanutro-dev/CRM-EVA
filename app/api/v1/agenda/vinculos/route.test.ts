@@ -160,6 +160,13 @@ describe("GET /api/v1/agenda/vinculos", () => {
     expect(selectsRecebidos[0]).toContain("is_blocked");
   });
 
+  it("devolve e-mail e nascimento para desempatar homônimos, e nunca o CPF", async () => {
+    await buscar("Otávio");
+    expect(selectsRecebidos[0]).toContain("email");
+    expect(selectsRecebidos[0]).toContain("birthdate");
+    expect(selectsRecebidos[0]).not.toMatch(/cpf/);
+  });
+
   it("termo vazio não manda filtro OR (não é busca)", async () => {
     await buscar("   ");
     expect(orsRecebidos).toEqual([]);

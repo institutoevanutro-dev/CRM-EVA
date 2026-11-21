@@ -3,7 +3,8 @@
  *
  * O que não pode se perder:
  *   1. A ORDEM: o procedimento só se escolhe depois do profissional, e só entre
- *      os que ele atende (dono do tipo, ou tipo sem dono).
+ *      os que ele atende (dono do tipo, ou tipo sem dono). A unidade, só entre
+ *      as da jornada dele.
  *   2. O FIM é calculado pela duração do procedimento e aparece no resumo.
  *   3. O BLOQUEIO grava pelo caminho que já existia (`POST /api/v1/agenda/excecoes`,
  *      `is_unavailable: true`), uma linha por dia do período.
@@ -36,10 +37,16 @@ import { BloqueioDeHorario } from "@/components/agenda/BloqueioDeHorario";
 import { MarcacaoSimples } from "@/components/agenda/MarcacaoSimples";
 import type { Pessoa } from "@/components/agenda/tipos";
 import {
+  atendeOProcedimento,
+  dataDeCalendario,
   datasDoPeriodo,
   fimDoHorario,
-  outrosProcedimentos,
+  idadeEmAnos,
+  ofertaDeUnidades,
   procedimentosDoProfissional,
+  ultimaEProximaConsulta,
+  unidadeDaMarcacao,
+  unidadesDaJornada,
 } from "@/lib/agenda/marcacao-simples";
 
 /** Bônus (0417): a marcação nova exige o canal; o teste escolhe "Mensagem" ao montar. */
@@ -69,9 +76,61 @@ describe("regras puras", () => {
     expect(procedimentosDoProfissional(TIPOS, "").map((t) => t.id)).toEqual([]);
     expect(procedimentosDoProfissional(TIPOS, ANA).map((t) => t.id)).toEqual(["t-ana", "t-livre"]);
     expect(procedimentosDoProfissional(TIPOS, BETO).map((t) => t.id)).toEqual(["t-beto", "t-livre"]);
-    // Os de outro dono não somem (o dono do tipo é o PADRÃO, não exclusivo): vão para o fim.
-    expect(outrosProcedimentos(TIPOS, BETO).map((t) => t.id)).toEqual(["t-ana"]);
-    expect(outrosProcedimentos(TIPOS, "")).toEqual([]);
+    // O de outro dono NÃO aparece (pedido do dono da clínica, 20/11): nem num grupo no fim.
+    expect(atendeOProcedimento(ANA, BETO)).toBe(false);
+    expect(atendeOProcedimento(null, BETO)).toBe(true);
+    expect(atendeOProcedimento(null, "")).toBe(false);
+  });
+
+  it("unidades: só as da jornada; sem jornada que diga, todas, como sempre foi", () => {
+    const U = [
+      { id: "u-camburi", name: "Camburi", active: true },
+      { id: "u-serra", name: "Serra", active: true },
+      { id: "u-velha", name: "Antiga", active: false },
+    ];
+    expect(unidadesDaJornada([{ unit_id: "u-serra" }, { unit_id: "u-serra" }, {}])).toEqual({
+      unidades: ["u-serra"],
+      semUnidade: true,
+    });
+    // Só Serra na jornada: só Serra, sem "sem unidade", e ela já vem escolhida.
+    const soSerra = ofertaDeUnidades(U, { unidades: ["u-serra"], atendeSemUnidade: false });
+    expect(soSerra.unidades.map((u) => u.id)).toEqual(["u-serra"]);
+    expect(soSerra.semUnidade).toBe(false);
+    expect(unidadeDaMarcacao(soSerra, "")).toBe("u-serra");
+    // A escolhida que não é dele cai.
+    expect(unidadeDaMarcacao(soSerra, "u-camburi")).toBe("u-serra");
+    // Duas unidades e nenhuma janela sem unidade: falta escolher ("").
+    const duas = ofertaDeUnidades(U, { unidades: ["u-camburi", "u-serra"] });
+    expect(unidadeDaMarcacao(duas, "")).toBe("");
+    expect(unidadeDaMarcacao(duas, "u-camburi")).toBe("u-camburi");
+    // Jornada que não diz onde: todas as ativas + "sem unidade", e a tela avisa.
+    const legado = ofertaDeUnidades(U, { unidades: [] });
+    expect(legado).toMatchObject({ semUnidade: true, daJornada: false });
+    expect(legado.unidades.map((u) => u.id)).toEqual(["u-camburi", "u-serra"]);
+    expect(ofertaDeUnidades(U, undefined).daJornada).toBe(false);
+    // Unidade da jornada desativada não deixa o campo sem opção.
+    expect(ofertaDeUnidades(U, { unidades: ["u-velha"] })).toMatchObject({ unidades: [], semUnidade: true });
+  });
+
+  it("idade pelo dia de calendário, sem fuso; data ilegível ou futura não tem idade", () => {
+    const agora = new Date(2026, 10, 20, 12);
+    expect(idadeEmAnos("1990-11-20", agora)).toBe(36);
+    expect(idadeEmAnos("1990-11-21", agora)).toBe(35);
+    expect(idadeEmAnos("2030-01-01", agora)).toBeNull();
+    expect(idadeEmAnos(null, agora)).toBeNull();
+    expect(dataDeCalendario("1990-03-12")).toBe("12/03/1990");
+  });
+
+  it("última consulta que passou e a próxima que vem", () => {
+    const agora = new Date("2026-11-20T12:00:00Z");
+    const c = (id: string, starts_at: string) => ({ id, starts_at, title: id });
+    const r = ultimaEProximaConsulta(
+      [c("futura-longe", "2026-12-20T12:00:00Z"), c("futura", "2026-11-25T12:00:00Z"), c("velha", "2026-01-01T12:00:00Z"), c("recente", "2026-11-10T12:00:00Z")],
+      agora,
+    );
+    expect(r.ultima?.id).toBe("recente");
+    expect(r.proxima?.id).toBe("futura");
+    expect(ultimaEProximaConsulta([], agora)).toEqual({ ultima: null, proxima: null });
   });
 
   it("fim = começo + duração", () => {
@@ -136,19 +195,37 @@ describe("Novo agendamento: profissional antes do procedimento", () => {
     expect(proc.disabled).toBe(true);
     expect(within(proc).getAllByRole("option")).toHaveLength(1);
     expect(screen.getByTestId("confirmar-marcacao")).toBeDisabled();
+    // A duração espera o procedimento: desligada, e não "inválida" (sem borda de erro).
+    expect(screen.getByTestId("duracao-da-marcacao")).toBeDisabled();
+    expect(screen.getByTestId("duracao-da-marcacao")).not.toHaveAttribute("aria-invalid");
   });
 
-  it("com o profissional, os procedimentos DELE vêm primeiro, com a duração; os de outros, num grupo no fim", () => {
+  it("com o profissional, SÓ os procedimentos dele (e os sem dono), com a duração", () => {
     montarMarcacao({ profissionalId: BETO });
     const proc = screen.getByTestId("procedimento-da-marcacao") as HTMLSelectElement;
     expect(proc.disabled).toBe(false);
-    const primeiroNivel = Array.from(proc.querySelectorAll(":scope > option")).map((o) => o.textContent);
-    expect(primeiroNivel).toEqual(["Escolha o procedimento", "Retorno · 30 min", "Aplicação · 15 min"]);
-    const grupo = proc.querySelector("optgroup")!;
-    expect(grupo.label).toBe("Procedimentos de outros profissionais");
-    expect(Array.from(grupo.querySelectorAll("option")).map((o) => o.textContent)).toEqual([
-      "Avaliação facial · 45 min",
+    expect(Array.from(proc.querySelectorAll("option")).map((o) => o.textContent)).toEqual([
+      "Escolha o procedimento",
+      "Retorno · 30 min",
+      "Aplicação · 15 min",
     ]);
+    expect(proc.querySelector("optgroup")).toBeNull();
+  });
+
+  it("o procedimento de OUTRO profissional que sobrou no estado não conta como escolhido", () => {
+    montarMarcacao({ profissionalId: BETO, tipoId: "t-ana" });
+    expect((screen.getByTestId("procedimento-da-marcacao") as HTMLSelectElement).value).toBe("");
+    expect(screen.getByTestId("painel-de-marcacao").getAttribute("data-tempo")).toBe("escolhendo-dia");
+  });
+
+  it("profissional sem procedimento: o campo explica e aponta onde cadastrar", () => {
+    const soDaAna = TIPOS.filter((t) => t.donoId === ANA);
+    montarMarcacao({ profissionalId: BETO, tipos: soDaAna });
+    const proc = screen.getByTestId("procedimento-da-marcacao") as HTMLSelectElement;
+    expect(proc.disabled).toBe(true);
+    const aviso = screen.getByTestId("sem-procedimento-do-profissional");
+    expect(aviso).toHaveTextContent("Dr. Beto Teste ainda não tem procedimento cadastrado.");
+    expect(within(aviso).getByRole("link")).toHaveAttribute("href", "/app/settings/tenant/agenda");
   });
 
   it("limpar o profissional limpa o procedimento (a ordem volta ao começo)", () => {
@@ -179,6 +256,72 @@ describe("Novo agendamento: profissional antes do procedimento", () => {
       expect.objectContaining({ instante, endereco: "", observacao: "", canal: "mensagem" }),
     ]);
     await screen.findByTestId("ver-na-agenda");
+  });
+});
+
+describe("unidade: só onde o profissional atende", () => {
+  const UNIDADES = [
+    { id: "u-camburi", name: "Camburi", active: true },
+    { id: "u-serra", name: "Serra", active: true },
+  ];
+  const instante = "2026-10-22T16:00:00.000Z";
+  const comHorario = {
+    tipoId: "t-beto",
+    unidades: UNIDADES,
+    horarioInicial: { instante, rotulo: "13:00" },
+    horariosPorDia: { "2026-10-22": [{ instante, rotulo: "13:00" }] },
+  };
+  const comJornada = (unidades: string[], atendeSemUnidade = false) =>
+    PESSOAS.map((p) => (p.id === BETO ? { ...p, unidades, atendeSemUnidade } : p));
+
+  it("só as unidades da jornada; a única já vem escolhida", async () => {
+    const onUnidade = vi.fn();
+    montarMarcacao({ ...comHorario, profissionalId: BETO, pessoas: comJornada(["u-serra"]), onUnidade });
+    const campo = screen.getByTestId("unidade-do-agendamento") as HTMLSelectElement;
+    expect(Array.from(campo.options).map((o) => o.textContent)).toEqual(["Escolha a unidade", "Serra"]);
+    await waitFor(() => expect(onUnidade).toHaveBeenCalledWith("u-serra"));
+  });
+
+  it("com janela sem unidade, oferece 'Teleconsulta ou sem unidade' ao lado das dele", () => {
+    montarMarcacao({ ...comHorario, profissionalId: BETO, pessoas: comJornada(["u-camburi"], true) });
+    const campo = screen.getByTestId("unidade-do-agendamento") as HTMLSelectElement;
+    expect(Array.from(campo.options).map((o) => o.textContent)).toEqual(["Teleconsulta ou sem unidade", "Camburi"]);
+    expect(screen.queryByTestId("unidades-sem-jornada")).toBeNull();
+  });
+
+  it("duas unidades e nenhuma escolhida: o Confirmar espera e diz o que falta", () => {
+    montarMarcacao({ ...comHorario, profissionalId: BETO, pessoas: comJornada(["u-camburi", "u-serra"]) });
+    expect(screen.getByTestId("confirmar-marcacao")).toBeDisabled();
+    expect(screen.getByTestId("falta-unidade-na-marcacao")).toHaveTextContent("Escolha a unidade do atendimento.");
+  });
+
+  it("a unidade de outro profissional que sobrou no estado é trocada pela que vale", async () => {
+    const onUnidade = vi.fn();
+    montarMarcacao({
+      ...comHorario,
+      profissionalId: BETO,
+      unidadeId: "u-camburi",
+      pessoas: comJornada(["u-serra"]),
+      onUnidade,
+    });
+    await waitFor(() => expect(onUnidade).toHaveBeenCalledWith("u-serra"));
+  });
+
+  it("jornada que não diz onde atende: todas as unidades, e a tela avisa por quê", () => {
+    montarMarcacao({ ...comHorario, profissionalId: BETO });
+    const campo = screen.getByTestId("unidade-do-agendamento") as HTMLSelectElement;
+    expect(Array.from(campo.options).map((o) => o.textContent)).toEqual([
+      "Teleconsulta ou sem unidade",
+      "Camburi",
+      "Serra",
+    ]);
+    expect(screen.getByTestId("unidades-sem-jornada")).toBeInTheDocument();
+    expect(screen.getByTestId("confirmar-marcacao")).toBeEnabled();
+  });
+
+  it("sem profissional, a unidade espera por ele", () => {
+    montarMarcacao({ unidades: UNIDADES });
+    expect(screen.getByTestId("unidade-do-agendamento")).toBeDisabled();
   });
 });
 

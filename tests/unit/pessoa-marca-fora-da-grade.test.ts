@@ -123,6 +123,7 @@ function bancoEmMemoria(tabelas: Record<string, Linha[]>, olhar: Olhar = "tudo")
       gt: (c: string, v: unknown) => (filtros.push((l) => instante(lerCampo(l, c)) > instante(v)), cadeia),
       gte: (c: string, v: unknown) => (filtros.push((l) => instante(lerCampo(l, c)) >= instante(v)), cadeia),
       lte: (c: string, v: unknown) => (filtros.push((l) => instante(lerCampo(l, c)) <= instante(v)), cadeia),
+      in: (c: string, vs: unknown[]) => (filtros.push((l) => vs.includes(lerCampo(l, c))), cadeia),
       maybeSingle: async () => ({ data: linhas()[0] ?? null, error: null }),
       then: (ok: (v: unknown) => unknown, falha?: (e: unknown) => unknown) =>
         Promise.resolve({ data: linhas(), error: null }).then(ok, falha),
@@ -235,6 +236,10 @@ function agenda(
     bufferDepoisMin?: number;
     /** `requires_patient` (0411). Ausente = coluna fora do dublê, como os casos antigos. */
     exigePaciente?: boolean;
+    /** `default_owner_user_id` do tipo. Padrão: DONO. `null` = tipo de todos. */
+    donoDoTipo?: string | null;
+    /** A unidade das janelas de quarta da jornada (`windows[].unit_id`). Ausente = sem unidade. */
+    unidadeDaJornada?: string;
   } = {},
 ): Banco {
   return bancoEmMemoria({
@@ -250,7 +255,7 @@ function agenda(
         minimum_notice_minutes: 120,
         slot_interval_minutes: null,
         booking_window_days: 30,
-        default_owner_user_id: DONO,
+        default_owner_user_id: args.donoDoTipo === undefined ? DONO : args.donoDoTipo,
         requires_confirmation: false,
         location_kind: "in_person",
         location_details: null,
@@ -264,7 +269,14 @@ function agenda(
         user_id: DONO,
         schedule: {
           timezone: "America/Sao_Paulo",
-          windows: [{ dow: 3, start: "09:00", end: args.fimDaJornada ?? "18:00" }],
+          windows: [
+            {
+              dow: 3,
+              start: "09:00",
+              end: args.fimDaJornada ?? "18:00",
+              ...(args.unidadeDaJornada ? { unit_id: args.unidadeDaJornada } : {}),
+            },
+          ],
         },
       },
     ],
@@ -670,6 +682,67 @@ describe("consulta exige paciente (migration 0411)", () => {
     await expect(
       marcarAgendamentoHandler(banco.client, ctx(AGENTE), { event_type_id: TIPO, starts_at: NA_GRADE }),
     ).rejects.toMatchObject({ status: 422, code: "patient_required" });
+  });
+});
+
+// Pedido do dono da clínica (20/11/2026): escolhido o profissional, só os
+// procedimentos e as unidades DELE. A tela já não oferece o resto; a rota recusa
+// para a REST e a IA, que passam por este mesmo handler.
+describe("o procedimento e a unidade são do profissional", () => {
+  const SERRA = "99999999-0000-4000-8000-000000000001";
+  const CAMBURI = "99999999-0000-4000-8000-000000000002";
+
+  it("procedimento de OUTRO profissional é RECUSADO — nada é criado", async () => {
+    const banco = agenda();
+    await expect(
+      marcarAgendamentoHandler(banco.client, ctx(PESSOA), {
+        event_type_id: TIPO,
+        owner_user_id: OUTRO_DONO,
+        starts_at: NA_GRADE,
+      }),
+    ).rejects.toMatchObject({ status: 422, code: "agenda_procedimento_de_outro_profissional" });
+    expect(criados(banco)).toHaveLength(0);
+  });
+
+  it("a IA recebe a mesma recusa", async () => {
+    const banco = agenda();
+    await expect(
+      marcarAgendamentoHandler(banco.client, ctx(AGENTE), {
+        event_type_id: TIPO,
+        owner_user_id: OUTRO_DONO,
+        starts_at: NA_GRADE,
+      }),
+    ).rejects.toMatchObject({ status: 422, code: "agenda_procedimento_de_outro_profissional" });
+  });
+
+  it("CONTROLE: o dono explícito marca; o tipo SEM dono marca na agenda de quem foi escolhido", async () => {
+    const doDono = agenda();
+    await marcarAgendamentoHandler(doDono.client, ctx(PESSOA), { event_type_id: TIPO, owner_user_id: DONO, starts_at: NA_GRADE });
+    expect(criados(doDono)).toHaveLength(1);
+
+    const deTodos = agenda({ donoDoTipo: null });
+    await marcarAgendamentoHandler(deTodos.client, ctx(PESSOA), { event_type_id: TIPO, owner_user_id: DONO, starts_at: NA_GRADE });
+    expect(criados(deTodos)[0]?.owner_user_id).toBe(DONO);
+  });
+
+  it("unidade fora da jornada do profissional é RECUSADA — nada é criado", async () => {
+    const banco = agenda({ unidadeDaJornada: SERRA });
+    await expect(
+      marcarAgendamentoHandler(banco.client, ctx(PESSOA), { event_type_id: TIPO, starts_at: NA_GRADE, unit_id: CAMBURI }),
+    ).rejects.toMatchObject({ status: 422, code: "agenda_unidade_fora_da_jornada" });
+    expect(criados(banco)).toHaveLength(0);
+  });
+
+  it("CONTROLE: a unidade da jornada marca, e vai para o compromisso", async () => {
+    const banco = agenda({ unidadeDaJornada: SERRA });
+    await marcarAgendamentoHandler(banco.client, ctx(PESSOA), { event_type_id: TIPO, starts_at: NA_GRADE, unit_id: SERRA });
+    expect(criados(banco)[0]?.unit_id).toBe(SERRA);
+  });
+
+  it("jornada que não diz unidade nenhuma não restringe — como sempre foi", async () => {
+    const banco = agenda();
+    await marcarAgendamentoHandler(banco.client, ctx(PESSOA), { event_type_id: TIPO, starts_at: NA_GRADE, unit_id: CAMBURI });
+    expect(criados(banco)[0]?.unit_id).toBe(CAMBURI);
   });
 });
 

@@ -11,6 +11,12 @@
  * irredutível: id, papel, nome e a trilha de cor escolhida. Sem e-mail, sem último acesso (gerente sem
  * `full_name` cadastrado recebe no nome a parte do e-mail antes do @).
  *
+ * E ONDE a pessoa atende (`jornada_unidades`, `jornada_sem_unidade`): os ids das
+ * unidades das janelas da jornada, para o "Novo agendamento" oferecer só as
+ * unidades do profissional escolhido (`ofertaDeUnidades`). Só ids — o nome da
+ * unidade a tela já lê de `/api/v1/agenda/unidades` —, e a jornada inteira não
+ * sai daqui: horários livres têm rota própria.
+ *
  * O Prestador (`provider`) lê a lista, mas recebe só a si mesmo: ele trabalha
  * só na própria agenda (a RLS de `calendar_appointments` esconde dele os
  * compromissos dos colegas). `viewer` segue sem a lista.
@@ -26,6 +32,8 @@ import { isServiceRoleConfigured } from "@/lib/audit";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { roleAtLeast } from "@/lib/auth/types";
+import { lerJornadaDoBanco } from "@/lib/agenda/jornada";
+import { unidadesDaJornada } from "@/lib/agenda/marcacao-simples";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -36,6 +44,8 @@ interface PessoaDaAgenda {
   role: string;
   full_name: string | null;
   calendar_trilha: number | null;
+  jornada_unidades: string[];
+  jornada_sem_unidade: boolean;
 }
 
 export async function GET(_req: NextRequest): Promise<Response> {
@@ -58,7 +68,28 @@ export async function GET(_req: NextRequest): Promise<Response> {
 
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
-  const membros = (rows ?? []) as Array<{ user_id: string; role: string; calendar_trilha: number | null }>;
+  const linhas = (rows ?? []) as Array<{ user_id: string; role: string; calendar_trilha: number | null }>;
+  // Onde cada um atende. A RLS de `attendant_availability` é da organização
+  // inteira (a mesma leitura que os horários livres fazem); o filtro explícito
+  // fica pelo client admin. Jornada ilegível ou ausente = não diz onde atende.
+  const { data: jornadas } = linhas.length
+    ? await client
+        .from("attendant_availability")
+        .select("user_id, schedule")
+        .eq("organization_id", orgId)
+        .in("user_id", linhas.map((m) => m.user_id))
+    : { data: [] };
+  const ondeAtende = new Map(
+    ((jornadas ?? []) as Array<{ user_id: string; schedule: unknown }>).map((j) => {
+      const leitura = lerJornadaDoBanco(j.schedule);
+      return [j.user_id, unidadesDaJornada(leitura.ok ? leitura.jornada.windows : [])] as const;
+    }),
+  );
+  const membros = linhas.map((m) => ({
+    ...m,
+    jornada_unidades: ondeAtende.get(m.user_id)?.unidades ?? [],
+    jornada_sem_unidade: ondeAtende.get(m.user_id)?.semUnidade ?? false,
+  }));
   if (!isServiceRoleConfigured() || membros.length === 0) {
     return ok(membros.map((m) => ({ ...m, full_name: null })), { requestId });
   }
