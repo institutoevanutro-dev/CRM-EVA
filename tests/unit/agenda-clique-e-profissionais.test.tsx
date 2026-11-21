@@ -141,7 +141,12 @@ vi.mock("@/components/agenda/MarcacaoSimples", () => ({
     horarioInicial?: { instante: string; rotulo: string };
     profissionalId: string;
     tipoId: string;
-    onConfirmar: (m: { instante: string; endereco: string; observacao: string }) => unknown;
+    onConfirmar: (m: {
+      instante: string;
+      endereco: string;
+      observacao: string;
+      quemConverteu: { kind: "user"; userId: string } | { kind: "ai" };
+    }) => unknown;
   }) => (
     <div
       data-testid="painel-dublê"
@@ -153,7 +158,13 @@ vi.mock("@/components/agenda/MarcacaoSimples", () => ({
       <button
         type="button"
         onClick={() =>
-          props.onConfirmar({ instante: props.horarioInicial!.instante, endereco: "", observacao: "" })
+          props.onConfirmar({
+            instante: props.horarioInicial!.instante,
+            endereco: "",
+            observacao: "",
+            // O modal de verdade sempre manda quem converteu (padrão: quem marca).
+            quemConverteu: { kind: "user", userId: "u-recepcao" },
+          })
         }
       >
         confirmar

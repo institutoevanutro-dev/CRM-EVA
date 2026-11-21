@@ -7,7 +7,7 @@
  * a grade mostrava o mesmo vazio de sempre.
  *
  * O que estes casos fixam:
- *   1. a faixa cai na hora certa (posição e altura na régua de 48px/h);
+ *   1. a faixa cai na hora certa (posição e altura na régua de 56px/h);
  *   2. dia inteiro cobre a janela desenhada (07h–22h), recortado nela;
  *   3. um fechamento noutro fuso é RECORTADO pelas bordas do dia da grade, e um
  *      "dia todo" em Tóquio vira dois pedaços em São Paulo;
@@ -68,10 +68,11 @@ describe("a faixa fechada na semana", () => {
   it("cai na hora certa, com o motivo, só na coluna do dia", () => {
     grade([PARCIAL]);
     const faixa = coluna("2026-11-03").getByTestId("fechamento-parcial");
-    // 48px por hora, a grade começa às 07h: 14:00 → 7h × 48 = 336px; 1h30 → 72px.
-    expect(faixa.style.top).toBe("336px");
-    expect(faixa.style.height).toBe("72px");
-    expect(faixa).toHaveTextContent("Fechado · Banco");
+    // 56px por hora, a grade começa às 07h: 14:00 → 7h × 56 = 392px; 1h30 → 84px.
+    expect(faixa.style.top).toBe("392px");
+    expect(faixa.style.height).toBe("84px");
+    expect(faixa).toHaveTextContent("Bloqueado");
+    expect(faixa).toHaveTextContent("Banco");
     expect(faixa).toHaveTextContent("14:00–15:30");
     expect(screen.getAllByTestId("fechamento-parcial")).toHaveLength(1);
   });
@@ -80,9 +81,9 @@ describe("a faixa fechada na semana", () => {
     grade([DIA_TODO]);
     const faixa = coluna("2026-11-05").getByTestId("fechamento-dia-todo");
     expect(faixa.style.top).toBe("0px");
-    // 07h às 22h = 15 horas × 48px.
-    expect(faixa.style.height).toBe("720px");
-    expect(faixa).toHaveTextContent("Fechado");
+    // 07h às 22h = 15 horas × 56px.
+    expect(faixa.style.height).toBe("840px");
+    expect(faixa).toHaveTextContent("Bloqueado");
     expect(faixa).toHaveTextContent("o dia todo");
   });
 
@@ -91,10 +92,10 @@ describe("a faixa fechada na semana", () => {
     grade([{ ...DIA_TODO, id: "toquio", comeca: "2026-11-02T15:00:00.000Z", termina: "2026-11-03T15:00:00.000Z" }]);
     const segunda = coluna("2026-11-02").getByTestId("fechamento-toquio");
     const terca = coluna("2026-11-03").getByTestId("fechamento-toquio");
-    // Segunda: das 12h ao fim da janela (22h) — 5h × 48 = 240px de topo, 10h de altura.
-    expect([segunda.style.top, segunda.style.height]).toEqual(["240px", "480px"]);
+    // Segunda: das 12h ao fim da janela (22h) — 5h × 56 = 280px de topo, 10h de altura.
+    expect([segunda.style.top, segunda.style.height]).toEqual(["280px", "560px"]);
     // Terça: do começo da janela (07h) às 12h.
-    expect([terca.style.top, terca.style.height]).toEqual(["0px", "240px"]);
+    expect([terca.style.top, terca.style.height]).toEqual(["0px", "280px"]);
   });
 
   it("fechamento todo fora da janela desenhada não vira faixa de altura zero", () => {
@@ -123,7 +124,20 @@ describe("a faixa fechada na semana", () => {
 
   it("com duas pessoas na grade, a faixa diz de quem é o fechamento", () => {
     grade([PARCIAL], { pessoas: [ANA, BRUNO] });
-    expect(coluna("2026-11-03").getByTestId("fechamento-parcial")).toHaveTextContent("Fechado · Ana · Banco");
+    const faixa = coluna("2026-11-03").getByTestId("fechamento-parcial");
+    expect(faixa).toHaveTextContent("Bloqueado");
+    expect(faixa).toHaveTextContent("Ana");
+    expect(faixa).toHaveTextContent("Banco");
+  });
+
+  it("feriado de várias pessoas vira UMA faixa com os nomes, não colunas estreitas (21/11)", () => {
+    grade([DIA_TODO, { ...DIA_TODO, id: "dia-todo-bruno", responsavelId: "bruno" }], { pessoas: [ANA, BRUNO] });
+    const faixas = coluna("2026-11-05").getAllByTestId(/^fechamento-/);
+    expect(faixas).toHaveLength(1);
+    expect(faixas[0]).toHaveAttribute("data-fechamentos", "2");
+    expect(faixas[0]).toHaveTextContent("Ana");
+    expect(faixas[0]).toHaveTextContent("Bruno");
+    expect(faixas[0]?.style.width).toBe("calc(100% - 4px)");
   });
 
   it("com uma pessoa só, o nome não aparece (todo fechamento é dela)", () => {
@@ -136,10 +150,10 @@ describe("a faixa fechada no mês", () => {
   it("a célula do dia diz que está fechado, com a faixa quando é só uma parte", () => {
     grade([PARCIAL, DIA_TODO], { visao: "mes" });
     expect(within(screen.getByTestId("celula-mes-2026-11-03")).getByTestId("fechamento-mes-parcial")).toHaveTextContent(
-      "14:00–15:30 Fechado",
+      "14:00–15:30 Bloqueado",
     );
     expect(within(screen.getByTestId("celula-mes-2026-11-05")).getByTestId("fechamento-mes-dia-todo")).toHaveTextContent(
-      /^Fechado$/,
+      /^Bloqueado$/,
     );
     expect(within(screen.getByTestId("celula-mes-2026-11-04")).queryByTestId(/^fechamento-mes-/)).toBeNull();
   });

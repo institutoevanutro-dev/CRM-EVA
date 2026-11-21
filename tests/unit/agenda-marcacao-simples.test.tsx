@@ -17,15 +17,22 @@ import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const post = vi.fn((..._a: unknown[]) => Promise.resolve({ data: {} }));
+const patch = vi.fn((..._a: unknown[]) => Promise.resolve({ data: {} }));
 let excecoes: unknown[] = [];
 let leiturasDeExcecoes = 0;
+/** A ficha do paciente escolhido (origem do lead); `null` = nenhum. */
+let ficha: Record<string, unknown> | null = null;
 vi.mock("@/lib/api/client", () => ({
   apiClient: {
     get: (url: string) => {
       if (url.includes("excecoes")) leiturasDeExcecoes++;
+      if (ficha && url.startsWith("/api/v1/contacts/")) return Promise.resolve({ data: ficha });
+      if (ficha && url.startsWith("/api/v1/agenda/vinculos"))
+        return Promise.resolve({ data: { contacts: [ficha], conversations: [] } });
       return Promise.resolve(url.includes("excecoes") ? { data: excecoes } : { data: { contacts: [], conversations: [] } });
     },
     post: (...a: unknown[]) => post(...a),
+    patch: (...a: unknown[]) => patch(...a),
     delete: () => Promise.resolve({}),
   },
 }));
@@ -218,13 +225,22 @@ describe("Novo agendamento: profissional antes do procedimento", () => {
     expect(screen.getByTestId("painel-de-marcacao").getAttribute("data-tempo")).toBe("escolhendo-dia");
   });
 
-  it("profissional sem procedimento: o campo explica e aponta onde cadastrar", () => {
+  it("profissional sem procedimento não aparece na lista, e o que vinha escolhido é limpo (21/11)", () => {
     const soDaAna = TIPOS.filter((t) => t.donoId === ANA);
-    montarMarcacao({ profissionalId: BETO, tipos: soDaAna });
-    const proc = screen.getByTestId("procedimento-da-marcacao") as HTMLSelectElement;
-    expect(proc.disabled).toBe(true);
+    const onProfissional = vi.fn();
+    montarMarcacao({ profissionalId: BETO, tipos: soDaAna, onProfissional });
+    const lista = screen.getByTestId("profissional-da-marcacao") as HTMLSelectElement;
+    const nomes = within(lista).getAllByRole("option").map((o) => o.textContent);
+    expect(nomes.some((n) => n?.includes("Beto"))).toBe(false);
+    expect(nomes.some((n) => n?.includes("Ana"))).toBe(true);
+    expect(onProfissional).toHaveBeenCalledWith("");
+    expect(screen.queryByTestId("sem-procedimento-do-profissional")).toBeNull();
+  });
+
+  it("ninguém com procedimento: o aviso explica e aponta onde cadastrar", () => {
+    montarMarcacao({ tipos: [] });
     const aviso = screen.getByTestId("sem-procedimento-do-profissional");
-    expect(aviso).toHaveTextContent("Dr. Beto Teste ainda não tem procedimento cadastrado.");
+    expect(aviso).toHaveTextContent("Nenhum profissional tem procedimento cadastrado.");
     expect(within(aviso).getByRole("link")).toHaveAttribute("href", "/app/settings/tenant/agenda");
   });
 
@@ -359,15 +375,14 @@ describe("consulta exige paciente (migration 0411)", () => {
     expect(screen.queryByTestId("recusa-da-marcacao")).toBeNull();
   });
 
-  it("sem 'Marcada por', o Confirmar cinza diz o que falta (achado 17, 16/11)", () => {
+  it("'Marcada por' já vem em Mensagem, e Ligação troca (pedido de 21/11)", () => {
     montarMarcacao({ ...comHorario, tipos: TIPOS }, true);
-    expect(screen.getByTestId("confirmar-marcacao")).toBeDisabled();
-    expect(screen.getByTestId("falta-canal-na-marcacao").textContent).toBe(
-      "Escolha como foi marcada: Mensagem ou Ligação.",
-    );
-    fireEvent.click(screen.getByTestId("canal-ligacao"));
+    expect(screen.getByTestId("canal-mensagem")).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByTestId("falta-canal-na-marcacao")).toBeNull();
     expect(screen.getByTestId("confirmar-marcacao")).toBeEnabled();
+    fireEvent.click(screen.getByTestId("canal-ligacao"));
+    expect(screen.getByTestId("canal-ligacao")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("canal-mensagem")).toHaveAttribute("aria-pressed", "false");
   });
 
   it("tipo que não exige marca sem paciente", async () => {
@@ -469,3 +484,78 @@ describe("Bloquear horário: o mesmo caminho da tela de dias fora da rotina", ()
     expect(lista.textContent).toContain("10:00–11:00");
   });
 });
+
+describe("quem converteu e a origem do lead (21/11/2026)", () => {
+  const instante = "2026-10-22T16:00:00.000Z";
+  const comHorario = {
+    profissionalId: ANA,
+    tipoId: "t-ana",
+    horarioInicial: { instante, rotulo: "13:00" },
+    horariosPorDia: { "2026-10-22": [{ instante, rotulo: "13:00" }] },
+  };
+  const PACIENTE = {
+    id: "c-ficticio",
+    name: "Paciente Fictício Silva",
+    display_name: null,
+    phone_number: "+5527900000000",
+    tags: ["Meta"],
+    source: "whatsapp",
+    source_metadata: {},
+  };
+  afterEach(() => {
+    ficha = null;
+    patch.mockClear();
+  });
+
+  it("vem com quem está marcando, e a IA do atendimento manda `ai`", async () => {
+    const onConfirmar = vi.fn((_m: unknown) => Promise.resolve());
+    montarMarcacao({ ...comHorario, onConfirmar });
+    const campo = screen.getByTestId("quem-converteu") as HTMLSelectElement;
+    expect(campo.value).toBe(`user:${ANA}`);
+    fireEvent.click(screen.getByTestId("confirmar-marcacao"));
+    await waitFor(() => expect(onConfirmar).toHaveBeenCalled());
+    expect(onConfirmar.mock.calls[0]?.[0]).toMatchObject({ quemConverteu: { kind: "user", userId: ANA } });
+
+    fireEvent.click(screen.getByText("Marcar outro"));
+    fireEvent.change(screen.getByTestId("quem-converteu"), { target: { value: "ai" } });
+    fireEvent.click(screen.getByTestId("horario-13:00"));
+    fireEvent.click(screen.getByTestId("confirmar-marcacao"));
+    await waitFor(() => expect(onConfirmar).toHaveBeenCalledTimes(2));
+    expect(onConfirmar.mock.calls[1]?.[0]).toMatchObject({ quemConverteu: { kind: "ai" } });
+  });
+
+  it("a origem sai da ficha pela regra do funil, e só é gravada se mudou", async () => {
+    ficha = PACIENTE;
+    const onConfirmar = vi.fn(() => Promise.resolve());
+    montarMarcacao({ ...comHorario, contactId: PACIENTE.id, onConfirmar });
+    const origem = screen.getByTestId("origem-do-lead") as HTMLSelectElement;
+    await waitFor(() => expect(origem.value).toBe("meta"));
+    fireEvent.change(origem, { target: { value: "indicacao" } });
+    await waitFor(() => expect(screen.getByTestId("confirmar-marcacao")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("confirmar-marcacao"));
+    await waitFor(() => expect(onConfirmar).toHaveBeenCalled());
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(patch.mock.calls[0]?.[1]).toEqual({ origem_informada: "indicacao" });
+  });
+
+  it("sem mudar a origem, nada é gravado na ficha", async () => {
+    ficha = PACIENTE;
+    const onConfirmar = vi.fn(() => Promise.resolve());
+    montarMarcacao({ ...comHorario, contactId: PACIENTE.id, onConfirmar });
+    await waitFor(() => expect((screen.getByTestId("origem-do-lead") as HTMLSelectElement).value).toBe("meta"));
+    await waitFor(() => expect(screen.getByTestId("confirmar-marcacao")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("confirmar-marcacao"));
+    await waitFor(() => expect(onConfirmar).toHaveBeenCalled());
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it("veio pelo clique no anúncio: a origem não se troca à mão", async () => {
+    ficha = { ...PACIENTE, tags: [], source_metadata: { ad_platform: "google_ads" } };
+    montarMarcacao({ ...comHorario, contactId: PACIENTE.id });
+    const origem = screen.getByTestId("origem-do-lead") as HTMLSelectElement;
+    await waitFor(() => expect(origem.value).toBe("google"));
+    expect(origem).toBeDisabled();
+    expect(screen.getByText("Marcada pelo clique no anúncio.")).toBeInTheDocument();
+  });
+});
+

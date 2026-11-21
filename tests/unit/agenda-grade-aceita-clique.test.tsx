@@ -206,13 +206,13 @@ describe("o bloco recusado DIZ por quê — a razão sai da mesma conta que o ap
 
 describe("a geometria é a régua da grade, e o teste mede contra ela", () => {
   it("o bloco das 09:00 começa a duas horas do topo e ocupa meia hora", () => {
-    // 48px por hora, janela a partir das 07:00: 09:00 está a (9-7)*48 = 96px, e
-    // meia hora são 24px. Se a régua mudar, este caso é quem avisa — a olho,
-    // 96px e 104px são indistinguíveis.
+    // 56px por hora, janela a partir das 07:00: 09:00 está a (9-7)*56 = 112px, e
+    // meia hora são 28px. Se a régua mudar, este caso é quem avisa — a olho,
+    // 112px e 120px são indistinguíveis.
     montar({ interacao: interacao() });
     const bloco = screen.getByTestId(`bloco-${DIA}-09:00`);
-    expect(bloco.style.top).toBe("96px");
-    expect(bloco.style.height).toBe("24px");
+    expect(bloco.style.top).toBe("112px");
+    expect(bloco.style.height).toBe("28px");
   });
 });
 

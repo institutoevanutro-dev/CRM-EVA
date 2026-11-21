@@ -28,7 +28,7 @@ import {
 import { inicioDaGradeDoMes, SEMANAS_DA_GRADE_DO_MES } from "@/lib/agenda/recorte-da-grade";
 import type { FechamentoDaGrade } from "@/lib/agenda/fechamentos-na-grade";
 import { dataDeParede, diaLocalISO, instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
-import { BellSlash, CheckCircle, Clock, Warning, XCircle } from "@/lib/ui/icons";
+import { BellSlash, CheckCircle, Clock, Lock, Warning, XCircle } from "@/lib/ui/icons";
 import { ROTULO_DA_SITUACAO } from "@/lib/agenda/tipos";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
@@ -42,12 +42,12 @@ import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
  * Altura de uma hora, em pixels. É a régua de toda a grade: posição e duração
  * de um bloco saem daqui, e o teste mede contra este número.
  *
- * 48px e não os 56px da linha de lista do produto: numa semana de trabalho de
- * 14 horas, 56 dá 784px de rolagem e o dia deixa de caber numa tela de notebook.
- * 48 mantém 12h visíveis em 1080p — e um agendamento de 30 minutos ainda tem
- * 24px, altura suficiente para uma linha de texto legível.
+ * Era 48px, para uma semana de 14 horas (07–21) caber num notebook. Desde
+ * 21/11/2026 a grade desenha só o dia de atendimento das jornadas (em geral
+ * 11–12 horas), e a hora ganhou os 56px da linha de lista do produto: um
+ * agendamento de 30 minutos passa a ter 28px, nome e horário legíveis.
  */
-const ALTURA_DA_HORA = 48;
+const ALTURA_DA_HORA = 56;
 
 /** No toque, quanto tempo parado sobre a consulta até ela poder ser arrastada. */
 export const TOQUE_LONGO_MS = 400;
@@ -68,14 +68,26 @@ export interface JanelaDaGrade {
  * A janela CRESCE para caber o que está marcado no período (achado 20 da
  * auditoria de 16/11): com 07–21 fixo, um compromisso das 06:00 ficava acima
  * da área desenhada, sob o cabeçalho, e um das 22:00 aparecia sem rótulo de
- * hora. Nunca encolhe abaixo do padrão: a grade vazia continua sendo o dia de
- * trabalho de sempre. Cancelado não alarga — ele não ocupa nada.
+ * hora. Cancelado não alarga — ele não ocupa nada.
+ *
+ * A BASE é o dia de atendimento da equipe (`base`, das jornadas), quando se
+ * sabe: a grade mostra só as horas em que se marca (pedido do dono da clínica
+ * em 21/11/2026). Sem jornada, o padrão 07–21 de sempre.
+ *
+ * Só compromisso NOSSO alarga. Ocupação do Google e bloqueio, não: um bloqueio
+ * de dia inteiro (feriado) fazia a semana desenhar da meia-noite às 23h, e uma
+ * academia às 6h na agenda pessoal do médico não é hora de atendimento. Eles
+ * aparecem recortados na janela.
  */
-export function janelaDoPeriodo(agendamentos: Agendamento[], fuso: string): JanelaDaGrade {
-  let primeira = PRIMEIRA_HORA;
-  let ultima = ULTIMA_HORA;
+export function janelaDoPeriodo(
+  agendamentos: Agendamento[],
+  fuso: string,
+  base?: JanelaDaGrade | null,
+): JanelaDaGrade {
+  let primeira = base?.primeira ?? PRIMEIRA_HORA;
+  let ultima = base?.ultima ?? ULTIMA_HORA;
   for (const a of agendamentos) {
-    if (a.situacao === "cancelled") continue;
+    if (a.situacao === "cancelled" || a.origem === "google_sync" || a.bloqueio) continue;
     const ini = partesNoFuso(new Date(a.comeca), fuso);
     const fim = partesNoFuso(new Date(a.termina), fuso);
     primeira = Math.min(primeira, ini.hora);
@@ -86,6 +98,19 @@ export function janelaDoPeriodo(agendamentos: Agendamento[], fuso: string): Jane
     ultima = Math.max(ultima, ultimaDoBloco);
   }
   return { primeira, ultima: Math.min(ultima, 23) };
+}
+
+/**
+ * A janela-base das jornadas de quem está na grade: da hora em que a primeira
+ * começa até a hora em que a última termina. `null` quando ninguém tem jornada.
+ */
+export function janelaDasJornadas(pessoas: ReadonlyArray<Pick<Pessoa, "jornada">>): JanelaDaGrade | null {
+  const faixas = pessoas.flatMap((p) => (p.jornada ? [p.jornada] : []));
+  if (faixas.length === 0) return null;
+  const de = Math.min(...faixas.map((f) => f.de));
+  const ate = Math.max(...faixas.map((f) => f.ate));
+  // Termina às 18:00 em ponto → a última hora desenhada é a das 17.
+  return { primeira: Math.floor(de / 60), ultima: Math.min(Math.ceil(ate / 60) - 1, 23) };
 }
 
 const JanelaContexto = React.createContext<JanelaDaGrade>({ primeira: PRIMEIRA_HORA, ultima: ULTIMA_HORA });
@@ -424,12 +449,60 @@ function rotuloDoTrecho(trecho: { de: number; ate: number }, t: (s: string) => s
 }
 
 /**
- * Hachura NEUTRA, com traço fino: diz "aqui não tem atendimento" sem parecer um
- * compromisso (que tem fundo de trilha) nem a ocupação do Google (hachura larga,
- * de bloco). Só tokens: o tema escuro troca as cores sem regra própria.
+ * Fundo NEUTRO e liso, com borda tracejada: diz "aqui não tem atendimento" sem
+ * parecer um compromisso (que tem fundo de trilha) nem a ocupação do Google
+ * (hachura de bloco). Só tokens: o tema escuro troca as cores sem regra própria.
  */
-const HACHURA_DO_FECHAMENTO =
-  "repeating-linear-gradient(135deg, var(--color-border) 0 1px, transparent 1px 7px), var(--color-surface-elevated)";
+const FUNDO_DO_FECHAMENTO = "color-mix(in oklab, var(--color-surface-muted) 85%, var(--color-text-subtle))";
+
+/**
+ * Os fechamentos de um dia, prontos para desenhar: os de MESMO trecho viram uma
+ * faixa só, com os nomes juntos (feriado com quatro profissionais fechados era
+ * quatro colunas estreitas e ilegíveis), e os que se encavalam em trechos
+ * diferentes dividem a largura, como os compromissos.
+ */
+type FaixaDoDia = {
+  chave: string;
+  trecho: { de: number; ate: number };
+  fechamentos: FechamentoDaGrade[];
+  coluna: number;
+  colunas: number;
+};
+
+export function faixasDoDia(
+  fechamentos: readonly FechamentoDaGrade[],
+  dia: Date,
+  fuso: string,
+): FaixaDoDia[] {
+  const porTrecho = new Map<string, { trecho: { de: number; ate: number }; fechamentos: FechamentoDaGrade[] }>();
+  for (const f of fechamentos) {
+    const trecho = trechoNoDia(f, dia, fuso);
+    if (!trecho) continue;
+    const chave = `${trecho.de}-${trecho.ate}`;
+    const g = porTrecho.get(chave) ?? { trecho, fechamentos: [] };
+    g.fechamentos.push(f);
+    porTrecho.set(chave, g);
+  }
+  const ordenadas = [...porTrecho.entries()].sort(([, a], [, b]) => a.trecho.de - b.trecho.de);
+  const saida: FaixaDoDia[] = [];
+  let grupo: FaixaDoDia[] = [];
+  let fimDoGrupo = -1;
+  const fechar = () => {
+    const colunas = Math.max(0, ...grupo.map((g) => g.coluna)) + 1;
+    for (const g of grupo) saida.push({ ...g, colunas });
+    grupo = [];
+  };
+  for (const [chave, g] of ordenadas) {
+    if (grupo.length > 0 && g.trecho.de >= fimDoGrupo) fechar();
+    const ocupadas = new Set(grupo.filter((x) => x.trecho.ate > g.trecho.de).map((x) => x.coluna));
+    let coluna = 0;
+    while (ocupadas.has(coluna)) coluna += 1;
+    grupo.push({ chave, ...g, coluna, colunas: 1 });
+    fimDoGrupo = Math.max(fimDoGrupo, g.trecho.ate);
+  }
+  if (grupo.length > 0) fechar();
+  return saida;
+}
 
 /**
  * A FAIXA FECHADA — o "Dias fora da rotina" desenhado na própria grade.
@@ -450,50 +523,65 @@ const HACHURA_DO_FECHAMENTO =
  * trechos, cada um com nome.
  */
 function FaixaFechada({
-  fechamento,
-  trecho,
-  pessoa,
+  faixa,
+  pessoas,
   mostrarQuem,
 }: {
-  fechamento: FechamentoDaGrade;
-  trecho: { de: number; ate: number };
-  pessoa: Pessoa | undefined;
+  faixa: FaixaDoDia;
+  pessoas: Pessoa[];
   /** Com duas pessoas ou mais na grade, a faixa diz DE QUEM é o fechamento. */
   mostrarQuem: boolean;
 }) {
   const t = useT();
   const janela = React.useContext(JanelaContexto);
+  const { trecho } = faixa;
   const topo = Math.max(trecho.de, janela.primeira * 60);
   const fim = Math.min(trecho.ate, (janela.ultima + 1) * 60);
   // Fechamento todo fora da janela desenhada (22h–23h, por exemplo): não há
   // onde pô-lo, e uma faixa de altura zero só confundiria o teste e o leitor.
   if (fim <= topo) return null;
-  const texto = [t("Fechado"), mostrarQuem ? pessoa?.nome : null, fechamento.motivo]
-    .filter(Boolean)
-    .join(" · ");
+  const quem = faixa.fechamentos
+    .map((f) => pessoas.find((p) => p.id === f.responsavelId))
+    .filter((p): p is Pessoa => Boolean(p));
+  const motivos = [...new Set(faixa.fechamentos.map((f) => f.motivo).filter(Boolean))];
+  const primeiro = faixa.fechamentos[0];
+  if (!primeiro) return null;
+  const alto = pixelsDe(fim - topo) >= 40;
 
   return (
     <div
-      data-testid={`fechamento-${fechamento.id}`}
-      data-responsavel={fechamento.responsavelId}
-      className="pointer-events-none absolute inset-x-0 overflow-hidden border-y border-border px-1.5 py-0.5"
+      data-testid={`fechamento-${primeiro.id}`}
+      data-responsavel={primeiro.responsavelId}
+      data-fechamentos={faixa.fechamentos.length}
+      className="pointer-events-none absolute flex flex-col gap-0.5 overflow-hidden rounded-md border border-dashed border-border-strong px-2 py-1"
       style={{
         top: pixelsDe(topo - janela.primeira * 60),
         height: pixelsDe(fim - topo),
-        background: HACHURA_DO_FECHAMENTO,
+        left: `calc(${(faixa.coluna / faixa.colunas) * 100}% + 2px)`,
+        width: `calc(${(1 / faixa.colunas) * 100}% - 4px)`,
+        background: FUNDO_DO_FECHAMENTO,
       }}
     >
-      {mostrarQuem && pessoa && (
-        <span
-          aria-hidden
-          className="absolute inset-y-0 left-0 w-[3px]"
-          style={{ backgroundColor: corDaTrilha(pessoa.trilha) }}
-        />
-      )}
-      <span className="ml-1 block truncate text-xs font-semibold leading-4 text-text-muted">
-        {texto}
+      <span className="flex min-w-0 items-center gap-1 text-xs font-semibold leading-4 text-text-muted">
+        <Lock aria-hidden size={12} weight="bold" className="shrink-0" />
+        <span className="truncate">{t("Bloqueado")}</span>
         <span className="sr-only"> · {rotuloDoTrecho(trecho, t)}</span>
       </span>
+      {mostrarQuem && quem.length > 0 && alto ? (
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] leading-3.5 text-text-muted">
+          {quem.map((p) => (
+            <span key={p.id} className="inline-flex min-w-0 items-center gap-1">
+              <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ backgroundColor: corDaTrilha(p.trilha) }} />
+              <span className="truncate">{nomeCurto(p.nome)}</span>
+            </span>
+          ))}
+        </span>
+      ) : mostrarQuem && quem.length > 0 ? (
+        <span className="sr-only">{quem.map((p) => p.nome).join(", ")}</span>
+      ) : null}
+      {motivos.length > 0 && alto ? (
+        <span className="truncate text-[11px] leading-3.5 text-text-subtle">{motivos.join(" · ")}</span>
+      ) : null}
     </div>
   );
 }
@@ -550,6 +638,13 @@ function BlocoDeAgendamento({
   const comeca = new Date(agendamento.comeca);
   const termina = new Date(agendamento.termina);
   const duracao = Math.max(differenceInMinutes(termina, comeca), 15);
+  // RECORTE NA JANELA: ocupação do Google e bloqueio não alargam a grade
+  // (`janelaDoPeriodo`), então um evento de dia inteiro é desenhado só na parte
+  // que cabe nela, e um todo fora dela não aparece.
+  const totalDaJanela = (janela.ultima - janela.primeira + 1) * 60;
+  const inicioNaJanela = minutosDesdeOTopo(comeca, fuso, janela.primeira);
+  const topoMin = Math.max(inicioNaJanela, 0);
+  const baseMin = Math.min(inicioNaJanela + duracao, totalDaJanela);
   const trilha = pessoa?.trilha ?? 1;
   const doGoogle = agendamento.origem === "google_sync";
   const cancelado = agendamento.situacao === "cancelled";
@@ -579,6 +674,8 @@ function BlocoDeAgendamento({
     semLembrete ? t("Sem lembrete") : null,
     faltaNome ? t("Falta o nome completo") : null,
   ].filter(Boolean);
+
+  if (baseMin <= topoMin) return null;
 
   return (
     <button
@@ -631,13 +728,13 @@ function BlocoDeAgendamento({
         // Uma linha só (15 e 30 min): `py-px` para a linha de 16 px caber nos
         // 18 px do bloco mínimo.
         rotulo.apoio === null ? "py-px" : "py-0.5",
-        "border transition-colors duration-fast ease-out",
+        "border shadow-xs transition-[border-color,box-shadow] duration-fast ease-out",
         // Tracejado = "ainda não" (aguardando confirmação), como em toda a base.
         // Na cor do texto de apoio, e não na borda clara de sempre: tracejado
         // em border/60 some no tema escuro.
         forma.tracejado ? "border-dashed border-text-muted" : "border-border/60",
         conflito && "ring-2 ring-error",
-        doGoogle ? "cursor-default" : "cursor-pointer hover:border-border-strong",
+        doGoogle ? "cursor-default" : "cursor-pointer hover:shadow-sm",
         // `grab` só quando remarcar é possível: o cursor é a única pista de que
         // o card se move, e prometê-la num card que não se move (ocupação do
         // Google, compromisso cancelado) é o controle decorativo de novo.
@@ -669,8 +766,8 @@ function BlocoDeAgendamento({
         arraste?.ativo && "opacity-40",
       )}
       style={{
-        top: pixelsDe(minutosDesdeOTopo(comeca, fuso, janela.primeira)),
-        height: Math.max(pixelsDe(duracao) - 2, 18),
+        top: pixelsDe(topoMin),
+        height: Math.max(pixelsDe(baseMin - topoMin) - 2, 18),
         // `calc` em vez de porcentagem crua para os 2px de respiro entre
         // colunas vizinhas não saírem da largura útil de cada bloco.
         left: `calc(${(coluna / colunas) * 100}% + 2px)`,
@@ -680,7 +777,11 @@ function BlocoDeAgendamento({
             // é neutra de propósito — a agenda de fora não pertence a ninguém da
             // equipe, então não recebe trilha.
             "repeating-linear-gradient(135deg, var(--color-surface-elevated) 0 6px, var(--color-surface) 6px 12px)"
-          : fundoDaTrilha(trilha),
+          : fundoDaTrilha(trilha, 22),
+        // A cor diz DE QUEM é (pedido de 21/11/2026): a borda também vem da
+        // trilha, e não do cinza de toda a base. Tracejado (aguardando) mantém
+        // a cor do texto de apoio, que é o que diz "ainda não".
+        borderColor: doGoogle || forma.tracejado ? undefined : `color-mix(in oklab, ${corDaTrilha(trilha)} 45%, var(--color-surface))`,
         opacity: doGoogle ? 0.75 : undefined,
       }}
     >
@@ -782,22 +883,30 @@ function ReguaDoAgora({ agora, fuso }: { agora: Date; fuso: string }) {
   );
 }
 
+/**
+ * As horas ao lado da grade, DENTRO do espaço de cada vaga: "09:00" no topo da
+ * hora e "09:30" na meia hora, alinhados com as linhas dos dias. Antes o rótulo
+ * ficava em cima da linha, meio fora da célula, e a meia hora não tinha rótulo
+ * nem linha (pedido do dono da clínica em 21/11/2026).
+ */
 function ColunaDeHoras() {
   const janela = React.useContext(JanelaContexto);
   return (
-    <div className="w-12 shrink-0 select-none border-r border-border" aria-hidden>
-      <div className="h-8 border-b border-border" />
-      {horasDa(janela).map((h) => (
-        <div
-          key={h}
-          className="relative border-b border-border/50 text-right"
-          style={{ height: ALTURA_DA_HORA }}
-        >
-          <span className="absolute -top-1.5 right-1 text-[10px] tabular-nums text-text-subtle">
-            {String(h).padStart(2, "0")}h
-          </span>
-        </div>
-      ))}
+    <div className="w-14 shrink-0 select-none border-r border-border bg-surface" aria-hidden>
+      <div className="h-10 border-b border-border" />
+      {horasDa(janela).map((h) => {
+        const hh = String(h).padStart(2, "0");
+        return (
+          <div key={h} className="relative border-b border-border/70 text-right" style={{ height: ALTURA_DA_HORA }}>
+            <span className="absolute right-2 top-1 text-[11px] font-medium leading-none tabular-nums text-text-muted">
+              {hh}:00
+            </span>
+            <span className="absolute right-2 top-[calc(50%+4px)] text-[10px] leading-none tabular-nums text-text-subtle">
+              {hh}:30
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -909,21 +1018,21 @@ function ColunaDeDia({
       className={cn(
         "relative min-w-0 flex-1 border-r border-border last:border-r-0",
         soNoDesktop && "max-md:hidden",
-        destacado && "bg-surface-elevated/40",
+        destacado && "bg-accent-soft/25",
       )}
     >
       <div
         className={cn(
-          "sticky top-0 z-20 flex h-8 items-center justify-center gap-1.5 border-b border-border bg-surface px-2",
+          "sticky top-0 z-20 flex h-10 items-center justify-center gap-1.5 border-b border-border bg-surface px-2",
         )}
       >
-        <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+        <span className="truncate text-xs font-medium capitalize text-text-muted">
           {format(dia, "EEE", { locale: localeDaData }).replace(".", "")}
         </span>
         <span
           className={cn(
-            "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] tabular-nums",
-            ehHoje ? "bg-accent text-accent-foreground font-semibold" : "text-text",
+            "flex size-7 items-center justify-center rounded-full text-sm font-semibold tabular-nums",
+            ehHoje ? "bg-accent text-accent-foreground" : "text-text",
           )}
         >
           {format(dia, "d")}
@@ -942,12 +1051,13 @@ function ColunaDeDia({
         data-corpo-do-dia={chaveDoDia(dia)}
         style={{ height: horas.length * ALTURA_DA_HORA }}
       >
+        {/* Uma linha cheia por hora e uma tracejada na meia hora: cada vaga de
+            30 minutos vira um espaço visível, e o compromisso das 10:30 encosta
+            numa linha em vez de flutuar no meio da hora (21/11/2026). */}
         {horas.map((h) => (
-          <div
-            key={h}
-            className="border-b border-border/50"
-            style={{ height: ALTURA_DA_HORA }}
-          />
+          <div key={h} className="relative border-b border-border/70" style={{ height: ALTURA_DA_HORA }}>
+            <div aria-hidden className="absolute inset-x-0 top-1/2 border-t border-dashed border-border/45" />
+          </div>
         ))}
         {interacao && (
           <CamadaDeMarcacao
@@ -960,18 +1070,9 @@ function ColunaDeDia({
         )}
         {/* Depois da camada de marcação e ANTES dos cards: a faixa cobre os
             blocos (já desabilitados) e fica por baixo do que está marcado. */}
-        {fechamentos.map((f) => {
-          const trecho = trechoNoDia(f, dia, fuso);
-          return trecho ? (
-            <FaixaFechada
-              key={f.id}
-              fechamento={f}
-              trecho={trecho}
-              pessoa={pessoas.find((p) => p.id === f.responsavelId)}
-              mostrarQuem={pessoas.length > 1}
-            />
-          ) : null;
-        })}
+        {faixasDoDia(fechamentos, dia, fuso).map((faixa) => (
+          <FaixaFechada key={faixa.chave} faixa={faixa} pessoas={pessoas} mostrarQuem={pessoas.length > 1} />
+        ))}
         {repartirSobrepostos(doDia).map(({ agendamento, coluna, colunas }) => (
           <BlocoDeAgendamento
             key={agendamento.id}
@@ -1130,11 +1231,11 @@ function VisaoDeMes({
                       key={`fechamento-${f.id}`}
                       data-testid={`fechamento-mes-${f.id}`}
                       className="truncate rounded-sm px-1 py-0.5 text-xs leading-4 text-text-muted"
-                      style={{ background: HACHURA_DO_FECHAMENTO }}
+                      style={{ background: FUNDO_DO_FECHAMENTO }}
                     >
                       {trecho.de === 0 && trecho.ate === 24 * 60
-                        ? t("Fechado")
-                        : `${rotuloDoTrecho(trecho, t)} ${t("Fechado")}`}
+                        ? t("Bloqueado")
+                        : `${rotuloDoTrecho(trecho, t)} ${t("Bloqueado")}`}
                     </div>,
                   ];
                 })}
@@ -1201,7 +1302,7 @@ export function GradeDaAgenda({
   fuso,
   pessoas,
   agendamentos,
-  fechamentos = [],
+  fechamentos: fechamentosRecebidos,
   onAbrirAgendamento,
   onAbrirDia,
   interacao,
@@ -1249,8 +1350,25 @@ export function GradeDaAgenda({
   className?: string;
 }) {
   const t = useT();
+  const fechamentos = fechamentosRecebidos ?? [];
   const dias = visao === "dia" ? [ancora] : diasDaSemanaDe(ancora);
   const conflitos = React.useMemo(() => conflitosDaGrade(agendamentos), [agendamentos]);
+  // O BLOQUEIO É DESENHADO UMA VEZ SÓ. Ele chega duas vezes — como cartão inerte
+  // (`lerBloqueiosDaGrade`, que também alimenta o conflito) e como faixa fechada
+  // (`useFechamentosDaGrade`), as duas da mesma `calendar_availability_exceptions`
+  // — e a grade desenhava os dois, um por cima do outro ("Horário bloqueado" com
+  // "Fechado · …" vazando por trás). Com as faixas presentes, o cartão sai do
+  // desenho e continua valendo para o conflito. A vitrine, sem faixas, segue
+  // desenhando o cartão.
+  const cartoes = React.useMemo(
+    () => (fechamentosRecebidos ? agendamentos.filter((a) => !a.bloqueio) : agendamentos),
+    [agendamentos, fechamentosRecebidos],
+  );
+  // Quem tem compromisso no período: a legenda de cores por profissional.
+  const pessoasNaGrade = React.useMemo(
+    () => pessoas.filter((p) => cartoes.some((a) => a.responsavelId === p.id && a.origem !== "google_sync")),
+    [pessoas, cartoes],
+  );
   // O primeiro do período, em ordem de horário: é para ele que o link leva.
   const primeiroConflito = React.useMemo(
     () =>
@@ -1280,9 +1398,12 @@ export function GradeDaAgenda({
   } | null>(null);
 
   // Só os dias DESENHADOS alargam a janela: no Mês esta parte nem aparece.
+  // A BASE é o dia de atendimento de TODA a equipe, e não só de quem está
+  // filtrado: trocar quem aparece não faz a grade pular (item 136).
+  const janelaBase = React.useMemo(() => janelaDasJornadas(pessoas), [pessoas]);
   const janela = React.useMemo(
-    () => janelaDoPeriodo(janelaSobre ? [...janelaSobre, ...agendamentos] : agendamentos, fuso),
-    [janelaSobre, agendamentos, fuso],
+    () => janelaDoPeriodo(janelaSobre ? [...janelaSobre, ...agendamentos] : agendamentos, fuso, janelaBase),
+    [janelaSobre, agendamentos, fuso, janelaBase],
   );
   const limites = { primeiro: janela.primeira * 60, ultimo: (janela.ultima + 1) * 60 };
 
@@ -1539,7 +1660,7 @@ export function GradeDaAgenda({
           ancora={ancora}
           agora={agora}
           fuso={fuso}
-          agendamentos={agendamentos}
+          agendamentos={cartoes}
           fechamentos={fechamentos}
           pessoas={pessoas}
           onAbrirDia={onAbrirDia}
@@ -1559,7 +1680,7 @@ export function GradeDaAgenda({
                 dia={d}
                 agora={agora}
                 fuso={fuso}
-                agendamentos={agendamentos}
+                agendamentos={cartoes}
                 fechamentos={fechamentos}
                 pessoas={pessoas}
                 onAbrir={onAbrirAgendamento}
@@ -1576,7 +1697,7 @@ export function GradeDaAgenda({
         </div>
         </JanelaContexto.Provider>
       )}
-      {visao !== "mes" ? <LegendaDaGrade /> : null}
+      {visao !== "mes" ? <LegendaDaGrade pessoas={pessoasNaGrade} /> : null}
     </div>
   );
 }
@@ -1586,7 +1707,7 @@ export function GradeDaAgenda({
  * eles querem dizer. Sem ela, o ícone só se explica passando o mouse — e o
  * toque não passa o mouse.
  */
-function LegendaDaGrade() {
+function LegendaDaGrade({ pessoas }: { pessoas: Pessoa[] }) {
   const t = useT();
   const item = "inline-flex items-center gap-1 whitespace-nowrap";
   return (
@@ -1594,6 +1715,21 @@ function LegendaDaGrade() {
       data-testid="legenda-da-grade"
       className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-3 py-1.5 text-xs text-text-muted"
     >
+      {/* De quem é cada cor: só quem tem compromisso no período (21/11/2026). */}
+      {pessoas.map((p) => (
+        <span key={p.id} data-testid={`legenda-pessoa-${p.id}`} className={cn(item, "font-medium text-text")}>
+          <span
+            aria-hidden
+            className="inline-block size-3 rounded-sm border"
+            style={{
+              background: fundoDaTrilha(p.trilha, 22),
+              borderColor: `color-mix(in oklab, ${corDaTrilha(p.trilha)} 45%, var(--color-surface))`,
+            }}
+          />
+          {nomeCurto(p.nome)}
+        </span>
+      ))}
+      {pessoas.length > 0 ? <span aria-hidden className="h-3 w-px bg-border" /> : null}
       <span className={item}>
         <span aria-hidden className="inline-block h-3 w-4 rounded-sm border border-dashed border-text-muted" />
         <Clock aria-hidden size={12} />

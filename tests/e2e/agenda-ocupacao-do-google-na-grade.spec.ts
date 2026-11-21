@@ -204,7 +204,7 @@ test.describe("a ocupação do Google na grade da agenda", () => {
       return { w: r.width, h: r.height, top: r.top };
     });
     expect(caixa.w, "o bloco tem largura zero — está no DOM e não na tela").toBeGreaterThan(20);
-    // 1h de evento × 48px/hora, menos os 2px de respiro.
+    // 1h de evento × 56px/hora, menos os 2px de respiro.
     expect(caixa.h, "a altura do bloco não corresponde a uma hora de grade").toBeGreaterThan(40);
 
     // ── O RÓTULO, E O SEGREDO ────────────────────────────────────────────────

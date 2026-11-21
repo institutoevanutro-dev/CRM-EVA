@@ -30,6 +30,9 @@ export interface NovoAgendamento {
   guest_email?: string;
   /** Como a equipe marcou (bônus por comparecimento). */
   booking_channel?: "mensagem" | "ligacao";
+  /** Quem converteu o lead (migration 0422). Ausente = quem está marcando. */
+  converted_by_kind?: "user" | "ai";
+  converted_by_user_id?: string;
 }
 
 /**

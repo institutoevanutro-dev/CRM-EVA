@@ -39940,3 +39940,39 @@ create index if not exists prontuario_contact_links_linked_by_api_token_id_idx
   where linked_by_api_token_id is not null;
 -- ---- fim: índice das FKs de api_tokens (migration 0419) ----
 
+-- ---- quem converteu o lead no agendamento (migration 0422) ----
+-- Derivado de supabase/migrations/20261121120000_0422_quem_converteu_o_lead.sql
+-- (pedido e decisão sem backfill: cabeçalho de lá). Colunas + CHECKs, idempotente.
+alter table public.calendar_appointments
+  add column if not exists converted_by_kind text;
+
+alter table public.calendar_appointments
+  add column if not exists converted_by_user_id uuid references auth.users(id) on delete set null;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'calendar_appointments_converted_by_kind_check'
+       and conrelid = 'public.calendar_appointments'::regclass
+  ) then
+    alter table public.calendar_appointments
+      add constraint calendar_appointments_converted_by_kind_check
+      check (converted_by_kind in ('user', 'ai'));
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'calendar_appointments_converted_by_coerente'
+       and conrelid = 'public.calendar_appointments'::regclass
+  ) then
+    alter table public.calendar_appointments
+      add constraint calendar_appointments_converted_by_coerente
+      check (converted_by_kind is distinct from 'ai' or converted_by_user_id is null);
+  end if;
+end $$;
+
+comment on column public.calendar_appointments.converted_by_kind is
+  'Quem converteu o lead neste agendamento: user (pessoa da equipe) ou ai (IA do atendimento). Nula = legado ou integração. Migration 0422.';
+comment on column public.calendar_appointments.converted_by_user_id is
+  'A pessoa que converteu o lead, quando converted_by_kind = user. Migration 0422.';
+-- ---- fim: quem converteu o lead no agendamento (migration 0422) ----

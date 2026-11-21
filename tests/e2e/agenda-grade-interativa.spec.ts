@@ -315,7 +315,7 @@ test("arrastar um card remarca — e o horário novo sobrevive ao reload", async
   // ⚠️ O ALVO É O BLOCO LIVRE MAIS PRÓXIMO, e não o último do dia.
   //
   // A primeira versão pegava `.last()` — o fim do expediente. Card e alvo
-  // ficavam a nove horas de distância na régua de 48px/hora, e rolar até o alvo
+  // ficavam a nove horas de distância na régua de 48px/hora (56px desde 21/11/2026), e rolar até o alvo
   // tirava o CARD da viewport: `boundingBox()` devolvia a caixa dele fora da
   // tela, o `mouse.move` batia em lugar nenhum, e a falha lia "o gesto não está
   // sendo capturado" — que acusa o produto de um defeito que era da distância

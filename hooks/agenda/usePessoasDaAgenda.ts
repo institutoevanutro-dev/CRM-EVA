@@ -21,6 +21,8 @@ interface MembroDto {
   /** Unidades das janelas da jornada (servidor antigo não manda: a tela não filtra). */
   jornada_unidades?: string[];
   jornada_sem_unidade?: boolean;
+  jornada_de_min?: number | null;
+  jornada_ate_min?: number | null;
 }
 
 /**
@@ -64,6 +66,10 @@ export function usePessoasDaAgenda() {
             trilha: trilhas.get(m.user_id) ?? 1,
             unidades: m.jornada_unidades,
             atendeSemUnidade: m.jornada_sem_unidade,
+            jornada:
+              typeof m.jornada_de_min === "number" && typeof m.jornada_ate_min === "number"
+                ? { de: m.jornada_de_min, ate: m.jornada_ate_min }
+                : undefined,
           }));
       } catch (err) {
         // O 403 chegava como "Você não tem permissão para esta ação", sem dizer

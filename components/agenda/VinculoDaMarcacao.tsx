@@ -11,7 +11,7 @@ import { NewContactDialog } from "@/components/contacts/NewContactDialog";
 import { dataDeCalendario, idadeEmAnos, ultimaEProximaConsulta } from "@/lib/agenda/marcacao-simples";
 import { nomeDoContato, rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { telefoneLegivel } from "@/lib/channels/phone-variants";
-import { CaretDown, MagnifyingGlass } from "@/lib/ui/icons";
+import { CaretDown, MagnifyingGlass, X } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { CAMPO } from "./CampoDaMarcacao";
 import { iniciaisDe } from "./paleta";
@@ -58,9 +58,16 @@ function desempate(c: Contato, t: (s: string) => string, agora: Date): string {
  * ele concluiu que não dava para marcar paciente. Agora quem a busca acha
  * aparece logo abaixo do campo, e quem foi escolhido aparece com nome e Trocar.
  *
- * O campo fica SEMPRE na tela, inclusive com alguém escolhido: a pré-escolha
- * automática (um só bateu) acontece enquanto a pessoa ainda digita, e sumir com
- * o campo ali engoliria as teclas seguintes.
+ * Fora do modal o campo fica SEMPRE na tela, inclusive com alguém escolhido: a
+ * pré-escolha automática (um só bateu) acontece enquanto a pessoa ainda digita,
+ * e sumir com o campo ali engoliria as teclas seguintes.
+ *
+ * No modal (`compacto`) é o contrário, a pedido do dono da clínica em
+ * 21/11/2026: escolhido o paciente, a busca SOME e fica só o cartão, com um X
+ * para desfazer e buscar outro. Busca e cartão juntos confundiam ("andre"
+ * digitado em cima de "Alexandre" escolhido). Por isso, no modal, não há
+ * pré-escolha automática: o paciente só é escolhido por clique ou Enter, e
+ * nenhuma tecla se perde com o campo sumindo.
  */
 export function VinculoDaMarcacao({
   contactId,
@@ -93,6 +100,16 @@ export function VinculoDaMarcacao({
   const [aberta, setAberta] = useState(false);
   const [ativo, setAtivo] = useState(0);
   const [criando, setCriando] = useState(false);
+  // No modal, com paciente escolhido, a busca sai da tela (ver o cabeçalho).
+  const buscaEscondida = compacto && Boolean(contactId);
+  // O X desfaz a escolha e devolve o foco à busca, que só existe no render seguinte.
+  const focarBusca = useRef(false);
+  useEffect(() => {
+    if (!buscaEscondida && focarBusca.current) {
+      focarBusca.current = false;
+      campo.current?.focus();
+    }
+  }, [buscaEscondida]);
   const query = useQuery({
     queryKey: ["agenda", "vinculos", contactId, search],
     queryFn: async () =>
@@ -126,11 +143,11 @@ export function VinculoDaMarcacao({
   useEffect(() => {
     const achados = query.data?.contacts ?? [];
     const unico = achados.length === 1 ? achados[0] : undefined;
-    if (!buscou || query.isFetching || !unico) return;
+    if (compacto || !buscou || query.isFetching || !unico) return;
     if (autoPara.current === search) return;
     autoPara.current = search;
     onChange(unico.id, "");
-  }, [buscou, query.isFetching, query.data, search, onChange]);
+  }, [compacto, buscou, query.isFetching, query.data, search, onChange]);
 
   function escolher(c: Contato) {
     onChange(c.id, "");
@@ -140,11 +157,17 @@ export function VinculoDaMarcacao({
     setSearch("");
     setAberta(false);
     onChange("", "");
-    if (focar) campo.current?.focus();
+    if (focar) {
+      focarBusca.current = true;
+      campo.current?.focus();
+    }
   }
 
   return (
     <div className={compacto ? "relative" : "space-y-3 rounded-lg border p-3"}>
+      {buscaEscondida ? (
+        <span className="mb-1.5 block text-xs font-medium text-text-muted">{t("Paciente")}</span>
+      ) : (
       <label className="block">
         <span className={compacto ? "mb-1.5 block text-xs font-medium text-text-muted" : "block"}>
           {compacto ? t("Paciente") : t("Buscar cliente")}
@@ -196,11 +219,12 @@ export function VinculoDaMarcacao({
           />
         </span>
       </label>
-      {/* Sempre no DOM: `aria-controls` aponta para ele mesmo com a lista fechada. */}
+      )}
+      {/* No DOM junto com a busca: `aria-controls` aponta para ele mesmo com a lista fechada. */}
       <ul
         id={listaId}
         role="listbox"
-        hidden={!mostrarLista}
+        hidden={!mostrarLista || buscaEscondida}
         className={
           compacto
             ? "absolute inset-x-0 z-30 mt-1 max-h-64 overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-lg"
@@ -253,7 +277,8 @@ export function VinculoDaMarcacao({
           contato={escolhido}
           agora={agora}
           onTrocar={() => semCliente(true)}
-          onSemCliente={() => semCliente(false)}
+          onSemCliente={compacto ? undefined : () => semCliente(false)}
+          comX={compacto}
           conversa={
             compacto
               ? {
@@ -336,13 +361,17 @@ function PacienteEscolhido({
   agora,
   onTrocar,
   onSemCliente,
+  comX = false,
   conversa,
 }: {
   contactId: string;
   contato: Contato | undefined;
   agora: Date;
   onTrocar: () => void;
-  onSemCliente: () => void;
+  /** Ausente no modal: lá o X já faz "sem paciente". */
+  onSemCliente?: () => void;
+  /** No modal: um X ao lado do nome desfaz a escolha, no lugar do "Trocar". */
+  comX?: boolean;
   /** A conversa vinculada, quando o cartão a mostra (o modal). */
   conversa?: { id: string; opcoes: Vinculos["conversations"]; onChange: (id: string) => void };
 }) {
@@ -386,7 +415,7 @@ function PacienteEscolhido({
     <div
       data-testid="paciente-escolhido"
       data-contact-id={contactId}
-      className="anima-revela mt-2 rounded-lg border border-border bg-surface-muted/50 p-3"
+      className={cn("anima-revela rounded-lg border border-border bg-surface-muted/50 p-3", !comX && "mt-2")}
     >
       <div className="flex items-center gap-3">
         <span
@@ -396,13 +425,26 @@ function PacienteEscolhido({
           {nome ? iniciaisDe(nome) : ""}
         </span>
         <p className="min-w-0 flex-1 truncate text-sm font-semibold text-text">{nome ?? "…"}</p>
-        <button
-          type="button"
-          onClick={onTrocar}
-          className="h-8 shrink-0 rounded-md border border-border bg-surface px-3 text-xs font-medium text-text transition-colors duration-fast hover:border-border-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-500 toque:h-11"
-        >
-          {t("Trocar")}
-        </button>
+        {comX ? (
+          <button
+            type="button"
+            onClick={onTrocar}
+            data-testid="tirar-paciente"
+            aria-label={t("Tirar o paciente e buscar outro")}
+            title={t("Tirar o paciente e buscar outro")}
+            className="flex size-8 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors duration-fast hover:bg-surface hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-500 toque:size-11"
+          >
+            <X size={16} weight="bold" aria-hidden />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onTrocar}
+            className="h-8 shrink-0 rounded-md border border-border bg-surface px-3 text-xs font-medium text-text transition-colors duration-fast hover:border-border-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-500 toque:h-11"
+          >
+            {t("Trocar")}
+          </button>
+        )}
       </div>
       {itens.length > 0 || ficha.isLoading ? (
         <dl
@@ -421,13 +463,15 @@ function PacienteEscolhido({
         </dl>
       ) : null}
       <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-        <button
-          type="button"
-          onClick={onSemCliente}
-          className="text-xs text-text-muted underline decoration-border-strong underline-offset-2 transition-colors duration-fast hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-500"
-        >
-          {t("Compromisso pessoal, sem cliente")}
-        </button>
+        {onSemCliente ? (
+          <button
+            type="button"
+            onClick={onSemCliente}
+            className="text-xs text-text-muted underline decoration-border-strong underline-offset-2 transition-colors duration-fast hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-500"
+          >
+            {t("Compromisso pessoal, sem cliente")}
+          </button>
+        ) : null}
         {conversa ? (
           <label className="flex min-w-0 items-center gap-1.5 text-xs text-text-subtle">
             <span aria-hidden>{t("Conversa")}</span>

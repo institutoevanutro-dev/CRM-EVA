@@ -101,6 +101,15 @@ export type SituacaoDoAgendamento = (typeof SITUACOES_DO_AGENDAMENTO)[number];
 export const CANAIS_DA_MARCACAO = ["mensagem", "ligacao"] as const;
 export type CanalDaMarcacao = (typeof CANAIS_DA_MARCACAO)[number];
 
+/**
+ * Quem converteu o lead no agendamento (`calendar_appointments.converted_by_kind`,
+ * migration 0422): uma pessoa da equipe (`user`, com `converted_by_user_id`) ou
+ * a IA do atendimento (`ai`). Nula no banco = legado ou integração. A forma
+ * `as const` é requisito de `tests/invariants/vocabulario-banco-x-typescript.test.ts`.
+ */
+export const QUEM_CONVERTEU = ["user", "ai"] as const;
+export type QuemConverteu = (typeof QUEM_CONVERTEU)[number];
+
 export const ROTULO_DA_SITUACAO: Record<SituacaoDoAgendamento, string> = {
   pending: "Aguardando confirmação",
   confirmed: "Confirmado",

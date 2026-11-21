@@ -46,6 +46,7 @@ import {
   ALVO_DE_VINCULO_DO_AGENDAMENTO,
   type CanalDaMarcacao,
   ENTIDADE_DO_AGENDAMENTO,
+  type QuemConverteu,
   NOME_GENERICO_DO_TIPO,
   VINCULO_DE_AGENDAMENTO,
 } from "@/lib/agenda/tipos";
@@ -110,6 +111,13 @@ export interface MarcarInput {
    * por comparecimento). Só vale quando quem marca é pessoa; da IA é ignorado.
    */
   booking_channel?: CanalDaMarcacao;
+  /**
+   * Quem converteu o lead (migration 0422): pessoa da equipe (`user`, com
+   * `converted_by_user_id`) ou a IA (`ai`). Ausente = quem está marcando. Da IA,
+   * é sempre `ai`.
+   */
+  converted_by_kind?: QuemConverteu;
+  converted_by_user_id?: string;
 }
 
 export interface AlterarInput {
@@ -251,6 +259,7 @@ async function executarCriacaoDeAgendamento(
     );
   }
   if (input.unit_id) await exigeUnidadeDaJornada(supabase, ctx, donoId, input.unit_id);
+  const conversao = await quemConverteu(supabase, ctx, input);
 
   // O `contact_id` É INPUT EXTERNO E PRECISA SER RESOLVIDO, não repassado.
   //
@@ -371,6 +380,8 @@ async function executarCriacaoDeAgendamento(
       created_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
       // Canal só de pessoa: consulta marcada pela IA não entra no bônus.
       booking_channel: ctx.actor.type === "user" ? (input.booking_channel ?? null) : null,
+      converted_by_kind: conversao.kind,
+      converted_by_user_id: conversao.userId,
       source: ctx.actor.type === "user" ? "ui" : "mcp",
     })
     .select("id, starts_at, ends_at, status, time_zone, revision, meeting_state, meeting_url")
@@ -404,6 +415,8 @@ async function executarCriacaoDeAgendamento(
       owner_user_id: donoId,
       time_zone: criado.time_zone,
       booking_channel: ctx.actor.type === "user" ? (input.booking_channel ?? null) : null,
+      converted_by_kind: conversao.kind,
+      converted_by_user_id: conversao.userId,
     },
   });
 
@@ -1129,6 +1142,43 @@ async function exigeSemSobreposicao(
       "Este horário já está ocupado na agenda de quem atende — por outro compromisso ou pelo Google Agenda.",
     );
   }
+}
+
+/**
+ * QUEM CONVERTEU O LEAD (migration 0422), resolvido de fonte confiável.
+ *
+ * Marcação da IA é sempre `ai`: o corpo do modelo não escolhe pessoa. De pessoa,
+ * o padrão é ela mesma; outra pessoa só se for MEMBRO ATIVO DESTA organização —
+ * o id vem do corpo do pedido, e gravar o de alguém de fora seria creditar a
+ * conversão a quem não é da equipe (e vazar a existência do id).
+ */
+async function quemConverteu(
+  supabase: SB,
+  ctx: HandlerCtx,
+  input: MarcarInput,
+): Promise<{ kind: QuemConverteu; userId: string | null }> {
+  if (ctx.actor.type !== "user") return { kind: "ai", userId: null };
+  if (input.converted_by_kind === "ai") return { kind: "ai", userId: null };
+  const userId = input.converted_by_user_id ?? ctx.actor.id;
+  if (userId === ctx.actor.id) return { kind: "user", userId };
+  const { data: membro, error } = await supabase
+    .from("user_organizations")
+    .select("user_id, revoked_at")
+    .eq("organization_id", ctx.organization_id)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
+  // Revogado também é "de fora": não está mais na equipe.
+  if (!membro || membro.revoked_at) {
+    throw new ApiError(
+      422,
+      "agenda_quem_converteu_fora_da_equipe",
+      undefined,
+      ctx.requestId,
+      "Quem converteu precisa ser alguém da equipe. Escolha outra pessoa.",
+    );
+  }
+  return { kind: "user", userId };
 }
 
 /** `Actor` → o vocabulário de `calendar_appointments.created_by_kind`. */
