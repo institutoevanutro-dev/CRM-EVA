@@ -197,9 +197,13 @@ test("gerente bloqueia 14:00 a 16:00 de um profissional e só a agenda dele perd
   await page.goto("/app/agenda");
   await esperarAgenda(page, 20_000);
   await irParaASemanaSeguinte(page);
-  const bloco = page.locator('[data-testid^="agendamento-bloqueio:"]').first();
+  // Desde 21/11/2026 o bloqueio é desenhado UMA vez, como faixa "Bloqueado"
+  // (`FaixaFechada`), e não mais também como cartão de compromisso.
+  const bloco = page.locator('[data-testid^="fechamento-"]').filter({ hasText: "14:00–16:00" }).first();
   await expect(bloco).toBeVisible({ timeout: 15_000 });
-  await expect(bloco).toHaveAttribute("aria-label", /Horário bloqueado, 14:00 às 16:00/);
+  await expect(bloco).toContainText("Bloqueado");
+  await expect(bloco).toHaveAttribute("data-responsavel", profissional);
+  await expect(page.locator('[data-testid^="agendamento-bloqueio:"]')).toHaveCount(0);
   await bloco.scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(EVIDENCIA, "3-agenda.png"), fullPage: true });
 });

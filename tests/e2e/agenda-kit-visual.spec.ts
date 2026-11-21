@@ -182,9 +182,10 @@ test.describe("kit visual da Agenda", () => {
     await expect(regua).toBeVisible({ timeout: ESPERA });
 
     // A âncora da vitrine é fixa: quarta, 14h37. Com a grade começando às 7h e
-    // 48px por hora, o topo da régua tem de ser (14-7)*48 + (37/60)*48 = 365.6px.
+    // 56px por hora (ALTURA_DA_HORA desde 21/11/2026), o topo da régua tem de ser
+    // (14-7)*56 + (37/60)*56 ≈ 426.5px.
     const medido = await regua.evaluate((el) => parseFloat((el as HTMLElement).style.top));
-    expect(medido).toBeCloseTo((14 - 7) * 48 + (37 / 60) * 48, 1);
+    expect(medido).toBeCloseTo((14 - 7) * 56 + (37 / 60) * 56, 1);
   });
 
   test("a coluna de horários NÃO está lá, e entra quando o dia é escolhido", async () => {
