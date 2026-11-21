@@ -6536,8 +6536,8 @@ export const DICIONARIO: Traducoes = {
     es: "columnas es el máximo — más que eso no cabe en la pantalla del celular.",
   },
   "O que veio na instalação": { es: "Lo que vino en la instalación" },
-  "Este é o quadro padrão, feito para loja online. Ao continuar, ele é substituído pelo de cima.": {
-    es: "Este es el tablero predeterminado, hecho para tienda en línea. Al continuar, se reemplaza por el de arriba.",
+  "Ao continuar, ele é substituído pelo de cima, e os clientes que já chegaram vão para a primeira coluna.": {
+    es: "Al continuar, se reemplaza por el de arriba, y los clientes que ya llegaron pasan a la primera columna.",
   },
   "Prefiro começar de um modelo pronto": { es: "Prefiero empezar desde un modelo listo" },
   "Dê um nome à coluna em branco.": { es: "Dale un nombre a la columna en blanco." },

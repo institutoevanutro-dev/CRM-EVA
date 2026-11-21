@@ -8,6 +8,24 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.28.3] — 2026-11-21
+
+### Corrigido
+
+- **Clínica nova nasce com o quadro "Agendamentos" e etiquetas de clínica** Toda organização nova nascia com o funil de loja "Pedidos" (Carrinho abandonado,
+  Enviado) e etiquetas de loja. Agora nasce com o quadro "Agendamentos" e
+  etiquetas de clínica. No onboarding, quem escreveu antes de o quadro ser
+  montado vai para a primeira coluna nova, em vez de travar a troca. O "Pedidos"
+  que ninguém usou vira "Agendamentos" sozinho; quadro em uso não muda.
+
+## [5.28.2] — 2026-11-21
+
+### Alterado
+
+- **Menu mostra "CRM" e o nome da clínica ao lado da logo** Com logo enviada, o topo do menu mostrava só a imagem, sem dizer que aquele
+  sistema é o CRM. Agora aparece "CRM" ao lado da logo e o nome da clínica
+  embaixo, como nos outros módulos.
+
 ## [5.28.1] — 2026-11-20
 
 ### Corrigido
@@ -9695,7 +9713,9 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.3...HEAD
+[5.28.3]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.2...v5.28.3
+[5.28.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.1...v5.28.2
 [5.28.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.0...v5.28.1
 [5.28.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.27.0...v5.28.0
 [5.27.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.26.5...v5.27.0
