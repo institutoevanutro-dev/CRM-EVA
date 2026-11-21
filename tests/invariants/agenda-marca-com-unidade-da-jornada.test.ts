@@ -42,6 +42,9 @@ const SERRA = "ea740000-2222-4000-8000-000000000002";
 const FUSO = "America/Sao_Paulo";
 
 let tipo = "";
+// O procedimento é do profissional (`default_owner_user_id`): quem atende nas duas
+// unidades tem o seu, senão a recusa seria a de procedimento alheio.
+let tipoDasDuas = "";
 let contato = "";
 
 function ctxDaIa(): HandlerCtx {
@@ -67,7 +70,7 @@ function quartaQueVem(minutoUtc = 0): string {
 
 async function marcar(dono: string, extra: Record<string, unknown> = {}) {
   return marcarAgendamentoHandler(db, ctxDaIa(), {
-    event_type_id: tipo,
+    event_type_id: dono === NAS_DUAS ? tipoDasDuas : tipo,
     owner_user_id: dono,
     starts_at: quartaQueVem(),
     contact_id: contato,
@@ -131,6 +134,13 @@ beforeAll(async () => {
     [ORG, SO_VITORIA],
   );
   tipo = t.rows[0]!.id;
+  const t2 = await pool.query<{ id: string }>(
+    `insert into calendar_event_types
+       (organization_id, slug, name, duration_minutes, required_room_kind, default_owner_user_id, is_active)
+     values ($1, 'drenagem-duas-unidades', 'Drenagem nas duas', 30, 'application', $2, true) returning id`,
+    [ORG, NAS_DUAS],
+  );
+  tipoDasDuas = t2.rows[0]!.id;
 
   const c = await pool.query<{ id: string }>(
     `insert into contacts (organization_id, name) values ($1, 'Paciente da unidade') returning id`,
@@ -146,6 +156,7 @@ afterAll(async () => {
 describe("a unidade do compromisso presencial", () => {
   it("o cenário está montado", () => {
     expect(tipo).not.toBe("");
+    expect(tipoDasDuas).not.toBe("");
     expect(contato).not.toBe("");
   });
 
@@ -163,10 +174,21 @@ describe("a unidade do compromisso presencial", () => {
     expect(linha.rows[0]!.room_id, "o gatilho escolheu a sala na unidade inferida").not.toBeNull();
   });
 
-  it("com o `unit_id` de outra unidade que a da jornada, o horário não existe ali, e nada entra", async () => {
+  it("com o `unit_id` de outra unidade que a da jornada, recusa dizendo que ele não atende ali, e nada entra", async () => {
     const r = await marcar(SO_VITORIA, { unit_id: SERRA, starts_at: quartaQueVem(30) });
     expect(r.ok).toBe(false);
-    expect(!r.ok && r.e.code).toBe("agenda_horario_indisponivel");
+    expect(!r.ok && r.e.code).toBe("agenda_unidade_fora_da_jornada");
+    const linha = await pool.query(
+      `select 1 from calendar_appointments where organization_id = $1 and owner_user_id = $2 and starts_at = $3`,
+      [ORG, SO_VITORIA, quartaQueVem(30)],
+    );
+    expect(linha.rows).toHaveLength(0);
+  });
+
+  it("procedimento de outro profissional é recusado na rota, não só escondido na tela", async () => {
+    const r = await marcar(NAS_DUAS, { event_type_id: tipo, unit_id: SERRA, starts_at: quartaQueVem(45) });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.e.code).toBe("agenda_procedimento_de_outro_profissional");
   });
 
   it("com duas unidades possíveis, recusa dizendo quais, sem escolher por conta própria", async () => {
