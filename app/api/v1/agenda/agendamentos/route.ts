@@ -19,7 +19,7 @@ import { z } from "zod";
 import { listaAgendamentos, type AgendamentoListado } from "@/lib/agenda/consulta";
 import { donosDaAgenda } from "@/lib/agenda/donos-da-agenda";
 import { DURACAO_MAXIMA_MIN, DURACAO_MINIMA_MIN } from "@/lib/agenda/duracao-escolhida";
-import { CANAIS_DA_MARCACAO } from "@/lib/agenda/tipos";
+import { CANAIS_DA_MARCACAO, QUEM_CONVERTEU } from "@/lib/agenda/tipos";
 import { lerBloqueiosDaGrade } from "@/lib/agenda/bloqueios-da-grade";
 import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
@@ -101,6 +101,13 @@ const marcarSchema = z.object({
    * mensagem.
    */
   booking_channel: z.enum(CANAIS_DA_MARCACAO).optional(),
+  /**
+   * Quem converteu o lead (migration 0422): pessoa da equipe ou a IA. Ausente =
+   * quem está marcando. `converted_by_user_id` só com `user`; a rota confere que
+   * a pessoa é da organização.
+   */
+  converted_by_kind: z.enum(QUEM_CONVERTEU).optional(),
+  converted_by_user_id: z.string().uuid().optional(),
 });
 
 const alterarSchema = z

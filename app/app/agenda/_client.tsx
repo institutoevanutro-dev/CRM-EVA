@@ -882,6 +882,8 @@ export function AgendaClient({
                   location_details: m.endereco,
                   description: m.observacao || undefined,
                   booking_channel: m.canal,
+                  converted_by_kind: m.quemConverteu.kind,
+                  converted_by_user_id: m.quemConverteu.kind === "user" ? m.quemConverteu.userId : undefined,
                 })
                 .then((r) => {
                   // Guardado para o fechamento saber para onde levar a grade.

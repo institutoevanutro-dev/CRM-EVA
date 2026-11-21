@@ -50,6 +50,9 @@ export const ApiErrorCodes = {
   // já não oferece nenhum dos dois; a rota recusa para a REST e a IA também.
   agenda_procedimento_de_outro_profissional: "agenda_procedimento_de_outro_profissional",
   agenda_unidade_fora_da_jornada: "agenda_unidade_fora_da_jornada",
+  // 422: "Quem converteu" (migration 0422) aponta para alguém que não é membro
+  // ativo da organização. O id vem do corpo do pedido.
+  agenda_quem_converteu_fora_da_equipe: "agenda_quem_converteu_fora_da_equipe",
   // 422: tipo com `requires_patient` (migration 0411) marcado sem `contact_id`.
   patient_required: "patient_required",
   // Código PRÓPRIO, e não o `unprocessable_entity` genérico: quem recebe isto

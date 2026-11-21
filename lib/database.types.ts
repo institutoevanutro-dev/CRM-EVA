@@ -2285,6 +2285,8 @@ export type Database = {
           google_synced_at: string | null
           guest_email: string | null
           booking_channel: string | null
+          converted_by_kind: string | null
+          converted_by_user_id: string | null
           id: string
           location_details: string | null
           location_kind: string
@@ -2360,6 +2362,8 @@ export type Database = {
           google_synced_at?: string | null
           guest_email?: string | null
           booking_channel?: string | null
+          converted_by_kind?: string | null
+          converted_by_user_id?: string | null
           id?: string
           location_details?: string | null
           location_kind?: string
@@ -2435,6 +2439,8 @@ export type Database = {
           google_synced_at?: string | null
           guest_email?: string | null
           booking_channel?: string | null
+          converted_by_kind?: string | null
+          converted_by_user_id?: string | null
           id?: string
           location_details?: string | null
           location_kind?: string

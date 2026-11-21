@@ -3,6 +3,7 @@ import { MeetDoCompromisso, type MeetingDetail } from "./MeetDoCompromisso";
 import { SincronizacaoDoCompromisso, type SyncDetail } from "./SincronizacaoDoCompromisso";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { usePessoasDaAgenda } from "@/hooks/agenda/usePessoasDaAgenda";
 import Link from "next/link";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api/client";
@@ -52,6 +53,9 @@ type Detalhe = {
   /** Como a equipe marcou (0417). Nula = legado ou marcada pela IA. */
   booking_channel?: "mensagem" | "ligacao" | null;
   created_by_kind?: string;
+  /** Quem converteu o lead (0422). Nula = legado ou integração. */
+  converted_by_kind?: "user" | "ai" | null;
+  converted_by_user_id?: string | null;
   contact_id: string | null;
   /** Os dois nomes do contato: o do cadastro e o do WhatsApp. */
   contato?: { name: string | null; display_name: string | null } | null;
@@ -99,6 +103,7 @@ export function DetalheDoCompromisso({
   const t = useT();
   const tagDoIdioma = useTagDeIdioma();
   const qc = useQueryClient();
+  const pessoas = usePessoasDaAgenda();
   const [evidence, setEvidence] = useState("");
   const [reason, setReason] = useState("");
   const [draftRevision, setDraftRevision] = useState<number | null>(null);
@@ -259,6 +264,14 @@ export function DetalheDoCompromisso({
                   <option value="ligacao">{t("Ligação")}</option>
                 </select>
               </label>
+            ) : null}
+            {a.converted_by_kind ? (
+              <p className="text-sm" data-testid="compromisso-quem-converteu">
+                <span className="text-text-muted">{t("Quem converteu")}: </span>
+                {a.converted_by_kind === "ai"
+                  ? t("IA do atendimento")
+                  : (pessoas.data?.find((p) => p.id === a.converted_by_user_id)?.nome ?? t("Alguém da equipe"))}
+              </p>
             ) : null}
             {faltaNome ? (
               <div

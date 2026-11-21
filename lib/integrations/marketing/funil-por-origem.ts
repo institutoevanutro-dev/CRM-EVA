@@ -38,7 +38,7 @@ import { emLotes, lerComparecimentos, lerEventosDoPeriodo, type Contato } from "
 import type { VendaPorContato } from "@/lib/integrations/financeiro/cliente";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
-import { origemInformadaDe, type OrigemInformada } from "@/lib/contacts/origem-informada";
+import { origemDe, origemInformadaDe, type OrigemInformada } from "@/lib/contacts/origem-informada";
 
 const UUID_RFC = z.string().uuid();
 
@@ -75,22 +75,9 @@ export interface LinhaDoFunil {
 }
 export interface FunilPorOrigem { currency: "BRL"; origens: LinhaDoFunil[] }
 
-const semAcento = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
-
-export function origemDe({ adPlatform, tags, informada = null }: { adPlatform: string | null; tags: string[]; informada?: OrigemInformada | null }): Origem {
-  if (adPlatform === "meta_ads") return "meta";
-  if (adPlatform === "google_ads") return "google";
-  // "Como chegou", escolhido na ficha do contato: vale acima das etiquetas.
-  if (informada) return informada;
-  // Correção à mão (18/11): sem a marca automática do anúncio, a recepção põe a etiqueta "Meta" ou
-  // "Google" (ou "Anúncio Meta"/"Anúncio Google") no lead de quem disse que veio do anúncio.
-  const t = tags.map(semAcento);
-  if (t.some((x) => x === "meta" || x === "anuncio meta")) return "meta";
-  if (t.some((x) => x === "google" || x === "anuncio google")) return "google";
-  // `tags` leva também a origem (`source`) dos leads do contato.
-  if (tags.some((t) => semAcento(t) === "indicacao")) return "indicacao";
-  return "organico";
-}
+// A regra mora em `lib/contacts/origem-informada.ts` desde 21/11/2026: o
+// "Novo agendamento" da Agenda mostra a MESMA origem que o funil conta.
+export { origemDe };
 
 export function montarFunil(
   e: { leads: Contato[]; agendamentos: Contato[]; comparecimentos?: Contato[]; sinais: Contato[]; ganhos: (Contato & { valueCents: number | null })[] },

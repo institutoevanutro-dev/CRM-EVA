@@ -6,6 +6,7 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useContact } from "@/hooks/contacts/useContact";
 import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
@@ -20,6 +21,13 @@ import {
 } from "@/lib/agenda/marcacao-simples";
 import type { CanalDaMarcacao } from "@/lib/agenda/tipos";
 import { ApiError } from "@/lib/api/types";
+import {
+  ORIGENS_INFORMADAS,
+  ROTULO_DA_ORIGEM_INFORMADA,
+  origemDe,
+  origemInformadaDe,
+  type OrigemInformada,
+} from "@/lib/contacts/origem-informada";
 import {
   ehNomeCompleto,
   faltaNomeCompleto,
@@ -77,6 +85,8 @@ export type MarcacaoConfirmada = {
   observacao: string;
   /** Mensagem ou ligação: obrigatório na tela, é a base do bônus por comparecimento. */
   canal: CanalDaMarcacao;
+  /** Quem converteu o lead (migration 0422): alguém da equipe ou a IA do atendimento. */
+  quemConverteu: { kind: "user"; userId: string } | { kind: "ai" };
 };
 
 const ROTULO_DO_CANAL: Record<CanalDaMarcacao, string> = { mensagem: "Mensagem", ligacao: "Ligação" };
@@ -241,7 +251,30 @@ export function MarcacaoSimples({
   const nomeCompleto =
     nomeEditado && nomeEditado.contactId === contactId ? nomeEditado.valor : sugestaoDeNomeCompleto(doPaciente);
   const nomeResolvido = !pedeNome || ehNomeCompleto(nomeCompleto);
-  const gravarNome = useUpdateContact(contactId);
+  const gravarContato = useUpdateContact(contactId);
+
+  // QUEM CONVERTEU (migration 0422): quem está marcando, até alguém escolher
+  // outra pessoa da equipe ou a IA do atendimento (pedido de 21/11/2026).
+  const [quemConverteu, setQuemConverteu] = React.useState<string>(() => `user:${usuarioId}`);
+
+  // ORIGEM DO LEAD: a MESMA conta do funil por origem do Marketing (`origemDe`),
+  // lida da ficha do paciente. Mudar aqui grava o "Como chegou" da ficha no
+  // Confirmar, pelo mesmo PATCH do nome; a marca do anúncio não se troca à mão.
+  const ficha = useContact(contactId);
+  const dadosDaFicha = contactId && ficha.data?.data?.id === contactId ? ficha.data.data : null;
+  const metaDaFicha = (dadosDaFicha?.source_metadata ?? null) as Record<string, unknown> | null;
+  const plataformaDoAnuncio = typeof metaDaFicha?.ad_platform === "string" ? metaDaFicha.ad_platform : null;
+  const veioDoAnuncio = plataformaDoAnuncio === "meta_ads" || plataformaDoAnuncio === "google_ads";
+  const origemDaFicha: OrigemInformada | null = dadosDaFicha
+    ? origemDe({
+        adPlatform: plataformaDoAnuncio,
+        tags: [...(dadosDaFicha.tags ?? []), dadosDaFicha.source].filter((x): x is string => Boolean(x)),
+        informada: origemInformadaDe(metaDaFicha),
+      })
+    : null;
+  const [origemEditada, setOrigemEditada] = React.useState<{ contactId: string; valor: OrigemInformada } | null>(null);
+  const origem = origemEditada && origemEditada.contactId === contactId ? origemEditada.valor : origemDaFicha;
+  const origemMudou = origem !== null && origemDaFicha !== null && origem !== origemDaFicha;
 
   const parede = (iso: string): Date => (fuso ? dataDeParede(new Date(iso), fuso) : new Date(iso));
 
@@ -338,7 +371,13 @@ export function MarcacaoSimples({
       // O nome vai ANTES do agendamento, pelo caminho de sempre da ficha
       // (`PATCH /api/v1/contacts/[id]`, auditado como `contact.updated`). Se a
       // gravação for recusada, nada é marcado: a recusa aparece no rodapé.
-      if (pedeNome) await gravarNome.mutateAsync({ name: nomeCompletoLimpo(nomeCompleto) });
+      // Nome e origem vão juntos, num PATCH só, e só o que mudou.
+      if (pedeNome || origemMudou) {
+        await gravarContato.mutateAsync({
+          ...(pedeNome ? { name: nomeCompletoLimpo(nomeCompleto) } : {}),
+          ...(origemMudou && origem ? { origem_informada: origem } : {}),
+        });
+      }
       await onConfirmar({
         instante: horario.instante,
         duracaoMin: duracao === null ? undefined : (duracaoMin ?? undefined),
@@ -346,6 +385,9 @@ export function MarcacaoSimples({
         endereco: endereco.trim(),
         observacao: observacao.trim(),
         canal,
+        quemConverteu: quemConverteu.startsWith("user:")
+          ? { kind: "user", userId: quemConverteu.slice("user:".length) }
+          : { kind: "ai" },
       });
       setRecusa(null);
       setMarcado(horario);
@@ -629,6 +671,56 @@ export function MarcacaoSimples({
                   onValor={(valor) => setNomeEditado({ contactId, valor })}
                 />
               ) : null}
+
+              <div className="grid gap-x-3 gap-y-4 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <label htmlFor="quem-converteu" className={ROTULO}>
+                    {t("Quem converteu")}
+                  </label>
+                  <Seletor
+                    id="quem-converteu"
+                    data-testid="quem-converteu"
+                    value={quemConverteu}
+                    onChange={(e) => setQuemConverteu(e.target.value)}
+                  >
+                    {pessoas.map((p) => (
+                      <option key={p.id} value={`user:${p.id}`}>
+                        {p.id === usuarioId ? `${p.nome} (${t("você")})` : p.nome}
+                      </option>
+                    ))}
+                    <option value="ai">{t("IA do atendimento")}</option>
+                  </Seletor>
+                </div>
+                <div className="min-w-0">
+                  <label htmlFor="origem-do-lead" className={ROTULO}>
+                    {t("Origem do lead")}
+                  </label>
+                  <Seletor
+                    id="origem-do-lead"
+                    data-testid="origem-do-lead"
+                    value={origem ?? ""}
+                    disabled={!dadosDaFicha || veioDoAnuncio}
+                    aria-describedby={veioDoAnuncio ? "origem-pelo-anuncio" : undefined}
+                    onChange={(e) =>
+                      setOrigemEditada({ contactId, valor: e.target.value as OrigemInformada })
+                    }
+                  >
+                    {!dadosDaFicha ? (
+                      <option value="">{contactId ? t("Carregando…") : t("Escolha antes o paciente")}</option>
+                    ) : null}
+                    {ORIGENS_INFORMADAS.map((o) => (
+                      <option key={o} value={o}>
+                        {t(ROTULO_DA_ORIGEM_INFORMADA[o])}
+                      </option>
+                    ))}
+                  </Seletor>
+                  {veioDoAnuncio ? (
+                    <p id="origem-pelo-anuncio" className="mt-1 text-xs text-text-subtle">
+                      {t("Marcada pelo clique no anúncio.")}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
 
               <div>
                 <label htmlFor="observacao-do-compromisso" className={ROTULO}>
