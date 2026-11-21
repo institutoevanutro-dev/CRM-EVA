@@ -683,6 +683,11 @@ export function MarcacaoSimples({
                     value={quemConverteu}
                     onChange={(e) => setQuemConverteu(e.target.value)}
                   >
+                    {/* Quem marca é o padrão e precisa estar na lista mesmo antes de a
+                        equipe carregar, senão o campo mostraria outra pessoa. */}
+                    {pessoas.some((p) => p.id === usuarioId) ? null : (
+                      <option value={`user:${usuarioId}`}>{t("Você")}</option>
+                    )}
                     {pessoas.map((p) => (
                       <option key={p.id} value={`user:${p.id}`}>
                         {p.id === usuarioId ? `${p.nome} (${t("você")})` : p.nome}

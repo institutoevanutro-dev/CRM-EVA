@@ -27,6 +27,16 @@ import { esperarAgenda } from "./helpers/tela-agenda";
  * Organização própria, criada e apagada aqui: nada do que este arquivo grava
  * encosta nas outras specs. Nomes fictícios, de propósito.
  *
+ * E o pedido de 21/11/2026, em cima do mesmo modal e da grade:
+ *
+ *   5. Só aparece no "Profissional" quem tem procedimento; "Marcada por" já vem
+ *      em Mensagem; escolhido o paciente, a busca some e um X o desfaz.
+ *   6. "Quem converteu" (padrão: quem marca) e "Origem do lead" (a regra do
+ *      funil; mudar grava o "Como chegou" da ficha) vão junto com a marcação.
+ *   7. A grade desenha só as horas das jornadas, com a meia hora marcada; o
+ *      bloqueio de várias pessoas no mesmo trecho vira UMA faixa; a legenda diz
+ *      de quem é cada cor.
+ *
  * As fotos vão para `.superpowers/evidence/agenda-visual/` (claro e escuro,
  * computador e celular), como a doutrina de QA visual pede.
  */
@@ -254,6 +264,14 @@ test("procedimento, unidade e paciente: a tela oferece só o que é do profissio
 
   const cartao = page.getByTestId("paciente-escolhido");
   await expect(cartao).toHaveAttribute("data-contact-id", f.helena);
+  // Escolhido o paciente, a busca SAI da tela; o X o desfaz e a devolve.
+  await expect(page.getByRole("combobox", { name: "Paciente" })).toHaveCount(0);
+  await page.getByTestId("tirar-paciente").click();
+  await expect(page.getByTestId("paciente-escolhido")).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Paciente" })).toBeFocused();
+  await page.getByRole("combobox", { name: "Paciente" }).fill("Helena Fictícia Prado");
+  await page.getByRole("listbox").getByRole("option", { name: /Helena Fictícia Prado/ }).click();
+  await expect(cartao).toHaveAttribute("data-contact-id", f.helena);
   await expect(cartao).toContainText("(27) 99999-0101");
   await expect(cartao).toContainText("helena.prado@exemplo.test");
   await expect(cartao).toContainText(`12/03/${ano - 34}`);
@@ -264,7 +282,15 @@ test("procedimento, unidade e paciente: a tela oferece só o que é do profissio
   const horario = page.locator('[data-testid^="horario-"]').first();
   await expect(horario).toBeVisible({ timeout: 15_000 });
   await horario.click();
-  await page.getByTestId("canal-mensagem").click();
+  // "Marcada por" já vem em Mensagem; ninguém precisa tocar nele.
+  await expect(page.getByTestId("canal-mensagem")).toHaveAttribute("aria-pressed", "true");
+  // Quem converteu vem com quem marca (a Ana); aqui foi o Bruno. A origem sai da
+  // ficha pela regra do funil (cadastro manual, sem etiqueta: Orgânico), e a
+  // recepção corrige para Indicação.
+  await expect(page.getByTestId("quem-converteu")).toHaveValue(`user:${f.ana.id}`);
+  await page.getByTestId("quem-converteu").selectOption(`user:${f.bruno.id}`);
+  await expect(page.getByTestId("origem-do-lead")).toHaveValue("organico", { timeout: 15_000 });
+  await page.getByTestId("origem-do-lead").selectOption("indicacao");
   await expect(page.getByTestId("resumo-da-marcacao")).toContainText(
     "Avaliação facial · Dra. Ana Fictícia · Unidade Centro · Helena Fictícia Prado",
   );
@@ -294,7 +320,7 @@ test("procedimento, unidade e paciente: a tela oferece só o que é do profissio
 
   const { data: criado } = await db
     .from("calendar_appointments")
-    .select("owner_user_id, event_type_id, unit_id, contact_id")
+    .select("owner_user_id, event_type_id, unit_id, contact_id, booking_channel, converted_by_kind, converted_by_user_id")
     .eq("organization_id", f.org)
     .neq("status", "completed")
     .single();
@@ -303,12 +329,15 @@ test("procedimento, unidade e paciente: a tela oferece só o que é do profissio
     event_type_id: f.avaliacao,
     unit_id: f.centro,
     contact_id: f.helena,
+    booking_channel: "mensagem",
+    converted_by_kind: "user",
+    converted_by_user_id: f.bruno.id,
   });
+  const { data: ficha } = await db.from("contacts").select("source_metadata").eq("id", f.helena).single();
+  expect((ficha?.source_metadata as Record<string, unknown> | null)?.origem_informada).toBe("indicacao");
 });
 
-test("profissional sem procedimento: o campo explica e aponta onde cadastrar; jornada sem unidade mostra todas, com aviso", async ({
-  page,
-}) => {
+test("profissional sem procedimento não aparece; jornada sem unidade mostra todas, com aviso", async ({ page }) => {
   // O único tipo "de todos" passa a ser do Bruno: a Carla fica sem nenhum.
   const r = await db.from("calendar_event_types").update({ default_owner_user_id: f.bruno.id }).eq("id", f.aplicacao);
   if (r.error) throw r.error;
@@ -318,24 +347,36 @@ test("profissional sem procedimento: o campo explica e aponta onde cadastrar; jo
   await page.goto("/app/agenda");
   await esperarAgenda(page, 30_000);
   await page.getByRole("button", { name: /novo agendamento/i }).click();
-  await expect.poll(async () => (await opcoes(page, "profissional-da-marcacao")).length).toBeGreaterThan(3);
+  await expect.poll(async () => (await opcoes(page, "profissional-da-marcacao")).length).toBeGreaterThan(2);
+  const semCarla = await opcoes(page, "profissional-da-marcacao");
+  expect(semCarla.some((o) => o.includes("Carla")), "quem não tem procedimento apareceu na lista").toBe(false);
+  await foto(page, "1b-profissional-sem-procedimento-1280x800-claro");
+
+  // Com um procedimento dela, a Carla entra na lista; a jornada dela não diz
+  // unidade nenhuma: todas aparecem, e a tela diz por quê.
+  await inserir("calendar_event_types", {
+    organization_id: f.org,
+    name: "Consulta da Carla",
+    slug: "consulta-da-carla",
+    duration_minutes: 30,
+    minimum_notice_minutes: 60,
+    booking_window_days: 60,
+    is_active: true,
+    default_owner_user_id: f.carla.id,
+  });
+  await page.reload();
+  await esperarAgenda(page, 30_000);
+  await page.getByRole("button", { name: /novo agendamento/i }).click();
+  await expect.poll(async () => (await opcoes(page, "profissional-da-marcacao")).some((o) => o.includes("Carla"))).toBe(
+    true,
+  );
   await page.getByTestId("profissional-da-marcacao").selectOption(f.carla.id);
-  await expect(page.getByTestId("sem-procedimento-do-profissional")).toContainText(
-    "Dra. Carla Fictícia ainda não tem procedimento cadastrado.",
-  );
-  await expect(page.getByTestId("sem-procedimento-do-profissional").getByRole("link")).toHaveAttribute(
-    "href",
-    "/app/settings/tenant/agenda",
-  );
-  await expect(page.getByTestId("procedimento-da-marcacao")).toBeDisabled();
-  // A jornada dela não diz unidade nenhuma: todas aparecem, e a tela diz por quê.
   await expect(page.getByTestId("unidades-sem-jornada")).toBeVisible();
   expect(await opcoes(page, "unidade-do-agendamento")).toEqual([
     "Teleconsulta ou sem unidade",
     "Unidade Centro",
     "Unidade Praia",
   ]);
-  await foto(page, "1b-profissional-sem-procedimento-1280x800-claro");
 });
 
 test("a rota recusa o que a tela não oferece: procedimento de outro e unidade fora da jornada", async ({ page }) => {
@@ -376,11 +417,11 @@ for (const tema of ["claro", "escuro"] as const) {
       await page.getByTestId("profissional-da-marcacao").selectOption(f.ana.id);
       await page.getByTestId("procedimento-da-marcacao").selectOption({ label: "Avaliação facial · 30 min" });
       await page.getByRole("combobox", { name: "Paciente" }).fill("Helena Fictícia Prado");
+      await page.getByRole("listbox").getByRole("option", { name: /Helena Fictícia Prado/ }).click({ timeout: 15_000 });
       await expect(page.getByTestId("paciente-escolhido")).toBeVisible({ timeout: 15_000 });
       await expect(page.getByTestId("paciente-escolhido").locator('[data-dado="ultima"]')).toBeVisible({
         timeout: 15_000,
       });
-      await page.getByRole("combobox", { name: "Paciente" }).press("Escape");
 
       // Sem rolagem para o lado em nenhuma largura; o tema chegou ao modal.
       const m = await page.evaluate(() => {
@@ -405,3 +446,83 @@ for (const tema of ["claro", "escuro"] as const) {
     });
   }
 }
+
+test("a grade: só as horas das jornadas, meia hora marcada, cor por profissional e o bloqueio uma vez só", async ({
+  page,
+}) => {
+  // Semana seguinte: uma consulta de cada profissional e um bloqueio do dia
+  // inteiro para os dois na quarta (feriado). Antes, o feriado desenhava a grade
+  // da meia-noite às 23h, em colunas estreitas e por cima de outra faixa.
+  // A segunda da semana SEGUINTE à de hoje, no calendário de São Paulo (UTC-3):
+  // é a semana que `irParaASemanaSeguinte` desenha (domingo a sábado).
+  const agoraSP = new Date(Date.now() - 3 * 3_600_000);
+  const segunda = Date.UTC(agoraSP.getUTCFullYear(), agoraSP.getUTCMonth(), agoraSP.getUTCDate() - agoraSP.getUTCDay() + 8);
+  const dia = (n: number, hora: number) => new Date(segunda + n * 86_400_000 + (hora + 3) * 3_600_000);
+  for (const [dono, tipo, d] of [
+    [f.ana.id, f.avaliacao, dia(0, 9)],
+    [f.bruno.id, f.retorno, dia(1, 14)],
+  ] as const) {
+    await inserir("calendar_appointments", {
+      organization_id: f.org,
+      contact_id: f.helena,
+      event_type_id: tipo,
+      owner_user_id: dono,
+      title: "Consulta fictícia",
+      status: "confirmed",
+      starts_at: d.toISOString(),
+      ends_at: new Date(d.getTime() + 30 * 60_000).toISOString(),
+      time_zone: "America/Sao_Paulo",
+      unit_id: f.centro,
+    });
+  }
+  const quarta = dia(2, 0).toISOString().slice(0, 10);
+  for (const dono of [f.ana.id, f.bruno.id]) {
+    await inserir("calendar_availability_exceptions", {
+      organization_id: f.org,
+      user_id: dono,
+      exception_date: quarta,
+      is_unavailable: true,
+      start_minute: 0,
+      end_minute: 1440,
+      reason: "Feriado fictício",
+    });
+  }
+
+  for (const tema of ["claro", "escuro"] as const) {
+    await page.emulateMedia({ colorScheme: tema === "escuro" ? "dark" : "light", reducedMotion: "reduce" });
+    await page.addInitScript((t) => window.localStorage.setItem("deskcomm-theme", t), tema === "escuro" ? "dark" : "light");
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await entrar(page, f.ana.email);
+    await page.goto("/app/agenda");
+    await esperarAgenda(page, 30_000);
+    await irParaASemanaSeguinte(page);
+
+    const grade = page.getByTestId("grade-da-agenda");
+    // Jornadas das 08:00 às 18:00: a primeira hora é 08:00, a última 17:30 — sem madrugada.
+    await expect(grade).toContainText("08:00");
+    await expect(grade).toContainText("17:30");
+    await expect(grade).not.toContainText("00:00");
+    await expect(grade).not.toContainText("18:00");
+
+    // O feriado dos dois é UMA faixa, com os dois nomes.
+    const colunaDaQuarta = page.getByTestId(`coluna-dia-${quarta}`);
+    const faixas = colunaDaQuarta.locator('[data-testid^="fechamento-"]');
+    await expect(faixas).toHaveCount(1);
+    await expect(faixas.first()).toHaveAttribute("data-fechamentos", "2");
+    await expect(faixas.first()).toContainText("Bloqueado");
+    // E não há cartão "Horário bloqueado" desenhado por cima dela.
+    await expect(colunaDaQuarta.locator('[data-testid^="agendamento-bloqueio:"]')).toHaveCount(0);
+
+    // A legenda diz de quem é cada cor, e as duas cores são diferentes.
+    await expect(page.getByTestId(`legenda-pessoa-${f.ana.id}`)).toBeVisible();
+    await expect(page.getByTestId(`legenda-pessoa-${f.bruno.id}`)).toBeVisible();
+    const fundos = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('[data-testid^="agendamento-"][data-trilha]')].map(
+        (el) => getComputedStyle(el).backgroundColor,
+      ),
+    );
+    expect(new Set(fundos).size, JSON.stringify(fundos)).toBeGreaterThan(1);
+    await foto(page, `7-grade-semana-1280x800-${tema}`);
+  }
+});
+

@@ -564,10 +564,7 @@ function FaixaFechada({
     >
       <span className="flex min-w-0 items-center gap-1 text-xs font-semibold leading-4 text-text-muted">
         <Lock aria-hidden size={12} weight="bold" className="shrink-0" />
-        <span className="truncate">
-          {t("Bloqueado")}
-          {trecho.de <= janela.primeira * 60 && trecho.ate >= (janela.ultima + 1) * 60 ? ` · ${t("o dia todo")}` : null}
-        </span>
+        <span className="truncate">{t("Bloqueado")}</span>
         <span className="sr-only"> · {rotuloDoTrecho(trecho, t)}</span>
       </span>
       {mostrarQuem && quem.length > 0 && alto ? (
