@@ -1251,6 +1251,8 @@ export const DICIONARIO: Traducoes = {
   Telefone: { es: "Teléfono" },
   "Nenhum contato": { es: "Ningún contacto" },
   Bloqueado: { es: "Bloqueado" },
+  "Nenhum profissional tem procedimento cadastrado.": { es: "Ningún profesional tiene un procedimiento registrado." },
+  "Tirar o paciente e buscar outro": { es: "Quitar al paciente y buscar otro" },
   Conversar: { es: "Conversar" },
   Consultas: { es: "Consultas" },
   Próximas: { es: "Próximas" },

@@ -115,13 +115,14 @@ describe("VinculoDaMarcacao", () => {
   // dizendo "Compromisso pessoal, sem cliente". Ele concluiu que não dava para
   // marcar paciente. Estes casos medem o que se vê, não o que existe no DOM.
 
-  function ComEstado() {
+  function ComEstado({ compacto = false }: { compacto?: boolean }) {
     const [v, setV] = useState({ contact: "", conversation: "" });
     return (
       <VinculoDaMarcacao
         contactId={v.contact}
         conversationId={v.conversation}
         onChange={(contact, conversation) => setV({ contact, conversation })}
+        compacto={compacto}
       />
     );
   }
@@ -230,6 +231,34 @@ describe("VinculoDaMarcacao", () => {
     await user.click(screen.getByRole("button", { name: /Trocar/i }));
     expect(screen.queryByTestId("paciente-escolhido")).not.toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: /Buscar cliente/i })).toHaveFocus();
+  });
+
+  it("no modal: escolhido o paciente, a busca some; o X desfaz e devolve a busca (21/11)", async () => {
+    responderCom(MARCELOS);
+    const user = userEvent.setup();
+    envolver(<ComEstado compacto />);
+
+    await user.type(screen.getByPlaceholderText("Buscar pelo nome ou telefone"), "Marcelo");
+    await user.click(await screen.findByRole("option", { name: /Marcelo Lima/ }));
+
+    expect(await screen.findByTestId("paciente-escolhido")).toHaveTextContent("Marcelo Lima");
+    expect(screen.queryByPlaceholderText("Buscar pelo nome ou telefone")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Trocar/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("tirar-paciente"));
+    expect(screen.queryByTestId("paciente-escolhido")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Buscar pelo nome ou telefone")).toHaveFocus();
+    expect(screen.getByPlaceholderText("Buscar pelo nome ou telefone")).toHaveValue("");
+  });
+
+  it("no modal, um só resultado NÃO é escolhido sozinho: busca e cartão nunca aparecem juntos", async () => {
+    responderCom([LIMA]);
+    const user = userEvent.setup();
+    envolver(<ComEstado compacto />);
+    await user.type(screen.getByPlaceholderText("Buscar pelo nome ou telefone"), "andre");
+    expect(await screen.findByRole("option", { name: /Marcelo Lima/ })).toBeInTheDocument();
+    expect(screen.queryByTestId("paciente-escolhido")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Buscar pelo nome ou telefone")).toHaveValue("andre");
   });
 
   it("setas e Enter escolhem pelo teclado; Escape fecha a lista", async () => {

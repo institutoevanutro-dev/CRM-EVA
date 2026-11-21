@@ -814,7 +814,7 @@ export function AgendaClient({
       */}
       <Dialog open={marcando && !remarcandoId} onOpenChange={aoMudarAbertura}>
         <DialogContent
-          className="flex max-w-[880px] flex-col gap-0 overflow-x-hidden bg-surface p-0"
+          className="flex max-w-[1040px] flex-col gap-0 overflow-x-hidden bg-surface p-0"
           // Escape com a lista de pacientes aberta fecha só a lista.
           onEscapeKeyDown={(e) => {
             const alvo = e.target as HTMLElement | null;

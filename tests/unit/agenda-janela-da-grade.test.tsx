@@ -40,13 +40,28 @@ describe("janelaDoPeriodo", () => {
     });
   });
 
+  it("com a jornada da equipe, a base é o dia de atendimento, e não 07–21", () => {
+    expect(janelaDoPeriodo([], FUSO, { primeira: 8, ultima: 18 })).toEqual({ primeira: 8, ultima: 18 });
+    // Compromisso nosso fora da jornada ainda alarga: ele tem de aparecer.
+    expect(janelaDoPeriodo([ag("cedo", "07:00", "07:30")], FUSO, { primeira: 8, ultima: 18 })).toEqual({
+      primeira: 7,
+      ultima: 18,
+    });
+  });
+
+  it("ocupação do Google e bloqueio não alargam (feriado desenhava 00h–23h)", () => {
+    const google = { ...ag("g", "00:00", "23:59"), origem: "google_sync" as const };
+    const bloqueio = { ...ag("b", "05:00", "23:00"), origem: "google_sync" as const, bloqueio: true };
+    expect(janelaDoPeriodo([google, bloqueio], FUSO, { primeira: 8, ultima: 18 })).toEqual({ primeira: 8, ultima: 18 });
+  });
+
   it("cancelado não alarga", () => {
     expect(janelaDoPeriodo([ag("x", "05:00", "05:30", "cancelled")], FUSO)).toEqual({ primeira: 7, ultima: 21 });
   });
 });
 
 describe("a grade desenha a hora que cresceu", () => {
-  it("o compromisso das 06:00 fica no topo da área, e há rótulo de 06h e de 22h", () => {
+  it("o compromisso das 06:00 fica no topo da área, e há rótulo de 06:00 e de 22:00", () => {
     const { container } = render(
       <GradeDaAgenda
         visao="dia"
@@ -58,8 +73,8 @@ describe("a grade desenha a hora que cresceu", () => {
       />,
     );
     expect(screen.getByTestId("agendamento-cedo").style.top).toBe("0px");
-    expect(container.textContent).toContain("06h");
-    expect(container.textContent).toContain("22h");
+    expect(container.textContent).toContain("06:00");
+    expect(container.textContent).toContain("22:00");
   });
 });
 
@@ -76,6 +91,6 @@ describe("a janela não pula com o filtro de pessoas (item 136, 17/11)", () => {
         janelaSobre={[ag("dela", "10:00", "10:30"), { ...ag("outra", "06:00", "06:30"), responsavelId: "p2" }]}
       />,
     );
-    expect(container.textContent).toContain("06h");
+    expect(container.textContent).toContain("06:00");
   });
 });

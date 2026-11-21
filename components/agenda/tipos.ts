@@ -36,6 +36,11 @@ export type Pessoa = {
   unidades?: string[];
   /** Alguma janela da jornada não tem unidade (teleconsulta ou sem unidade). */
   atendeSemUnidade?: boolean;
+  /**
+   * O dia de atendimento da jornada, em minutos de parede (`faixaDaJornada`).
+   * Ausente = sem jornada, ou servidor mais velho: a grade fica no padrão.
+   */
+  jornada?: { de: number; ate: number };
 };
 
 /**

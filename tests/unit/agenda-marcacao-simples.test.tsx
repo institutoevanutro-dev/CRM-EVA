@@ -218,13 +218,22 @@ describe("Novo agendamento: profissional antes do procedimento", () => {
     expect(screen.getByTestId("painel-de-marcacao").getAttribute("data-tempo")).toBe("escolhendo-dia");
   });
 
-  it("profissional sem procedimento: o campo explica e aponta onde cadastrar", () => {
+  it("profissional sem procedimento não aparece na lista, e o que vinha escolhido é limpo (21/11)", () => {
     const soDaAna = TIPOS.filter((t) => t.donoId === ANA);
-    montarMarcacao({ profissionalId: BETO, tipos: soDaAna });
-    const proc = screen.getByTestId("procedimento-da-marcacao") as HTMLSelectElement;
-    expect(proc.disabled).toBe(true);
+    const onProfissional = vi.fn();
+    montarMarcacao({ profissionalId: BETO, tipos: soDaAna, onProfissional });
+    const lista = screen.getByTestId("profissional-da-marcacao") as HTMLSelectElement;
+    const nomes = within(lista).getAllByRole("option").map((o) => o.textContent);
+    expect(nomes.some((n) => n?.includes("Beto"))).toBe(false);
+    expect(nomes.some((n) => n?.includes("Ana"))).toBe(true);
+    expect(onProfissional).toHaveBeenCalledWith("");
+    expect(screen.queryByTestId("sem-procedimento-do-profissional")).toBeNull();
+  });
+
+  it("ninguém com procedimento: o aviso explica e aponta onde cadastrar", () => {
+    montarMarcacao({ tipos: [] });
     const aviso = screen.getByTestId("sem-procedimento-do-profissional");
-    expect(aviso).toHaveTextContent("Dr. Beto Teste ainda não tem procedimento cadastrado.");
+    expect(aviso).toHaveTextContent("Nenhum profissional tem procedimento cadastrado.");
     expect(within(aviso).getByRole("link")).toHaveAttribute("href", "/app/settings/tenant/agenda");
   });
 
@@ -359,15 +368,14 @@ describe("consulta exige paciente (migration 0411)", () => {
     expect(screen.queryByTestId("recusa-da-marcacao")).toBeNull();
   });
 
-  it("sem 'Marcada por', o Confirmar cinza diz o que falta (achado 17, 16/11)", () => {
+  it("'Marcada por' já vem em Mensagem, e Ligação troca (pedido de 21/11)", () => {
     montarMarcacao({ ...comHorario, tipos: TIPOS }, true);
-    expect(screen.getByTestId("confirmar-marcacao")).toBeDisabled();
-    expect(screen.getByTestId("falta-canal-na-marcacao").textContent).toBe(
-      "Escolha como foi marcada: Mensagem ou Ligação.",
-    );
-    fireEvent.click(screen.getByTestId("canal-ligacao"));
+    expect(screen.getByTestId("canal-mensagem")).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByTestId("falta-canal-na-marcacao")).toBeNull();
     expect(screen.getByTestId("confirmar-marcacao")).toBeEnabled();
+    fireEvent.click(screen.getByTestId("canal-ligacao"));
+    expect(screen.getByTestId("canal-ligacao")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("canal-mensagem")).toHaveAttribute("aria-pressed", "false");
   });
 
   it("tipo que não exige marca sem paciente", async () => {

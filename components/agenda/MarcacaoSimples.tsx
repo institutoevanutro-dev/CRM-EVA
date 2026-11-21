@@ -15,6 +15,7 @@ import {
   fimDoHorario,
   ofertaDeUnidades,
   procedimentosDoProfissional,
+  profissionaisComProcedimento,
   unidadeDaMarcacao,
 } from "@/lib/agenda/marcacao-simples";
 import type { CanalDaMarcacao } from "@/lib/agenda/tipos";
@@ -162,6 +163,14 @@ export function MarcacaoSimples({
   const locale = useLocaleDeData();
   const [aba, setAba] = React.useState<"marcar" | "bloquear">("marcar");
 
+  // Só quem tem procedimento entra na lista; um escolhido de fora dela (a grade
+  // abre o modal com a pessoa filtrada) é limpo, para o campo não mostrar uma
+  // pessoa que a lista não tem.
+  const profissionais = profissionaisComProcedimento(pessoas, tipos);
+  const profissionalForaDaLista = Boolean(profissionalId) && !profissionais.some((p) => p.id === profissionalId);
+  React.useEffect(() => {
+    if (profissionalForaDaLista) onProfissional("");
+  }, [profissionalForaDaLista, onProfissional]);
   const procedimentos = procedimentosDoProfissional(tipos, profissionalId);
   // Só vale o procedimento que é DESTE profissional: um id que sobrou de outro
   // (a grade abre o modal com o tipo dela) não conta como escolhido.
@@ -201,7 +210,9 @@ export function MarcacaoSimples({
   const [encaixeAberto, setEncaixeAberto] = React.useState(false);
   const [horaDoEncaixe, setHoraDoEncaixe] = React.useState("");
   const [observacao, setObservacao] = React.useState("");
-  const [canal, setCanal] = React.useState<CanalDaMarcacao | null>(null);
+  // "Mensagem" já vem escolhida (pedido do dono da clínica em 21/11/2026): é o
+  // caso comum, e a recepção só toca em "Ligação" quando foi por telefone.
+  const [canal, setCanal] = React.useState<CanalDaMarcacao | null>("mensagem");
   const [convidado, setConvidado] = React.useState("");
   // Endereço não editado herda o do procedimento; trocar de procedimento volta
   // ao dele, senão o endereço de um viaja para outro atendimento.
@@ -453,7 +464,7 @@ export function MarcacaoSimples({
                     onChange={(e) => trocarProfissional(e.target.value)}
                   >
                     <option value="">{t("Escolha o profissional")}</option>
-                    {pessoas.map((p) => (
+                    {profissionais.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.id === usuarioId ? `${p.nome} (${t("você")})` : p.nome}
                       </option>
@@ -470,7 +481,7 @@ export function MarcacaoSimples({
                     data-testid="procedimento-da-marcacao"
                     value={tipo?.id ?? ""}
                     disabled={!profissionalId || procedimentos.length === 0}
-                    aria-describedby={profissionalId && procedimentos.length === 0 ? "sem-procedimento" : undefined}
+                    aria-describedby={profissionais.length === 0 ? "sem-procedimento" : undefined}
                     onChange={(e) => trocarProcedimento(e.target.value)}
                   >
                     <option value="">
@@ -489,16 +500,16 @@ export function MarcacaoSimples({
                 </div>
               </div>
 
-              {/* Profissional sem procedimento: dizer POR QUÊ e ONDE resolver, em
-                  vez de um campo vazio e mudo. */}
-              {profissionalId && procedimentos.length === 0 ? (
+              {/* Ninguém com procedimento (instalação nova): dizer POR QUÊ e ONDE
+                  resolver, em vez de uma lista vazia e muda. */}
+              {profissionais.length === 0 ? (
                 <div
                   id="sem-procedimento"
                   data-testid="sem-procedimento-do-profissional"
                   className="rounded-md border border-dashed border-border-strong px-3 py-2.5"
                 >
                   <p className="text-xs font-medium text-text">
-                    {profissional?.nome ?? t("Este profissional")} {t("ainda não tem procedimento cadastrado.")}
+                    {t("Nenhum profissional tem procedimento cadastrado.")}
                   </p>
                   <p className="mt-0.5 text-xs text-text-muted">
                     {t("Cadastre em Tipos de agendamento, no campo “Quem atende”.")}{" "}

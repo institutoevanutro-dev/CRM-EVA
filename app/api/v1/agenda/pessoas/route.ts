@@ -11,7 +11,9 @@
  * irredutível: id, papel, nome e a trilha de cor escolhida. Sem e-mail, sem último acesso (gerente sem
  * `full_name` cadastrado recebe no nome a parte do e-mail antes do @).
  *
- * E ONDE a pessoa atende (`jornada_unidades`, `jornada_sem_unidade`): os ids das
+ * E ONDE e QUANDO a pessoa atende (`jornada_unidades`, `jornada_sem_unidade`,
+ * `jornada_de_min`/`jornada_ate_min`, o começo e o fim do dia de atendimento, que
+ * a grade usa para não desenhar madrugada). Os ids das
  * unidades das janelas da jornada, para o "Novo agendamento" oferecer só as
  * unidades do profissional escolhido (`ofertaDeUnidades`). Só ids — o nome da
  * unidade a tela já lê de `/api/v1/agenda/unidades` —, e a jornada inteira não
@@ -33,7 +35,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { roleAtLeast } from "@/lib/auth/types";
 import { lerJornadaDoBanco } from "@/lib/agenda/jornada";
-import { unidadesDaJornada } from "@/lib/agenda/marcacao-simples";
+import { faixaDaJornada, unidadesDaJornada } from "@/lib/agenda/marcacao-simples";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -46,6 +48,9 @@ interface PessoaDaAgenda {
   calendar_trilha: number | null;
   jornada_unidades: string[];
   jornada_sem_unidade: boolean;
+  /** Minutos de parede do começo e do fim do dia de atendimento; null = sem jornada. */
+  jornada_de_min: number | null;
+  jornada_ate_min: number | null;
 }
 
 export async function GET(_req: NextRequest): Promise<Response> {
@@ -82,13 +87,16 @@ export async function GET(_req: NextRequest): Promise<Response> {
   const ondeAtende = new Map(
     ((jornadas ?? []) as Array<{ user_id: string; schedule: unknown }>).map((j) => {
       const leitura = lerJornadaDoBanco(j.schedule);
-      return [j.user_id, unidadesDaJornada(leitura.ok ? leitura.jornada.windows : [])] as const;
+      const janelas = leitura.ok ? leitura.jornada.windows : [];
+      return [j.user_id, { ...unidadesDaJornada(janelas), faixa: faixaDaJornada(janelas) }] as const;
     }),
   );
   const membros = linhas.map((m) => ({
     ...m,
     jornada_unidades: ondeAtende.get(m.user_id)?.unidades ?? [],
     jornada_sem_unidade: ondeAtende.get(m.user_id)?.semUnidade ?? false,
+    jornada_de_min: ondeAtende.get(m.user_id)?.faixa?.de ?? null,
+    jornada_ate_min: ondeAtende.get(m.user_id)?.faixa?.ate ?? null,
   }));
   if (!isServiceRoleConfigured() || membros.length === 0) {
     return ok(membros.map((m) => ({ ...m, full_name: null })), { requestId });

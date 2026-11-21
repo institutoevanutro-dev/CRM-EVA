@@ -275,6 +275,8 @@ describe("(b) GET /api/v1/agenda/pessoas — a lista mínima da Agenda", () => {
       // Sem jornada lida, não diz onde atende — e a marcação oferece todas.
       jornada_unidades: [],
       jornada_sem_unidade: false,
+      jornada_de_min: null,
+      jornada_ate_min: null,
     });
     expect(JSON.stringify(corpo)).not.toContain("@x.com");
     // organization_id do cookie validado, e revogado fora.
@@ -305,6 +307,9 @@ describe("(b) GET /api/v1/agenda/pessoas — a lista mínima da Agenda", () => {
       expect(corpo.data?.[0]).toMatchObject({
         jornada_unidades: ["6f1c1f0e-7a52-4c1e-9d55-2d1e8d0a0001"],
         jornada_sem_unidade: true,
+        // QUANDO atende: do começo mais cedo (09:00) ao fim mais tarde (18:00).
+        jornada_de_min: 9 * 60,
+        jornada_ate_min: 18 * 60,
       });
       expect(corpo.data?.[1]).toMatchObject({ jornada_unidades: [], jornada_sem_unidade: false });
       expect(duble.filtrosDaJornada[0]).toEqual(["organization_id", "org-1"]);

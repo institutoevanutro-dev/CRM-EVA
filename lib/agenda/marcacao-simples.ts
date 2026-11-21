@@ -41,6 +41,19 @@ export function procedimentosDoProfissional<T extends ProcedimentoComDono>(
 }
 
 /**
+ * Quem a marcação oferece no campo "Profissional": só quem tem ao menos um
+ * procedimento (pedido do dono da clínica em 21/11/2026). Quem não atende nada
+ * não tem o que ser marcado, e escolhê-lo só levava ao aviso "ainda não tem
+ * procedimento cadastrado".
+ */
+export function profissionaisComProcedimento<P extends { id: string }>(
+  pessoas: readonly P[],
+  tipos: readonly ProcedimentoComDono[],
+): P[] {
+  return pessoas.filter((p) => tipos.some((t) => atendeOProcedimento(t.donoId, p.id)));
+}
+
+/**
  * Onde o profissional atende, lido das janelas da JORNADA
  * (`attendant_availability.schedule.windows[].unit_id`) — é a única ligação
  * entre pessoa e unidade que o banco tem. `semUnidade` diz se alguma janela não
@@ -52,6 +65,27 @@ export function unidadesDaJornada(janelas: ReadonlyArray<{ unit_id?: string | nu
 } {
   const unidades = [...new Set(janelas.flatMap((j) => (j.unit_id ? [j.unit_id] : [])))];
   return { unidades, semUnidade: janelas.some((j) => !j.unit_id) };
+}
+
+/**
+ * O começo e o fim do dia de atendimento de uma jornada, em minutos de parede:
+ * a janela que começa mais cedo e a que termina mais tarde, de qualquer dia da
+ * semana. É o que a grade da Agenda desenha (pedido do dono da clínica em
+ * 21/11/2026: "tirar os horários que não fazem parte dos horários de
+ * agendamento"). Jornada sem janela = `null`, e a grade fica no padrão.
+ */
+export function faixaDaJornada(
+  janelas: ReadonlyArray<{ start: string; end: string }>,
+): { de: number; ate: number } | null {
+  const minutos = (hhmm: string) => {
+    const [h = 0, m = 0] = hhmm.split(":").map(Number);
+    return h * 60 + m;
+  };
+  if (janelas.length === 0) return null;
+  return {
+    de: Math.min(...janelas.map((j) => minutos(j.start))),
+    ate: Math.max(...janelas.map((j) => minutos(j.end))),
+  };
 }
 
 /** O que a tela sabe da jornada de um profissional; ausente = não sabe. */
