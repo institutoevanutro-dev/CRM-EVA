@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { GOV_ORG, seedGov, sql } from "./gov-helpers";
+import { GOV_ADMIN, GOV_ORG, seedGov, sql, writeErrorAs } from "./gov-helpers";
 
 /**
  * Resumo semanal do Marketing (migration 0431): o registro de envio é deny-all para
@@ -17,6 +17,17 @@ describe("resumo semanal (0431)", () => {
                and grantee in ('anon','authenticated');`),
     ).toBe("0");
     expect(sql(`select relrowsecurity from pg_class where oid='public.marketing_resumo_envios'::regclass;`)).toBe("t");
+  });
+
+  it("nem o administrador da própria organização lê ou escreve pela sessão (permission denied)", () => {
+    const leitura = writeErrorAs(GOV_ADMIN, "select count(*) from marketing_resumo_envios");
+    expect(leitura, "authenticated leu SEM erro — a tabela está exposta").not.toBeNull();
+    expect(leitura).toContain("permission denied");
+    const escrita = writeErrorAs(
+      GOV_ADMIN,
+      `insert into marketing_resumo_envios (organization_id, semana, telefone) values ('${GOV_ORG}', '2026-W48', '5527999990000')`,
+    );
+    expect(escrita).toContain("permission denied");
   });
 
   it("o mesmo telefone não entra duas vezes na mesma semana", () => {

@@ -22,11 +22,14 @@ export const EntradaDoResumo = z.object({
     .max(5),
 });
 export type EntradaDoResumo = z.infer<typeof EntradaDoResumo>;
+/** Espelho do CHECK de `marketing_resumo_envios.status` (0431). */
+export const STATUS_DO_ENVIO_DO_RESUMO = ["enviando", "enviado", "falhou"] as const;
+export type StatusDoEnvioDoResumo = (typeof STATUS_DO_ENVIO_DO_RESUMO)[number];
 export type Resultado = { enviados: number; ja_enviados: number; falhas: { final: string; codigo: string }[] };
 
 export type Dependencias = {
   reservar(semana: string, telefone: string): Promise<"nova" | "ja">;
-  concluir(semana: string, telefone: string, status: "enviado" | "falhou", erro?: string, messageId?: string): Promise<void>;
+  concluir(semana: string, telefone: string, status: Exclude<StatusDoEnvioDoResumo, "enviando">, erro?: string, messageId?: string): Promise<void>;
   acharOuCriarContato(nome: string, canonico: string, variantes: string[]): Promise<string>;
   sessao(): Promise<string | null>;
   conversa(contactId: string, sessionId: string): Promise<string>;

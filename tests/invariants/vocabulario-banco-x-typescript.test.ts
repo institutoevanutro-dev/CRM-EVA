@@ -208,6 +208,13 @@ const PARES: Array<{
     simbolo: "ModoDeOrcamento",
   },
   {
+    tabela: "marketing_resumo_envios",
+    coluna: "status",
+    // lib/integrations/marketing/enviar-resumo.ts → STATUS_DO_ENVIO_DO_RESUMO (tupla `as const`, 0431).
+    arquivo: "lib/integrations/marketing/enviar-resumo.ts",
+    simbolo: "STATUS_DO_ENVIO_DO_RESUMO",
+  },
+  {
     tabela: "followup_flow_pointers",
     coluna: "surface",
     // lib/followup/api-schemas.ts → FOLLOWUP_FLOW_SURFACES (tupla `as const`).

@@ -75,6 +75,7 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  { tabela: "marketing_resumo_envios", razao: "tests/invariants/resumo-semanal.test.ts — deny-all (0431): privilégio NENHUM para anon e authenticated, `permission denied` medido sob `set role authenticated` com JWT de administrador, RLS ligada e zero policies; só a rota de integração do Marketing escreve, com o organization_id do env" },
   { tabela: "conversation_notes", razao: "tests/invariants/nota-interna-somente-autor-ou-gestor.test.ts — atendentes da org leem a nota; o administrador de outra organização lê 0 e não cria, edita nem apaga (saiu da dívida na 0319)" },
   { tabela: "agent_cases", razao: "tests/invariants/casos-so-o-servidor-escreve.test.ts — membros leem só o caso da conversa que veem, o administrador de outra organização lê 0, e sessão nenhuma escreve (saiu da dívida na 0319)" },
   { tabela: "agent_case_events", razao: "tests/invariants/casos-so-o-servidor-escreve.test.ts — mesmo arquivo: a linha do tempo segue o caso, leitura cruzada zero, escrita só do servidor" },
