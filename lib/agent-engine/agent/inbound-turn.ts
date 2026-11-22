@@ -147,6 +147,7 @@ import {
 } from './agent-config';
 import { msAteAJanelaAbrir, msAteAJanelaAbrirPulandoFeriado } from './janela-de-atendimento';
 import { turnoDisparaNasMensagens } from './palavra-chave-do-gatilho';
+import { agenteJaRespondeuNoAtendimento } from './agente-ja-respondeu';
 import { enviaAvisoForaDoHorario, portasDeProducao } from './aviso-fora-do-horario';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { adiadoPorJanela } from '../pacing/adiados-da-janela';
@@ -3051,7 +3052,21 @@ async function executarTurnoDoAgente(
   // tela. Regex quebrada, corpo sem texto ou nada a julgar ⇒ o turno SEGUE —
   // entrar de menos cala o cliente, e esta porta é a única que este gate
   // existe para não criar.
-  if (!preview && liveJob().kind === 'inbound_turn' && agentConfig?.filtroDePalavraChave != null) {
+  //
+  // O FILTRO DECIDE A ENTRADA, NÃO CADA MENSAGEM (porte do original #3240):
+  // se ESTE agente já respondeu neste atendimento, a resposta do paciente à
+  // pergunta dele passa sem filtro (`agente-ja-respondeu.ts`). A consulta só
+  // roda para agente com filtro; o miss na ENTRADA segue calando.
+  if (
+    !preview &&
+    liveJob().kind === 'inbound_turn' &&
+    agentConfig?.filtroDePalavraChave != null &&
+    !(await agenteJaRespondeuNoAtendimento(pool, {
+      organizationId: tenantId,
+      conversationId: input.conversationId,
+      agentId: agentConfig.agentId,
+    }))
+  ) {
     const corposDoTurno =
       inboundsPendentes.length > 0
         ? inboundsPendentes
