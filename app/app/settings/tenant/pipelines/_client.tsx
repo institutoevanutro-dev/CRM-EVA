@@ -339,6 +339,26 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
                 }}
               />
             )}
+            {/* A IA pode ler (porte do upstream #4684). Ausência é LIGADO
+                (ver `ia_pode_ler` no schema): desmarcar grava `false`, marcar
+                apaga a chave e o campo volta ao padrão. */}
+            <label className="flex items-center gap-1 text-xs md:col-span-4">
+              <input
+                type="checkbox"
+                aria-label={`${t("A IA pode ler este campo")} — ${f.label || i + 1}`}
+                checked={f.ia_pode_ler !== false}
+                onChange={(ev) => {
+                  const next = [...fields];
+                  const { ia_pode_ler: _apagada, ...semOpcao } = f;
+                  next[i] = ev.target.checked ? semOpcao : { ...f, ia_pode_ler: false };
+                  setFields(next);
+                }}
+              />
+              {t("A IA pode ler este campo")}
+              <span className="text-muted-foreground">
+                {t("(desligado, o valor fica só no card e o assistente de IA não o recebe)")}
+              </span>
+            </label>
             {/* Quando este campo aparece (porte do upstream #2793). Os
                 operadores são os três que `campoVisivel` aplica. */}
             <div className="space-y-1 md:col-span-4">

@@ -329,6 +329,10 @@ export const DICIONARIO: Traducoes = {
   "ninguém assumiu": { es: "nadie lo asumió" },
   "da clínica": { es: "de la clínica" },
   "Mostrar só quando:": { es: "Mostrar solo cuando:" },
+  "A IA pode ler este campo": { es: "La IA puede leer este campo" },
+  "(desligado, o valor fica só no card e o assistente de IA não o recebe)": {
+    es: "(desactivado, el valor queda solo en la tarjeta y el asistente de IA no lo recibe)",
+  },
   "Campo da condição": { es: "Campo de la condición" },
   "Sempre mostrar": { es: "Mostrar siempre" },
   "Operador da condição": { es: "Operador de la condición" },

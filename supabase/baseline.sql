@@ -39701,6 +39701,72 @@ grant execute on function public.fn_conversation_assign_pelo_turno(uuid, uuid, u
 notify pgrst, 'reload schema';
 -- ---- fim: atribuição do próprio turno não revoga o turno (migration 0425) ----
 
+-- ---- escrita tardia da IA sobre contato anonimizado nasce redigida (migration 0427) ----
+-- Derivado de supabase/migrations/20261122150000_0427_lgpd_escrita_tardia_da_ia_nasce_redigida.sql
+-- (porte do efeito de melgarafael/DeskcommCRM#1958; motivo e janelas: cabeçalho de lá).
+-- Cria função: entra ANTES da VARREDURA anon.
+create or replace function public.fn_lgpd_redige_escrita_tardia_da_ia()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_anonimizado_em timestamptz;
+begin
+  select k.anonymized_at into v_anonimizado_em
+    from public.contacts k
+   where k.id = new.contact_id
+     and k.organization_id = new.organization_id
+     and k.is_anonymized;
+  if v_anonimizado_em is null then
+    return new;
+  end if;
+
+  if tg_table_name = 'ai_agent_runs' then
+    -- A run que COMEÇOU antes da anonimização é do episódio anonimizado,
+    -- termine quando terminar. Run nova (created_at depois) é de quem voltou.
+    if new.created_at <= v_anonimizado_em then
+      new.tool_calls := public.fn_lgpd_redigir_tool_calls(new.tool_calls);
+    end if;
+  elsif now() <= v_anonimizado_em + interval '15 minutes' then
+    -- ponytail: memória e estado não guardam de qual run vieram; a janela de
+    -- 15 min cobre o turno que estava no ar. Se um turno passar disso, ligar
+    -- a escrita à run (run_id) em vez do relógio.
+    if tg_table_name = 'lead_notes' then
+      new.headline := '(anonimizado)';
+      new.body := '(anonimizado)';
+      new.embedding := null;
+    elsif tg_table_name = 'lead_state' then
+      new.next_action := null;
+      new.qualification := '{}'::jsonb;
+    end if;
+  end if;
+  return new;
+end
+$$;
+
+-- As DUAS origens de EXECUTE: o grant a PUBLIC da criação e o grant nominal a
+-- anon (e authenticated) do ALTER DEFAULT PRIVILEGES do baseline.
+revoke all on function public.fn_lgpd_redige_escrita_tardia_da_ia() from public, anon, authenticated;
+
+create or replace trigger trg_lgpd_redige_escrita_tardia_da_ia
+  before insert or update of tool_calls on public.ai_agent_runs
+  for each row
+  when (new.contact_id is not null)
+  execute function public.fn_lgpd_redige_escrita_tardia_da_ia();
+
+create or replace trigger trg_lgpd_redige_escrita_tardia_da_ia
+  before insert or update of headline, body, embedding on public.lead_notes
+  for each row
+  execute function public.fn_lgpd_redige_escrita_tardia_da_ia();
+
+create or replace trigger trg_lgpd_redige_escrita_tardia_da_ia
+  before insert or update of next_action, qualification on public.lead_state
+  for each row
+  execute function public.fn_lgpd_redige_escrita_tardia_da_ia();
+-- ---- fim: escrita tardia da IA sobre contato anonimizado nasce redigida (migration 0427) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
