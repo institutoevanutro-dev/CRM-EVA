@@ -149,6 +149,7 @@ import { msAteAJanelaAbrir, msAteAJanelaAbrirPulandoFeriado } from './janela-de-
 import { turnoDisparaNasMensagens } from './palavra-chave-do-gatilho';
 import { enviaAvisoForaDoHorario, portasDeProducao } from './aviso-fora-do-horario';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
+import { adiadoPorJanela } from '../pacing/adiados-da-janela';
 import { loadChannelKnobs } from '../pacing/store';
 import { avisarJanelaFechada, resolverAvisoDeJanela } from '../pacing/aviso-de-janela';
 import { resolveConversationTurn, type TurnAgentResolution } from './resolve-turn-agent';
@@ -2513,6 +2514,13 @@ async function executarTurnoDoAgente(
         acquiredAt: claimOfJob(liveJob())?.acquired_at,
         delayMs: Math.max(abertura.getTime() - agora.getTime(), 1_000),
         reason: 'fora da janela anti-ban de envio — turno adiado para a abertura',
+        // O rastro que torna o adiamento alcançável (porte do original #3419):
+        // abrir a janela acorda este job, e a mensagem nova não pega carona nele.
+        payloadPatch: adiadoPorJanela({
+          tipo: resposta ? 'resposta' : 'disparo',
+          abertura: abertura.toISOString(),
+          janela: janelaDoTurno,
+        }),
       });
       runLog.info('turno adiado — fora da janela anti-ban de envio', {
         janela: janelaDoTurno,
