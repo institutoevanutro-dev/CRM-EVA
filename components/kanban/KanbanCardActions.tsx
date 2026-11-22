@@ -36,6 +36,7 @@ import { usePermission } from "@/hooks/auth/AuthProvider";
 import { BotaoRegistrarVenda } from "@/components/vendas/BotaoRegistrarVenda";
 import { MOEDA_PADRAO } from "@/lib/money";
 import { LoseLeadDialog } from "./LoseLeadDialog";
+import { MoveToOtherPipelineDialog } from "./MoveToOtherPipelineDialog";
 import { EditLeadDialog } from "./EditLeadDialog";
 import type { Lead } from "@/lib/types/leads";
 import type { BoardData, Stage } from "@/lib/kanban/types";
@@ -50,6 +51,7 @@ interface KanbanCardActionsProps {
 export function KanbanCardActions({ lead, pipelineId, stages }: KanbanCardActionsProps) {
   const t = useT();
   const [loseOpen, setLoseOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const winMutation = useWinLead(pipelineId);
@@ -237,6 +239,16 @@ export function KanbanCardActions({ lead, pipelineId, stages }: KanbanCardAction
           >
             {t("Marcar como perdido")}
           </DropdownMenuItem>
+          {/* `pipeline.move_card` é a mesma régua do POST /clone (agent+). */}
+          {canAssign && (
+            <DropdownMenuItem
+              onSelect={() => {
+                setMoveOpen(true);
+              }}
+            >
+              {t("Levar para outro funil")}
+            </DropdownMenuItem>
+          )}
           {canAssign && (
             <>
               <DropdownMenuSeparator />
@@ -304,6 +316,14 @@ export function KanbanCardActions({ lead, pipelineId, stages }: KanbanCardAction
         <LoseLeadDialog
           open={loseOpen}
           onOpenChange={setLoseOpen}
+          leadId={lead.id}
+          pipelineId={pipelineId}
+        />
+      )}
+      {moveOpen && (
+        <MoveToOtherPipelineDialog
+          open={moveOpen}
+          onOpenChange={setMoveOpen}
           leadId={lead.id}
           pipelineId={pipelineId}
         />

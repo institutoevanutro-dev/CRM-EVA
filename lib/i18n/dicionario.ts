@@ -10224,6 +10224,22 @@ export const DICIONARIO: Traducoes = {
     es: "Un archivo CSV con una línea por lead. Los leads entran en la primera etapa abierta del embudo elegido.",
   },
   "Funil de destino": { es: "Embudo de destino" },
+  // "Levar para outro funil" no card (porte de DeskcommCRM #1585/#3655).
+  "Levar para outro funil": { es: "Llevar a otro embudo" },
+  "O negócio é recriado no funil escolhido e este fica encerrado aqui. A linha do tempo dos dois registra a troca.": {
+    es: "El negocio se crea de nuevo en el embudo elegido y este queda cerrado aquí. La línea de tiempo de los dos registra el cambio.",
+  },
+  "Este é o único funil. Crie outro funil para poder levar o negócio até ele.": {
+    es: "Este es el único embudo. Crea otro embudo para poder llevar el negocio hasta él.",
+  },
+  "Escolha o funil de destino": { es: "Elige el embudo de destino" },
+  "Este funil não tem etapa aberta para receber o negócio. Escolha outro funil.": {
+    es: "Este embudo no tiene una etapa abierta para recibir el negocio. Elige otro embudo.",
+  },
+  "Primeira etapa aberta (padrão)": { es: "Primera etapa abierta (predeterminado)" },
+  "Sem escolha, o negócio entra na primeira etapa aberta do funil.": {
+    es: "Sin elegir, el negocio entra en la primera etapa abierta del embudo.",
+  },
   // As duas mensagens de recusa da ROTA de importação. Nasceram no #597, que
   // consertou a validação que este PR tinha acabado de traduzir — a frase velha
   // ("…o funil e a etapa de destino") deixou de ser emitida por qualquer caminho.
