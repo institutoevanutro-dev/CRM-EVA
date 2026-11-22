@@ -910,6 +910,7 @@ export const AUDIT_ACTIONS = [
   // lead, valor e data — nunca a observação, que é texto livre.
   "venda.registrada",
   "venda.apagada",
+  "marketing.resumo_enviado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

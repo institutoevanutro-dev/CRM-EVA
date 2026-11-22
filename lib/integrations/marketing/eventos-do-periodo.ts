@@ -34,7 +34,7 @@ export function emLotes<T>(xs: T[]): T[][] {
 }
 
 /** Dia inteiro em São Paulo (sem horário de verão desde 2019). */
-function janela(de: string, ate: string) {
+export function janela(de: string, ate: string) {
   const fim = new Date(`${ate}T00:00:00-03:00`);
   fim.setUTCDate(fim.getUTCDate() + 1);
   return { inicio: new Date(`${de}T00:00:00-03:00`).toISOString(), fim: fim.toISOString() };
