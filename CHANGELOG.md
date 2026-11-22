@@ -8,6 +8,18 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.35.0] — 2026-11-22
+
+### Adicionado
+
+- **O painel de Marketing pode mandar o resumo semanal em PDF pelo WhatsApp da clínica** Duas rotas novas de integração com o painel de Marketing: os números da
+  semana (contatos novos por origem, atendimento, mensagens, agenda e quem
+  marcou, mais as vendas do Financeiro quando ele está ligado) e o envio do
+  PDF semanal pelo WhatsApp da clínica, uma vez por semana para cada número
+  cadastrado no painel. Quem recebe e ainda não é contato entra com a
+  atendente virtual desligada. Sem o painel de Marketing configurado, nada
+  muda.
+
 ## [5.34.0] — 2026-11-22
 
 ### Alterado
@@ -9963,7 +9975,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.34.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.35.0...HEAD
+[5.35.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.34.0...v5.35.0
 [5.34.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.33.0...v5.34.0
 [5.33.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.32.0...v5.33.0
 [5.32.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.31.1...v5.32.0
