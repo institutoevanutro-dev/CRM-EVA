@@ -99,13 +99,31 @@ import { PAUSA_PADRAO_MIN, carregarPrazoDaPausa } from "./pausa-por-resposta-hum
  */
 export const PRAZO_DO_SILENCIO_MS = PAUSA_PADRAO_MIN * 60 * 1000;
 
-const MOTIVO = "Atendimento manual pelo canal (resposta fora do CRM)";
+/** Motivo gravado quando uma pessoa responde pelo canal, fora do CRM. */
+export const MOTIVO_ATENDIMENTO_MANUAL = "Atendimento manual pelo canal (resposta fora do CRM)";
+
+/**
+ * Motivo gravado quando o operador manda `#off` do celular
+ * (`lib/escalacao/comando-de-canal.ts`). Separado do de cima: a trilha distingue
+ * "alguém respondeu à mão" de "alguém desligou o automático com o comando".
+ */
+export const MOTIVO_COMANDO_OFF = "Comando #off enviado pelo celular";
 
 export interface PausaPorAtendimentoManualInput {
   organizationId: string;
   conversationId: string;
   /** Rótulo da origem do evento, só para log (o adapter que chamou se identifica). */
   canal?: string;
+  /** Texto gravado em `last_handoff_reason`. Default = `MOTIVO_ATENDIMENTO_MANUAL`. */
+  motivo?: string;
+  /**
+   * `true` grava `'infinity'` (só `#on` pelo celular ou "devolver ao automático"
+   * na tela religam) em vez do prazo. Só vale para o agente que ligou "Comandos
+   * pelo celular" (`ai_agents.config.aceita_comandos_celular`): sem o `#on` à
+   * mão, silêncio durável por um "oi" no celular seria a conversa morta descrita
+   * acima.
+   */
+  duravel?: boolean;
   /**
    * O instante da fala humana. INJETADO para o teste não depender do relógio
    * real: o `now()` do banco e o `Date.now()` do processo são dois relógios, e
@@ -125,17 +143,20 @@ export async function pausarIaPorAtendimentoManual(
   input: PausaPorAtendimentoManualInput,
 ): Promise<boolean> {
   const agora = input.agora ?? new Date();
+  const motivo = input.motivo ?? MOTIVO_ATENDIMENTO_MANUAL;
 
   try {
     // As duas leituras em paralelo: o ajuste não acrescenta ida e volta em série
     // ao caminho da ingestão, e a dele nunca falha (cai no padrão).
     const [proposto, { data: atual, error: readErr }] = await Promise.all([
-      carregarPrazoDaPausa(admin, input.organizationId, agora, (detail) =>
-        logger.warn("[atendimento-manual] ajuste da pausa ilegível — usando o padrão", {
-          organization_id: input.organizationId,
-          detail,
-        }),
-      ),
+      input.duravel
+        ? Promise.resolve(null)
+        : carregarPrazoDaPausa(admin, input.organizationId, agora, (detail) =>
+            logger.warn("[atendimento-manual] ajuste da pausa ilegível — usando o padrão", {
+              organization_id: input.organizationId,
+              detail,
+            }),
+          ),
       admin
         .from("conversations")
         .select("bot_silenced_until")
@@ -168,7 +189,10 @@ export async function pausarIaPorAtendimentoManual(
         : silenciadaAte instanceof Date
           ? silenciadaAte.getTime()
           : silenciadaAte;
-    if (atualMs >= proposto.getTime()) return false;
+    // `null` = pausa DURÁVEL: proposta infinita, gravada como `'infinity'`.
+    const propostoMs = proposto === null ? Number.POSITIVE_INFINITY : proposto.getTime();
+    const gravado = proposto === null ? "infinity" : proposto.toISOString();
+    if (atualMs >= propostoMs) return false;
 
     // A LINHA VOLTA (#534 do original). Um UPDATE pode devolver `error: null` sem
     // ter tocado em nada (corrida com um DELETE entre a leitura acima e esta
@@ -179,9 +203,9 @@ export async function pausarIaPorAtendimentoManual(
       admin
         .from("conversations")
         .update({
-          bot_silenced_until: proposto.toISOString(),
+          bot_silenced_until: gravado,
           last_handoff_at: agora.toISOString(),
-          last_handoff_reason: MOTIVO,
+          last_handoff_reason: motivo,
         })
         .eq("organization_id", input.organizationId)
         .eq("id", input.conversationId)
@@ -213,11 +237,10 @@ export async function pausarIaPorAtendimentoManual(
         .eq("id", input.conversationId)
         .maybeSingle();
       if (relErr || relida == null) {
-        const motivo = relErr ? "leitura_falhou" : "conversa_inexistente";
         logger.error("[atendimento-manual] PAUSA NÃO GARANTIDA — IA pode responder por cima do atendente", {
           ...log,
           canal: input.canal ?? "desconhecido",
-          motivo,
+          motivo: relErr ? "leitura_falhou" : "conversa_inexistente",
         });
         return false;
       }
@@ -237,7 +260,8 @@ export async function pausarIaPorAtendimentoManual(
       organization_id: input.organizationId,
       conversation_id: input.conversationId,
       canal: input.canal ?? "desconhecido",
-      silenciada_ate: proposto.toISOString(),
+      silenciada_ate: gravado,
+      motivo,
     });
     return true;
   } catch (err) {
@@ -248,4 +272,15 @@ export async function pausarIaPorAtendimentoManual(
     });
     return false;
   }
+}
+
+/**
+ * Pausa DURÁVEL (`'infinity'`) — o `#off` do celular, e a resposta manual de quem
+ * ligou "Comandos pelo celular". A regra é a mesma de cima; só o prazo muda.
+ */
+export async function pausarIaDuravelmente(
+  admin: SupabaseClient,
+  input: Omit<PausaPorAtendimentoManualInput, "duravel">,
+): Promise<boolean> {
+  return pausarIaPorAtendimentoManual(admin, { ...input, duravel: true });
 }

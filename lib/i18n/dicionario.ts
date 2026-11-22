@@ -879,6 +879,9 @@ export const DICIONARIO: Traducoes = {
   "Revisar modelos do canal": { es: "Revisar plantillas del canal" },
   "Abrir uma conversa afetada": { es: "Abrir una conversación afectada" },
   "Abrir Agenda": { es: "Abrir Agenda" },
+  "Abrir o funil": { es: "Abrir el embudo" },
+  "Este contato tem 1 negócio aberto no funil. Feche ou mova o negócio antes de excluir.": { es: "Este contacto tiene 1 negocio abierto en el embudo. Cierra o mueve el negocio antes de eliminarlo." },
+  "Este contato tem {n} negócios abertos no funil. Feche ou mova os negócios antes de excluir.": { es: "Este contacto tiene {n} negocios abiertos en el embudo. Cierra o mueve los negocios antes de eliminarlo." },
   "Este contato tem 1 compromisso na Agenda ({lista}).": { es: "Este contacto tiene 1 cita en la Agenda ({lista})." },
   "Este contato tem {n} compromissos na Agenda ({lista}).": { es: "Este contacto tiene {n} citas en la Agenda ({lista})." },
   "Compromisso é histórico do contato e impede a exclusão. Se esta ficha é duplicada, abra a ficha e use \"Juntar com outra ficha\": os compromissos passam para a ficha que fica. Se o compromisso foi lançado por engano, exclua-o na Agenda e tente de novo.": { es: "La cita es historial del contacto e impide la eliminación. Si esta ficha está duplicada, abre la ficha y usa \"Juntar con otra ficha\": las citas pasan a la ficha que se queda. Si la cita se registró por error, elimínala en la Agenda e inténtalo de nuevo." },
@@ -12818,6 +12821,20 @@ export const DICIONARIO: Traducoes = {
   "total": { es: "total" },
   "Soma de": { es: "Suma de" },
   "venda(s) registrada(s)": { es: "venta(s) registrada(s)" },
+  // ─── Comandos pelo celular (#on/#off) — porte do DeskcommCRM #1631 ───
+  "Comandos pelo celular": { es: "Comandos desde el celular" },
+  "Aceitar #on/#off enviados pelo celular": { es: "Aceptar #on/#off enviados desde el celular" },
+  "Ligado, QUALQUER mensagem enviada pelo WhatsApp do celular pausa a IA nesta conversa até alguém mandar #on — a pausa não vence sozinha. #off pausa sem precisar responder o cliente. Desligado, #on e #off são texto comum, e responder pelo celular pausa a IA só por um tempo.":
+    {
+      es: "Activado, CUALQUIER mensaje enviado desde el WhatsApp del celular pausa la IA en esta conversación hasta que alguien envíe #on — la pausa no vence sola. #off pausa sin necesidad de responder al cliente. Desactivado, #on y #off son texto normal, y responder desde el celular pausa la IA solo por un tiempo.",
+    },
+  "Atenção: o comando é digitado no chat do cliente e pode aparecer para ele. Vale por conversa, e a pausa só termina com #on ou pelo botão “devolver ao automático”.":
+    {
+      es: "Atención: el comando se escribe en el chat del cliente y puede aparecer para él. Vale por conversación, y la pausa solo termina con #on o con el botón “devolver al automático”.",
+    },
+  "Comandos pelo celular ligados — já valem no próximo atendimento.":
+    { es: "Comandos desde el celular activados — ya valen en la próxima atención." },
+  "Comandos pelo celular desligados.": { es: "Comandos desde el celular desactivados." },
 };
 
 /**

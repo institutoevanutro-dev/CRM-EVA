@@ -99,8 +99,13 @@ describe("fiação — resposta manual pelo WhatsApp silencia o bot temporariame
     const i = FONTE_INGEST.indexOf("async function handleOutboundFromUserPhone(");
     const j = FONTE_INGEST.indexOf("async function handleAck(", i);
     const corpo = FONTE_INGEST.slice(i, j);
-    expect(corpo).toMatch(
-      /if \(!\(await ehEcoDeEnvioNosso\([^)]*\)\)\) \{[\s\S]{0,300}?pausarIaPorAtendimentoManual\(/,
-    );
+    // Desde o porte do #on/#off (DeskcommCRM #1631) a guarda tem três desfechos
+    // (`#off` durável / `#on` devolve / mensagem comum pausa). TODA ação sobre o
+    // automático — e a leitura do interruptor do agente — fica DENTRO dela.
+    const guarda = /if \(!\(await ehEcoDeEnvioNosso\([^)]*\)\)\) \{/;
+    expect(corpo).toMatch(new RegExp(guarda.source + /[\s\S]{0,300}?agenteAceitaComandoDeCelular\(/.source));
+    expect(corpo).toMatch(new RegExp(guarda.source + /[\s\S]{0,700}?pausarIaDuravelmente\(/.source));
+    expect(corpo).toMatch(new RegExp(guarda.source + /[\s\S]{0,1200}?devolverAtendimentoAoAgente\(/.source));
+    expect(corpo).toMatch(new RegExp(guarda.source + /[\s\S]{0,2500}?pausarIaPorAtendimentoManual\(/.source));
   });
 });

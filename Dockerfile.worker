@@ -24,4 +24,9 @@ COPY . .
 # Healthz do worker (bind 0.0.0.0 dentro do container).
 EXPOSE 8787
 
-CMD ["pnpm", "exec", "tsx", "workers/agent-worker/main.ts"]
+# O PID 1 é o NODE, não o pnpm (upstream #2823). `pnpm exec` põe duas camadas
+# de processo entre o supervisor e o worker, e o execa mata o filho à força
+# ~5 s depois do SIGTERM — antes de o envio em voo gravar o recibo.
+# `node --import tsx` registra o loader no próprio processo: o sinal cai no
+# handler do shutdown, que drena os jobs em curso e sai 0.
+CMD ["node", "--import", "tsx", "workers/agent-worker/main.ts"]
