@@ -553,6 +553,21 @@ export const NAV_CATALOG = [
   // lista as cinco (`hubSections`), então as duas continuam a um clique, com a
   // frase que explica para que servem. O ⌘K também as acha por nome.
   {
+    // ── O PAINEL DE VENDAS (porte de melgarafael/DeskcommCRM#5084) ──
+    //
+    // "Quanto vendi" numa tela só: cartões de Vendas, Valor vendido, Ticket
+    // médio e Conversão, o gráfico do período e a lista das vendas por funil e
+    // tag. Fonte: os negócios GANHOS (`lib/relatorios/painel-de-vendas.ts`).
+    // Só no hub de Análise e no ⌘K, como no original: não entra no menu lateral.
+    href: "/app/vendas",
+    label: "Vendas",
+    description: "Quanto você vendeu, o ticket médio e a conversão, com o gráfico do período.",
+    icon: "ChartBar",
+    group: "analise",
+    section: "Os números do período",
+    minRole: "viewer",
+  },
+  {
     href: "/app/metrics",
     label: "Desempenho",
     description: "Funil e performance por atendente nos últimos 30 dias.",
