@@ -86,6 +86,8 @@ import type { ChannelProvider } from '@/lib/channels/capabilities';
 // caminho de envio que não passa pelo gate de elegibilidade.
 import { sqlContatoInterno } from '@/lib/contacts/tags-internas';
 import { avaliarHorarios, type HorariosDaAgenda } from './horario-da-agenda';
+import { detectarAfirmacaoClinica, renderVetoDeAfirmacaoClinica } from './afirmacao-clinica';
+import { concessoesSemLastro, renderVetoDeConcessaoSemLastro, type LastroComercial } from './lastro-comercial';
 
 /** O que os gates enxergam — carregado UMA vez sob o lock, por tentativa de envio. */
 export interface GateContext {
@@ -254,6 +256,14 @@ export interface GateContext {
    */
   internalVocabularyEnforced?: boolean;
   /**
+   * Arma o `clinicalClaimGate` (diagnóstico, prescrição, promessa de resultado,
+   * afirmação de câncer — `./afirmacao-clinica.ts`; porte do #2321/#2323). Ausente =
+   * DESARMADO: no caminho determinístico (follow-up, template, resposta aprovada) o texto
+   * não é do modelo e veto ali é drop silencioso; e a camada é OPCIONAL por organização
+   * (`afirmacao_clinica` em `org_guardrail_layers`, padrão desligado).
+   */
+  clinicalClaimEnforced?: boolean;
+  /**
    * Arma o `spinningGate`. **Ausente = ARMADO** — a direção segura aqui é a
    * oposta do `internalVocabularyEnforced` logo acima, e a assimetria é
    * deliberada: aquele protege o CLIENTE de uma palavra feia, este protege o
@@ -314,6 +324,14 @@ export interface GateContext {
    * direção segura do `agenda`. Ver `horario-da-agenda.ts`.
    */
   horariosDaAgenda?: HorariosDaAgenda;
+  /**
+   * Arma o `concessaoSemLastroGate` (porte do #3965/#3995): quais valores e termos de
+   * concessão a EMPRESA escreveu e quais só o CLIENTE trouxe (`./lastro-comercial.ts`).
+   * Ausente = DESARMADO. Só o `send_message` do `inbound_turn` arma (e a prévia): é o
+   * corpo do modelo com a correção do turno mudo atrás. Follow-up, resposta de caso,
+   * template e resposta aprovada ficam desarmados.
+   */
+  lastroComercial?: LastroComercial;
   /**
    * Retorno marcado pelo próprio assistente, para o `casePromiseGate`. Ausente = nenhum
    * alívio: o gate exige caso como sempre, e o veto não cita follow-up.
@@ -475,6 +493,28 @@ export const promiseGate: Gate = {
 };
 
 /**
+ * Gate 5.5 — condição comercial sem lastro (porte do #3965/#3995): valor ou termo de
+ * concessão afirmado como condição que só aparece do lado do cliente. Antes do semântico,
+ * para que o primeiro erro de ensino seja este.
+ */
+export const concessaoSemLastroGate: Gate = {
+  name: 'concessao_sem_lastro',
+  evaluate: (ctx) => {
+    if (ctx.lastroComercial === undefined) return { pass: true };
+    const achados = concessoesSemLastro(ctx.body, ctx.lastroComercial);
+    return achados.length === 0
+      ? { pass: true }
+      : {
+          pass: false,
+          code: 'concessao_sem_lastro',
+          reason: renderVetoDeConcessaoSemLastro(achados),
+          // Só os átomos (tipo, moeda, número), nunca o corpo — sem PII.
+          detail: { sem_lastro: achados.join(',') },
+        };
+  },
+};
+
+/**
  * Gate semântico de promessa (F4-02) — lê o veredito do classificador binário barato
  * (rodado async na carga do ctx, DEPOIS da camada determinística `promiseGate`) e veta
  * promessa em texto livre que a regex não pega ("faço de graça", "garanto entrega amanhã").
@@ -624,6 +664,29 @@ export const internalVocabularyGate: Gate = {
       // nunca os termos — termo casado é trecho da candidata, e um snake_case pode ter
       // vindo de um dado do lead. A medição que a doutrina pede cabe nestes dois campos.
       detail: { leaked_count: achado.termos.length, leaked_kinds: achado.categorias.join(',') },
+    };
+  },
+};
+
+/**
+ * Gate de AFIRMAÇÃO CLÍNICA (porte do #2321/#2323) — barra a mensagem em que o assistente
+ * diz o que a pessoa tem, indica remédio ou dose, garante resultado ou afirma que uma
+ * lesão é câncer. Só arma quando a organização ligou a camada `afirmacao_clinica` e o
+ * corpo é do modelo (ver `GateContext.clinicalClaimEnforced`). Posição 6.8: depois do
+ * `internal_vocabulary`, antes do `agenda_stall` e do `disclosure`.
+ */
+export const clinicalClaimGate: Gate = {
+  name: 'clinical_claim',
+  evaluate: (ctx) => {
+    if (ctx.clinicalClaimEnforced !== true) return { pass: true };
+    const achado = detectarAfirmacaoClinica(ctx.body);
+    if (!achado.achou) return { pass: true };
+    return {
+      pass: false,
+      code: 'clinical_claim',
+      reason: renderVetoDeAfirmacaoClinica(achado.categorias),
+      // detail é persistido: só as CATEGORIAS, nunca o trecho (pode ter dado de saúde).
+      detail: { clinical_kinds: achado.categorias.join(',') },
     };
   },
 };
@@ -1018,8 +1081,14 @@ const spinningGate: Gate = {
  * `GateContext.horariosDaAgenda`): só o agente com ferramenta de agenda e a prévia o armam,
  * e só com HORARIO_DA_AGENDA_MODO=barrar; no padrão (observar) ele só registra no trace o
  * que barraria.
+ * v10 (porte do #2321/#2323) = insere `clinicalClaimGate` entre `internal_vocabulary` e
+ * `agenda_stall`. Nasce DESARMADO: só arma no turno do agente (e na prévia) de uma
+ * organização que ligou a camada `afirmacao_clinica`.
+ * v11 (porte do #3965/#3995) = insere `concessaoSemLastroGate` entre `promise` e
+ * `semantic_promise`: valor ou termo de concessão afirmado como condição da empresa que só
+ * aparece do lado do cliente. Desarmado por padrão; o `send_message` do `inbound_turn` arma.
  */
-export const BEFORE_SEND_CHAIN_VERSION = 9;
+export const BEFORE_SEND_CHAIN_VERSION = 11;
 
 /**
  * Ordem FINAL da cadeia (F4-08/F4-09; edge-contract §before_send / blueprint órgão 5) — DADO
@@ -1030,11 +1099,14 @@ export const BEFORE_SEND_CHAIN_VERSION = 9;
  *   (3) pacing — janela/throttle/warm-up/caps anti-ban (F2-11);
  *   (4) spinning — template idêntico em massa (F2-12);
  *   (5) promise — validação determinística de preço/desconto/parcelamento (F4-01);
+ *   (5.5) concessao_sem_lastro — valor/termo afirmado como condição que só o cliente trouxe;
  *   (6) semantic_promise — promessa em texto livre que a regex não pega (F4-02);
  *   (6.5) case_promise — anti-alucinação de casos humanos (spec 15 §10.2, Wave 4);
  *   (6.6) unscheduled_followup — promessa de nova tentativa sem execução programada;
  *   (6.7) internal_vocabulary — vazamento de vocabulário interno ao cliente (doutrina
  *         `separacao-fala-e-operacao.md`); antes do disclosure porque ele pode emendar o corpo;
+ *   (6.8) clinical_claim — diagnóstico, prescrição, promessa de resultado ou afirmação de
+ *         câncer escritos pelo modelo; só arma com a camada `afirmacao_clinica` ligada;
  *   (6.9) agenda_stall — "vou verificar/confirmar horário" sem ter chamado a ferramenta de
  *         agenda neste turno; antes do disclosure pelo mesmo motivo do internal_vocabulary;
  *   (6.93) horario_da_agenda — dia+horário citado que a agenda não devolveu neste turno, ou
@@ -1050,10 +1122,12 @@ export const BEFORE_SEND_GATES: readonly Gate[] = [
   messagingWindowGate,
   spinningGate,
   promiseGate,
+  concessaoSemLastroGate,
   semanticPromiseGate,
   casePromiseGate,
   unscheduledFollowUpGate,
   internalVocabularyGate,
+  clinicalClaimGate,
   agendaStallGate,
   horarioDaAgendaGate,
   disclosureGate,
@@ -1180,6 +1254,8 @@ export interface RunBeforeSendArgs {
    * depois de N vetos no mesmo turno o envio sai, com registro.
    */
   enforceInternalVocabulary?: boolean;
+  /** Arma o `clinicalClaimGate` — ver `GateContext.clinicalClaimEnforced`. Ausente = no-op. */
+  enforceClinicalClaim?: boolean;
   /**
    * Desarma o `spinningGate` para ESTA tentativa. Ausente = armado (ver
    * `GateContext.spinningEnforced` para a razão da assimetria e para a conta que
@@ -1197,6 +1273,8 @@ export interface RunBeforeSendArgs {
   agenda?: GateContext['agenda'];
   /** Ver `GateContext.horariosDaAgenda`. Ausente = gate no-op. */
   horariosDaAgenda?: GateContext['horariosDaAgenda'];
+  /** Ver `GateContext.lastroComercial`. Ausente = gate no-op. */
+  lastroComercial?: GateContext['lastroComercial'];
   /** Ver `GateContext.followup`. Ausente = o `casePromiseGate` não alivia nada. */
   followup?: GateContext['followup'];
   /**
@@ -1449,8 +1527,10 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
         : {}),
       unscheduledFollowUpEnforced: args.enforceUnscheduledFollowUp ?? false,
       internalVocabularyEnforced: args.enforceInternalVocabulary ?? false,
+      clinicalClaimEnforced: args.enforceClinicalClaim ?? false,
       ...(args.agenda !== undefined ? { agenda: args.agenda } : {}),
       ...(args.horariosDaAgenda !== undefined ? { horariosDaAgenda: args.horariosDaAgenda } : {}),
+      ...(args.lastroComercial !== undefined ? { lastroComercial: args.lastroComercial } : {}),
       ...(args.followup !== undefined ? { followup: args.followup } : {}),
     };
 

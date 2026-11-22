@@ -36,7 +36,9 @@ import type pg from 'pg';
  * quebraria o `update.sh` dele se houvesse constraint. Em troca, o emissor usa
  * esta constante e nunca string literal.
  */
-export const CAMADAS_SEMANTICAS = ['promessa_semantica', 'jailbreak'] as const;
+// `afirmacao_clinica` (porte do #2321) não custa nada: é escolha porque só serve a negócio
+// de saúde. Nasce desligada e não tem variável de ambiente (`./afirmacao-clinica.ts`).
+export const CAMADAS_SEMANTICAS = ['promessa_semantica', 'jailbreak', 'afirmacao_clinica'] as const;
 
 export type CamadaSemantica = (typeof CAMADAS_SEMANTICAS)[number];
 
@@ -44,7 +46,11 @@ export type CamadaSemantica = (typeof CAMADAS_SEMANTICAS)[number];
 export type EscolhaDeCamadas = Record<CamadaSemantica, boolean | null>;
 
 /** Nenhuma escolha — o estado de toda organização antes de alguém clicar. */
-export const SEM_ESCOLHA: EscolhaDeCamadas = { promessa_semantica: null, jailbreak: null };
+export const SEM_ESCOLHA: EscolhaDeCamadas = {
+  promessa_semantica: null,
+  jailbreak: null,
+  afirmacao_clinica: null,
+};
 
 /**
  * A precedência, isolada em função pura para ser testável sem banco.
