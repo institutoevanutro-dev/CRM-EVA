@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { GOV_ADMIN, GOV_ORG, seedGov, sql, writeErrorAs } from "./gov-helpers";
+import { GOV_ADMIN, GOV_ORG, lastLine, seedGov, sql, writeErrorAs } from "./gov-helpers";
 
 /**
  * Resumo semanal do Marketing (migration 0431): o registro de envio é deny-all para
@@ -50,4 +50,20 @@ describe("resumo semanal (0431)", () => {
     expect(Object.keys(j).sort()).toEqual(["agenda", "mensagens", "quem_marcou", "recebidas"]);
     expect(Object.keys(j.agenda).sort()).toEqual(["cancelados", "criados", "faltas", "realizados"]);
   });
+
+  it("agendamento importado ou remarcado não conta como agendamento novo (mesma régua do funil)", () => {
+    const j = JSON.parse(lastLine(
+      sql(`delete from calendar_appointments where organization_id='${GOV_ORG}' and title like 'resumo-%';
+           insert into calendar_appointments(id,organization_id,title,starts_at,ends_at,status,source)
+             values ('cccccccc-9999-4000-8000-000000000001','${GOV_ORG}','resumo-normal',now(),now()+interval '30 min','completed','ui');
+           insert into calendar_appointments(id,organization_id,title,starts_at,ends_at,status,source,history_import_key)
+             values ('cccccccc-9999-4000-8000-000000000002','${GOV_ORG}','resumo-importado',now()-interval '2 hours',now()-interval '90 min','completed','historical_import',repeat('a',64));
+           insert into calendar_appointments(organization_id,title,starts_at,ends_at,status,source,rescheduled_from_id)
+             values ('${GOV_ORG}','resumo-remarcado',now()+interval '1 day',now()+interval '1 day 30 min','confirmed','ui','cccccccc-9999-4000-8000-000000000001');
+           select public.fn_marketing_semana('${GOV_ORG}', now() - interval '3 hours', now() + interval '2 days');`),
+    ));
+    expect(j.agenda.criados).toBe(1);
+    expect(j.agenda.realizados).toBe(1);
+  });
 });
+

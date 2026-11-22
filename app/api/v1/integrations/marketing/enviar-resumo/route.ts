@@ -2,7 +2,8 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { type NextRequest } from "next/server";
 import { z } from "zod";
 import { fail, ok } from "@/lib/api/wrappers";
-import { EntradaDoResumo, enviarResumo } from "@/lib/integrations/marketing/enviar-resumo";
+import { EntradaDoResumo, enviarResumo, semanaPermitida } from "@/lib/integrations/marketing/enviar-resumo";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // O Marketing pede o envio do PDF semanal. Credencial e organização das outras rotas do Marketing;
@@ -27,11 +28,13 @@ export async function POST(req: NextRequest): Promise<Response> {
     return fail("validation_failed", "Arquivo grande demais.", 413, { requestId });
   const entrada = EntradaDoResumo.safeParse(await req.json().catch(() => null));
   if (!entrada.success) return fail("validation_failed", "Pedido inválido.", 422, { requestId });
+  if (!semanaPermitida(entrada.data.semana)) return fail("validation_failed", "Semana fora do envio desta segunda.", 422, { requestId });
   try {
     const response = ok(await enviarResumo(createAdminClient(), org.data, entrada.data, requestId), { requestId });
     response.headers.set("Cache-Control", "no-store");
     return response;
-  } catch {
+  } catch (err) {
+    logger.error("[marketing.resumo] rota falhou", { requestId, error: err instanceof Error ? err.message : String(err) });
     return fail("unavailable", "Não consegui enviar agora.", 503, { requestId });
   }
 }

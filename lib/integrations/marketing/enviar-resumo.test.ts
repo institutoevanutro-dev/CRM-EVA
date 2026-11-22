@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { EntradaDoResumo, enviarResumo, telefoneDoDestinatario, type Dependencias } from "./enviar-resumo";
+import { EntradaDoResumo, enviarResumo, podeRetomar, semanaPermitida, telefoneDoDestinatario, type Dependencias } from "./enviar-resumo";
 
 const PDF = Buffer.from("%PDF-1.4\n%fim\n").toString("base64");
 const base = { semana: "2026-W47", legenda: "Resumo da semana", nome_arquivo: "resumo-17-a-23-11.pdf", pdf_base64: PDF,
@@ -24,6 +24,8 @@ function deps(over: Partial<Dependencias> = {}): Dependencias {
     espacar: vi.fn(async () => {}),
     enviar: vi.fn(async () => ({ id: "m1", status: "sent" })),
     auditar: vi.fn(async () => {}),
+    descartarFila: vi.fn(async () => {}),
+    silenciarBot: vi.fn(async () => {}),
     ...over,
   };
 }
@@ -82,5 +84,55 @@ describe("enviarResumo", () => {
     const e = EntradaDoResumo.parse({ ...base, destinatarios: [{ nome: "A", telefone: "27999990000" }, { nome: "B", telefone: "27988887777" }] });
     const r = await enviarResumo({} as never, "org", e, "r1", d);
     expect(r).toEqual({ enviados: 1, ja_enviados: 0, falhas: [{ final: "0000", codigo: "erro_no_envio" }] });
+  });
+});
+
+describe("revisão final", () => {
+  const SEG = new Date("2026-11-23T11:00:00Z"); // segunda 23/11, 8h em SP
+  it("só aceita a semana que acabou de terminar e o teste de hoje (relógio do servidor)", () => {
+    expect(semanaPermitida("2026-W47", SEG)).toBe(true);
+    expect(semanaPermitida("2026-W48", SEG)).toBe(false);
+    expect(semanaPermitida("2031-W03", SEG)).toBe(false);
+    expect(semanaPermitida("teste-2026-11-23", SEG)).toBe(true);
+    expect(semanaPermitida("teste-2099-01-01", SEG)).toBe(false);
+    // domingo 22/11 23h em SP: a semana completa anterior ainda é a W46
+    expect(semanaPermitida("2026-W46", new Date("2026-11-23T02:00:00Z"))).toBe(true);
+  });
+  it("telefone fora de 10 a 13 dígitos é recusado na entrada", () => {
+    expect(EntradaDoResumo.safeParse({ ...base, destinatarios: [{ nome: "X", telefone: "99999-0000" }] }).success).toBe(false);
+    expect(EntradaDoResumo.safeParse({ ...base, destinatarios: [{ nome: "X", telefone: "+55 27 99999-0000 123" }] }).success).toBe(false);
+  });
+  it("linha travada em 'enviando' há mais de 10 min pode ser retomada; recente não", () => {
+    const agora = Date.parse("2026-11-23T11:30:00Z");
+    expect(podeRetomar({ status: "falhou", updated_at: "2026-11-23T11:29:00Z" }, agora)).toBe(true);
+    expect(podeRetomar({ status: "enviando", updated_at: "2026-11-23T11:15:00Z" }, agora)).toBe(true);
+    expect(podeRetomar({ status: "enviando", updated_at: "2026-11-23T11:25:00Z" }, agora)).toBe(false);
+    expect(podeRetomar({ status: "enviado", updated_at: "2026-11-23T10:00:00Z" }, agora)).toBe(false);
+  });
+  it("mensagem 'queued' é descartada da fila (não sai depois só a legenda)", async () => {
+    const d = deps({ enviar: vi.fn(async () => ({ id: "m9", status: "queued" })) });
+    const r = await enviarResumo({} as never, "org", EntradaDoResumo.parse(base), "r1", d);
+    expect(r.falhas[0]?.codigo).toBe("nao_enviado");
+    expect(d.descartarFila).toHaveBeenCalledWith("m9");
+  });
+  it("depois de enviar, a atendente virtual fica calada na conversa; falha não silencia", async () => {
+    const d = deps();
+    await enviarResumo({} as never, "org", EntradaDoResumo.parse(base), "r1", d);
+    expect(d.silenciarBot).toHaveBeenCalledWith("v1");
+    const f = deps({ enviar: vi.fn(async () => ({ id: "m1", status: "failed" })) });
+    await enviarResumo({} as never, "org", EntradaDoResumo.parse(base), "r1", f);
+    expect(f.silenciarBot).not.toHaveBeenCalled();
+  });
+  it("erro do banco na reserva vira falha daquele número e não para os outros", async () => {
+    const d = deps();
+    (d.reservar as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("db fora"));
+    const e = EntradaDoResumo.parse({ ...base, destinatarios: [{ nome: "A", telefone: "27999990000" }, { nome: "B", telefone: "27988887777" }] });
+    const r = await enviarResumo({} as never, "org", e, "r1", d);
+    expect(r).toEqual({ enviados: 1, ja_enviados: 0, falhas: [{ final: "0000", codigo: "erro_no_envio" }] });
+  });
+  it("concluir que falha depois do envio não vira falha (a mensagem saiu)", async () => {
+    const d = deps({ concluir: vi.fn(async () => { throw new Error("db"); }) });
+    const r = await enviarResumo({} as never, "org", EntradaDoResumo.parse(base), "r1", d);
+    expect(r.enviados).toBe(1);
   });
 });

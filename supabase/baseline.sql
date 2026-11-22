@@ -39643,14 +39643,17 @@ as $$
                    where m.organization_id = p_org and m.direction = 'inbound' and not cv.is_group
                      and m.created_at >= p_inicio and m.created_at < p_fim),
     'agenda', jsonb_build_object(
+      -- Mesma régua do funil (eventos-do-periodo.ts): importação de histórico não é agendamento da
+      -- semana, e a remarcação cria linha nova que não é agendamento novo.
       'criados', (select count(*)::int from public.calendar_appointments a where a.organization_id = p_org and a.excluded_at is null
+                    and a.source <> 'historical_import' and a.rescheduled_from_id is null
                     and a.created_at >= p_inicio and a.created_at < p_fim),
       'realizados', (select count(*)::int from public.calendar_appointments a where a.organization_id = p_org and a.excluded_at is null
-                    and a.status = 'completed' and a.starts_at >= p_inicio and a.starts_at < p_fim),
+                    and a.source <> 'historical_import' and a.status = 'completed' and a.starts_at >= p_inicio and a.starts_at < p_fim),
       'faltas', (select count(*)::int from public.calendar_appointments a where a.organization_id = p_org and a.excluded_at is null
-                    and a.status = 'no_show' and a.starts_at >= p_inicio and a.starts_at < p_fim),
+                    and a.source <> 'historical_import' and a.status = 'no_show' and a.starts_at >= p_inicio and a.starts_at < p_fim),
       'cancelados', (select count(*)::int from public.calendar_appointments a where a.organization_id = p_org and a.excluded_at is null
-                    and a.status = 'cancelled' and a.starts_at >= p_inicio and a.starts_at < p_fim)
+                    and a.source <> 'historical_import' and a.status = 'cancelled' and a.starts_at >= p_inicio and a.starts_at < p_fim)
     ),
     'quem_marcou', coalesce((
       select jsonb_agg(jsonb_build_object('nome', nome, 'total', n) order by n desc)
@@ -39659,6 +39662,7 @@ as $$
                      count(*)::int as n
                 from public.calendar_appointments a left join auth.users u on u.id = a.created_by_user_id
                where a.organization_id = p_org and a.excluded_at is null and a.created_by_kind in ('user', 'ai')
+                 and a.source <> 'historical_import' and a.rescheduled_from_id is null
                  and a.created_at >= p_inicio and a.created_at < p_fim
                group by 1 order by 2 desc limit 8) x), '[]'::jsonb)
   );

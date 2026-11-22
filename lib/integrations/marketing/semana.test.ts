@@ -21,6 +21,7 @@ describe("consultaSemana", () => {
     expect(s.atendimento.mediana_primeira_resposta_s).toBe(24.5);
     expect(s.agenda.criados).toBe(5);
     expect(s.financeiro).toBeNull();
+    expect(s.financeiro_indisponivel).toBe(false);
     const chamada = (admin as unknown as { rpc: ReturnType<typeof vi.fn> }).rpc.mock.calls.find((c) => c[0] === "fn_marketing_semana")!;
     expect(chamada[1]).toMatchObject({ p_inicio: "2026-11-17T03:00:00.000Z", p_fim: "2026-11-24T03:00:00.000Z" });
   });
@@ -29,6 +30,8 @@ describe("consultaSemana", () => {
     const fin = vi.fn(async () => { throw new Error("fora"); });
     const s = await consultaSemana(admin, ORG, "2026-11-17", "2026-11-23", fin);
     expect(s.financeiro).toBeNull();
+    // ligado mas fora do ar: o Marketing precisa saber, para não mandar o PDF sem vendas como se não houvesse Financeiro
+    expect(s.financeiro_indisponivel).toBe(true);
   });
   it("erro do banco lança (o endpoint responde 503, nunca zeros)", async () => {
     const admin = { rpc: vi.fn(async () => ({ data: null, error: { message: "x" } })) } as never;
