@@ -10230,6 +10230,32 @@ export const DICIONARIO: Traducoes = {
     es: "Un archivo CSV con una línea por lead. Los leads entran en la primera etapa abierta del embudo elegido.",
   },
   "Funil de destino": { es: "Embudo de destino" },
+  // Motivos de perda com categoria e o relatório "Perdas" (porte de DeskcommCRM #1717).
+  "Categoria de cada motivo, para o relatório de perdas:": {
+    es: "Categoría de cada motivo, para el informe de pérdidas:",
+  },
+  "Categoria do motivo": { es: "Categoría del motivo" },
+  "Sem categoria": { es: "Sin categoría" },
+  Concorrência: { es: "Competencia" },
+  Mérito: { es: "Mérito" },
+  Nós: { es: "Nosotros" },
+  Ausência: { es: "Ausencia" },
+  "Nenhuma perda na janela.": { es: "Ninguna pérdida en el período." },
+  "Erro ao carregar o relatório de perdas.": { es: "Error al cargar el informe de pérdidas." },
+  Perdas: { es: "Pérdidas" },
+  "Por motivo, categoria e etapa de saída — quantidade e valor por moeda.": {
+    es: "Por motivo, categoría y etapa de salida — cantidad y valor por moneda.",
+  },
+  "Cortado no limite de leitura.": { es: "Cortado en el límite de lectura." },
+  "Por motivo": { es: "Por motivo" },
+  "Por categoria": { es: "Por categoría" },
+  "Por etapa de saída": { es: "Por etapa de salida" },
+  "Valor por moeda": { es: "Valor por moneda" },
+  "Moedas nunca são somadas entre si: cada balde é o total da própria moeda.": {
+    es: "Las monedas nunca se suman entre sí: cada grupo es el total de su propia moneda.",
+  },
+  "Sem motivo registrado": { es: "Sin motivo registrado" },
+  "Etapa desconhecida": { es: "Etapa desconocida" },
   // "Levar para outro funil" no card (porte de DeskcommCRM #1585/#3655).
   "Levar para outro funil": { es: "Llevar a otro embudo" },
   "O negócio é recriado no funil escolhido e este fica encerrado aqui. A linha do tempo dos dois registra a troca.": {

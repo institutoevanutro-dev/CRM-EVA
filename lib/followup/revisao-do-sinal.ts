@@ -88,7 +88,7 @@ export async function listarReservasVencidas(
 export async function etapaJaTrataOSinal(admin: SupabaseClient, organizationId: string, contactId: string): Promise<boolean> {
   const { data, error } = await admin
     .from('crm_leads')
-    .select('crm_stages!inner(blocks_followups)')
+    .select('crm_stages!crm_leads_stage_id_fkey!inner(blocks_followups)')
     .eq('organization_id', organizationId)
     .eq('contact_id', contactId)
     .eq('status', 'open');

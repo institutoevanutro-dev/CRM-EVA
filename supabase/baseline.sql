@@ -235,6 +235,17 @@ end $$;
 ALTER FUNCTION "public"."fn_audit_log_row"() OWNER TO "postgres";
 
 
+-- A coluna que o corpo abaixo escreve (migration 0430) chega ANTES dele em
+-- quem ATUALIZA: sem isto, entre esta linha e o apêndice, mover um card para
+-- perda falharia com "record new has no field lost_from_stage_id". Na
+-- instalação nova a tabela ainda não existe aqui e o apêndice cria a coluna.
+do $$
+begin
+  if to_regclass('public.crm_leads') is not null then
+    alter table public.crm_leads add column if not exists lost_from_stage_id uuid;
+  end if;
+end $$;
+
 CREATE OR REPLACE FUNCTION "public"."fn_crm_lead_close_on_stage"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     SET "search_path" TO 'public', 'pg_temp'
@@ -258,10 +269,17 @@ begin
   elsif v_is_lost then
     new.status := 'lost';
     new.closed_at := coalesce(new.closed_at, now());
+    -- A etapa ABERTA que o negócio deixou (0430). Só na transição: o card já
+    -- perdido movido entre etapas de perda mantém a origem verdadeira.
+    if tg_op = 'UPDATE' and old.status is distinct from 'lost' then
+      new.lost_from_stage_id := coalesce(new.lost_from_stage_id, old.stage_id);
+    end if;
   else
     if tg_op = 'UPDATE' and old.status in ('won','lost') then
       new.status := 'open';
       new.closed_at := null;
+      -- Reabriu: a origem da perda passada não vale para o negócio aberto.
+      new.lost_from_stage_id := null;
     end if;
   end if;
   return new;
@@ -1259,8 +1277,15 @@ begin
       raise exception 'lost_reason_required' using errcode = '22023';
     end if;
 
+    -- `lost_reasons` aceita texto puro E `{ label, categoria }` (0430): o que
+    -- se compara é o RÓTULO nos dois formatos.
     select coalesce(
-      array(select jsonb_array_elements_text(settings->'lost_reasons')), '{}'::text[]
+      array(
+        select case when jsonb_typeof(e) = 'object'
+                    then nullif(e ->> 'label', '')
+                    else nullif(e #>> '{}', '') end
+          from jsonb_array_elements(settings->'lost_reasons') as t(e)
+      ), '{}'::text[]
     ) into v_pipeline_extra
     from public.crm_pipelines where id = new.pipeline_id;
 
@@ -29078,8 +29103,9 @@ notify pgrst, 'reload schema';
 -- ---- motivo de perda de quem respondeu PARAR (migration 0310) ----
 -- Portado do DeskcommCRM PR 2049. `opted_out_of_messages` entra no array
 -- canônico de `fn_validate_lost_reason_required`: a ingestão fecha como perdido
--- todo negócio aberto de quem pediu para não receber mensagens. Corpo IDÊNTICO
--- ao da migration 0310; `create or replace`, re-aplicável, sem dado a curar.
+-- todo negócio aberto de quem pediu para não receber mensagens. O corpo é o
+-- FINAL (o da 0430, que lê o rótulo de `{ label, categoria }`): uma definição
+-- do meio com corpo antigo abriria janela ao reaplicar o baseline.
 create or replace function public.fn_validate_lost_reason_required() returns trigger
     language plpgsql
     set search_path to 'public', 'pg_temp'
@@ -29095,8 +29121,15 @@ begin
       raise exception 'lost_reason_required' using errcode = '22023';
     end if;
 
+    -- `lost_reasons` aceita texto puro E `{ label, categoria }` (0430): o que
+    -- se compara é o RÓTULO nos dois formatos.
     select coalesce(
-      array(select jsonb_array_elements_text(settings->'lost_reasons')), '{}'::text[]
+      array(
+        select case when jsonb_typeof(e) = 'object'
+                    then nullif(e ->> 'label', '')
+                    else nullif(e #>> '{}', '') end
+          from jsonb_array_elements(settings->'lost_reasons') as t(e)
+      ), '{}'::text[]
     ) into v_pipeline_extra
     from public.crm_pipelines where id = new.pipeline_id;
 
@@ -39608,6 +39641,109 @@ update public.crm_leads l
 
 notify pgrst, 'reload schema';
 -- ---- fim: valor do negócio pelas vendas (migration 0424) ----
+
+-- ---- motivo de perda com categoria (migration 0430) ----
+-- Derivado de supabase/migrations/20261122170000_0430_motivo_de_perda_com_categoria.sql
+-- (porte de DeskcommCRM #1717; o porquê está no cabeçalho de lá). Coluna, FK e
+-- os dois gatilhos com o corpo final, igual ao das primeiras definições acima.
+alter table public.crm_leads
+  add column if not exists lost_from_stage_id uuid;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'fk_crm_leads_lost_from_stage'
+       and conrelid = 'public.crm_leads'::regclass
+  ) then
+    alter table public.crm_leads
+      add constraint fk_crm_leads_lost_from_stage
+      foreign key (lost_from_stage_id)
+      references public.crm_stages(id)
+      on delete set null;
+  end if;
+end $$;
+
+comment on column public.crm_leads.lost_from_stage_id is
+  'Etapa aberta de onde o negócio saiu quando foi perdido (gravada por fn_crm_lead_close_on_stage). Migration 0430.';
+
+create or replace function public.fn_crm_lead_close_on_stage() returns trigger
+    language plpgsql
+    set search_path to 'public', 'pg_temp'
+    as $$
+declare
+  v_is_won  boolean;
+  v_is_lost boolean;
+begin
+  if tg_op = 'UPDATE'
+     and new.stage_id is not distinct from old.stage_id
+     and new.status   is not distinct from old.status then
+    return new;
+  end if;
+
+  select is_won, is_lost into v_is_won, v_is_lost
+    from public.crm_stages where id = new.stage_id;
+
+  if v_is_won then
+    new.status := 'won';
+    new.closed_at := coalesce(new.closed_at, now());
+  elsif v_is_lost then
+    new.status := 'lost';
+    new.closed_at := coalesce(new.closed_at, now());
+    -- A etapa ABERTA que o negócio deixou (0430). Só na transição: o card já
+    -- perdido movido entre etapas de perda mantém a origem verdadeira.
+    if tg_op = 'UPDATE' and old.status is distinct from 'lost' then
+      new.lost_from_stage_id := coalesce(new.lost_from_stage_id, old.stage_id);
+    end if;
+  else
+    if tg_op = 'UPDATE' and old.status in ('won','lost') then
+      new.status := 'open';
+      new.closed_at := null;
+      -- Reabriu: a origem da perda passada não vale para o negócio aberto.
+      new.lost_from_stage_id := null;
+    end if;
+  end if;
+  return new;
+end$$;
+
+create or replace function public.fn_validate_lost_reason_required() returns trigger
+    language plpgsql
+    set search_path to 'public', 'pg_temp'
+    as $$
+declare
+  v_canonical text[] := array['requested_by_customer','price','no_response','product_unavailable',
+                              'cancelled_by_store','cancelled_by_customer','payment_failed','other',
+                              'opted_out_of_messages'];
+  v_pipeline_extra text[];
+begin
+  if new.status = 'lost' then
+    if new.lost_reason is null or length(new.lost_reason) = 0 then
+      raise exception 'lost_reason_required' using errcode = '22023';
+    end if;
+
+    -- `lost_reasons` aceita texto puro E `{ label, categoria }` (0430): o que
+    -- se compara é o RÓTULO nos dois formatos.
+    select coalesce(
+      array(
+        select case when jsonb_typeof(e) = 'object'
+                    then nullif(e ->> 'label', '')
+                    else nullif(e #>> '{}', '') end
+          from jsonb_array_elements(settings->'lost_reasons') as t(e)
+      ), '{}'::text[]
+    ) into v_pipeline_extra
+    from public.crm_pipelines where id = new.pipeline_id;
+
+    if not (new.lost_reason = any (v_canonical) or new.lost_reason = any (v_pipeline_extra)) then
+      raise exception 'lost_reason_invalid: %', new.lost_reason using errcode = '22023';
+    end if;
+  end if;
+  return new;
+end$$;
+
+-- Funções de gatilho: o EXECUTE não é conferido no disparo; só fecha a RPC.
+revoke execute on function public.fn_validate_lost_reason_required() from public, anon;
+grant execute on function public.fn_validate_lost_reason_required() to authenticated, service_role;
+-- ---- fim: motivo de perda com categoria (migration 0430) ----
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
