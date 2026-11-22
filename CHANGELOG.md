@@ -8,6 +8,32 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.31.0] — 2026-11-22
+
+### Adicionado
+
+- **Mude o tempo de um compromisso puxando a borda do card na agenda** Na visão de dia e de semana, com mouse, trackpad ou caneta, puxe a borda de
+  baixo de um compromisso para mudar quanto tempo ele dura. O fim anda de 15 em
+  15 minutos e o fim original continua disponível para voltar atrás. Antes de
+  gravar, a agenda pergunta e mostra o novo intervalo; o início não muda e não há
+  aviso de remarcação. Pelo teclado, `Alt+Shift+↑/↓` faz o mesmo, e `Esc` desfaz
+  o ajuste (também no meio do gesto com o mouse). Compromissos já realizados, com
+  falta, do Google, bloqueios e fins que já passaram não mudam pela borda. No
+  toque, o dedo continua arrastando o card inteiro.
+
+  Porte de melgarafael/DeskcommCRM#5082 e #5110.
+
+### Corrigido
+
+- **O visto azul chega ao cliente nas conexões por QR Code** Depois da resposta do agente ou do atendente, o cliente ficava nos dois tiques
+  cinza nas conexões por QR Code (WAHA NOWEB). O pedido de "li a conversa" saía
+  sem dizer quais mensagens, e o WAHA sem histórico guardado recusava o pedido.
+  Agora a resposta diz ao canal quais mensagens do cliente ela está lendo (as que
+  chegaram depois do último envio que saiu, sem reações, até 30) e só do número
+  que está sendo respondido. Grupos continuam sem visto.
+
+  Porte de melgarafael/DeskcommCRM#5047.
+
 ## [5.30.0] — 2026-11-21
 
 ### Alterado
@@ -9744,7 +9770,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.30.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.31.0...HEAD
+[5.31.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.30.0...v5.31.0
 [5.30.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.29.0...v5.30.0
 [5.29.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.3...v5.29.0
 [5.28.3]: https://github.com/melgarafael/DeskcommCRM/compare/v5.28.2...v5.28.3
