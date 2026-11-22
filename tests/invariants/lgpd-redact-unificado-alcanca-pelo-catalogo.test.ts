@@ -180,6 +180,14 @@ const DECISOES: Record<string, Decisao> = {
     razao: "Passo 7f (0317): o assunto e o próximo passo, texto livre sobre o que a pessoa pediu; estado, dono, prazo e desfecho ficam.",
   },
   // ── redigir pela virada de is_anonymized (gatilho) ────────────────────────
+  vendas_registradas: {
+    decidida: "redigir",
+    caminho: "gatilho",
+    razao:
+      "0423 (porte do original #5087): `observacao` é texto livre sobre o cliente e as tags podem nomeá-lo — " +
+      "`trg_vendas_do_contato_anonimizado`, em `contacts` AFTER UPDATE OF is_anonymized, zera as duas. " +
+      "Valor, moeda e dia FICAM: são o registro do dinheiro, e o painel de vendas continua somando.",
+  },
   mensagens_agendadas: {
     decidida: "redigir",
     caminho: "gatilho",

@@ -901,6 +901,11 @@ export const AUDIT_ACTIONS = [
   // lista montada foi DESCARTADA (metadata: quantos). Só vale antes de qualquer
   // envio — mas tira gente de uma lista conferida, e isso pede rastro.
   "campaign.reverted_to_draft",
+  // Venda registrada à mão num negócio (Vendas registradas, migration 0423):
+  // conta no painel de vendas pela DATA dela, em qualquer etapa. Metadata com
+  // lead, valor e data — nunca a observação, que é texto livre.
+  "venda.registrada",
+  "venda.apagada",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

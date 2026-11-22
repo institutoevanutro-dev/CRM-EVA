@@ -26,8 +26,9 @@ export const MENU: ReadonlyArray<{ id: string; label: string; hrefs: readonly st
     id: "vendas",
     label: "Vendas",
     // Bônus: o catálogo o põe em Análise, mas aqui ele é trabalho do dia (a fila de leads
-    // antigos e de ligações), e Análise já está nas 9 telas.
-    hrefs: ["/app/kanban", "/app/contacts", "/app/tasks", "/app/campaigns", "/app/analise/bonus"],
+    // antigos e de ligações), e Análise já está nas 9 telas. O painel de vendas (porte do
+    // original #5084) também está em Análise no catálogo e vem para cá pelo mesmo motivo.
+    hrefs: ["/app/kanban", "/app/vendas", "/app/contacts", "/app/tasks", "/app/campaigns", "/app/analise/bonus"],
   },
   {
     id: "assistente",

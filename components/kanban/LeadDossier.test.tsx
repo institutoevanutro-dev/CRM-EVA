@@ -47,6 +47,7 @@ vi.mock("./TarefasDoNegocio", () => ({ TarefasDoNegocio: () => <div data-peca="t
 vi.mock("./ConversaNoDossie", () => ({ ConversaNoDossie: () => null }));
 vi.mock("./ScoreSlot", () => ({ ScoreSlot: () => null }));
 vi.mock("./OwnerBadge", () => ({ OwnerBadge: () => null }));
+vi.mock("@/components/vendas/VendasDoNegocio", () => ({ VendasDoNegocio: () => <div data-peca="vendas" /> }));
 vi.mock("./LeadTimeline", () => ({
   LeadTimeline: ({ itens }: { itens: Array<{ id: string; type: string }> }) => (
     <ul data-peca="linha-do-tempo">
@@ -123,16 +124,16 @@ beforeEach(() => {
 });
 
 describe("a ordem das seções do dossiê (#3181)", () => {
-  it("⭐ a ordem padrão é Dados do negócio, Tarefas, Linha do tempo", () => {
+  it("⭐ a ordem padrão é Dados do negócio, Vendas, Tarefas, Linha do tempo", () => {
     montarDossie();
 
-    expect(ordemDasSecoes()).toEqual(["dados-do-negocio", "linha-do-tempo"]);
+    expect(ordemDasSecoes()).toEqual(["dados-do-negocio", "vendas", "linha-do-tempo"]);
 
     // A mesma ordem pelo TEXTO que o atendente lê: o id poderia estar certo com
     // o título trocado de lugar. O primeiro `<span>` do cabeçalho é o título; o
     // segundo é o sinal `+`/`−`.
     const titulos = ordemDasSecoes().map((id) => secao(id).querySelector("h3 button span")?.textContent);
-    expect(titulos).toEqual(["Dados do negócio", "Linha do tempo"]);
+    expect(titulos).toEqual(["Dados do negócio", "Vendas", "Linha do tempo"]);
 
     // Os campos vêm ANTES de a linha do tempo começar (era o que a ordem antiga
     // não entregava), e as tarefas seguem entre os dois.
@@ -143,7 +144,7 @@ describe("a ordem das seções do dossiê (#3181)", () => {
   it("as seções nascem ABERTAS: sem preferência salva, ninguém esconde conteúdo", () => {
     montarDossie();
 
-    for (const id of ["dados-do-negocio", "linha-do-tempo"]) {
+    for (const id of ["dados-do-negocio", "vendas", "linha-do-tempo"]) {
       expect(secao(id).getAttribute("data-recolhida")).toBe("nao");
       const cabecalho = within(secao(id)).getByRole("button");
       expect(cabecalho, `a seção ${id} não se anuncia aberta`).toHaveAttribute("aria-expanded", "true");

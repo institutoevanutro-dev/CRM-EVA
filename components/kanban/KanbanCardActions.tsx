@@ -33,6 +33,8 @@ import { midpoint } from "@/lib/kanban/fractional-indexing";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAssignableAgents } from "@/hooks/kanban/useAssignableAgents";
 import { usePermission } from "@/hooks/auth/AuthProvider";
+import { BotaoRegistrarVenda } from "@/components/vendas/BotaoRegistrarVenda";
+import { MOEDA_PADRAO } from "@/lib/money";
 import { LoseLeadDialog } from "./LoseLeadDialog";
 import { EditLeadDialog } from "./EditLeadDialog";
 import type { Lead } from "@/lib/types/leads";
@@ -61,6 +63,9 @@ export function KanbanCardActions({ lead, pipelineId, stages }: KanbanCardAction
   const { data: members } = useAssignableMembers(canAssign);
   // A rota já devolve só agente ativo e não arquivado — é o picker.
   const { data: agents } = useAssignableAgents(canAssign);
+  // Registrar venda: o piso do `POST /api/v1/vendas` (`requireRole("agent")`).
+  // Abaixo dele o "+" levava a um diálogo que só terminava em 403.
+  const podeRegistrarVenda = usePermission("vendas.registrar");
   // "Mover para" é a alternativa ao arraste (WCAG 2.5.7): a MESMA mutação, com o
   // card indo para o fim da etapa. O fim é contado na etapa INTEIRA (o cache do
   // quadro sem filtro), como no arraste, para não empatar com card escondido.
@@ -118,6 +123,13 @@ export function KanbanCardActions({ lead, pipelineId, stages }: KanbanCardAction
       positivo de que clicar no CARD continua abrindo o dossiê.
     */
     <span className="contents" onClick={(e) => e.stopPropagation()}>
+      {podeRegistrarVenda && (
+        <BotaoRegistrarVenda
+          leadId={lead.id}
+          titulo={lead.title}
+          moeda={(lead.currency ?? MOEDA_PADRAO).toUpperCase()}
+        />
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button

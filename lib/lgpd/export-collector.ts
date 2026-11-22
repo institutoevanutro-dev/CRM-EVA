@@ -223,6 +223,22 @@ export interface ScheduledMessageRow {
  * saber não só que a empresa escreveu algo sobre ele, mas quando ela combinou
  * agir — que é a informação que dá sentido ao texto.
  */
+/**
+ * Venda registrada no negócio do titular (migration 0423). A anonimização limpa
+ * `observacao` e `tags`; valor, moeda e dia ficam (registro do dinheiro). O
+ * pedido de acesso entrega a linha inteira.
+ */
+export interface VendaRegistradaRow {
+  id: string;
+  lead_id: string | null;
+  valor_cents: number;
+  currency: string;
+  data: string;
+  tags: string[];
+  observacao: string | null;
+  created_at: string;
+}
+
 export interface TaskRow {
   id: string;
   title: string;
@@ -480,6 +496,8 @@ export interface ExportPayload {
    * data.json de quem não tem agendamento fica byte a byte o de antes.
    */
   scheduled_messages?: ScheduledMessageRow[];
+  /** Presente só quando há linha, como `scheduled_messages`. */
+  vendas_registradas?: VendaRegistradaRow[];
   /** Opcional: o JSON leva; o PDF não o lê. */
   bonus_calls?: BonusCallRow[];
   webhook_captures: CaptureRow[];
@@ -1200,6 +1218,28 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // Vendas registradas — contact_id direto em vendas_registradas (migration
+  // 0423). A venda de negócio herda o contato do negócio ao nascer
+  // (POST /api/v1/vendas), e é por esse contact_id que a anonimização a limpa.
+  let vendas_registradas: VendaRegistradaRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("vendas_registradas")
+      .select("id, lead_id, valor_cents, currency, data, tags, observacao, created_at")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("data", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] vendas registradas load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      vendas_registradas = data;
+    }
+  }
+
   // Chamadas de voz — `contact_id` direto em `voice_calls` (migration 0232).
   //
   // O que existe aqui é o REGISTRO da ligação, nunca o áudio: gravação está
@@ -1693,6 +1733,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     appointments,
     tasks,
     ...(scheduled_messages.length > 0 ? { scheduled_messages } : {}),
+    ...(vendas_registradas.length > 0 ? { vendas_registradas } : {}),
     bonus_calls,
     exames_enviados_ao_prontuario,
     webhook_captures,
