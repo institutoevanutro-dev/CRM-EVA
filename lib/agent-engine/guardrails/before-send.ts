@@ -87,6 +87,7 @@ import type { ChannelProvider } from '@/lib/channels/capabilities';
 import { sqlContatoInterno } from '@/lib/contacts/tags-internas';
 import { avaliarHorarios, type HorariosDaAgenda } from './horario-da-agenda';
 import { detectarAfirmacaoClinica, renderVetoDeAfirmacaoClinica } from './afirmacao-clinica';
+import { concessoesSemLastro, renderVetoDeConcessaoSemLastro, type LastroComercial } from './lastro-comercial';
 
 /** O que os gates enxergam — carregado UMA vez sob o lock, por tentativa de envio. */
 export interface GateContext {
@@ -324,6 +325,14 @@ export interface GateContext {
    */
   horariosDaAgenda?: HorariosDaAgenda;
   /**
+   * Arma o `concessaoSemLastroGate` (porte do #3965/#3995): quais valores e termos de
+   * concessão a EMPRESA escreveu e quais só o CLIENTE trouxe (`./lastro-comercial.ts`).
+   * Ausente = DESARMADO. Só o `send_message` do `inbound_turn` arma (e a prévia): é o
+   * corpo do modelo com a correção do turno mudo atrás. Follow-up, resposta de caso,
+   * template e resposta aprovada ficam desarmados.
+   */
+  lastroComercial?: LastroComercial;
+  /**
    * Retorno marcado pelo próprio assistente, para o `casePromiseGate`. Ausente = nenhum
    * alívio: o gate exige caso como sempre, e o veto não cita follow-up.
    *
@@ -479,6 +488,28 @@ export const promiseGate: Gate = {
           code: decision.code ?? 'promise_out_of_table',
           reason: decision.reason ?? '',
           ...(decision.detail !== undefined ? { detail: decision.detail } : {}),
+        };
+  },
+};
+
+/**
+ * Gate 5.5 — condição comercial sem lastro (porte do #3965/#3995): valor ou termo de
+ * concessão afirmado como condição que só aparece do lado do cliente. Antes do semântico,
+ * para que o primeiro erro de ensino seja este.
+ */
+export const concessaoSemLastroGate: Gate = {
+  name: 'concessao_sem_lastro',
+  evaluate: (ctx) => {
+    if (ctx.lastroComercial === undefined) return { pass: true };
+    const achados = concessoesSemLastro(ctx.body, ctx.lastroComercial);
+    return achados.length === 0
+      ? { pass: true }
+      : {
+          pass: false,
+          code: 'concessao_sem_lastro',
+          reason: renderVetoDeConcessaoSemLastro(achados),
+          // Só os átomos (tipo, moeda, número), nunca o corpo — sem PII.
+          detail: { sem_lastro: achados.join(',') },
         };
   },
 };
@@ -1053,8 +1084,11 @@ const spinningGate: Gate = {
  * v10 (porte do #2321/#2323) = insere `clinicalClaimGate` entre `internal_vocabulary` e
  * `agenda_stall`. Nasce DESARMADO: só arma no turno do agente (e na prévia) de uma
  * organização que ligou a camada `afirmacao_clinica`.
+ * v11 (porte do #3965/#3995) = insere `concessaoSemLastroGate` entre `promise` e
+ * `semantic_promise`: valor ou termo de concessão afirmado como condição da empresa que só
+ * aparece do lado do cliente. Desarmado por padrão; o `send_message` do `inbound_turn` arma.
  */
-export const BEFORE_SEND_CHAIN_VERSION = 10;
+export const BEFORE_SEND_CHAIN_VERSION = 11;
 
 /**
  * Ordem FINAL da cadeia (F4-08/F4-09; edge-contract §before_send / blueprint órgão 5) — DADO
@@ -1065,6 +1099,7 @@ export const BEFORE_SEND_CHAIN_VERSION = 10;
  *   (3) pacing — janela/throttle/warm-up/caps anti-ban (F2-11);
  *   (4) spinning — template idêntico em massa (F2-12);
  *   (5) promise — validação determinística de preço/desconto/parcelamento (F4-01);
+ *   (5.5) concessao_sem_lastro — valor/termo afirmado como condição que só o cliente trouxe;
  *   (6) semantic_promise — promessa em texto livre que a regex não pega (F4-02);
  *   (6.5) case_promise — anti-alucinação de casos humanos (spec 15 §10.2, Wave 4);
  *   (6.6) unscheduled_followup — promessa de nova tentativa sem execução programada;
@@ -1087,6 +1122,7 @@ export const BEFORE_SEND_GATES: readonly Gate[] = [
   messagingWindowGate,
   spinningGate,
   promiseGate,
+  concessaoSemLastroGate,
   semanticPromiseGate,
   casePromiseGate,
   unscheduledFollowUpGate,
@@ -1237,6 +1273,8 @@ export interface RunBeforeSendArgs {
   agenda?: GateContext['agenda'];
   /** Ver `GateContext.horariosDaAgenda`. Ausente = gate no-op. */
   horariosDaAgenda?: GateContext['horariosDaAgenda'];
+  /** Ver `GateContext.lastroComercial`. Ausente = gate no-op. */
+  lastroComercial?: GateContext['lastroComercial'];
   /** Ver `GateContext.followup`. Ausente = o `casePromiseGate` não alivia nada. */
   followup?: GateContext['followup'];
   /**
@@ -1492,6 +1530,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       clinicalClaimEnforced: args.enforceClinicalClaim ?? false,
       ...(args.agenda !== undefined ? { agenda: args.agenda } : {}),
       ...(args.horariosDaAgenda !== undefined ? { horariosDaAgenda: args.horariosDaAgenda } : {}),
+      ...(args.lastroComercial !== undefined ? { lastroComercial: args.lastroComercial } : {}),
       ...(args.followup !== undefined ? { followup: args.followup } : {}),
     };
 
