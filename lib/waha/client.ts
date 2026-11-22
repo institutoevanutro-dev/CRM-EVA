@@ -616,16 +616,6 @@ export class WahaClient {
     if (!res.ok) throw new Error(`waha_${res.status}`);
   }
 
-  /** Sem `forMe`: para mensagem enviada, o WAHA revoga para todos. */
-  async deleteMessage(session: string, chatId: string, messageId: string): Promise<void> {
-    const path = `/api/${encodeURIComponent(session)}/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}`;
-    const res = await this.fetchComTeto(`${this.baseUrl}${path}`, {
-      method: "DELETE",
-      headers: { "X-Api-Key": this.apiKey },
-    });
-    if (!res.ok) throw new Error(`waha_${res.status}`);
-  }
-
   async setPresence(
     session: string,
     chatId: string,
