@@ -57,6 +57,19 @@ function idCompletoDaMensagem(externalId: string, chatId: string): string {
 }
 
 /**
+ * O endereço de uma mensagem que já existe, para editar ou apagar: o chat que o
+ * id serializado carrega vence o endereço resolvido a partir do contato.
+ * (Porte de melgarafael/DeskcommCRM#1626.)
+ */
+function enderecoDaMensagem(input: { recipient: string | null; externalId: string }) {
+  const client = getWahaClient();
+  if (!client) throw new Error("waha_not_configured");
+  const chatId = chatIdFromWaMessageId(input.externalId) ?? input.recipient;
+  if (!chatId) throw new Error("recipient_unavailable");
+  return { client, chatId, messageId: idCompletoDaMensagem(input.externalId, chatId) };
+}
+
+/**
  * Recorta os ids lidos ao chat DESTA resposta (porte de melgarafael/DeskcommCRM#5047).
  *
  * O id serializado carrega o próprio chat (`false_<chat>_<id>`), e o WAHA lê
@@ -320,5 +333,15 @@ export const wahaAdapter: ChannelAdapter = {
     });
 
     return { externalId: parseWahaMessageId(res) };
+  },
+
+  async editMessage(input: { sessionRef: string; recipient: string | null; externalId: string; text: string }): Promise<void> {
+    const { client, chatId, messageId } = enderecoDaMensagem(input);
+    await client.editMessage(input.sessionRef, chatId, messageId, input.text);
+  },
+
+  async revokeMessage(input: { sessionRef: string; recipient: string | null; externalId: string }): Promise<void> {
+    const { client, chatId, messageId } = enderecoDaMensagem(input);
+    await client.deleteMessage(input.sessionRef, chatId, messageId);
   },
 };

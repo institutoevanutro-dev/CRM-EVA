@@ -1117,6 +1117,7 @@ export function InboxLayout({
                 onResponder={setRespondendo}
                 onEncaminhar={podeEncaminhar ? setEncaminhando : undefined}
                 podeEnviarAoProntuario={podeEnviarAoProntuario}
+                podeAlterarEnviada={podeEncaminhar && caps?.alteraMensagemEnviada === true}
                 searchTerm={buscaAberta && busca ? busca.termo : ""}
                 aparencia={aparencia}
               />

@@ -9,9 +9,9 @@ import { ApiError } from "@/lib/api/types";
 import { motivoDaFalhaDaMensagem } from "@/lib/inbox/motivo-da-falha";
 
 /**
- * O que a bolha muda numa mensagem que já existe. No fork, por enquanto, só o
- * reenvio da que falhou (portado do DeskcommCRM, PR #3192); o nome é o do
- * original, onde editar e apagar moram no mesmo hook.
+ * O que a bolha muda numa mensagem que já existe: o reenvio da que falhou
+ * (portado do DeskcommCRM, PR #3192) e editar/apagar para todos a que o
+ * atendente enviou (DeskcommCRM #1626).
  */
 export function useAlterarMensagem(conversationId: string | null) {
   const qc = useQueryClient();
@@ -58,5 +58,24 @@ export function useAlterarMensagem(conversationId: string | null) {
       showApiError(err);
     },
   });
-  return { reenviar };
+  // Editar e apagar: a bolha muda pela recarga, e o erro sobe para a bolha
+  // manter o editor (ou a confirmação) aberto para nova tentativa.
+  const recarregar = () => {
+    qc.invalidateQueries({ queryKey: ["messages", conversationId] });
+    qc.invalidateQueries({ queryKey: ["conversations"] });
+  };
+  const editar = useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) =>
+      apiClient.patch(`/api/v1/messages/${id}`, { text }),
+    onSuccess: () => toast.success(t("Mensagem editada")),
+    onSettled: recarregar,
+    onError: showApiError,
+  });
+  const apagar = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/api/v1/messages/${id}`),
+    onSuccess: () => toast.success(t("Mensagem apagada para todos")),
+    onSettled: recarregar,
+    onError: showApiError,
+  });
+  return { reenviar, editar, apagar };
 }

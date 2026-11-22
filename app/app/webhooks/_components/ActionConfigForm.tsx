@@ -38,7 +38,7 @@ export type ActionItem =
     }
   | { type: "add_tag"; config: { tags: string[]; destino?: "card" | "contato"; google_ads_fields?: CampoDeEtiquetaGoogleAds[] } }
   | { type: "assign_owner"; config: { user_id: string } }
-  | { type: "call_webhook"; config: { url: string; secret?: string; secret_enc?: string } }
+  | { type: "call_webhook"; config: { url: string; secret?: string; secret_enc?: string; include_owner?: boolean } }
   | { type: "start_message_flow"; config: { flow_pointer_id: string; bind_appointment?: boolean } };
 
 export function defaultActionConfig(type: ActionItem["type"]): ActionItem {
@@ -563,7 +563,7 @@ function AssignOwnerForm({ config, onChange }: FormProps<{ user_id: string }>) {
 function CallWebhookForm({
   config,
   onChange,
-}: FormProps<{ url: string; secret?: string; secret_enc?: string }>) {
+}: FormProps<{ url: string; secret?: string; secret_enc?: string; include_owner?: boolean }>) {
   const t = useT();
   // O segredo é write-only: o servidor guarda cifrado (secret_enc) e nunca
   // devolve o valor. Digitar aqui envia `secret` novo; deixar em branco
@@ -598,6 +598,20 @@ function CallWebhookForm({
             ? t("Já existe um segredo guardado com segurança. Digitar aqui substitui; limpar remove.")
             : t("Se preencher, enviaremos uma assinatura para o outro sistema conferir que fomos nós.")}
         </p>
+      </div>
+      {/* Opt-in do responsável (DeskcommCRM #1709): desligado é o padrão. */}
+      <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+        <div className="space-y-0.5">
+          <Label>{t("Incluir o responsável no corpo")}</Label>
+          <p className="text-xs text-muted-foreground">
+            {t("Padrão: o aviso não diz quem atende. Ligue só se o outro sistema precisar do nome da equipe.")}
+          </p>
+        </div>
+        <Switch
+          checked={config.include_owner === true}
+          onCheckedChange={(v) => onChange({ ...config, include_owner: v ? true : undefined })}
+          aria-label={t("Incluir o responsável no corpo")}
+        />
       </div>
     </div>
   );

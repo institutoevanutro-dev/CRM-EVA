@@ -24,6 +24,11 @@ import type { Json } from "@/lib/database.types";
  * A recusa sai como `ApiError`: a rota a traduz em `fail()`, a tool a traduz
  * para o modelo, e nenhum dos dois reimplementa a decisão.
  */
+import {
+  payloadDoAviso,
+  type RecorteDoCompromisso,
+  type TipoDoAtendimento,
+} from "@/lib/agenda/aviso-do-compromisso";
 import { coletaOQueOcupa, horariosLivresDaOrg, resolverDuracaoDoTipo } from "@/lib/agenda/consulta";
 import {
   DURACAO_MAXIMA_MIN,
@@ -1276,19 +1281,35 @@ async function fecharOLaco(
   // organização (`fn_role_at_least`, que também cobre a sessão de suporte).
   // Serve igual aos dois chamadores — o mesmo `registraFalhaDeAtividade` logo
   // abaixo já emite assim. A organização vem do contexto autenticado.
+  // O negócio do contato, lido ANTES do emit: é o mesmo que a timeline ancora
+  // logo abaixo, e `lead_ids` no corpo do aviso quer exatamente ele.
+  const leadId = args.contactId ? await leadAtivoDoContato(supabase, ctx, args.contactId) : null;
+
   if (args.gatilho) {
+    // O corpo do aviso carrega horário, situação, tipo e negócios (porte de
+    // DeskcommCRM #1709): a linha é LIDA aqui, depois de gravada — o banco é a
+    // fonte, não o recorte que cada chamador devolve.
+    const compromisso = await compromissoParaOAviso(supabase, ctx, args.appointmentId);
+    const tipo = compromisso?.event_type_id
+      ? await tipoDoCompromisso(supabase, ctx, compromisso.event_type_id)
+      : null;
+    const leadIds = await leadIdsDoCompromisso(supabase, ctx, args.appointmentId, leadId);
+
     const { error } = await supabase.rpc("emit_event", {
       p_organization_id: ctx.organization_id,
       p_event_type: args.gatilho,
       p_entity_kind: ENTIDADE_DO_AGENDAMENTO,
       p_entity_id: args.appointmentId,
-      p_payload: {
-        appointment_id: args.appointmentId,
-        contact_id: args.contactId,
-        event_type_name: args.nomeDoTipo,
-        time_zone: args.fusoDoCompromisso,
+      p_payload: payloadDoAviso({
+        appointmentId: args.appointmentId,
+        contactId: args.contactId,
         transicao: args.transicao,
-      },
+        fuso: args.fusoDoCompromisso,
+        nomeDoTipo: args.nomeDoTipo,
+        compromisso,
+        tipo,
+        leadIds,
+      }) as Json,
       // `request_id` sem o prefixo `rule:` de propósito: ele correlaciona com o
       // audit log e NÃO aciona o anti-loop do motor, que só barra o que uma
       // regra causou.
@@ -1303,8 +1324,6 @@ async function fecharOLaco(
       });
     }
   }
-
-  const leadId = args.contactId ? await leadAtivoDoContato(supabase, ctx, args.contactId) : null;
 
   // ⚠️ ANTES do early-return de `!args.atividade`. Confirmar um agendamento
   // pendente é `atividade: null` (nada novo pra timeline — `atividadeDaTransicao`
@@ -1375,6 +1394,64 @@ async function fecharOLaco(
  * NÃO são erro: o agendamento existe e a atividade não nasce, porque não há
  * negócio a que ancorar.
  */
+/**
+ * O recorte da linha que o corpo do aviso carrega — lido DEPOIS da gravação.
+ * Falha não é erro: os campos novos saem `null` e o evento sai mesmo assim.
+ */
+async function compromissoParaOAviso(
+  supabase: SB,
+  ctx: HandlerCtx,
+  appointmentId: string,
+): Promise<RecorteDoCompromisso | null> {
+  const { data } = await supabase
+    .from("calendar_appointments")
+    .select("starts_at, ends_at, status, location_kind, event_type_id")
+    .eq("organization_id", ctx.organization_id)
+    .eq("id", appointmentId)
+    .maybeSingle();
+  return (data as RecorteDoCompromisso | null) ?? null;
+}
+
+/** O tipo de atendimento — `slug` (estável) e `name` de `calendar_event_types`. */
+async function tipoDoCompromisso(
+  supabase: SB,
+  ctx: HandlerCtx,
+  eventTypeId: unknown,
+): Promise<TipoDoAtendimento | null> {
+  if (typeof eventTypeId !== "string" || !eventTypeId) return null;
+  const { data } = await supabase
+    .from("calendar_event_types")
+    .select("slug, name")
+    .eq("organization_id", ctx.organization_id)
+    .eq("id", eventTypeId)
+    .maybeSingle();
+  return (data as TipoDoAtendimento | null) ?? null;
+}
+
+/**
+ * Os negócios do compromisso: os vínculos já gravados e o negócio ativo do
+ * contato (no nascer do compromisso o vínculo ainda não existe — é escrito
+ * depois do emit). Sem duplicata.
+ */
+async function leadIdsDoCompromisso(
+  supabase: SB,
+  ctx: HandlerCtx,
+  appointmentId: string,
+  leadAtivo: string | null,
+): Promise<string[]> {
+  const { data } = await supabase
+    .from("crm_lead_links")
+    .select("lead_id")
+    .eq("organization_id", ctx.organization_id)
+    .eq("target_kind", ALVO_DE_VINCULO_DO_AGENDAMENTO)
+    .eq("target_id", appointmentId);
+  const vinculados = (Array.isArray(data) ? data : [])
+    .map((linha) => (linha as { lead_id?: unknown }).lead_id)
+    .filter((id): id is string => typeof id === "string" && !!id);
+  const todos = leadAtivo ? [...vinculados, leadAtivo] : vinculados;
+  return todos.filter((id, i) => todos.indexOf(id) === i);
+}
+
 async function leadAtivoDoContato(
   supabase: SB,
   ctx: HandlerCtx,

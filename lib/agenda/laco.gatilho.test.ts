@@ -33,10 +33,10 @@ describe("gatilhoDaTransicao", () => {
     expect(gatilhoDaTransicao("pending", "cancelled")).toBe("appointment.cancelled");
   });
 
-  it("compareceu e faltou NÃO emitem: já têm appointment.outcome_confirmed", () => {
-    // Dois eventos para o mesmo fato fariam a regra rodar duas vezes.
-    expect(gatilhoDaTransicao("confirmed", "completed")).toBeNull();
-    expect(gatilhoDaTransicao("confirmed", "no_show")).toBeNull();
+  it("compareceu e faltou emitem os SEUS (DeskcommCRM #1709)", () => {
+    expect(gatilhoDaTransicao("confirmed", "completed")).toBe("appointment.completed");
+    expect(gatilhoDaTransicao("confirmed", "no_show")).toBe("appointment.no_show");
+    expect(gatilhoDaTransicao("pending", "completed")).toBe("appointment.completed");
   });
 
   it("nascer já cancelado ou concluído não é gatilho de nada", () => {

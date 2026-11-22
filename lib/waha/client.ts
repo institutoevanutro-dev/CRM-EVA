@@ -540,6 +540,31 @@ export class WahaClient {
   }
 
   /**
+   * Edita o texto de uma mensagem enviada. O `messageId` é o COMPLETO
+   * (`true_<chat>_<id>`); quem completa o bare é o adapter. (Porte de
+   * melgarafael/DeskcommCRM#1626.)
+   */
+  async editMessage(session: string, chatId: string, messageId: string, text: string): Promise<void> {
+    const path = `/api/${encodeURIComponent(session)}/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}`;
+    const res = await this.fetchComTeto(`${this.baseUrl}${path}`, {
+      method: "PUT",
+      headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) throw new Error(`waha_${res.status}`);
+  }
+
+  /** Sem `forMe`: para mensagem enviada, o WAHA apaga para todos. */
+  async deleteMessage(session: string, chatId: string, messageId: string): Promise<void> {
+    const path = `/api/${encodeURIComponent(session)}/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}`;
+    const res = await this.fetchComTeto(`${this.baseUrl}${path}`, {
+      method: "DELETE",
+      headers: { "X-Api-Key": this.apiKey },
+    });
+    if (!res.ok) throw new Error(`waha_${res.status}`);
+  }
+
+  /**
    * O "digitando…" (e o "gravando…") no aparelho do cliente.
    *
    * ─── O contrato, e por que ele é diferente do resto deste arquivo ─────────

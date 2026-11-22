@@ -59,6 +59,46 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * O local e o link da reunião saem da linha ATUAL do compromisso
+ * (`context.appointment`), nunca do evento: o `event_log` não é alcançado pela
+ * anonimização, e a linha já vem redigida (ou com o Meet cancelado) quando for
+ * o caso. O link só sai com a reunião pronta. (Porte de DeskcommCRM #1709.)
+ */
+function localDoCompromisso(appointment: unknown): Record<string, unknown> | undefined {
+  if (!appointment || typeof appointment !== "object") return undefined;
+  const linha = appointment as Record<string, unknown>;
+  const texto = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v : null);
+  const meetingUrl = linha.meeting_state === "ready" ? texto(linha.meeting_url) : null;
+  return {
+    local: { tipo: texto(linha.location_kind), descricao: texto(linha.location_details) },
+    ...(meetingUrl ? { meeting_url: meetingUrl } : {}),
+  };
+}
+
+/**
+ * O responsável do compromisso, só com `include_owner: true` na ação. Sem dono,
+ * a chave não nasce. O nome vem do perfil do usuário; sem nome, só o id.
+ */
+async function responsavelPublico(
+  ctx: ActionCtx,
+  config: Record<string, unknown>,
+): Promise<Record<string, unknown> | undefined> {
+  if (config.include_owner !== true) return undefined;
+  const compromisso = ctx.context.appointment as Record<string, unknown> | undefined;
+  const ownerId = compromisso && typeof compromisso.owner_user_id === "string" ? compromisso.owner_user_id : null;
+  if (!ownerId) return undefined;
+  let nome: string | null = null;
+  try {
+    const { data } = await ctx.admin.auth.admin.getUserById(ownerId);
+    const metadata = data?.user?.user_metadata as { full_name?: unknown } | undefined;
+    nome = typeof metadata?.full_name === "string" && metadata.full_name ? metadata.full_name : null;
+  } catch {
+    nome = null;
+  }
+  return nome ? { id: ownerId, name: nome } : { id: ownerId };
+}
+
 export async function executeCallWebhook(
   ctx: ActionCtx,
   config: Record<string, unknown>,
@@ -80,6 +120,8 @@ export async function executeCallWebhook(
 
   const leadPublic = projectPublicFields(ctx.context.lead, LEAD_PUBLIC_FIELDS);
   const contactPublic = projectPublicFields(ctx.context.contact, CONTACT_PUBLIC_FIELDS);
+  const ownerPublic = await responsavelPublico(ctx, config);
+  const compromissoPublic = localDoCompromisso(ctx.context.appointment);
   const body = JSON.stringify({
     event: ctx.event.event_type,
     occurred_at: new Date().toISOString(),
@@ -87,6 +129,8 @@ export async function executeCallWebhook(
       ...ctx.event.payload,
       ...(leadPublic ? { lead: leadPublic } : {}),
       ...(contactPublic ? { contact: contactPublic } : {}),
+      ...(compromissoPublic ?? {}),
+      ...(ownerPublic ? { owner: ownerPublic } : {}),
     },
   });
   const headers: Record<string, string> = {

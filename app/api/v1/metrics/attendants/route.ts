@@ -2,7 +2,7 @@
  * GET /api/v1/metrics/attendants — métricas por responsável (spec 13 §6).
  *
  * Escopo = a PRÓPRIA RLS: a agregação (`fn_attendant_metrics`, SECURITY INVOKER)
- * roda com o client user-scoped (cookie session), então crm_leads (0036) e
+ * roda com o client user-scoped (cookie session), então crm_leads — RLS da 0036 — e
  * conversations (0035) já filtram por atendente. agent ⇒ vê só as próprias
  * (own-scope G1-06a; a lista "por atendente" colapsa a 1 linha, a dele);
  * manager+ ⇒ org-wide + filtro opcional `owner_user_id`. Piso de rota = agent.

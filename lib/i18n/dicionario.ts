@@ -4282,6 +4282,12 @@ export const DICIONARIO: Traducoes = {
   "Se preencher, enviaremos uma assinatura para o outro sistema conferir que fomos nós.": {
     es: "Si lo completas, enviaremos una firma para que el otro sistema confirme que fuimos nosotros.",
   },
+  "Incluir o responsável no corpo": { es: "Incluir al responsable en el cuerpo" },
+  "Padrão: o aviso não diz quem atende. Ligue só se o outro sistema precisar do nome da equipe.": {
+    es: "Por defecto, el aviso no dice quién atiende. Actívalo solo si el otro sistema necesita el nombre del equipo.",
+  },
+  "Quando alguém comparecer ao compromisso": { es: "Cuando alguien asista a la cita" },
+  "Quando alguém faltar ao compromisso": { es: "Cuando alguien falte a la cita" },
   Sucesso: { es: "Éxito" },
   "Aguardando envio": { es: "Esperando envío" },
   "Essa ação não funcionou.": { es: "Esta acción no funcionó." },
@@ -10235,6 +10241,48 @@ export const DICIONARIO: Traducoes = {
     es: "Un archivo CSV con una línea por lead. Los leads entran en la primera etapa abierta del embudo elegido.",
   },
   "Funil de destino": { es: "Embudo de destino" },
+  // Motivos de perda com categoria e o relatório "Perdas" (porte de DeskcommCRM #1717).
+  "Categoria de cada motivo, para o relatório de perdas:": {
+    es: "Categoría de cada motivo, para el informe de pérdidas:",
+  },
+  "Categoria do motivo": { es: "Categoría del motivo" },
+  "Sem categoria": { es: "Sin categoría" },
+  Concorrência: { es: "Competencia" },
+  Mérito: { es: "Mérito" },
+  Nós: { es: "Nosotros" },
+  Ausência: { es: "Ausencia" },
+  "Nenhuma perda na janela.": { es: "Ninguna pérdida en el período." },
+  "Erro ao carregar o relatório de perdas.": { es: "Error al cargar el informe de pérdidas." },
+  Perdas: { es: "Pérdidas" },
+  "Por motivo, categoria e etapa de saída — quantidade e valor por moeda.": {
+    es: "Por motivo, categoría y etapa de salida — cantidad y valor por moneda.",
+  },
+  "Cortado no limite de leitura.": { es: "Cortado en el límite de lectura." },
+  "Por motivo": { es: "Por motivo" },
+  "Por categoria": { es: "Por categoría" },
+  "Por etapa de saída": { es: "Por etapa de salida" },
+  "Valor por moeda": { es: "Valor por moneda" },
+  "Moedas nunca são somadas entre si: cada balde é o total da própria moeda.": {
+    es: "Las monedas nunca se suman entre sí: cada grupo es el total de su propia moneda.",
+  },
+  "Sem motivo registrado": { es: "Sin motivo registrado" },
+  "Etapa desconhecida": { es: "Etapa desconocida" },
+  // "Levar para outro funil" no card (porte de DeskcommCRM #1585/#3655).
+  "Levar para outro funil": { es: "Llevar a otro embudo" },
+  "O negócio é recriado no funil escolhido e este fica encerrado aqui. A linha do tempo dos dois registra a troca.": {
+    es: "El negocio se crea de nuevo en el embudo elegido y este queda cerrado aquí. La línea de tiempo de los dos registra el cambio.",
+  },
+  "Este é o único funil. Crie outro funil para poder levar o negócio até ele.": {
+    es: "Este es el único embudo. Crea otro embudo para poder llevar el negocio hasta él.",
+  },
+  "Escolha o funil de destino": { es: "Elige el embudo de destino" },
+  "Este funil não tem etapa aberta para receber o negócio. Escolha outro funil.": {
+    es: "Este embudo no tiene una etapa abierta para recibir el negocio. Elige otro embudo.",
+  },
+  "Primeira etapa aberta (padrão)": { es: "Primera etapa abierta (predeterminado)" },
+  "Sem escolha, o negócio entra na primeira etapa aberta do funil.": {
+    es: "Sin elegir, el negocio entra en la primera etapa abierta del embudo.",
+  },
   // As duas mensagens de recusa da ROTA de importação. Nasceram no #597, que
   // consertou a validação que este PR tinha acabado de traduzir — a frase velha
   // ("…o funil e a etapa de destino") deixou de ser emitida por qualquer caminho.
@@ -12313,6 +12361,25 @@ export const DICIONARIO: Traducoes = {
   // Portes 23/10, grupo B (PR #3279): a bolha apagada diz quem apagou.
   "Esta mensagem foi apagada pelo contato": { es: "Este mensaje fue eliminado por el contacto" },
   "Esta mensagem foi apagada pelo atendente": { es: "Este mensaje fue eliminado por el agente" },
+  // Editar e apagar a mensagem enviada (porte de DeskcommCRM #1626).
+  "Opções da mensagem": { es: "Opciones del mensaje" },
+  "Editar mensagem": { es: "Editar mensaje" },
+  "Apagar para todos": { es: "Eliminar para todos" },
+  "Apagar esta mensagem para todos?": { es: "¿Eliminar este mensaje para todos?" },
+  "O WhatsApp tira a mensagem também do celular do cliente. Aqui no CRM ela fica marcada como apagada.": {
+    es: "WhatsApp quita el mensaje también del celular del cliente. Aquí en el CRM queda marcado como eliminado.",
+  },
+  "Mensagem editada": { es: "Mensaje editado" },
+  "Mensagem apagada para todos": { es: "Mensaje eliminado para todos" },
+  "Esta mensagem não pode ser alterada.": { es: "Este mensaje no se puede modificar." },
+  "O prazo para editar esta mensagem terminou.": { es: "Terminó el plazo para editar este mensaje." },
+  "Este canal não permite alterar mensagens.": { es: "Este canal no permite modificar mensajes." },
+  "WhatsApp indisponível no momento.": { es: "WhatsApp no está disponible en este momento." },
+  "Contato sem WhatsApp válido.": { es: "Contacto sin WhatsApp válido." },
+  "O WhatsApp recusou a alteração da mensagem.": { es: "WhatsApp rechazó la modificación del mensaje." },
+  "O WhatsApp alterou a mensagem, mas o CRM não conseguiu atualizar o histórico.": {
+    es: "WhatsApp modificó el mensaje, pero el CRM no pudo actualizar el historial.",
+  },
   // Portes 23/10, grupo B (PR #2841): encaminhar mensagem para outra conversa.
   Encaminhar: { es: "Reenviar" },
   "{n} não lidas": { es: "{n} no leídas" },

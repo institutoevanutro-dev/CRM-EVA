@@ -198,7 +198,24 @@ export const pipelineConfigPatchSchema = z.object({
     })
     .optional(),
   fields: z.array(customFieldSchema).max(50).optional(),
-  lost_reasons: z.array(z.string().min(1).max(80)).max(50).optional(),
+  /**
+   * Os motivos de perda do funil: texto puro continua valendo, e quem quiser
+   * agrupar no relatório "Perdas" grava `{ label, categoria }` (porte de
+   * DeskcommCRM #1717). O trigger `fn_validate_lost_reason_required` lê o
+   * `label` dos objetos e o texto dos strings — a mesma régua, dois formatos.
+   */
+  lost_reasons: z
+    .array(
+      z.union([
+        z.string().min(1).max(80),
+        z.object({
+          label: z.string().min(1).max(80),
+          categoria: z.string().min(1).max(40).optional(),
+        }),
+      ]),
+    )
+    .max(50)
+    .optional(),
 });
 export type PipelineConfigPatch = z.infer<typeof pipelineConfigPatchSchema>;
 

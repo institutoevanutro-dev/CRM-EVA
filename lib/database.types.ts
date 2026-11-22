@@ -4083,6 +4083,7 @@ export type Database = {
           external_id: string | null
           id: string
           last_activity_at: string | null
+          lost_from_stage_id: string | null
           lost_reason: string | null
           organization_id: string
           owner_agent_id: string | null
@@ -4115,6 +4116,7 @@ export type Database = {
           external_id?: string | null
           id?: string
           last_activity_at?: string | null
+          lost_from_stage_id?: string | null
           lost_reason?: string | null
           organization_id: string
           owner_agent_id?: string | null
@@ -4147,6 +4149,7 @@ export type Database = {
           external_id?: string | null
           id?: string
           last_activity_at?: string | null
+          lost_from_stage_id?: string | null
           lost_reason?: string | null
           organization_id?: string
           owner_agent_id?: string | null
@@ -4193,6 +4196,13 @@ export type Database = {
             columns: ["pipeline_id"]
             isOneToOne: false
             referencedRelation: "crm_pipelines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_crm_leads_lost_from_stage"
+            columns: ["lost_from_stage_id"]
+            isOneToOne: false
+            referencedRelation: "crm_stages"
             referencedColumns: ["id"]
           },
           {

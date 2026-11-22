@@ -52,7 +52,12 @@ function fakeDb(seed: Record<string, Row[]>) {
     let pending: Row | null = null;
 
     const rows = (): Row[] => (tables[table] ??= []);
-    const matches = () => rows().filter((row) => filters.every(([c, v]) => row[c] === v));
+    const matches = () =>
+      rows().filter((row) =>
+        filters.every(([c, v]) =>
+          v instanceof Set ? v.has(row[c]) : row[c] === v,
+        ),
+      );
 
     function selectRows(): Row[] {
       return matches()
@@ -101,6 +106,10 @@ function fakeDb(seed: Record<string, Row[]>) {
         filters.push([column, value]);
         return builder;
       },
+      in: (column: string, values: unknown[]) => {
+        filters.push([column, new Set(values)]);
+        return builder;
+      },
       order: (column: string, options?: { ascending?: boolean }) => {
         orders.push([column, options?.ascending ?? true]);
         return builder;
@@ -138,8 +147,8 @@ function fakeDb(seed: Record<string, Row[]>) {
 function seed() {
   return {
     crm_pipelines: [
-      { id: P1, organization_id: ORG_ID, name: "Comercial" },
-      { id: P2, organization_id: ORG_ID, name: "Suporte" },
+      { id: P1, organization_id: ORG_ID, name: "Comercial", is_archived: false, position: 1 },
+      { id: P2, organization_id: ORG_ID, name: "Suporte", is_archived: false, position: 2 },
     ],
     crm_stages: [
       { id: S1_A, organization_id: ORG_ID, pipeline_id: P1, name: "Novo", position: 1000, is_won: false, is_lost: false, is_archived: false },
@@ -208,6 +217,38 @@ function moveRequest(body: unknown): NextRequest {
 }
 
 const params = { params: Promise.resolve({ id: LEAD_ID }) };
+
+describe("GET /api/v1/leads/[id]/clone", () => {
+  const getRequest = () =>
+    new NextRequest(`http://localhost/api/v1/leads/${LEAD_ID}/clone`, { method: "GET" });
+
+  it("lista os funis de destino com as etapas, sem o funil ATUAL do lead", async () => {
+    const { GET } = await import("./route");
+    const response = await GET(getRequest(), params);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data.pipelines).toEqual([
+      {
+        id: P2,
+        name: "Suporte",
+        stages: [
+          { id: S2_A, name: "Triagem", position: 1000, is_won: false, is_lost: false },
+          { id: S2_B, name: "Em análise", position: 2000, is_won: false, is_lost: false },
+          { id: S2_LOST, name: "Perdido", position: 9000, is_won: false, is_lost: true },
+        ],
+      },
+    ]);
+  });
+
+  it("recusa lead inexistente na organização", async () => {
+    const { GET } = await import("./route");
+    const response = await GET(getRequest(), {
+      params: Promise.resolve({ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" }),
+    });
+    expect(response.status).toBe(404);
+  });
+});
 
 describe("POST /api/v1/leads/[id]/clone", () => {
   it("cria o negócio no funil destino e fecha a origem como perdida", async () => {

@@ -22,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
 import { createLeadHandler } from "@/app/api/v1/leads/_handler";
+import { listPipelinesHandler } from "@/app/api/v1/pipelines/_handler";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
 import { ApiError } from "@/lib/api/types";
 import { ok, fail } from "@/lib/api/wrappers";
@@ -49,6 +50,76 @@ import { cloneLeadSchema, validateRequest } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+
+/** Uma etapa do funil de destino, como o seletor da tela a recebe. */
+interface EtapaDeDestino {
+  id: string;
+  pipeline_id: string;
+  name: string;
+  position: number | string | null;
+  is_won: boolean;
+  is_lost: boolean;
+}
+
+/**
+ * GET /api/v1/leads/[id]/clone — para onde este negócio pode ir: os OUTROS
+ * funis, cada um com as etapas não arquivadas, na ordem do quadro. É a lista do
+ * diálogo "Levar para outro funil" (porte de melgarafael/DeskcommCRM#1585 e
+ * #3655). Funil e etapas vêm juntos porque a rota de etapas é `manager`+ e quem
+ * leva o card é `agent`.
+ */
+export async function GET(
+  _req: NextRequest,
+  ctx: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  const requestId = randomUUID();
+  const { id: leadId } = await ctx.params;
+
+  const supabase = await createClient();
+  const authz = await requireRole("agent", { requestId, resource: "crm_leads" });
+  if (!authz.ok) return authz.response;
+  const t = (texto: string) => traduzir(texto, authz.user.idioma);
+  const organizationId = authz.org.orgId;
+
+  const { data: origem, error: selErr } = await supabase
+    .from("crm_leads")
+    .select("id, pipeline_id")
+    .eq("id", leadId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  if (selErr) return fail("internal_error", selErr.message, 500, { requestId });
+  if (!origem) return fail("not_found", t("Lead não encontrado."), 404, { requestId });
+
+  const { pipelines } = await listPipelinesHandler(supabase, {
+    organization_id: organizationId,
+    actor: { type: "user", id: authz.user.id },
+    requestId,
+    idioma: authz.user.idioma,
+  });
+  const outros = pipelines.filter((p) => p.id !== origem.pipeline_id);
+
+  // Funil único (instalação nova) não é erro: a tela explica que não há destino.
+  const { data: etapas, error: stagesErr } =
+    outros.length === 0
+      ? { data: [] as EtapaDeDestino[], error: null }
+      : await supabase
+          .from("crm_stages")
+          .select("id, pipeline_id, name, position, is_won, is_lost")
+          .eq("organization_id", organizationId)
+          .in("pipeline_id", outros.map((p) => p.id))
+          .eq("is_archived", false)
+          .order("position", { ascending: true });
+  if (stagesErr) return fail("internal_error", stagesErr.message, 500, { requestId });
+
+  const destinos = outros.map((p) => ({
+    id: p.id,
+    name: p.name,
+    stages: ((etapas ?? []) as EtapaDeDestino[])
+      .filter((e) => e.pipeline_id === p.id)
+      .map(({ id, name, position, is_won, is_lost }) => ({ id, name, position, is_won, is_lost })),
+  }));
+  return ok({ pipelines: destinos }, { requestId });
+}
 
 export async function POST(
   req: NextRequest,

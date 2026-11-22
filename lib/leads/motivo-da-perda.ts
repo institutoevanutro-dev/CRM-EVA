@@ -229,7 +229,13 @@ export function recusaDeMotivoForaDoVocabulario(input: {
     ?.lost_reasons;
   const aceitos = new Set<string>([
     ...CANONICAL_LOST_REASONS,
-    ...(Array.isArray(extras) ? extras.filter((v): v is string => typeof v === "string") : []),
+    // O item é texto puro OU `{ label, categoria }` (0430) — o mesmo que o
+    // trigger aceita; ler só o texto recusaria aqui o que o banco aceita.
+    ...(Array.isArray(extras)
+      ? extras
+          .map((v) => (typeof v === "string" ? v : (v as { label?: unknown } | null)?.label))
+          .filter((v): v is string => typeof v === "string" && v.length > 0)
+      : []),
   ]);
   if (aceitos.has(motivo)) return null;
 
