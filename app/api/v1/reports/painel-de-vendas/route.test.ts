@@ -10,7 +10,7 @@
  *  5. falha de leitura SOBE (500), nunca vira "não houve venda";
  *  6. sem papel, a rota responde o que `requireRole` devolveu.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
@@ -233,5 +233,126 @@ describe("GET /api/v1/reports/painel-de-vendas — vendas registradas", () => {
     expect(corpo.data).toMatchObject({ vendas: 2, vendido_centavos: 25_000 });
     expect(corpo.data.nomes_dos_funis).toEqual({ [FUNIL]: "Pedidos" });
     expect((corpo.data.contatos as Record<string, unknown>).c1).toMatchObject({ display_name: "Dãm Dãm Baby" });
+  });
+});
+
+describe("GET /api/v1/reports/painel-de-vendas — com o Financeiro ligado", () => {
+  const C1 = "c1c1c1c1-c1c1-4c1c-8c1c-c1c1c1c1c1c1";
+  // `configFinanceiro` exige UUID RFC (o ORG dos outros testes não é).
+  const ORG_FIN = "22222222-2222-4222-8222-222222222222";
+  const TOKEN = "t".repeat(40);
+  const FIN = {
+    currency: "BRL",
+    vendas: { quantidade: 3, com_valor: 3, valor_cents: "150000" },
+    por_dia: [{ dia: "2026-11-02", quantidade: 3, valor_cents: "150000" }],
+    por_contato: [{ contato_id: C1, vendas: 2, valor_cents: "100000" }],
+    sem_vinculo: { quantidade: 1, valor_cents: "50000" },
+  };
+  const LINHAS = {
+    crm_leads: [
+      { id: "l1", status: "won", closed_at: "2026-11-03T15:00:00.000Z", value_cents: 30_000, currency: "BRL" },
+      { id: "l2", status: "lost", closed_at: "2026-11-06T15:00:00.000Z", value_cents: 9_000, currency: "BRL" },
+    ],
+    vendas_registradas: [{ id: "r1", lead_id: null, contact_id: null, valor_cents: 77_700, currency: "BRL", data: "2026-11-05", tags: [] }],
+    contacts: [{ id: C1, display_name: "Paciente Teste", name: null, phone_number: null }],
+  };
+
+  function authComo(role: string) {
+    vi.mocked(requireRole).mockResolvedValue({
+      ok: true,
+      user: { id: "u1", idioma: "pt-BR", is_platform_admin: false, support: false },
+      org: { orgId: ORG_FIN, name: "Empresa", role, timezone: "America/Sao_Paulo", currency: "BRL" },
+    } as never);
+  }
+  function ligarFinanceiro(resposta: () => Promise<Response>) {
+    vi.stubEnv("FINANCEIRO_URL", "https://financeiro.exemplo.test/");
+    vi.stubEnv("FINANCEIRO_TOKEN", TOKEN);
+    vi.stubEnv("FINANCEIRO_ORGANIZATION_ID", ORG_FIN);
+    const fetchMock = vi.fn(resposta);
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("gestor: cartões, série e clientes do Financeiro; conversão do funil; vendas registradas fora dos cartões", async () => {
+    authComo("manager");
+    makeDb(LINHAS);
+    const fetchMock = ligarFinanceiro(async () => Response.json({ data: FIN }));
+
+    const res = await GET(pedir());
+    const corpo = (await res.json()) as { data: Record<string, unknown> & { rankings: Record<string, unknown[]>; contatos: Record<string, unknown> } };
+
+    expect(res.status).toBe(200);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://financeiro.exemplo.test/api/integracoes/crm/vendas-do-periodo?de=2026-11-01&ate=2026-11-19");
+    expect((init.headers as Record<string, string>)["x-integracao-token"]).toBe(TOKEN);
+    expect(corpo.data).toMatchObject({
+      fonte: "financeiro",
+      vendas: 3,
+      vendido_centavos: 150_000,
+      ticket_medio_centavos: 50_000,
+      sem_vinculo: { vendas: 1, centavos: 50_000 },
+    });
+    expect(corpo.data.conversao).toBeCloseTo(1 / 2);
+    expect(corpo.data.rankings.tags).toEqual([]);
+    expect(corpo.data.rankings.funis).toEqual([]);
+    expect(corpo.data.rankings.clientes).toEqual([{ chave: C1, centavos: 100_000, vendas: 2 }]);
+    // o nome do cliente do ranking do Financeiro é lido do CRM
+    expect(corpo.data.contatos[C1]).toMatchObject({ display_name: "Paciente Teste" });
+    // a lista segue do CRM (ganho + venda registrada)
+    expect(corpo.data.vendas_no_recorte).toBe(2);
+  });
+
+  it("Financeiro fora: 200 com aviso (fonte indisponível) e números dele null; conversão segue", async () => {
+    authComo("admin");
+    makeDb(LINHAS);
+    ligarFinanceiro(async () => new Response("{}", { status: 503 }));
+
+    const res = await GET(pedir());
+    const corpo = (await res.json()) as { data: Record<string, unknown> };
+
+    expect(res.status).toBe(200);
+    expect(corpo.data).toMatchObject({ fonte: "financeiro_indisponivel", vendas: null, vendido_centavos: null, ticket_medio_centavos: null });
+    expect(corpo.data.conversao).toBeCloseTo(1 / 2);
+  });
+
+  it("Financeiro com resposta fora do contrato também conta como fora", async () => {
+    authComo("manager");
+    makeDb(LINHAS);
+    ligarFinanceiro(async () => Response.json({ data: { vendas: "muitas" } }));
+
+    const corpo = (await (await GET(pedir())).json()) as { data: Record<string, unknown> };
+
+    expect(corpo.data.fonte).toBe("financeiro_indisponivel");
+  });
+
+  it("abaixo de gestor, o Financeiro nem é chamado: segue o cálculo do CRM", async () => {
+    authComo("agent");
+    makeDb(LINHAS);
+    const fetchMock = ligarFinanceiro(async () => Response.json({ data: FIN }));
+
+    const corpo = (await (await GET(pedir())).json()) as { data: Record<string, unknown> };
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(corpo.data).toMatchObject({ fonte: "crm", vendas: 2, vendido_centavos: 30_000 + 77_700 });
+  });
+
+  it("sem as variáveis do Financeiro, o modo CRM fica como estava", async () => {
+    authComo("manager");
+    makeDb(LINHAS);
+    vi.stubEnv("FINANCEIRO_URL", "");
+    vi.stubEnv("FINANCEIRO_TOKEN", "");
+    vi.stubEnv("FINANCEIRO_ORGANIZATION_ID", "");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const corpo = (await (await GET(pedir())).json()) as { data: Record<string, unknown> };
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(corpo.data).toMatchObject({ fonte: "crm", vendas: 2, sem_vinculo: null });
   });
 });

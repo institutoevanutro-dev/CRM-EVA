@@ -28,6 +28,7 @@ const FUNIL_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 function resposta(patch: Partial<RespostaDoPainelDeVendas> = {}): RespostaDoPainelDeVendas {
   return {
     janela: { de: NOVEMBRO.de, ate: NOVEMBRO.ate, tz: TZ, from: "", to: "" },
+    fonte: "crm",
     moeda: "BRL",
     vendas: 34,
     vendido_centavos: 5_570_120,
@@ -64,6 +65,7 @@ function resposta(patch: Partial<RespostaDoPainelDeVendas> = {}): RespostaDoPain
     contatos: { c1: { display_name: "Dãm Dãm Baby - Financeiro", name: null, phone_number: null } },
     nomes_dos_funis: { [FUNIL_A]: "Pedidos" },
     truncado: false,
+    sem_vinculo: null,
     ...patch,
   };
 }
@@ -183,5 +185,50 @@ describe("PainelDeVendas — recorte, rankings e lista", () => {
     responder(resposta({ opcoes: { pipeline_ids: [FUNIL_A], tags: ["varejo"] } }), false);
     fireEvent.click(screen.getByTestId("atalho-mes_passado"));
     expect(vi.mocked(usePainelDeVendas).mock.lastCall?.[0]).toMatchObject({ tag: "" });
+  });
+});
+
+describe("PainelDeVendas — com o Financeiro ligado", () => {
+  it("modo CRM: diz a fonte e mostra os três rankings", () => {
+    responder(resposta());
+    render(<PainelDeVendas periodoInicial={NOVEMBRO} tz={TZ} />);
+
+    expect(texto("fonte-do-painel")).toContain("Negócios ganhos e vendas registradas no CRM.");
+    expect(screen.getByTestId("ranking-tags")).toBeTruthy();
+    expect(screen.getByTestId("ranking-funis")).toBeTruthy();
+  });
+
+  it("modo Financeiro: rótulo da fonte, só o ranking de clientes, cobertura sem vínculo", () => {
+    responder(resposta({ fonte: "financeiro", sem_vinculo: { vendas: 3, centavos: 90_000 } }));
+    render(<PainelDeVendas periodoInicial={NOVEMBRO} tz={TZ} />);
+
+    expect(texto("fonte-do-painel")).toContain("Vendas do Financeiro");
+    expect(screen.queryByTestId("ranking-tags")).toBeNull();
+    expect(screen.queryByTestId("ranking-funis")).toBeNull();
+    expect(screen.getByTestId("ranking-clientes")).toBeTruthy();
+    expect(texto("cobertura-do-financeiro")).toContain("sem vínculo com o CRM");
+    expect(texto("lista-do-painel")).toContain("Vendas no CRM");
+  });
+
+  it("Financeiro fora: aviso, cartões de venda em '—', conversão segue", () => {
+    responder(
+      resposta({
+        fonte: "financeiro_indisponivel",
+        vendas: null,
+        vendido_centavos: null,
+        vendas_com_valor: null,
+        vendas_sem_valor: null,
+        ticket_medio_centavos: null,
+        serie: [],
+        rankings: { tags: [], clientes: [], funis: [] },
+      }),
+    );
+    render(<PainelDeVendas periodoInicial={NOVEMBRO} tz={TZ} />);
+
+    expect(texto("financeiro-fora")).toContain("O Financeiro não respondeu");
+    expect(texto("cartao-vendas")).toContain("—");
+    expect(texto("cartao-valor")).toContain("—");
+    expect(texto("cartao-ticket")).toContain("—");
+    expect(texto("cartao-conversao")).toContain("16%");
   });
 });
