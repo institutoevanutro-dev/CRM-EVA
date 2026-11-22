@@ -36,6 +36,8 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     janelaAutomaticaMs: null,
     limiteDeTexto: null,
     midiaDeEnvio: "completa",
+    // O NOWEB sem store só marca leitura por id (porte de melgarafael/DeskcommCRM#5047).
+    marcaLidasPorMensagem: true,
   },
   // Hetero-restrição: não me banem, mas a Meta me proíbe e me cobra.
   meta_cloud: {
@@ -55,6 +57,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     janelaAutomaticaMs: null,
     limiteDeTexto: null,
     midiaDeEnvio: "completa",
+    marcaLidasPorMensagem: false,
   },
   // Mesma hetero-restrição do canal oficial, por baixo: é um BSP: a WABA é da
   // Meta, os templates são aprovados pela Meta e a janela de 24h é da Meta. O
@@ -94,6 +97,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     janelaAutomaticaMs: null,
     limiteDeTexto: null,
     midiaDeEnvio: "completa",
+    marcaLidasPorMensagem: false,
   },
   // O Direct não tem template aprovado nem janela de 24h formal como o
   // WhatsApp — a restrição real da API é a janela de 24h desde a última
@@ -125,6 +129,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     janelaAutomaticaMs: WINDOW_MS,
     limiteDeTexto: 1000,
     midiaDeEnvio: "so_foto",
+    marcaLidasPorMensagem: false,
   },
 };
 
@@ -235,6 +240,16 @@ export function canalConhecidoSemMensagem(provider: string | null | undefined): 
 export function canalRespondePeloCrm(provider: string | null | undefined): boolean {
   const caps = CHANNEL_CAPABILITIES[(provider ?? "") as ProviderDeMensagem];
   return caps ? caps.canSend : true;
+}
+
+/**
+ * O envio deve ler a conversa atrás dos ids que o canal marca como lidos? Só
+ * canal de mensagem conhecido com `marcaLidasPorMensagem`. Desconhecido ou
+ * `null` responde `false`: o visto é enfeite e não justifica leitura no caminho
+ * da resposta (porte de melgarafael/DeskcommCRM#5047).
+ */
+export function canalMarcaLidasPorMensagem(provider: string | null | undefined): boolean {
+  return CHANNEL_CAPABILITIES[(provider ?? "") as ProviderDeMensagem]?.marcaLidasPorMensagem ?? false;
 }
 
 /**

@@ -89,6 +89,13 @@ export interface ChannelCapabilities {
   limiteDeTexto: number | null;
   /** O que o CRM consegue anexar por este canal. */
   midiaDeEnvio: "completa" | "so_foto";
+  /**
+   * O canal marca como lidas mensagens ESPECÍFICAS, pelos ids que o envelope
+   * traz em `readExternalIds` (o visto azul)? É a pergunta que o envio faz antes
+   * de ler a conversa atrás desses ids: canal que responde `false` ignora o
+   * campo, e a leitura seria trabalho jogado fora no caminho da resposta.
+   */
+  marcaLidasPorMensagem: boolean;
 }
 
 /**
@@ -193,6 +200,19 @@ export interface OutboundEnvelope extends ChannelTenantScope {
    * `undefined` = envio solto, que é o caso comum.
    */
   replyToExternalId?: string | null;
+  /**
+   * As mensagens do cliente que ESTA resposta lê, pelo id que o PROVIDER conhece
+   * (`messages.external_id` das linhas de entrada) — para o canal marcá-las como
+   * lidas depois do envio (o visto azul).
+   *
+   * Existe porque o NOWEB sem store recusa o "li a conversa inteira" (porte de
+   * melgarafael/DeskcommCRM#5047). Quem monta o envelope lê o banco e resolve a
+   * lista; o adapter só repassa — mesma divisão do `replyToExternalId`.
+   *
+   * OPCIONAL: `undefined` (ou lista vazia) = o canal faz o pedido de antes.
+   * Canal que não marca leitura ignora o campo.
+   */
+  readExternalIds?: string[];
   /** Envio humano fora das 24h num canal com janela humana: o adapter marca a mensagem como atendimento humano. */
   etiquetaHumana?: boolean;
 }

@@ -17,6 +17,7 @@ import {
 import {
   bareWaMessageId,
   canonicalWahaExternalId,
+  chatIdFromWaMessageId,
   parseWahaMessageId,
   wahaEchoExternalIds,
 } from "@/lib/waha/message-id";
@@ -53,6 +54,27 @@ export function statusHttpDoErroWaha(msg: string): number | null {
  */
 function idCompletoDaMensagem(externalId: string, chatId: string): string {
   return externalId.includes("_") ? externalId : `true_${chatId}_${bareWaMessageId(externalId)}`;
+}
+
+/**
+ * Recorta os ids lidos ao chat DESTA resposta (porte de melgarafael/DeskcommCRM#5047).
+ *
+ * O id serializado carrega o próprio chat (`false_<chat>_<id>`), e o WAHA lê
+ * cada um no chat que ele traz — o `chatId` do pedido não o restringe. Uma ficha
+ * com dois números junta numa conversa só mensagens de dois chats; responder a
+ * um não pode marcar como lidas as do outro. Fica o que é do endereço do envio
+ * ou do chat da mensagem mais nova (a que está sendo respondida) — assim o
+ * `@lid` da mesma conta, que não bate com o `@c.us` do envio, não se perde. Id
+ * sem chat não é endereçável e sai. Sem nada que fique, `undefined`: o pedido de antes.
+ */
+function lidasNesteChat(ids: readonly string[] | undefined, to: string): string[] | undefined {
+  if (!ids || ids.length === 0) return undefined;
+  const chatDaMaisNova = chatIdFromWaMessageId(ids[ids.length - 1]!);
+  const ficam = ids.filter((id) => {
+    const chat = chatIdFromWaMessageId(id);
+    return chat !== null && (chat === to || chat === chatDaMaisNova);
+  });
+  return ficam.length > 0 ? ficam : undefined;
 }
 
 export const wahaAdapter: ChannelAdapter = {
@@ -286,10 +308,15 @@ export const wahaAdapter: ChannelAdapter = {
     // envio. `void`, não `await`: quem chama só grava o `external_id` depois que
     // este `send` volta, e o `message.ack` acha a linha só por esse id — um ack
     // que chegasse durante o visto se perderia. O helper nunca rejeita.
+    //
+    // Os ids das mensagens lidas vêm de quem montou o envelope: o NOWEB sem
+    // store só aceita marcar por mensagem (porte de melgarafael/DeskcommCRM#5047).
+    const lidas = lidasNesteChat(envelope.readExternalIds, to);
     void marcarConversaComoLida({
       organizationId: envelope.organizationId,
       sessionName: envelope.sessionRef,
       chatId: to,
+      ...(lidas ? { messageIds: lidas } : {}),
     });
 
     return { externalId: parseWahaMessageId(res) };

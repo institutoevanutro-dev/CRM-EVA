@@ -50,6 +50,7 @@ const CAPABILITIES = [
   "janelaAutomaticaMs",
   "limiteDeTexto",
   "midiaDeEnvio",
+  "marcaLidasPorMensagem",
 ] as const;
 
 describe("matriz capability × provider é exaustiva", () => {

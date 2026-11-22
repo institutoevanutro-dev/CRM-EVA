@@ -40,6 +40,7 @@ describe("capabilities do canal intermediado", () => {
       janelaAutomaticaMs: null,
       limiteDeTexto: null,
       midiaDeEnvio: "completa",
+      marcaLidasPorMensagem: false,
     });
   });
 
