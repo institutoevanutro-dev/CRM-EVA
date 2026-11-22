@@ -131,6 +131,10 @@ export const AUDIT_ACTIONS = [
   // A revogação chegou pelo CANAL: o autor apagou no aplicativo do WhatsApp.
   // É a única trilha de quem apaga sem passar por tela nenhuma (DeskcommCRM #3277).
   "message.revoked_in_channel",
+  // O atendente editou ou apagou para todos a mensagem que enviou pelo CRM
+  // (PATCH/DELETE /api/v1/messages/{id}). O corpo não entra na trilha.
+  "message.edited",
+  "message.revoked",
   "contact.blocked",
   // O pedido de descadastro é do cliente e o padrão é irreversível — mas a
   // regra W-02 do catálogo de negócio prevê o override: admin desbloqueia à

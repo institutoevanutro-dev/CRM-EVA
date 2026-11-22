@@ -12302,6 +12302,25 @@ export const DICIONARIO: Traducoes = {
   // Portes 23/10, grupo B (PR #3279): a bolha apagada diz quem apagou.
   "Esta mensagem foi apagada pelo contato": { es: "Este mensaje fue eliminado por el contacto" },
   "Esta mensagem foi apagada pelo atendente": { es: "Este mensaje fue eliminado por el agente" },
+  // Editar e apagar a mensagem enviada (porte de DeskcommCRM #1626).
+  "Opções da mensagem": { es: "Opciones del mensaje" },
+  "Editar mensagem": { es: "Editar mensaje" },
+  "Apagar para todos": { es: "Eliminar para todos" },
+  "Apagar esta mensagem para todos?": { es: "¿Eliminar este mensaje para todos?" },
+  "O WhatsApp tira a mensagem também do celular do cliente. Aqui no CRM ela fica marcada como apagada.": {
+    es: "WhatsApp quita el mensaje también del celular del cliente. Aquí en el CRM queda marcado como eliminado.",
+  },
+  "Mensagem editada": { es: "Mensaje editado" },
+  "Mensagem apagada para todos": { es: "Mensaje eliminado para todos" },
+  "Esta mensagem não pode ser alterada.": { es: "Este mensaje no se puede modificar." },
+  "O prazo para editar esta mensagem terminou.": { es: "Terminó el plazo para editar este mensaje." },
+  "Este canal não permite alterar mensagens.": { es: "Este canal no permite modificar mensajes." },
+  "WhatsApp indisponível no momento.": { es: "WhatsApp no está disponible en este momento." },
+  "Contato sem WhatsApp válido.": { es: "Contacto sin WhatsApp válido." },
+  "O WhatsApp recusou a alteração da mensagem.": { es: "WhatsApp rechazó la modificación del mensaje." },
+  "O WhatsApp alterou a mensagem, mas o CRM não conseguiu atualizar o histórico.": {
+    es: "WhatsApp modificó el mensaje, pero el CRM no pudo actualizar el historial.",
+  },
   // Portes 23/10, grupo B (PR #2841): encaminhar mensagem para outra conversa.
   Encaminhar: { es: "Reenviar" },
   "{n} não lidas": { es: "{n} no leídas" },
