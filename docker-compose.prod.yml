@@ -106,6 +106,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+    # No `docker stop` o Docker manda SIGTERM e espera ESTE prazo antes do
+    # SIGKILL. Sem a chave o padrão é 10 s — metade dos 30 s que o worker se dá
+    # (`SHUTDOWN_GRACE_MS`) para fechar laços, drain e pool, contados DO SINAL
+    # (`workers/agent-worker/desligamento-no-prazo.ts`). Regra do par:
+    # `stop_grace_period` > `SHUTDOWN_GRACE_MS`/1000, com folga para o fecho do
+    # pool. O default mora aqui: `.env` antigo não precisa mudar (upstream #3237).
+    stop_grace_period: ${WORKER_STOP_GRACE_PERIOD:-40s}
     restart: unless-stopped
     env_file: .env
     environment:
