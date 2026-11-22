@@ -149,11 +149,19 @@ describe("o corpo enviado é uma lista fechada", () => {
     const evento = eventoMeta({ cliqueMeta: "CLIQUE", paginaMeta: "123456789012345", wabaMeta: "104987654321098" });
     expect(evento.action_source).toBe("business_messaging");
     expect(evento.messaging_channel).toBe("whatsapp");
+    // `Schedule` é recusado em conversa (100/2804066): vai como QualifiedLead.
+    expect(evento.event_name).toBe("QualifiedLead");
     const ud = evento.user_data as Record<string, unknown>;
     expect(ud.ctwa_clid).toBe("CLIQUE");
     expect(ud.page_id).toBe("123456789012345");
     // Um ou outro, nunca os dois (upstream #2098).
     expect(ud).not.toHaveProperty("whatsapp_business_account_id");
+  });
+
+  it("Meta com clique: o sinal pago vai como InitiateCheckout, sem valor", () => {
+    const evento = eventoMeta({ evento: "CompleteRegistration", cliqueMeta: "CLIQUE", paginaMeta: "123456789012345" });
+    expect(evento.event_name).toBe("InitiateCheckout");
+    expect(evento).not.toHaveProperty("custom_data");
   });
 
   it("Meta com clique e só a WABA: a WABA vai no lugar da Página", () => {
@@ -165,6 +173,7 @@ describe("o corpo enviado é uma lista fechada", () => {
   it("Meta com clique SEM Página nem WABA: vai como `chat`, sem o clique (a Meta recusaria com 2804116)", () => {
     const evento = eventoMeta({ cliqueMeta: "CLIQUE" });
     expect(evento.action_source).toBe("chat");
+    expect(evento.event_name).toBe("Schedule");
     expect(evento).not.toHaveProperty("messaging_channel");
     expect(Object.keys(evento.user_data as object).sort()).toEqual(["em", "ph"]);
   });

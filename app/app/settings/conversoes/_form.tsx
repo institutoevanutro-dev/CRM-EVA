@@ -317,7 +317,7 @@ export function FormularioMeta({ estado, idioma }: { estado: EstadoMeta; idioma:
           ligado={sinalPago}
           onChange={(v) => noToque({ deposit_paid_enabled: v })}
           disabled={isPending}
-          ajuda={t("Vai como o evento padrão CompleteRegistration, sem valor. Só sai para as etapas marcadas acima.")}
+          ajuda={t("Vai sem valor, como CompleteRegistration (ou InitiateCheckout quando o paciente veio do anúncio para o WhatsApp). Só sai para as etapas marcadas acima.")}
         />
         <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={isPending || !podeSalvar}>

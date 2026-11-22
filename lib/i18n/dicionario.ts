@@ -198,7 +198,7 @@ export const DICIONARIO: Traducoes = {
   "Nenhuma etapa de funil cadastrada.": { es: "No hay ninguna etapa de embudo registrada." },
   "Salvar etapas": { es: "Guardar etapas" },
   "Avisar a Meta quando o sinal for pago": { es: "Avisar a Meta cuando se pague la seña" },
-  "Vai como o evento padrão CompleteRegistration, sem valor. Só sai para as etapas marcadas acima.": { es: "Se envía como el evento estándar CompleteRegistration, sin valor. Solo sale para las etapas marcadas arriba." },
+  "Vai sem valor, como CompleteRegistration (ou InitiateCheckout quando o paciente veio do anúncio para o WhatsApp). Só sai para as etapas marcadas acima.": { es: "Se envía sin valor, como CompleteRegistration (o InitiateCheckout cuando el paciente vino del anuncio a WhatsApp). Solo sale para las etapas marcadas arriba." },
   "ID da ação de conversão do sinal pago": { es: "ID de la acción de conversión de la seña pagada" },
   "Outra ação de conversão, também do tipo importação, só para o sinal pago. Obrigatória se o sinal pago estiver ligado.": { es: "Otra acción de conversión, también del tipo importación, solo para la seña pagada. Obligatoria si la seña pagada está activada." },
   "Avisar o Google Ads quando o sinal for pago": { es: "Avisar a Google Ads cuando se pague la seña" },
