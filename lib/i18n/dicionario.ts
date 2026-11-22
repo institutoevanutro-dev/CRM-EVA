@@ -4275,6 +4275,12 @@ export const DICIONARIO: Traducoes = {
   "Se preencher, enviaremos uma assinatura para o outro sistema conferir que fomos nós.": {
     es: "Si lo completas, enviaremos una firma para que el otro sistema confirme que fuimos nosotros.",
   },
+  "Incluir o responsável no corpo": { es: "Incluir al responsable en el cuerpo" },
+  "Padrão: o aviso não diz quem atende. Ligue só se o outro sistema precisar do nome da equipe.": {
+    es: "Por defecto, el aviso no dice quién atiende. Actívalo solo si el otro sistema necesita el nombre del equipo.",
+  },
+  "Quando alguém comparecer ao compromisso": { es: "Cuando alguien asista a la cita" },
+  "Quando alguém faltar ao compromisso": { es: "Cuando alguien falte a la cita" },
   Sucesso: { es: "Éxito" },
   "Aguardando envio": { es: "Esperando envío" },
   "Essa ação não funcionou.": { es: "Esta acción no funcionó." },

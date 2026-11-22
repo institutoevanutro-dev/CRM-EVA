@@ -50,6 +50,10 @@ export const ENTIDADE_ESPERADA_POR_GATILHO = {
   "appointment.confirmed": "calendar_appointment",
   "appointment.rescheduled": "calendar_appointment",
   "appointment.cancelled": "calendar_appointment",
+  // O desfecho (porte de DeskcommCRM #1709): a equipe registrou que a pessoa
+  // compareceu ou faltou. Emitido por `fecharOLaco`, uma vez por mudança.
+  "appointment.completed": "calendar_appointment",
+  "appointment.no_show": "calendar_appointment",
 } as const;
 
 export type GatilhoDeAutomacao = keyof typeof ENTIDADE_ESPERADA_POR_GATILHO;
@@ -170,6 +174,9 @@ export const actionSchema = z.discriminatedUnion("type", [
       secret: z.string().max(200).optional(),
       // Ciphertext hex (round-trip do editor: GET devolve, PATCH preserva).
       secret_enc: z.string().max(4000).optional(),
+      // Opt-in do RESPONSÁVEL (DeskcommCRM #1709): sem isto o corpo não diz
+      // quem atende. Só sai quando quem monta a regra pede, na tela.
+      include_owner: z.boolean().optional(),
     }),
   }),
   z.object({
