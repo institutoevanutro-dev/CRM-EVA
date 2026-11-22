@@ -8,6 +8,154 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.33.0] — 2026-11-22
+
+### Adicionado
+
+- **Gatilhos "compareceu" e "faltou" nas automações, e o aviso de compromisso mais completo** Em Automações há dois gatilhos novos: "Quando alguém comparecer ao compromisso"
+  e "Quando alguém faltar ao compromisso". Eles disparam uma vez quando a equipe
+  marca Realizado ou Faltou no compromisso. Os avisos de compromisso que saem por
+  webhook passam a levar o horário de início e fim, a situação, o tipo, o local e
+  os negócios ligados ao compromisso. O link da reunião vai junto quando houver.
+  As chaves antigas continuam iguais. A ação "Chamar webhook" ganha a opção
+  "Incluir o responsável no corpo", que vem desligada. Porte de
+  melgarafael/DeskcommCRM#1709.
+
+- **Cada campo do negócio ganha a opção "A IA pode ler este campo"** Em Configurações › Funis, cada campo personalizado do negócio tem agora a
+  caixa "A IA pode ler este campo". Desmarcada, o valor fica só no card: o
+  agente de IA não o recebe quando consulta o negócio durante o atendimento.
+  Ela vem MARCADA em todo campo que já existe, então nada some do atendimento
+  de hoje; desmarque os campos que a IA não deve ver (documento, dado de saúde,
+  observação interna). Porte de melgarafael/DeskcommCRM#4684, com o padrão
+  invertido de propósito (lá a caixa nasce desmarcada).
+
+- **Editar e apagar para todos a mensagem enviada pelo Inbox** No WhatsApp por QR, a mensagem de texto que você enviou pelo CRM ganha o botão
+  de opções (os três pontinhos ao lado do balão): "Editar mensagem" vale por 15
+  minutos depois do envio, e "Apagar para todos" pede confirmação na tela antes de
+  tirar a mensagem também do celular do cliente. Só quem enviou vê o botão. No CRM
+  a mensagem editada mostra "editada" e a apagada fica marcada como apagada pelo
+  atendente; as duas ações entram na auditoria, sem o texto da mensagem. Porte de
+  melgarafael/DeskcommCRM#1626.
+
+- **"Levar para outro funil" no menu do card** O menu do card no quadro do funil ganha "Levar para outro funil": escolha o
+  funil de destino e, se quiser, a etapa de entrada (sem escolha, o negócio entra
+  na primeira etapa aberta). O negócio é recriado lá e este fica encerrado aqui,
+  com a troca registrada na linha do tempo dos dois. Com um funil só, a janela
+  explica que é preciso criar outro. Porte de melgarafael/DeskcommCRM#1585 e #3655.
+
+- **Ligar e desligar o agente pelo celular (#on/#off), opcional por agente** Na tela do agente há uma seção nova, **Comandos pelo celular**, com um
+  interruptor (desligado por padrão). Ligado, quem atende pelo WhatsApp do
+  celular vinculado pode mandar `#off` no chat do cliente para pausar a IA
+  naquela conversa e `#on` para devolvê-la ao automático. Só vale quando a
+  mensagem inteira é o comando, e o comando é apagado do WhatsApp do cliente
+  logo depois de aplicado. Com o recurso ligado, qualquer resposta pelo celular
+  pausa a IA até alguém mandar `#on` ou devolver pela tela; desligado, nada muda
+  (`#on`/`#off` são texto comum e a pausa vence sozinha no prazo da empresa).
+
+  Também corrigido: salvar um ajuste só da configuração do agente não regrava
+  mais os outros ajustes (temperatura, busca na base) com o padrão.
+
+  Porte de melgarafael/DeskcommCRM#1631 (contribuição de @vgamkt).
+
+- **Motivos de perda com categoria, filtro no quadro e relatório de perdas** Em Configurações › Funis, cada motivo de perda pode ganhar uma categoria
+  (Cliente, Concorrência, Mérito, Nós ou Ausência). Os motivos padrão já vêm com
+  categoria, então funil sem cadastro também aparece agrupado. O CRM passa a
+  guardar em que etapa o negócio estava quando foi perdido, a partir desta
+  versão; perdas antigas ficam como "Etapa desconhecida". Na aba Desempenho, o
+  gerente vê o novo quadro "Perdas", com os últimos 30 dias por motivo, por
+  categoria e por etapa de saída, e o valor separado por moeda. A troca de funil
+  não conta como perda. No quadro do funil, com a situação em "Perdidos",
+  aparecem os filtros de motivo e de categoria. Porte de
+  melgarafael/DeskcommCRM#1717.
+
+- **Proteção opcional "Não fazer afirmação clínica" no agente** Em Segurança, na configuração do agente, há uma nova proteção: "Não fazer
+  afirmação clínica". Ligada, ela impede que o assistente envie mensagens que
+  digam o que a pessoa tem (diagnóstico), indiquem remédio, pomada ou dose,
+  garantam resultado ou digam que uma lesão é câncer. O assistente recebe a
+  orientação de reescrever oferecendo consulta; se insistir, a mensagem continua
+  barrada e um caso é aberto para a equipe (se o agente tiver casos ligados).
+  Não consulta modelo nem tem custo, reconhece português e espanhol, e vem
+  DESLIGADA: quem quer, liga em Segurança. Porte de melgarafael/DeskcommCRM#2321
+  e #2323 (crédito: `hampikamayuq` e `Tong-bit-art`).
+
+### Corrigido
+
+- **A IA que atribui a conversa a alguém não interrompe o próprio atendimento** Quando o agente atribuía a conversa a uma pessoa da equipe no mesmo turno em
+  que passava o atendimento ou mudava a etapa, a atribuição encerrava o próprio
+  turno: a mensagem saía, mas o aviso de passagem e a mudança de etapa não
+  aconteciam. Agora só o turno que pediu a atribuição continua; Assumir ou
+  Transferir feito por uma pessoa segue interrompendo a IA como antes. Porte de
+  melgarafael/DeskcommCRM#3953 (migration 0425).
+
+- **O assistente não confirma como condição da clínica um valor ou uma concessão que só o paciente citou** O assistente não confirma como condição da empresa um preço, uma parcela, um
+  percentual ou uma concessão (aprovação, liberação, gratuidade, cortesia,
+  isenção, brinde) que só aparece no que o paciente escreveu. Valem como
+  registro da empresa: as mensagens que ela enviou antes, o prompt do agente, a
+  memória da organização, as skills da organização, a tabela de promessa e o que
+  o agente consultou no turno (conhecimento, catálogo, pedidos); sob suspeita, o
+  sistema ainda busca a frase no conhecimento do agente e lê a conversa inteira.
+  Quando barra, o assistente reescreve sem repetir o número ou a palavra e, se
+  não achou o registro, oferece confirmar com a equipe. Não exige configuração e
+  aparece na lista de Segurança do agente. Porte de melgarafael/DeskcommCRM#3965
+  e #3995.
+
+- **O desligamento do worker cabe no prazo que o Docker dá** O prazo que o worker se dá para terminar o que está em andamento (30 s)
+  passa a contar a partir do aviso de parada, e o Docker passa a esperar 40 s
+  antes de forçar o encerramento (antes eram 10 s, metade do prazo do worker).
+  Nenhum passo manual: o novo prazo já vem no `docker-compose.prod.yml`, e quem
+  quiser outro valor usa `WORKER_STOP_GRACE_PERIOD` no `.env`.
+
+  Porte de melgarafael/DeskcommCRM#3237.
+
+- **Excluir um contato com negócio aberto no funil pede para fechar o negócio antes** Antes, excluir um contato deixava o card aberto no funil, sem contato e sem
+  ninguém a quem ligar. Agora a exclusão é recusada enquanto o contato tiver
+  negócio aberto: o aviso diz quantos negócios barram e leva ao funil, para
+  fechar ou mover cada um com o motivo real. Nada é fechado automaticamente, então
+  nenhuma perda entra nas métricas e nenhuma automação dispara por engano.
+  Negócios ganhos ou perdidos não barram.
+
+  Porte de melgarafael/DeskcommCRM#4896.
+
+- **Follow-up de falta confirmada para quando o paciente responde, como a tela mostrava** No gatilho **Falta confirmada pela equipe**, o interruptor "Cancelar se o lead
+  responder" aparecia ligado e travado, mas o valor não era gravado: o paciente
+  respondia "quero remarcar" e a mensagem seguinte da sequência saía mesmo assim.
+  Agora a tela grava o valor, e os fluxos de falta já salvos sem ele também
+  passam a parar na primeira resposta, sem precisar abrir nem salvar de novo.
+  Quem gravou `cancel_on_reply: false` de propósito (pela API ou importação)
+  continua com o que escolheu.
+
+  Porte de melgarafael/DeskcommCRM#3755.
+
+- **O filtro de palavras do agente decide a entrada na conversa, não cada mensagem** Com o campo "Só responder quando a mensagem falar de algo específico"
+  preenchido, o filtro valia em cada mensagem: o agente perguntava algo e a
+  resposta do paciente, sem nenhuma das palavras, deixava a IA calada no meio da
+  conversa. Agora, se o mesmo agente já respondeu neste atendimento, as mensagens
+  seguintes passam sem filtro. A primeira mensagem de um atendimento continua
+  precisando de uma das palavras. Porte de melgarafael/DeskcommCRM#3240.
+
+- **Abrir a janela de resposta solta na hora o atendimento que estava esperando** Quando o paciente escrevia fora da janela de resposta do canal, o turno da IA
+  ficava agendado para a abertura, e isso continua igual. Se a clínica abrisse a
+  janela depois, o turno seguia dormindo até o horário antigo, e a mensagem
+  seguinte do mesmo paciente entrava junto nele. Agora, ao salvar uma janela que
+  já está aberta, os turnos que esperavam rodam na hora; e a mensagem nova que
+  chega com a janela aberta acorda o turno adiado, que responde já. Com a janela
+  fechada nada muda. Porte de melgarafael/DeskcommCRM#3419.
+
+- **Anonimizar um contato alcança também o que a IA grava logo depois** Se o atendimento da IA estava no meio de uma resposta quando o contato foi
+  anonimizado, o registro das ferramentas, a memória e o próximo passo que esse
+  turno gravava depois ficavam com o nome da pessoa. Agora essa escrita já é
+  gravada anonimizada. Quem volta a falar depois da anonimização (conversa nova)
+  não é afetado. Porte de melgarafael/DeskcommCRM#1958.
+
+- **Parar ou atualizar o worker não o mata mais à força aos 5 segundos** Quando a VPS parava o worker (atualização, reinício ou `docker stop`), o
+  processo era morto à força uns 5 segundos depois. Se havia uma mensagem
+  saindo nesse momento, ela podia chegar ao WhatsApp sem que o worker anotasse
+  o envio: aparecia como presa e depois como falha, embora tivesse saído. Agora
+  o worker recebe o aviso de parada, não começa trabalho novo e termina o que
+  estava em andamento. Nenhuma configuração nova: a atualização leva a correção.
+
+  Porte de melgarafael/DeskcommCRM#2826 (contribuição de @webtecnica).
+
 ## [5.32.0] — 2026-11-22
 
 ### Adicionado
@@ -9800,7 +9948,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.32.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.33.0...HEAD
+[5.33.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.32.0...v5.33.0
 [5.32.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.31.1...v5.32.0
 [5.31.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.31.0...v5.31.1
 [5.31.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.30.0...v5.31.0

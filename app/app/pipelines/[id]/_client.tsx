@@ -36,6 +36,7 @@ import {
 import { Plus } from "@/lib/ui/icons";
 import type { LeadFilters } from "@/lib/kanban/filters";
 import { applyFilters, filtersFromParams, filtersToParams } from "@/lib/kanban/filters";
+import { categoriaDoMotivo } from "@/lib/leads/motivos-de-perda-do-funil";
 import {
   PREFERENCIA_PADRAO,
   gravarPreferencia,
@@ -147,7 +148,10 @@ export function PipelinePageClient({
     const extras = verAntigos ? (antigos.data?.leads ?? []) : [];
     const vistos = new Set(data.leads.map((l) => l.id));
     const todos = extras.length ? [...data.leads, ...extras.filter((l) => !vistos.has(l.id))] : data.leads;
-    return applyFilters(todos, filters);
+    // A categoria do motivo de perda NÃO vem no lead: sai do `settings` do
+    // funil, pela mesma régua do relatório (DeskcommCRM #1717).
+    const settings = data.pipeline.settings;
+    return applyFilters(todos, filters, { categoriaDo: (motivo) => categoriaDoMotivo(motivo, settings) });
   }, [data, verAntigos, antigos.data, filters]);
   // NÃO é a conta do FilterBar: o seletor de filtro lista as três caixas
   // (`marcadoresDoCard`: negócio, contato e conversa), e esta lista, a da tag em
@@ -320,7 +324,7 @@ export function PipelinePageClient({
           titulo={rotuloNovo}
         />
       )}
-      <FilterBar filters={filters} onChange={setFilters} leads={data?.leads ?? []} />
+      <FilterBar filters={filters} onChange={setFilters} leads={data?.leads ?? []} settings={data?.pipeline.settings} />
       {data && filteredLeads.length === 0 && data.leads.length > 0 ? (
         // Com o filtro escondendo tudo, as colunas só diziam "vazio" — e o
         // funil parecia sem negócio nenhum.

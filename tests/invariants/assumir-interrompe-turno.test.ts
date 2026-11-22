@@ -390,3 +390,61 @@ describe("o servidor recusa a escrita da IA depois da tomada", () => {
     );
   });
 });
+
+describe("a atribuição pedida pelo próprio turno não revoga esse turno (0425, porte do original #3953)", () => {
+  const pelo_turno = (job: string, motivo = "transfer") =>
+    sql(
+      `select public.fn_conversation_assign_pelo_turno('${ORG}','${CONVERSATION}','${OWNER}','${motivo}',null,false,'${job}');`,
+    );
+
+  it("poupa só o job que pediu; os outros turnos da conversa são revogados", async () => {
+    semear("inbound_turn");
+    semear("case_reply_turn", "pending");
+    const job = await emExecucao();
+    pelo_turno(job.id);
+    expect((await pool.query("select status from job_queue where id=$1", [job.id])).rows[0]!.status).toBe("running");
+    expect(valor(`select count(*) from public.job_queue where organization_id='${ORG}' and status='failed';`)).toBe(1);
+    expect(revogados()).toBe(1);
+    await expect(requireCurrentAutonomousTurn(pool, job)).resolves.toBeUndefined();
+  });
+
+  it("a marca não vaza: a atribuição seguinte, sem ela, revoga o turno", async () => {
+    semear("inbound_turn");
+    const job = await emExecucao();
+    pelo_turno(job.id);
+    atribuir("release", null);
+    atribuir("claim");
+    expect((await pool.query("select status from job_queue where id=$1", [job.id])).rows[0]!.status).toBe("failed");
+  });
+
+  it("evento com pessoa não é poupado, mesmo com a variável posta na transação", async () => {
+    semear("inbound_turn");
+    const job = await emExecucao();
+    sql(`begin;
+      select set_config('app.turno_que_atribui','${job.id}',true);
+      set local role authenticated;
+      select set_config('request.jwt.claims','{"sub":"${OWNER}"}',true);
+      select public.fn_conversation_assign('${ORG}','${CONVERSATION}','${OWNER}','claim',null,false);
+      commit;`);
+    expect((await pool.query("select status from job_queue where id=$1", [job.id])).rows[0]!.status).toBe("failed");
+  });
+
+  it.each(["anon", "authenticated"])("%s não executa a variante do turno", async (papel) => {
+    const tx = await pool.connect();
+    try {
+      await tx.query("begin");
+      await tx.query(`set local role ${papel}`);
+      await expect(
+        tx.query("select fn_conversation_assign_pelo_turno($1,$2,$3,'transfer',null,false,$4)", [
+          ORG,
+          CONVERSATION,
+          OWNER,
+          ORG,
+        ]),
+      ).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await tx.query("rollback");
+      tx.release();
+    }
+  });
+});

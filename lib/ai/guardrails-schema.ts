@@ -88,6 +88,12 @@ export const agentConfigSchema = z.object({
   rag_top_k: z.number().int().min(1).max(20).default(5),
   rag_similarity_threshold: z.number().min(0).max(1).default(0.4),
   confidence_threshold: z.number().min(0).max(1).default(0.6),
+  /**
+   * Aceita `#on`/`#off` enviados pelo CELULAR do operador
+   * (`lib/escalacao/comando-de-canal.ts`)? Padrão `false`: o comando é digitado
+   * no chat do cliente, então só liga quem escolher na tela do agente.
+   */
+  aceita_comandos_celular: z.boolean().default(false),
 });
 export type AgentConfig = z.infer<typeof agentConfigSchema>;
 
@@ -98,7 +104,26 @@ export const AGENT_CONFIG_DEFAULTS: AgentConfig = {
   rag_top_k: 5,
   rag_similarity_threshold: 0.4,
   confidence_threshold: 0.6,
+  aceita_comandos_celular: false,
 };
+
+// Parcial SEM defaults. No Zod 4, `.partial()` mantém o `.default()` de cada
+// campo: um PATCH com uma chave só devolvia os outros campos com o default, e a
+// junção da rota regravava ajustes que o cliente nem mandou. Todo campo com
+// default entra aqui — `tests/unit/patch-de-config-grava-so-o-que-veio.test.ts`
+// reprova o que ficar de fora.
+const cfg = agentConfigSchema.shape;
+export const agentConfigPatchSchema = agentConfigSchema
+  .extend({
+    temperature: cfg.temperature.removeDefault(),
+    max_tokens: cfg.max_tokens.removeDefault(),
+    context_message_window: cfg.context_message_window.removeDefault(),
+    rag_top_k: cfg.rag_top_k.removeDefault(),
+    rag_similarity_threshold: cfg.rag_similarity_threshold.removeDefault(),
+    confidence_threshold: cfg.confidence_threshold.removeDefault(),
+    aceita_comandos_celular: cfg.aceita_comandos_celular.removeDefault(),
+  })
+  .partial();
 
 // ---------------------------------------------------------------------------
 // PATCH / CREATE schemas
@@ -113,7 +138,7 @@ export const agentPatchSchema = z
     is_active: z.boolean().optional(),
     model: agentModelSchema.optional(),
     system_prompt: z.string().min(20).max(10000).optional(),
-    config: agentConfigSchema.partial().optional(),
+    config: agentConfigPatchSchema.optional(),
     guardrails: guardrailsSchema.optional(),
   })
   .strict();

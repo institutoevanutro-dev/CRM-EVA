@@ -235,6 +235,17 @@ end $$;
 ALTER FUNCTION "public"."fn_audit_log_row"() OWNER TO "postgres";
 
 
+-- A coluna que o corpo abaixo escreve (migration 0430) chega ANTES dele em
+-- quem ATUALIZA: sem isto, entre esta linha e o apêndice, mover um card para
+-- perda falharia com "record new has no field lost_from_stage_id". Na
+-- instalação nova a tabela ainda não existe aqui e o apêndice cria a coluna.
+do $$
+begin
+  if to_regclass('public.crm_leads') is not null then
+    alter table public.crm_leads add column if not exists lost_from_stage_id uuid;
+  end if;
+end $$;
+
 CREATE OR REPLACE FUNCTION "public"."fn_crm_lead_close_on_stage"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     SET "search_path" TO 'public', 'pg_temp'
@@ -258,10 +269,17 @@ begin
   elsif v_is_lost then
     new.status := 'lost';
     new.closed_at := coalesce(new.closed_at, now());
+    -- A etapa ABERTA que o negócio deixou (0430). Só na transição: o card já
+    -- perdido movido entre etapas de perda mantém a origem verdadeira.
+    if tg_op = 'UPDATE' and old.status is distinct from 'lost' then
+      new.lost_from_stage_id := coalesce(new.lost_from_stage_id, old.stage_id);
+    end if;
   else
     if tg_op = 'UPDATE' and old.status in ('won','lost') then
       new.status := 'open';
       new.closed_at := null;
+      -- Reabriu: a origem da perda passada não vale para o negócio aberto.
+      new.lost_from_stage_id := null;
     end if;
   end if;
   return new;
@@ -1259,8 +1277,15 @@ begin
       raise exception 'lost_reason_required' using errcode = '22023';
     end if;
 
+    -- `lost_reasons` aceita texto puro E `{ label, categoria }` (0430): o que
+    -- se compara é o RÓTULO nos dois formatos.
     select coalesce(
-      array(select jsonb_array_elements_text(settings->'lost_reasons')), '{}'::text[]
+      array(
+        select case when jsonb_typeof(e) = 'object'
+                    then nullif(e ->> 'label', '')
+                    else nullif(e #>> '{}', '') end
+          from jsonb_array_elements(settings->'lost_reasons') as t(e)
+      ), '{}'::text[]
     ) into v_pipeline_extra
     from public.crm_pipelines where id = new.pipeline_id;
 
@@ -29078,8 +29103,9 @@ notify pgrst, 'reload schema';
 -- ---- motivo de perda de quem respondeu PARAR (migration 0310) ----
 -- Portado do DeskcommCRM PR 2049. `opted_out_of_messages` entra no array
 -- canônico de `fn_validate_lost_reason_required`: a ingestão fecha como perdido
--- todo negócio aberto de quem pediu para não receber mensagens. Corpo IDÊNTICO
--- ao da migration 0310; `create or replace`, re-aplicável, sem dado a curar.
+-- todo negócio aberto de quem pediu para não receber mensagens. O corpo é o
+-- FINAL (o da 0430, que lê o rótulo de `{ label, categoria }`): uma definição
+-- do meio com corpo antigo abriria janela ao reaplicar o baseline.
 create or replace function public.fn_validate_lost_reason_required() returns trigger
     language plpgsql
     set search_path to 'public', 'pg_temp'
@@ -29095,8 +29121,15 @@ begin
       raise exception 'lost_reason_required' using errcode = '22023';
     end if;
 
+    -- `lost_reasons` aceita texto puro E `{ label, categoria }` (0430): o que
+    -- se compara é o RÓTULO nos dois formatos.
     select coalesce(
-      array(select jsonb_array_elements_text(settings->'lost_reasons')), '{}'::text[]
+      array(
+        select case when jsonb_typeof(e) = 'object'
+                    then nullif(e ->> 'label', '')
+                    else nullif(e #>> '{}', '') end
+          from jsonb_array_elements(settings->'lost_reasons') as t(e)
+      ), '{}'::text[]
     ) into v_pipeline_extra
     from public.crm_pipelines where id = new.pipeline_id;
 
@@ -35896,6 +35929,7 @@ create or replace function public.fn_interromper_turnos_ao_assumir()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
   v_contact uuid;
+  v_turno uuid;
 begin
   -- Distribuir pelo rodízio não é assumir; o handoff é decisão do próprio turno.
   if new.reason not in ('claim', 'transfer') or new.to_user_id is null then return new; end if;
@@ -35904,6 +35938,12 @@ begin
    where c.organization_id = new.organization_id and c.id = new.conversation_id
      and c.assigned_to_user_id = new.to_user_id;
   if v_contact is null then return new; end if;
+  -- O turno que PEDIU esta atribuição não perde o próprio comando (0425): só
+  -- ele é poupado, e só quando quem atribuiu é o runtime (sem pessoa logada).
+  -- A marca vem de fn_conversation_assign_pelo_turno, na mesma transação.
+  if new.changed_by is null then
+    v_turno := nullif(current_setting('app.turno_que_atribui', true), '')::uuid;
+  end if;
 
   -- O fato vem ANTES do update: ele guarda o estado em que o job estava.
   insert into public.event_log (organization_id, event_type, entity_kind, entity_id, payload, status)
@@ -35915,6 +35955,7 @@ begin
    where j.organization_id = new.organization_id and j.contact_id = v_contact
      and j.payload->'service_boundary'->>'conversation_id' = new.conversation_id::text
      and j.payload->'service_boundary'->>'organization_id' = new.organization_id::text
+     and j.id is distinct from v_turno
      and ((j.kind in ('inbound_turn', 'case_reply_turn') and j.status in ('pending', 'running'))
        or (j.kind = 'followup_turn' and j.status = 'running'));
 
@@ -35924,6 +35965,7 @@ begin
    where j.organization_id = new.organization_id and j.contact_id = v_contact
      and j.payload->'service_boundary'->>'conversation_id' = new.conversation_id::text
      and j.payload->'service_boundary'->>'organization_id' = new.organization_id::text
+     and j.id is distinct from v_turno
      and j.kind in ('inbound_turn', 'case_reply_turn')
      and j.status in ('pending', 'running');
   return new;
@@ -39608,6 +39650,258 @@ update public.crm_leads l
 
 notify pgrst, 'reload schema';
 -- ---- fim: valor do negócio pelas vendas (migration 0424) ----
+
+-- ---- atribuição do próprio turno não revoga o turno (migration 0425) ----
+-- Derivado de supabase/migrations/20261122140000_0425_atribuicao_do_turno_nao_revoga_o_turno.sql
+-- (o porquê inteiro está no cabeçalho de lá). Porte de melgarafael/DeskcommCRM
+-- #3953. O gatilho da 0361 poupa o job que pediu a atribuição (marca local à
+-- transação, só com `changed_by` nulo). O corpo novo também está na primeira
+-- definição, no bloco da 0361, para a reaplicação não passar pela versão antiga.
+create or replace function public.fn_interromper_turnos_ao_assumir()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  v_contact uuid;
+  v_turno uuid;
+begin
+  -- Distribuir pelo rodízio não é assumir; o handoff é decisão do próprio turno.
+  if new.reason not in ('claim', 'transfer') or new.to_user_id is null then return new; end if;
+  -- O evento tem de corresponder ao dono real, na MESMA organização.
+  select c.contact_id into v_contact from public.conversations c
+   where c.organization_id = new.organization_id and c.id = new.conversation_id
+     and c.assigned_to_user_id = new.to_user_id;
+  if v_contact is null then return new; end if;
+  -- O turno que PEDIU esta atribuição não perde o próprio comando (0425): só
+  -- ele é poupado, e só quando quem atribuiu é o runtime (sem pessoa logada).
+  -- A marca vem de fn_conversation_assign_pelo_turno, na mesma transação.
+  if new.changed_by is null then
+    v_turno := nullif(current_setting('app.turno_que_atribui', true), '')::uuid;
+  end if;
+
+  -- O fato vem ANTES do update: ele guarda o estado em que o job estava.
+  insert into public.event_log (organization_id, event_type, entity_kind, entity_id, payload, status)
+  select new.organization_id, 'conversation.autonomous_turn_revoked', 'job', j.id,
+         jsonb_build_object('conversation_id', new.conversation_id, 'assignment_event_id', new.id,
+                            'motivo', new.reason, 'kind', j.kind, 'status_anterior', j.status),
+         'done'
+    from public.job_queue j
+   where j.organization_id = new.organization_id and j.contact_id = v_contact
+     and j.payload->'service_boundary'->>'conversation_id' = new.conversation_id::text
+     and j.payload->'service_boundary'->>'organization_id' = new.organization_id::text
+     and j.id is distinct from v_turno
+     and ((j.kind in ('inbound_turn', 'case_reply_turn') and j.status in ('pending', 'running'))
+       or (j.kind = 'followup_turn' and j.status = 'running'));
+
+  update public.job_queue j
+     set status = 'failed', locked_by = null, locked_at = null,
+         last_error = 'conversation_command_taken'
+   where j.organization_id = new.organization_id and j.contact_id = v_contact
+     and j.payload->'service_boundary'->>'conversation_id' = new.conversation_id::text
+     and j.payload->'service_boundary'->>'organization_id' = new.organization_id::text
+     and j.id is distinct from v_turno
+     and j.kind in ('inbound_turn', 'case_reply_turn')
+     and j.status in ('pending', 'running');
+  return new;
+end;
+$$;
+revoke execute on function public.fn_interromper_turnos_ao_assumir() from public, anon, authenticated, service_role;
+
+-- A atribuição pedida pelo turno da IA (`crm_assign_conversation` no turno).
+-- Marca o job na transação e chama a porta única de atribuição, sem mudar a
+-- assinatura dela. Só o runtime (service_role) executa.
+create or replace function public.fn_conversation_assign_pelo_turno(
+  p_organization_id uuid,
+  p_conversation_id uuid,
+  p_to_user_id uuid,
+  p_reason text,
+  p_expected_assignee uuid,
+  p_enforce_expected boolean,
+  p_source_job_id uuid
+)
+returns setof public.conversations
+language plpgsql security invoker set search_path = '' as $$
+begin
+  perform pg_catalog.set_config('app.turno_que_atribui', coalesce(p_source_job_id::text, ''), true);
+  return query select * from public.fn_conversation_assign(
+    p_organization_id, p_conversation_id, p_to_user_id, p_reason, p_expected_assignee, p_enforce_expected);
+  perform pg_catalog.set_config('app.turno_que_atribui', '', true);
+end;
+$$;
+revoke execute on function public.fn_conversation_assign_pelo_turno(uuid, uuid, uuid, text, uuid, boolean, uuid)
+  from public, anon, authenticated;
+grant execute on function public.fn_conversation_assign_pelo_turno(uuid, uuid, uuid, text, uuid, boolean, uuid)
+  to service_role;
+
+notify pgrst, 'reload schema';
+-- ---- fim: atribuição do próprio turno não revoga o turno (migration 0425) ----
+
+-- ---- escrita tardia da IA sobre contato anonimizado nasce redigida (migration 0427) ----
+-- Derivado de supabase/migrations/20261122150000_0427_lgpd_escrita_tardia_da_ia_nasce_redigida.sql
+-- (porte do efeito de melgarafael/DeskcommCRM#1958; motivo e janelas: cabeçalho de lá).
+-- Cria função: entra ANTES da VARREDURA anon.
+create or replace function public.fn_lgpd_redige_escrita_tardia_da_ia()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_anonimizado_em timestamptz;
+begin
+  select k.anonymized_at into v_anonimizado_em
+    from public.contacts k
+   where k.id = new.contact_id
+     and k.organization_id = new.organization_id
+     and k.is_anonymized;
+  if v_anonimizado_em is null then
+    return new;
+  end if;
+
+  if tg_table_name = 'ai_agent_runs' then
+    -- A run que COMEÇOU antes da anonimização é do episódio anonimizado,
+    -- termine quando terminar. Run nova (created_at depois) é de quem voltou.
+    if new.created_at <= v_anonimizado_em then
+      new.tool_calls := public.fn_lgpd_redigir_tool_calls(new.tool_calls);
+    end if;
+  elsif now() <= v_anonimizado_em + interval '15 minutes' then
+    -- ponytail: memória e estado não guardam de qual run vieram; a janela de
+    -- 15 min cobre o turno que estava no ar. Se um turno passar disso, ligar
+    -- a escrita à run (run_id) em vez do relógio.
+    if tg_table_name = 'lead_notes' then
+      new.headline := '(anonimizado)';
+      new.body := '(anonimizado)';
+      new.embedding := null;
+    elsif tg_table_name = 'lead_state' then
+      new.next_action := null;
+      new.qualification := '{}'::jsonb;
+    end if;
+  end if;
+  return new;
+end
+$$;
+
+-- As DUAS origens de EXECUTE: o grant a PUBLIC da criação e o grant nominal a
+-- anon (e authenticated) do ALTER DEFAULT PRIVILEGES do baseline.
+revoke all on function public.fn_lgpd_redige_escrita_tardia_da_ia() from public, anon, authenticated;
+
+create or replace trigger trg_lgpd_redige_escrita_tardia_da_ia
+  before insert or update of tool_calls on public.ai_agent_runs
+  for each row
+  when (new.contact_id is not null)
+  execute function public.fn_lgpd_redige_escrita_tardia_da_ia();
+
+create or replace trigger trg_lgpd_redige_escrita_tardia_da_ia
+  before insert or update of headline, body, embedding on public.lead_notes
+  for each row
+  execute function public.fn_lgpd_redige_escrita_tardia_da_ia();
+
+create or replace trigger trg_lgpd_redige_escrita_tardia_da_ia
+  before insert or update of next_action, qualification on public.lead_state
+  for each row
+  execute function public.fn_lgpd_redige_escrita_tardia_da_ia();
+-- ---- fim: escrita tardia da IA sobre contato anonimizado nasce redigida (migration 0427) ----
+
+-- ---- motivo de perda com categoria (migration 0430) ----
+-- Derivado de supabase/migrations/20261122170000_0430_motivo_de_perda_com_categoria.sql
+-- (porte de DeskcommCRM #1717; o porquê está no cabeçalho de lá). Coluna, FK e
+-- os dois gatilhos com o corpo final, igual ao das primeiras definições acima.
+alter table public.crm_leads
+  add column if not exists lost_from_stage_id uuid;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'fk_crm_leads_lost_from_stage'
+       and conrelid = 'public.crm_leads'::regclass
+  ) then
+    alter table public.crm_leads
+      add constraint fk_crm_leads_lost_from_stage
+      foreign key (lost_from_stage_id)
+      references public.crm_stages(id)
+      on delete set null;
+  end if;
+end $$;
+
+comment on column public.crm_leads.lost_from_stage_id is
+  'Etapa aberta de onde o negócio saiu quando foi perdido (gravada por fn_crm_lead_close_on_stage). Migration 0430.';
+
+create or replace function public.fn_crm_lead_close_on_stage() returns trigger
+    language plpgsql
+    set search_path to 'public', 'pg_temp'
+    as $$
+declare
+  v_is_won  boolean;
+  v_is_lost boolean;
+begin
+  if tg_op = 'UPDATE'
+     and new.stage_id is not distinct from old.stage_id
+     and new.status   is not distinct from old.status then
+    return new;
+  end if;
+
+  select is_won, is_lost into v_is_won, v_is_lost
+    from public.crm_stages where id = new.stage_id;
+
+  if v_is_won then
+    new.status := 'won';
+    new.closed_at := coalesce(new.closed_at, now());
+  elsif v_is_lost then
+    new.status := 'lost';
+    new.closed_at := coalesce(new.closed_at, now());
+    -- A etapa ABERTA que o negócio deixou (0430). Só na transição: o card já
+    -- perdido movido entre etapas de perda mantém a origem verdadeira.
+    if tg_op = 'UPDATE' and old.status is distinct from 'lost' then
+      new.lost_from_stage_id := coalesce(new.lost_from_stage_id, old.stage_id);
+    end if;
+  else
+    if tg_op = 'UPDATE' and old.status in ('won','lost') then
+      new.status := 'open';
+      new.closed_at := null;
+      -- Reabriu: a origem da perda passada não vale para o negócio aberto.
+      new.lost_from_stage_id := null;
+    end if;
+  end if;
+  return new;
+end$$;
+
+create or replace function public.fn_validate_lost_reason_required() returns trigger
+    language plpgsql
+    set search_path to 'public', 'pg_temp'
+    as $$
+declare
+  v_canonical text[] := array['requested_by_customer','price','no_response','product_unavailable',
+                              'cancelled_by_store','cancelled_by_customer','payment_failed','other',
+                              'opted_out_of_messages'];
+  v_pipeline_extra text[];
+begin
+  if new.status = 'lost' then
+    if new.lost_reason is null or length(new.lost_reason) = 0 then
+      raise exception 'lost_reason_required' using errcode = '22023';
+    end if;
+
+    -- `lost_reasons` aceita texto puro E `{ label, categoria }` (0430): o que
+    -- se compara é o RÓTULO nos dois formatos.
+    select coalesce(
+      array(
+        select case when jsonb_typeof(e) = 'object'
+                    then nullif(e ->> 'label', '')
+                    else nullif(e #>> '{}', '') end
+          from jsonb_array_elements(settings->'lost_reasons') as t(e)
+      ), '{}'::text[]
+    ) into v_pipeline_extra
+    from public.crm_pipelines where id = new.pipeline_id;
+
+    if not (new.lost_reason = any (v_canonical) or new.lost_reason = any (v_pipeline_extra)) then
+      raise exception 'lost_reason_invalid: %', new.lost_reason using errcode = '22023';
+    end if;
+  end if;
+  return new;
+end$$;
+
+-- Funções de gatilho: o EXECUTE não é conferido no disparo; só fecha a RPC.
+revoke execute on function public.fn_validate_lost_reason_required() from public, anon;
+grant execute on function public.fn_validate_lost_reason_required() to authenticated, service_role;
+-- ---- fim: motivo de perda com categoria (migration 0430) ----
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----

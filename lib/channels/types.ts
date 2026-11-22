@@ -96,6 +96,13 @@ export interface ChannelCapabilities {
    * campo, e a leitura seria trabalho jogado fora no caminho da resposta.
    */
   marcaLidasPorMensagem: boolean;
+  /**
+   * O atendente edita e apaga para todos a mensagem que ELE enviou pelo CRM?
+   * Só o canal por QR (WAHA) sabe fazer isso hoje. A tela pergunta aqui antes
+   * de oferecer o gesto; a rota testa a presença de `editMessage`/`revokeMessage`.
+   * (Porte de melgarafael/DeskcommCRM#1626.)
+   */
+  alteraMensagemEnviada: boolean;
 }
 
 /**
@@ -237,6 +244,23 @@ export interface ChannelAdapter {
   isConfigured(): boolean;
   /** externalId null = canal não configurado (noop) ou resposta sem id reconhecível. */
   send(envelope: OutboundEnvelope): Promise<{ externalId: string | null }>;
+  /**
+   * Edita o texto de uma mensagem já enviada. LANÇA quando o transporte recusa
+   * (`recipient_unavailable` quando não há endereço). Opcional: a capability
+   * `alteraMensagemEnviada` responde à tela, e a rota testa a presença.
+   */
+  editMessage?(input: ChannelTenantScope & {
+    sessionRef: string;
+    recipient: string | null;
+    externalId: string;
+    text: string;
+  }): Promise<void>;
+  /** Apaga para todos uma mensagem enviada. Mesmo contrato de `editMessage`. */
+  revokeMessage?(input: ChannelTenantScope & {
+    sessionRef: string;
+    recipient: string | null;
+    externalId: string;
+  }): Promise<void>;
   /**
    * Códigos que o chamador grava em `metadata`/`error_code`. Vivem NO ADAPTER
    * porque carregam nome de provider, e o lint da Task 7 proíbe esse nome fora

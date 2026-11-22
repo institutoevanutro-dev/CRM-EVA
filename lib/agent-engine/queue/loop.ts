@@ -82,6 +82,11 @@ export async function rodarLoopDaFila<J>(deps: DepsDoLoopDaFila<J>): Promise<voi
       }
     }
 
+    // O desligamento pode ter chegado durante o relógio: claimar agora abriria
+    // uma transação que o drain não espera, e o lease ficaria preso até o reaper.
+    // Um claim já iniciado (abaixo) roda até o fim.
+    if (deps.deveParar()) break;
+
     let claimados: J[] = [];
     if (faltaMs !== null && faltaMs <= 0) {
       try {

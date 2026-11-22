@@ -329,6 +329,10 @@ export const DICIONARIO: Traducoes = {
   "ninguém assumiu": { es: "nadie lo asumió" },
   "da clínica": { es: "de la clínica" },
   "Mostrar só quando:": { es: "Mostrar solo cuando:" },
+  "A IA pode ler este campo": { es: "La IA puede leer este campo" },
+  "(desligado, o valor fica só no card e o assistente de IA não o recebe)": {
+    es: "(desactivado, el valor queda solo en la tarjeta y el asistente de IA no lo recibe)",
+  },
   "Campo da condição": { es: "Campo de la condición" },
   "Sempre mostrar": { es: "Mostrar siempre" },
   "Operador da condição": { es: "Operador de la condición" },
@@ -875,6 +879,9 @@ export const DICIONARIO: Traducoes = {
   "Revisar modelos do canal": { es: "Revisar plantillas del canal" },
   "Abrir uma conversa afetada": { es: "Abrir una conversación afectada" },
   "Abrir Agenda": { es: "Abrir Agenda" },
+  "Abrir o funil": { es: "Abrir el embudo" },
+  "Este contato tem 1 negócio aberto no funil. Feche ou mova o negócio antes de excluir.": { es: "Este contacto tiene 1 negocio abierto en el embudo. Cierra o mueve el negocio antes de eliminarlo." },
+  "Este contato tem {n} negócios abertos no funil. Feche ou mova os negócios antes de excluir.": { es: "Este contacto tiene {n} negocios abiertos en el embudo. Cierra o mueve los negocios antes de eliminarlo." },
   "Este contato tem 1 compromisso na Agenda ({lista}).": { es: "Este contacto tiene 1 cita en la Agenda ({lista})." },
   "Este contato tem {n} compromissos na Agenda ({lista}).": { es: "Este contacto tiene {n} citas en la Agenda ({lista})." },
   "Compromisso é histórico do contato e impede a exclusão. Se esta ficha é duplicada, abra a ficha e use \"Juntar com outra ficha\": os compromissos passam para a ficha que fica. Se o compromisso foi lançado por engano, exclua-o na Agenda e tente de novo.": { es: "La cita es historial del contacto e impide la eliminación. Si esta ficha está duplicada, abre la ficha y usa \"Juntar con otra ficha\": las citas pasan a la ficha que se queda. Si la cita se registró por error, elimínala en la Agenda e inténtalo de nuevo." },
@@ -4275,6 +4282,12 @@ export const DICIONARIO: Traducoes = {
   "Se preencher, enviaremos uma assinatura para o outro sistema conferir que fomos nós.": {
     es: "Si lo completas, enviaremos una firma para que el otro sistema confirme que fuimos nosotros.",
   },
+  "Incluir o responsável no corpo": { es: "Incluir al responsable en el cuerpo" },
+  "Padrão: o aviso não diz quem atende. Ligue só se o outro sistema precisar do nome da equipe.": {
+    es: "Por defecto, el aviso no dice quién atiende. Actívalo solo si el otro sistema necesita el nombre del equipo.",
+  },
+  "Quando alguém comparecer ao compromisso": { es: "Cuando alguien asista a la cita" },
+  "Quando alguém faltar ao compromisso": { es: "Cuando alguien falte a la cita" },
   Sucesso: { es: "Éxito" },
   "Aguardando envio": { es: "Esperando envío" },
   "Essa ação não funcionou.": { es: "Esta acción no funcionó." },
@@ -6801,6 +6814,10 @@ export const DICIONARIO: Traducoes = {
   "Variar o texto das mensagens iguais": { es: "Variar el texto de los mensajes iguales" },
   "Não prometer preço ou prazo por conta própria": { es: "No prometer precio o plazo por cuenta propia" },
   "Conferir promessas em texto livre": { es: "Verificar promesas en texto libre" },
+  "Não confirmar condição que só o cliente citou": { es: "No confirmar una condición que solo citó el cliente" },
+  "Não fazer afirmação clínica": { es: "No hacer afirmaciones clínicas" },
+  "Barra a mensagem em que o assistente diz o que a pessoa tem, indica remédio ou dose, garante resultado ou afirma que uma lesão é câncer.": { es: "Bloquea el mensaje en el que el asistente dice lo que la persona tiene, indica un medicamento o una dosis, garantiza un resultado o afirma que una lesión es cáncer." },
+  "Não custa nada e reconhece frases em português e espanhol. Só serve para saúde: em outros negócios pode barrar frases normais, como \"passe o creme hidratante\".": { es: "No cuesta nada y reconoce frases en portugués y español. Solo sirve para salud: en otros negocios puede bloquear frases normales, como \"aplica la crema hidratante\"." },
   "Não prometer atendimento humano que não existe": { es: "No prometer atención humana que no existe" },
   "Não falar a nossa língua com o seu cliente": { es: "No hablar nuestro idioma con tu cliente" },
   "Dizer que é um assistente quando perguntam": { es: "Decir que es un asistente cuando preguntan" },
@@ -10224,6 +10241,48 @@ export const DICIONARIO: Traducoes = {
     es: "Un archivo CSV con una línea por lead. Los leads entran en la primera etapa abierta del embudo elegido.",
   },
   "Funil de destino": { es: "Embudo de destino" },
+  // Motivos de perda com categoria e o relatório "Perdas" (porte de DeskcommCRM #1717).
+  "Categoria de cada motivo, para o relatório de perdas:": {
+    es: "Categoría de cada motivo, para el informe de pérdidas:",
+  },
+  "Categoria do motivo": { es: "Categoría del motivo" },
+  "Sem categoria": { es: "Sin categoría" },
+  Concorrência: { es: "Competencia" },
+  Mérito: { es: "Mérito" },
+  Nós: { es: "Nosotros" },
+  Ausência: { es: "Ausencia" },
+  "Nenhuma perda na janela.": { es: "Ninguna pérdida en el período." },
+  "Erro ao carregar o relatório de perdas.": { es: "Error al cargar el informe de pérdidas." },
+  Perdas: { es: "Pérdidas" },
+  "Por motivo, categoria e etapa de saída — quantidade e valor por moeda.": {
+    es: "Por motivo, categoría y etapa de salida — cantidad y valor por moneda.",
+  },
+  "Cortado no limite de leitura.": { es: "Cortado en el límite de lectura." },
+  "Por motivo": { es: "Por motivo" },
+  "Por categoria": { es: "Por categoría" },
+  "Por etapa de saída": { es: "Por etapa de salida" },
+  "Valor por moeda": { es: "Valor por moneda" },
+  "Moedas nunca são somadas entre si: cada balde é o total da própria moeda.": {
+    es: "Las monedas nunca se suman entre sí: cada grupo es el total de su propia moneda.",
+  },
+  "Sem motivo registrado": { es: "Sin motivo registrado" },
+  "Etapa desconhecida": { es: "Etapa desconocida" },
+  // "Levar para outro funil" no card (porte de DeskcommCRM #1585/#3655).
+  "Levar para outro funil": { es: "Llevar a otro embudo" },
+  "O negócio é recriado no funil escolhido e este fica encerrado aqui. A linha do tempo dos dois registra a troca.": {
+    es: "El negocio se crea de nuevo en el embudo elegido y este queda cerrado aquí. La línea de tiempo de los dos registra el cambio.",
+  },
+  "Este é o único funil. Crie outro funil para poder levar o negócio até ele.": {
+    es: "Este es el único embudo. Crea otro embudo para poder llevar el negocio hasta él.",
+  },
+  "Escolha o funil de destino": { es: "Elige el embudo de destino" },
+  "Este funil não tem etapa aberta para receber o negócio. Escolha outro funil.": {
+    es: "Este embudo no tiene una etapa abierta para recibir el negocio. Elige otro embudo.",
+  },
+  "Primeira etapa aberta (padrão)": { es: "Primera etapa abierta (predeterminado)" },
+  "Sem escolha, o negócio entra na primeira etapa aberta do funil.": {
+    es: "Sin elegir, el negocio entra en la primera etapa abierta del embudo.",
+  },
   // As duas mensagens de recusa da ROTA de importação. Nasceram no #597, que
   // consertou a validação que este PR tinha acabado de traduzir — a frase velha
   // ("…o funil e a etapa de destino") deixou de ser emitida por qualquer caminho.
@@ -12302,6 +12361,25 @@ export const DICIONARIO: Traducoes = {
   // Portes 23/10, grupo B (PR #3279): a bolha apagada diz quem apagou.
   "Esta mensagem foi apagada pelo contato": { es: "Este mensaje fue eliminado por el contacto" },
   "Esta mensagem foi apagada pelo atendente": { es: "Este mensaje fue eliminado por el agente" },
+  // Editar e apagar a mensagem enviada (porte de DeskcommCRM #1626).
+  "Opções da mensagem": { es: "Opciones del mensaje" },
+  "Editar mensagem": { es: "Editar mensaje" },
+  "Apagar para todos": { es: "Eliminar para todos" },
+  "Apagar esta mensagem para todos?": { es: "¿Eliminar este mensaje para todos?" },
+  "O WhatsApp tira a mensagem também do celular do cliente. Aqui no CRM ela fica marcada como apagada.": {
+    es: "WhatsApp quita el mensaje también del celular del cliente. Aquí en el CRM queda marcado como eliminado.",
+  },
+  "Mensagem editada": { es: "Mensaje editado" },
+  "Mensagem apagada para todos": { es: "Mensaje eliminado para todos" },
+  "Esta mensagem não pode ser alterada.": { es: "Este mensaje no se puede modificar." },
+  "O prazo para editar esta mensagem terminou.": { es: "Terminó el plazo para editar este mensaje." },
+  "Este canal não permite alterar mensagens.": { es: "Este canal no permite modificar mensajes." },
+  "WhatsApp indisponível no momento.": { es: "WhatsApp no está disponible en este momento." },
+  "Contato sem WhatsApp válido.": { es: "Contacto sin WhatsApp válido." },
+  "O WhatsApp recusou a alteração da mensagem.": { es: "WhatsApp rechazó la modificación del mensaje." },
+  "O WhatsApp alterou a mensagem, mas o CRM não conseguiu atualizar o histórico.": {
+    es: "WhatsApp modificó el mensaje, pero el CRM no pudo actualizar el historial.",
+  },
   // Portes 23/10, grupo B (PR #2841): encaminhar mensagem para outra conversa.
   Encaminhar: { es: "Reenviar" },
   "{n} não lidas": { es: "{n} no leídas" },
@@ -12817,6 +12895,20 @@ export const DICIONARIO: Traducoes = {
   "total": { es: "total" },
   "Soma de": { es: "Suma de" },
   "venda(s) registrada(s)": { es: "venta(s) registrada(s)" },
+  // ─── Comandos pelo celular (#on/#off) — porte do DeskcommCRM #1631 ───
+  "Comandos pelo celular": { es: "Comandos desde el celular" },
+  "Aceitar #on/#off enviados pelo celular": { es: "Aceptar #on/#off enviados desde el celular" },
+  "Ligado, QUALQUER mensagem enviada pelo WhatsApp do celular pausa a IA nesta conversa até alguém mandar #on — a pausa não vence sozinha. #off pausa sem precisar responder o cliente. Desligado, #on e #off são texto comum, e responder pelo celular pausa a IA só por um tempo.":
+    {
+      es: "Activado, CUALQUIER mensaje enviado desde el WhatsApp del celular pausa la IA en esta conversación hasta que alguien envíe #on — la pausa no vence sola. #off pausa sin necesidad de responder al cliente. Desactivado, #on y #off son texto normal, y responder desde el celular pausa la IA solo por un tiempo.",
+    },
+  "Atenção: o comando é digitado no chat do cliente e pode aparecer para ele. Vale por conversa, e a pausa só termina com #on ou pelo botão “devolver ao automático”.":
+    {
+      es: "Atención: el comando se escribe en el chat del cliente y puede aparecer para él. Vale por conversación, y la pausa solo termina con #on o con el botón “devolver al automático”.",
+    },
+  "Comandos pelo celular ligados — já valem no próximo atendimento.":
+    { es: "Comandos desde el celular activados — ya valen en la próxima atención." },
+  "Comandos pelo celular desligados.": { es: "Comandos desde el celular desactivados." },
 };
 
 /**

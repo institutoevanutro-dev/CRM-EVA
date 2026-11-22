@@ -38,6 +38,11 @@ interface Props {
   aparencia?: AparenciaDaConversa;
   /** Mostra o botão "Enviar ao prontuário" (quem decide é o `InboxLayout`). */
   podeEnviarAoProntuario?: boolean;
+  /**
+   * O canal sabe editar e apagar para todos o que o atendente enviou
+   * (capability `alteraMensagemEnviada`; quem decide é o `InboxLayout`).
+   */
+  podeAlterarEnviada?: boolean;
 }
 
 /** Onda 5.2: union de item do thread — mensagem real ou nota interna (nunca vai ao cliente). */
@@ -82,6 +87,7 @@ export function ChatThread({
   searchTerm = "",
   aparencia = APARENCIA_PADRAO,
   podeEnviarAoProntuario = false,
+  podeAlterarEnviada = false,
 }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
@@ -102,8 +108,19 @@ export function ChatThread({
   const canManage = activeOrg != null && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
   // Reenviar é envio: a rota exige `agent`, e quem só lê não ganha um botão que ela recusa.
   const podeEnviar = activeOrg != null && ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent;
-  const { reenviar } = useAlterarMensagem(conversationId);
+  const { reenviar, editar, apagar } = useAlterarMensagem(conversationId);
   const reenviarMutateAsync = reenviar.mutateAsync;
+  const editarMutateAsync = editar.mutateAsync;
+  const apagarMutateAsync = apagar.mutateAsync;
+  // Estáveis pelo mesmo motivo do reenvio: a bolha é `memo`.
+  const editarMensagem = useCallback(
+    (m: Message, text: string) => editarMutateAsync({ id: m.id, text }).then(() => undefined),
+    [editarMutateAsync],
+  );
+  const apagarMensagem = useCallback(
+    (m: Message) => apagarMutateAsync(m.id).then(() => undefined),
+    [apagarMutateAsync],
+  );
   // UMA função para todas as bolhas: o `MessageBubble` é `memo`, e uma closure
   // nova por bolha a cada render o redesenharia inteiro.
   const reenviarMensagem = useCallback(
@@ -476,6 +493,10 @@ export function ChatThread({
                   nomeDoAutor={item.data.sent_by_user_id ? (nomePorUsuario.get(item.data.sent_by_user_id) ?? null) : null}
                   onReenviar={podeEnviar && item.data.direction === "outbound" ? reenviarMensagem : undefined}
                   podeReenviarDeOutros={canManage}
+                  // Só o autor altera (a rota confere de novo): o gesto nem
+                  // aparece na mensagem do colega.
+                  onEditar={podeAlterarEnviada && podeEnviar && item.data.sent_by_user_id === currentUser.id ? editarMensagem : undefined}
+                  onApagar={podeAlterarEnviada && podeEnviar && item.data.sent_by_user_id === currentUser.id ? apagarMensagem : undefined}
                   onEnviarAoProntuario={podeEnviarAoProntuario ? envioAoProntuario.enviar : undefined}
                   enviandoAoProntuario={envioAoProntuario.emVoo.has(item.data.id)}
                   erroAoProntuario={envioAoProntuario.ultimoErro.get(item.data.id) ?? null}

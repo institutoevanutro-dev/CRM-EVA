@@ -78,6 +78,8 @@ interface OpcoesFake {
   rpcFalse?: boolean;
   /** As conexões Google que a pré-checagem lê (0414): id → status. */
   conexoes?: Record<string, string>;
+  /** Quantos negócios ABERTOS o contato tem no funil (porte do #4896). */
+  negociosAbertos?: number;
 }
 
 function clienteFalso(opts?: OpcoesFake): unknown {
@@ -109,6 +111,20 @@ function clienteFalso(opts?: OpcoesFake): unknown {
                     ? { data: null, error: opts.erroContagem }
                     : { data: opts?.compromissos ?? [], error: null },
                 );
+              },
+            };
+            return cadeia;
+          }
+          if (tabela === "crm_leads") {
+            const filtros: Array<[string, unknown]> = [];
+            const cadeia = {
+              eq: (coluna: string, valor: unknown) => {
+                filtros.push([coluna, valor]);
+                return cadeia;
+              },
+              then: (resolve: (v: unknown) => unknown) => {
+                contagens.push({ tabela, filtros });
+                return resolve({ count: opts?.negociosAbertos ?? 0, error: null });
               },
             };
             return cadeia;
@@ -194,6 +210,14 @@ describe("deleteContactHandler", () => {
         filtros: [
           ["contact_id", CONTATO],
           ["organization_id", ORG],
+        ],
+      },
+      {
+        tabela: "crm_leads",
+        filtros: [
+          ["contact_id", CONTATO],
+          ["organization_id", ORG],
+          ["status", "open"],
         ],
       },
     ]);
@@ -461,8 +485,26 @@ describe("deleteContactHandler", () => {
     await deleteContactHandler(clienteFalso() as never, ctxFalso(), CONTATO);
     expect(contagens).toEqual([
       { tabela: "calendar_appointments", filtros: [["contact_id", CONTATO], ["organization_id", ORG]] },
+      { tabela: "crm_leads", filtros: [["contact_id", CONTATO], ["organization_id", ORG], ["status", "open"]] },
     ]);
     expect(rpcs.find((r) => r.nome === FUNCAO)?.args).toEqual({ p_contact_id: CONTATO, p_organization_id: ORG });
+  });
+
+  it("negócio aberto no funil: 409 e nada é apagado nem fechado (porte do #4896)", async () => {
+    const { deleteContactHandler } = await import("@/app/api/v1/contacts/_handler");
+    await expect(
+      deleteContactHandler(clienteFalso({ negociosAbertos: 2 }) as never, ctxFalso(), CONTATO),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "state_conflict",
+      details: { vinculos: ["2 negócio(s) aberto(s) no funil"], por_tabela: { crm_leads: 2 } },
+    });
+    expect(chamadas).toEqual([]);
+    expect(rpcs.some((r) => r.nome === FUNCAO)).toBe(false);
+    expect(ultimaAuditoria()).toMatchObject({
+      action: "contact.delete_blocked",
+      metadata: { motivo: "vinculo_restrict", vinculos: ["2 negócio(s) aberto(s) no funil"], apagados: [] },
+    });
   });
 
   it("a função falha: audita apagados VAZIO e propaga o 409 (nada saiu pela metade)", async () => {

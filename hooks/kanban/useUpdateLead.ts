@@ -108,3 +108,41 @@ export function useEditLead(pipelineId: string) {
     },
   });
 }
+
+interface MoveToPipelineArgs {
+  leadId: string;
+  targetPipelineId: string;
+  /** Etapa de entrada; `null` deixa o servidor escolher a primeira aberta. */
+  targetStageId?: string | null;
+}
+
+/**
+ * "Levar para outro funil" (porte de melgarafael/DeskcommCRM#1585 e #3655): o
+ * negócio é recriado no funil escolhido e a origem fecha como perdida. O card
+ * que fica neste quadro é a ORIGEM encerrada.
+ */
+export function useMoveLeadToPipeline(pipelineId: string) {
+  const qc = useQueryClient();
+  const queryKey = ["board", pipelineId] as const;
+  return useMutation({
+    mutationFn: async ({ leadId, targetPipelineId, targetStageId }: MoveToPipelineArgs) => {
+      marcarEcoLocal(leadId);
+      return apiClient.post<{ data: { lead: Lead; origem: Lead } }>(
+        `/api/v1/leads/${leadId}/clone`,
+        {
+          pipeline_id: targetPipelineId,
+          // Sem escolha, quem decide a etapa continua sendo o servidor.
+          ...(targetStageId ? { stage_id: targetStageId } : {}),
+        },
+      );
+    },
+    onSuccess: (res, { leadId }) => {
+      gravaLeadNoQuadro(qc, queryKey, leadId, res?.data?.origem);
+    },
+    onError: showApiError,
+    onSettled: (_data, _err, { leadId }) => {
+      liberarEcoLocal(leadId);
+      qc.invalidateQueries({ queryKey });
+    },
+  });
+}

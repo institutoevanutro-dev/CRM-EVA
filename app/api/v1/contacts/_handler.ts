@@ -1065,6 +1065,23 @@ export async function deleteContactHandler(
   }
   const lidos = (compromissos ?? []) as CompromissoDoContato[];
 
+  // Negócio ABERTO no funil também barra (porte do DeskcommCRM #4896).
+  // `crm_leads.contact_id` é `on delete set null`: sem esta barra, o card
+  // ficava solto no Kanban, sem contato. Não fechamos por conta própria —
+  // fechar como perdido lançaria a perda na métrica e dispararia `lead.lost`
+  // (automações, webhooks) para um contato que some em seguida. Ganho e
+  // perdido são histórico e não barram.
+  const { count: contagemDeAbertos, error: errNegocios } = await supabase
+    .from("crm_leads")
+    .select("id", { count: "exact", head: true })
+    .eq("contact_id", contactId)
+    .eq("organization_id", ctx.organization_id)
+    .eq("status", "open");
+  if (errNegocios) {
+    throw new ApiError(500, "internal_error", undefined, ctx.requestId, errNegocios.message);
+  }
+  const negociosAbertos = contagemDeAbertos ?? 0;
+
   // A situação das conexões Google dos excluídos pendentes (0414). O `manager`
   // que a rota exige lê as conexões da organização (policy
   // `calendar_connections_dono_ou_manager_read`); só `status` sai daqui.
@@ -1090,7 +1107,8 @@ export async function deleteContactHandler(
 
   const { visiveis, emTransito, travados, apagaveis, orfaos } = classificarCompromissos(lidos, statusDaConexao);
 
-  if (visiveis.length > 0 || emTransito.length > 0 || travados.length > 0) {
+  const agendaBarra = visiveis.length > 0 || emTransito.length > 0 || travados.length > 0;
+  if (agendaBarra || negociosAbertos > 0) {
     // A tela monta a frase com `agenda` (quantos, em que situação, e qual abrir);
     // `vinculos` é o texto em pt-BR da auditoria (DeskcommCRM #1925).
     const por_situacao: Record<string, number> = {};
@@ -1103,7 +1121,11 @@ export async function deleteContactHandler(
     if (travados.length > 0) {
       vinculos.push(`${travados.length} compromisso(s) excluído(s) travado(s) na sincronização com o Google`);
     }
-    const agenda = {
+    if (negociosAbertos > 0) vinculos.push(`${negociosAbertos} negócio(s) aberto(s) no funil`);
+    const por_tabela: Record<string, number> = {};
+    if (agendaBarra) por_tabela.calendar_appointments = visiveis.length + emTransito.length + travados.length;
+    if (negociosAbertos > 0) por_tabela.crm_leads = negociosAbertos;
+    const agenda = !agendaBarra ? undefined : {
       por_situacao,
       pendentes_no_google: emTransito.length,
       travados_no_google: travados.length,
@@ -1125,11 +1147,7 @@ export async function deleteContactHandler(
     throw new ApiError(
       409,
       "state_conflict",
-      {
-        vinculos,
-        por_tabela: { calendar_appointments: visiveis.length + emTransito.length + travados.length },
-        agenda,
-      },
+      { vinculos, por_tabela, ...(agenda ? { agenda } : {}) },
       ctx.requestId,
       traduzir("Não foi possível excluir: o contato ainda tem registros vinculados.", ctx.idioma ?? "pt-BR"),
     );
