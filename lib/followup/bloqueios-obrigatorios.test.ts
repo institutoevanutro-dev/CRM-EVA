@@ -760,3 +760,27 @@ describe('caso aberto esperando a equipe (2 dias úteis)', () => {
     });
   });
 });
+
+// Porte do DeskcommCRM #3755: no gatilho de falta confirmada, `cancel_on_reply`
+// AUSENTE vale `true` (a tela mostra ligado e travado); `false` declarado vale.
+describe('falta confirmada — resposta do paciente segura o próximo envio', () => {
+  const respondeuDepois = {
+    ultimo_envio_da_inscricao_em: '2026-09-16T13:10:00.000Z',
+    ultima_recebida_em: '2026-09-16T13:20:00.000Z',
+  };
+  it('sem o campo gravado (tela antiga): bloqueia por resposta', () => {
+    const f = fatos({ trigger_config: { kind: 'appointment_no_show', params: {} }, ...respondeuDepois });
+    expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).toMatchObject({
+      motivo: 'resposta_do_contato',
+    });
+  });
+  it('`false` declarado continua respeitado', () => {
+    const f = fatos({
+      trigger_config: { kind: 'appointment_no_show', params: {}, cancel_on_reply: false },
+      ...respondeuDepois,
+    });
+    expect(decidirEnvio(f, CONFIG_SEM_BLOQUEIOS_OPCIONAIS, QUARTA_MANHA)).not.toMatchObject({
+      motivo: 'resposta_do_contato',
+    });
+  });
+});
