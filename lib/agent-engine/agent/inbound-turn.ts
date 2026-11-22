@@ -517,6 +517,14 @@ export const AGENT_TOOL_DEFS = {
 export const MAX_VETOS_DE_VOCABULARIO_INTERNO = 2;
 
 /**
+ * Quantos vetos de `clinical_claim` o turno tolera antes do fail-safe (porte do #2321). A
+ * saída é a OPOSTA da do vocabulário interno: este NUNCA solta o envio. O que o fail-safe
+ * faz é chamar a equipe (abre um caso), e aí o modelo tem uma saída honesta: dizer que a
+ * equipe vai falar com a pessoa.
+ */
+export const MAX_VETOS_DE_AFIRMACAO_CLINICA = 2;
+
+/**
  * O mesmo degrau para o veto de `false_empty_inbound`, e pela mesma assimetria.
  *
  * Sem teto, o contador só subia: um falso positivo teimoso da detecção calava o
@@ -3393,6 +3401,9 @@ async function executarTurnoDoAgente(
   // (`internal_vocabulary_leak`): 1º veto no turno ensina o modelo a reescrever; persistir
   // solta o envio com registro. Por turno (closure), nunca cross-turno.
   let internalVocabularyVetoCount = 0;
+  // Fail-safe do gate de afirmação clínica (`clinical_claim`): 1º veto ensina; persistir
+  // abre caso para a equipe — e o envio continua barrado. Por turno (closure).
+  let clinicalClaimVetoCount = 0;
   // Uma recusa deste tipo devolve o texto confirmado ao modelo para que ele
   // reescreva antes de falar com o cliente. Não gasta envio nem toca no canal.
   let falseEmptyInboundVetoCount = 0;
@@ -3709,6 +3720,7 @@ async function executarTurnoDoAgente(
             humanPromiseExtraTargets: agentConfig?.handoffKeywords ?? [],
             enforceUnscheduledFollowUp: true,
             enforceInternalVocabulary: true,
+            enforceClinicalClaim: camadaLigada(camadas.afirmacao_clinica, false),
             agenda: {
               active: agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds),
               ferramentas: agentConfig === null ? [] : ferramentasDeAgendaDoAgente(agentConfig.toolIds),
@@ -4255,6 +4267,10 @@ async function executarTurnoDoAgente(
             // não é dele, e a única saída seria o silêncio. O follow-up determinístico
             // idem (ver GateContext.internalVocabularyEnforced).
             enforceInternalVocabulary: true,
+            // Afirmação clínica: só o corpo do MODELO, e só para a organização que ligou a
+            // camada. Sem linha, desligada: não há padrão de ambiente para uma proteção que
+            // só faz sentido em saúde.
+            enforceClinicalClaim: camadaLigada(camadas.afirmacao_clinica, false),
             // Mesmo padrão do vocabulário interno: só o `send_message` arma — é o único
             // corpo escrito pelo modelo. `active` é ter QUALQUER ferramenta de agenda:
             // um agente que só CONSULTA promete "vou verificar" igual, e enquanto a
@@ -4412,6 +4428,52 @@ async function executarTurnoDoAgente(
               hasOpenCase: true,
               openedCaseThisTurn: true,
             });
+          }
+          if (chain.status === 'vetoed' && chain.code === 'clinical_claim') {
+            // Fail-safe do gate de afirmação clínica. NUNCA solta o envio: não existe
+            // "frase com diagnóstico, mas melhor que silêncio". Na insistência o sistema
+            // chama a equipe (abre um caso com a frase barrada) e o erro devolvido ao
+            // modelo diz que a equipe foi acionada, para ele avisar a pessoa.
+            clinicalClaimVetoCount += 1;
+            if (
+              clinicalClaimVetoCount >= MAX_VETOS_DE_AFIRMACAO_CLINICA &&
+              agentConfig?.casesEnabled === true &&
+              !openedCaseThisTurn &&
+              !hasOpenCase
+            ) {
+              const auto = await openCase(
+                pool,
+                {
+                  tenantId,
+                  conversationId: input.conversationId,
+                  agentId: agentConfig?.agentId ?? null,
+                },
+                {
+                  title: 'Pergunta clínica que precisa de um profissional',
+                  summary: body, // a mensagem que o assistente tentou enviar e foi barrada
+                  blocker:
+                    'Aberto automaticamente: o assistente insistiu numa afirmação clínica ' +
+                    '(diagnóstico, remédio, promessa de resultado ou câncer) e o envio foi barrado.',
+                  source: 'guardrail_autofallback',
+                  contextSnapshot: buildCaseContextSnapshot(),
+                },
+              );
+              if (auto.ok) {
+                openedCaseThisTurn = true;
+                moverParaHandoffBestEffort('clinical_claim_autofallback');
+                return {
+                  ok: false,
+                  error: {
+                    code: chain.code,
+                    message:
+                      'A mensagem continua barrada. A equipe já foi acionada: diga à pessoa, ' +
+                      'em uma frase, que um profissional da equipe vai falar com ela, sem ' +
+                      'repetir nada sobre diagnóstico, remédio ou resultado.',
+                  },
+                };
+              }
+            }
+            return { ok: false, error: { code: chain.code, message: chain.message } };
           }
           if (chain.status === 'vetoed' && chain.code === 'internal_vocabulary_leak') {
             // Fail-safe do gate de vazamento — O CLIENTE NUNCA FICA SEM RESPOSTA.

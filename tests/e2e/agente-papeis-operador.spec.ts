@@ -149,16 +149,15 @@ test.describe("A aba do papel que organiza o sistema", () => {
     const itens = painel.locator('[data-testid^="item-conferencia-"]');
     await expect(itens).toHaveCount([...CONFERENCIAS_DE_SAIDA, CONFERENCIA_DE_ENTRADA].length);
 
-    // EXATAMENTE DOIS interruptores — um por camada que custa dinheiro. Este caso
-    // já afirmou ZERO, e a mudança é deliberada: enquanto o motor lia só o `.env`,
-    // um controle aqui seria a tela gravando o que o código ignora. Depois que a
-    // 0142 criou a escolha por organização e os três pontos de consumo passaram a
-    // lê-la, o interruptor deixou de ser decorativo.
-    //
-    // As outras nove seguem sem controle, e é isso que a contagem exata guarda:
-    // um switch a mais aqui é alguém oferecendo desligar o que protege o número
-    // do cliente.
-    await expect(painel.locator('[role="switch"]')).toHaveCount(2);
+    // Um interruptor por item que tem ESCOLHA na lista — e só esses (derivado, não
+    // literal). As PAGAS (que consultam modelo) continuam sendo duas; a afirmação
+    // clínica (porte do #2321) é a terceira escolha, não custa nada e vem desligada.
+    const comEscolha = [...CONFERENCIAS_DE_SAIDA, CONFERENCIA_DE_ENTRADA].filter((c) => c.escolha !== null);
+    expect(
+      comEscolha.filter((c) => c.escolha?.consultaModelo).length,
+      "as camadas pagas (que consultam modelo) continuam sendo duas",
+    ).toBe(2);
+    await expect(painel.locator('[role="switch"]')).toHaveCount(comEscolha.length);
   });
 
   test("desligado, a tela diz o que CONTINUA acontecendo — não só o que para", async () => {

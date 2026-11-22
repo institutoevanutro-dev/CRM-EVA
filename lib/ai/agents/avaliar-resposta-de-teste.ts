@@ -82,6 +82,11 @@ const NAO_AVALIAVEIS_SEM_TURNO: ReadonlyArray<{ gate: string; porque: string }> 
       "depende do que as ferramentas de agenda devolveram neste turno e dos compromissos do contato — não há turno real no teste",
   },
   { gate: "disclosure", porque: "depende de esta ser a primeira mensagem ao contato" },
+  {
+    gate: "clinical_claim",
+    porque:
+      "depende de a organização ter ligado \"Não fazer afirmação clínica\" em Segurança; quando ligada, a prévia do motor aplica",
+  },
 ];
 
 /**

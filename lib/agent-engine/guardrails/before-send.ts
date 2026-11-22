@@ -86,6 +86,7 @@ import type { ChannelProvider } from '@/lib/channels/capabilities';
 // caminho de envio que não passa pelo gate de elegibilidade.
 import { sqlContatoInterno } from '@/lib/contacts/tags-internas';
 import { avaliarHorarios, type HorariosDaAgenda } from './horario-da-agenda';
+import { detectarAfirmacaoClinica, renderVetoDeAfirmacaoClinica } from './afirmacao-clinica';
 
 /** O que os gates enxergam — carregado UMA vez sob o lock, por tentativa de envio. */
 export interface GateContext {
@@ -253,6 +254,14 @@ export interface GateContext {
    * fiação nos dois sentidos: presente no `send_message`, ausente no follow-up.
    */
   internalVocabularyEnforced?: boolean;
+  /**
+   * Arma o `clinicalClaimGate` (diagnóstico, prescrição, promessa de resultado,
+   * afirmação de câncer — `./afirmacao-clinica.ts`; porte do #2321/#2323). Ausente =
+   * DESARMADO: no caminho determinístico (follow-up, template, resposta aprovada) o texto
+   * não é do modelo e veto ali é drop silencioso; e a camada é OPCIONAL por organização
+   * (`afirmacao_clinica` em `org_guardrail_layers`, padrão desligado).
+   */
+  clinicalClaimEnforced?: boolean;
   /**
    * Arma o `spinningGate`. **Ausente = ARMADO** — a direção segura aqui é a
    * oposta do `internalVocabularyEnforced` logo acima, e a assimetria é
@@ -624,6 +633,29 @@ export const internalVocabularyGate: Gate = {
       // nunca os termos — termo casado é trecho da candidata, e um snake_case pode ter
       // vindo de um dado do lead. A medição que a doutrina pede cabe nestes dois campos.
       detail: { leaked_count: achado.termos.length, leaked_kinds: achado.categorias.join(',') },
+    };
+  },
+};
+
+/**
+ * Gate de AFIRMAÇÃO CLÍNICA (porte do #2321/#2323) — barra a mensagem em que o assistente
+ * diz o que a pessoa tem, indica remédio ou dose, garante resultado ou afirma que uma
+ * lesão é câncer. Só arma quando a organização ligou a camada `afirmacao_clinica` e o
+ * corpo é do modelo (ver `GateContext.clinicalClaimEnforced`). Posição 6.8: depois do
+ * `internal_vocabulary`, antes do `agenda_stall` e do `disclosure`.
+ */
+export const clinicalClaimGate: Gate = {
+  name: 'clinical_claim',
+  evaluate: (ctx) => {
+    if (ctx.clinicalClaimEnforced !== true) return { pass: true };
+    const achado = detectarAfirmacaoClinica(ctx.body);
+    if (!achado.achou) return { pass: true };
+    return {
+      pass: false,
+      code: 'clinical_claim',
+      reason: renderVetoDeAfirmacaoClinica(achado.categorias),
+      // detail é persistido: só as CATEGORIAS, nunca o trecho (pode ter dado de saúde).
+      detail: { clinical_kinds: achado.categorias.join(',') },
     };
   },
 };
@@ -1018,8 +1050,11 @@ const spinningGate: Gate = {
  * `GateContext.horariosDaAgenda`): só o agente com ferramenta de agenda e a prévia o armam,
  * e só com HORARIO_DA_AGENDA_MODO=barrar; no padrão (observar) ele só registra no trace o
  * que barraria.
+ * v10 (porte do #2321/#2323) = insere `clinicalClaimGate` entre `internal_vocabulary` e
+ * `agenda_stall`. Nasce DESARMADO: só arma no turno do agente (e na prévia) de uma
+ * organização que ligou a camada `afirmacao_clinica`.
  */
-export const BEFORE_SEND_CHAIN_VERSION = 9;
+export const BEFORE_SEND_CHAIN_VERSION = 10;
 
 /**
  * Ordem FINAL da cadeia (F4-08/F4-09; edge-contract §before_send / blueprint órgão 5) — DADO
@@ -1035,6 +1070,8 @@ export const BEFORE_SEND_CHAIN_VERSION = 9;
  *   (6.6) unscheduled_followup — promessa de nova tentativa sem execução programada;
  *   (6.7) internal_vocabulary — vazamento de vocabulário interno ao cliente (doutrina
  *         `separacao-fala-e-operacao.md`); antes do disclosure porque ele pode emendar o corpo;
+ *   (6.8) clinical_claim — diagnóstico, prescrição, promessa de resultado ou afirmação de
+ *         câncer escritos pelo modelo; só arma com a camada `afirmacao_clinica` ligada;
  *   (6.9) agenda_stall — "vou verificar/confirmar horário" sem ter chamado a ferramenta de
  *         agenda neste turno; antes do disclosure pelo mesmo motivo do internal_vocabulary;
  *   (6.93) horario_da_agenda — dia+horário citado que a agenda não devolveu neste turno, ou
@@ -1054,6 +1091,7 @@ export const BEFORE_SEND_GATES: readonly Gate[] = [
   casePromiseGate,
   unscheduledFollowUpGate,
   internalVocabularyGate,
+  clinicalClaimGate,
   agendaStallGate,
   horarioDaAgendaGate,
   disclosureGate,
@@ -1180,6 +1218,8 @@ export interface RunBeforeSendArgs {
    * depois de N vetos no mesmo turno o envio sai, com registro.
    */
   enforceInternalVocabulary?: boolean;
+  /** Arma o `clinicalClaimGate` — ver `GateContext.clinicalClaimEnforced`. Ausente = no-op. */
+  enforceClinicalClaim?: boolean;
   /**
    * Desarma o `spinningGate` para ESTA tentativa. Ausente = armado (ver
    * `GateContext.spinningEnforced` para a razão da assimetria e para a conta que
@@ -1449,6 +1489,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
         : {}),
       unscheduledFollowUpEnforced: args.enforceUnscheduledFollowUp ?? false,
       internalVocabularyEnforced: args.enforceInternalVocabulary ?? false,
+      clinicalClaimEnforced: args.enforceClinicalClaim ?? false,
       ...(args.agenda !== undefined ? { agenda: args.agenda } : {}),
       ...(args.horariosDaAgenda !== undefined ? { horariosDaAgenda: args.horariosDaAgenda } : {}),
       ...(args.followup !== undefined ? { followup: args.followup } : {}),
