@@ -194,7 +194,7 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
   const [won, setWon] = useState(v.won ?? "Ganho");
   const [lost, setLost] = useState(v.lost ?? "Perdido");
   const [reasonsText, setReasonsText] = useState(readLostReasons(pipeline.settings).join(", "));
-  const [categorias, setCategorias] = useState<Record<string, string>>(() => readCategorias(pipeline.settings));
+  const [categorias, setCategorias] = useState(readCategorias(pipeline.settings));
   const camposIniciais = camposDoFunil(pipeline.settings);
   const [fields, setFields] = useState<CustomFieldDef[]>(camposIniciais);
   // A `key` de cada linha é um id que nasce com ela, nunca a chave digitada:

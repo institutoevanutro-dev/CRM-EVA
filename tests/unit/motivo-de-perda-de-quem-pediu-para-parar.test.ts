@@ -33,7 +33,7 @@ describe("motivo de perda de quem pediu para não receber mensagens", () => {
     expect([...CANONICAL_LOST_REASONS]).toContain(MOTIVO);
     // O rótulo mora no `REASON_LABELS` da janela de perder (um `Record` sobre
     // os canônicos — o typecheck cobra a chave); aqui se cobra o texto.
-    const janela = readFileSync(path.join(raiz, "components/kanban/LoseLeadDialog.tsx"), "utf8");
+    const janela = readFileSync(path.join(raiz, "lib/schemas/leads.ts"), "utf8");
     expect(janela).toContain(`${MOTIVO}: "Pediu para não receber mensagens"`);
     expect(traduzir("Pediu para não receber mensagens", "es")).toBe("Pidió no recibir mensajes");
   });

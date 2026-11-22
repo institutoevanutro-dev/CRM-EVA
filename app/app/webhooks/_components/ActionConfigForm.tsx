@@ -599,7 +599,7 @@ function CallWebhookForm({
             : t("Se preencher, enviaremos uma assinatura para o outro sistema conferir que fomos nós.")}
         </p>
       </div>
-      {/* Opt-in do responsável (DeskcommCRM #1709): desligado é o padrão. */}
+      {/* Opt-in do responsável (upstream #1709): desligado é o padrão. */}
       <div className="flex items-center justify-between gap-3 rounded-md border p-3">
         <div className="space-y-0.5">
           <Label>{t("Incluir o responsável no corpo")}</Label>

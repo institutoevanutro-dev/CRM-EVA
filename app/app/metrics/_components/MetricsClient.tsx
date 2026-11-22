@@ -181,7 +181,7 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
           filtro de atendente, agora pelo NÚMERO. Leitura de gestão: só para
           quem compara a equipe (a rota também exige gerente). */}
       {canCompare ? <CanaisPanel owner={selectedOwner} /> : null}
-      {/* Perdas por motivo, categoria e etapa de saída (porte de DeskcommCRM
+      {/* Perdas por motivo, categoria e etapa de saída (porte do upstream
           #1717): o funil inteiro, então só para gerente (a rota exige). */}
       {canCompare ? <PerdasPanel /> : null}
     </div>

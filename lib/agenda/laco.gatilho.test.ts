@@ -33,7 +33,7 @@ describe("gatilhoDaTransicao", () => {
     expect(gatilhoDaTransicao("pending", "cancelled")).toBe("appointment.cancelled");
   });
 
-  it("compareceu e faltou emitem os SEUS (DeskcommCRM #1709)", () => {
+  it("compareceu e faltou emitem os SEUS (upstream #1709)", () => {
     expect(gatilhoDaTransicao("confirmed", "completed")).toBe("appointment.completed");
     expect(gatilhoDaTransicao("confirmed", "no_show")).toBe("appointment.no_show");
     expect(gatilhoDaTransicao("pending", "completed")).toBe("appointment.completed");
