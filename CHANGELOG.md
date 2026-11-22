@@ -8,6 +8,21 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.34.0] — 2026-11-22
+
+### Alterado
+
+- **Painel de vendas puxa as vendas do Financeiro quando ele está ligado** Com o Financeiro ligado (`FINANCEIRO_URL`, `FINANCEIRO_TOKEN` e
+  `FINANCEIRO_ORGANIZATION_ID`), Análise › Vendas mostra, para gestor e admin,
+  Vendas, Valor vendido, Ticket médio, o gráfico e "Clientes que mais compram"
+  a partir do vendido no Financeiro no período. A conversão continua vindo do
+  funil. Funil e tag passam a filtrar só a conversão e a lista do CRM, e os
+  rankings de tags e funis somem nesse modo. Vendas registradas no CRM não
+  entram nos cartões, para não contar em dobro. Se o Financeiro não responder,
+  a tela avisa e deixa esses cartões em branco. Precisa do Financeiro com a
+  rota `vendas-do-periodo` (eva-financeiro, migration 0088). Sem o Financeiro,
+  nada muda.
+
 ## [5.33.0] — 2026-11-22
 
 ### Adicionado
@@ -9948,7 +9963,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.33.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.34.0...HEAD
+[5.34.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.33.0...v5.34.0
 [5.33.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.32.0...v5.33.0
 [5.32.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.31.1...v5.32.0
 [5.31.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.31.0...v5.31.1
