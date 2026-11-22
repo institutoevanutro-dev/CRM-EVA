@@ -118,6 +118,8 @@ const alterarSchema = z
     confirmation_next_at: z.string().datetime({offset:true}).optional(),
     /** Remarcar: o novo início. O fim conserva o comprimento do bloco (upstream #3714). */
     starts_at: z.string().datetime({ offset: true }).optional(),
+    /** Mudar o tempo: sozinha, só o fim muda (a borda do card na grade). */
+    duration_minutes: z.number().int().min(DURACAO_MINIMA_MIN).max(DURACAO_MAXIMA_MIN).optional(),
     /**
      * `rescheduled` NÃO entra aqui: remarcar se pede mandando `starts_at`, e é
      * movimento próprio — não uma situação que se escolhe.
@@ -132,6 +134,7 @@ const alterarSchema = z
     (c) =>
       c.confirmation_next_at !== undefined ||
       c.starts_at !== undefined ||
+      c.duration_minutes !== undefined ||
       c.status !== undefined ||
       c.notes !== undefined ||
       c.guest_email !== undefined ||

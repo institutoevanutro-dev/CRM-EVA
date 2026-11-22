@@ -37,14 +37,27 @@ export function useRemarcarAgendamento() {
     mutationFn: async (entrada: {
       id: string;
       revision?: number;
-      starts_at: string;
+      /**
+       * O novo início. AUSENTE quando só a duração muda (a borda da grade, porte
+       * de melgarafael/DeskcommCRM#5082): aí a rota reescreve só o fim.
+       */
+      starts_at?: string;
       guest_email?: string;
+      /** A duração nova, em minutos. */
+      duration_minutes?: number;
     }) => apiClient.patch<{ data: { id: string } }>("/api/v1/agenda/agendamentos", entrada),
-    onSuccess: () => {
-      toast.success(t("Agendamento remarcado."));
+    // O aviso diz o que aconteceu: sem `starts_at` nada foi remarcado — só o
+    // tempo mudou.
+    onSuccess: (_dados, entrada) => {
+      toast.success(entrada.starts_at ? t("Agendamento remarcado.") : t("Duração alterada."));
       void qc.invalidateQueries({ queryKey: ["agenda"] });
     },
-    onError: (err) => showApiError(err),
+    onError: (err) => {
+      showApiError(err);
+      // Recusado ou passado para trás (409): a grade volta a ler o que vale
+      // agora, em vez de seguir desenhando a versão que o servidor recusou.
+      void qc.invalidateQueries({ queryKey: ["agenda"] });
+    },
   });
 }
 

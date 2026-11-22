@@ -126,6 +126,13 @@ export interface AlterarInput {
   outcome_message_id?: string;
   confirmation_next_at?: string;
   starts_at?: string;
+  /**
+   * A duração nova, em minutos. Sozinha, só o fim muda (a borda do card na
+   * grade): não é remarcação. Com `starts_at`, é o comprimento do bloco no
+   * horário novo. Ausente = o comprimento que o bloco já tem (porte de
+   * melgarafael/DeskcommCRM#5082).
+   */
+  duration_minutes?: number;
   status?: "confirmed" | "completed" | "no_show";
   notes?: string;
   /** Igual ao de `MarcarInput`: `""` desconvida, ausente não mexe. */
@@ -483,8 +490,22 @@ export async function alterarAgendamentoHandler(
   if (input.guest_email !== undefined) mudanca.guest_email = input.guest_email || null;
   let transicao: Transicao | null = null;
 
-  if (input.starts_at) {
-    const novoInicio = new Date(input.starts_at);
+  if (input.duration_minutes !== undefined && !duracaoEscolhidaValida(input.duration_minutes)) {
+    throw new ApiError(
+      422,
+      "agenda_duracao_invalida",
+      undefined,
+      ctx.requestId,
+      `A duração precisa ser um número inteiro de minutos entre ${DURACAO_MINIMA_MIN} e ${DURACAO_MAXIMA_MIN}.`,
+    );
+  }
+
+  // REMARCAR (início novo) E MUDAR O TEMPO (duração nova) são a mesma pergunta:
+  // quanto do horário o compromisso ocupa, a partir de quando (porte de
+  // melgarafael/DeskcommCRM#5082). Sem `duration_minutes`, o comprimento que o
+  // bloco já tem viaja com o horário, como antes.
+  if (input.starts_at || input.duration_minutes !== undefined) {
+    const novoInicio = input.starts_at ? new Date(input.starts_at) : new Date(atual.starts_at as string);
     const { data: tipo } = await supabase
       .from("calendar_event_types")
       .select("id, duration_minutes")
@@ -495,17 +516,31 @@ export async function alterarAgendamentoHandler(
       throw new ApiError(404, "not_found", undefined, ctx.requestId, "O tipo deste agendamento não existe mais.");
     }
 
-    const duracaoDoBlocoMin = duracaoDoBloco(
+    const duracaoAtualMin = duracaoDoBloco(
       atual.starts_at as string,
       atual.ends_at as string | null,
       Number(tipo.duration_minutes),
     );
+    // A escolha da tela vence o que o bloco tinha; ausente, o bloco é a régua.
+    const duracaoDoBlocoMin = input.duration_minutes ?? duracaoAtualMin;
     const novoFim = new Date(novoInicio.getTime() + duracaoDoBlocoMin * 60_000);
     // ⚠️ O PRÓPRIO COMPROMISSO OCUPA O HORÁRIO DELE. Remarcar para o mesmo
-    // instante é no-op — sem esta guarda ele se veria como conflito e recusaria
-    // a si mesmo.
+    // instante, com o mesmo comprimento, é no-op — sem esta guarda ele se veria
+    // como conflito e recusaria a si mesmo.
     const mesmoHorario = new Date(atual.starts_at as string).getTime() === novoInicio.getTime();
-    if (!mesmoHorario) {
+    const mesmaDuracao = duracaoDoBlocoMin === duracaoAtualMin;
+    if (!mesmoHorario || !mesmaDuracao) {
+      // Mudar o tempo para um fim que já passou não muda agenda nenhuma: é
+      // reescrever o histórico do atendimento.
+      if (!input.starts_at && novoFim.getTime() <= Date.now()) {
+        throw new ApiError(
+          422,
+          "agenda_horario_passado",
+          undefined,
+          ctx.requestId,
+          "O novo fim deste compromisso já passou. Escolha um fim depois de agora.",
+        );
+      }
       // REMARCAR segue a mesma assimetria de marcar (`exigeHorarioLivre`): a
       // pessoa que combinou o encaixe por fora da grade precisa poder movê-lo
       // também, senão o compromisso nasce possível e fica preso.
@@ -517,10 +552,14 @@ export async function alterarAgendamentoHandler(
         duracaoMin: duracaoDoBlocoMin,
         ignorarAgendamentoId: atual.id as string,
       });
-      mudanca.starts_at = novoInicio.toISOString();
+      // O INÍCIO só é reescrito quando o pedido trouxe início: mudar só o
+      // tempo não é remarcação (nem aviso, nem notícia na timeline).
+      if (input.starts_at) {
+        mudanca.starts_at = novoInicio.toISOString();
+        mudanca.time_zone = consulta.fusoDaRegra;
+        transicao = "rescheduled";
+      }
       mudanca.ends_at = novoFim.toISOString();
-      mudanca.time_zone = consulta.fusoDaRegra;
-      transicao = "rescheduled";
     }
   }
 

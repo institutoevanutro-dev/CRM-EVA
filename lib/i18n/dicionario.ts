@@ -172,6 +172,23 @@ export const DICIONARIO: Traducoes = {
   },
   // Auditoria de 17/11, lote 12: a recusa do arraste traduzida.
   "Não dá para remarcar para esse horário — {razao}.": { es: "No se puede reprogramar para ese horario — {razao}." },
+  // A borda de baixo do card (porte de melgarafael/DeskcommCRM#5082): mudar só o tempo.
+  "Arraste para mudar a duração": { es: "Arrastra para cambiar la duración" },
+  "Mudar a duração de": { es: "Cambiar la duración de" },
+  "Se a agenda estiver ligada ao Google Agenda, quem foi convidado pode receber um e-mail de atualização do Google.": {
+    es: "Si la agenda está conectada a Google Calendar, los invitados pueden recibir un correo de actualización de Google.",
+  },
+  "Alterar duração": { es: "Cambiar duración" },
+  "o compromisso": { es: "la cita" },
+  "Duração alterada.": { es: "Duración cambiada." },
+  "A duração de {nome} não foi alterada — {motivo}.": { es: "No se cambió la duración de {nome}: {motivo}." },
+  "não consegui salvar agora": { es: "no pude guardar ahora" },
+  "Este compromisso foi alterado por outra pessoa enquanto você ajustava — agora vai de {inicio} a {fim}. Ajuste de novo se ainda precisar.": {
+    es: "Otra persona cambió esta cita mientras la ajustabas: ahora va de {inicio} a {fim}. Ajústala de nuevo si todavía lo necesitas.",
+  },
+  "Este compromisso foi alterado por outra pessoa enquanto você ajustava. Confira o horário atual dele antes de ajustar de novo.": {
+    es: "Otra persona cambió esta cita mientras la ajustabas. Revisa su horario actual antes de ajustarla de nuevo.",
+  },
   "Entendi": { es: "Entendido" },
   "Paciente": { es: "Paciente" },
   "Buscar pelo nome ou telefone": { es: "Buscar por nombre o teléfono" },
@@ -8748,7 +8765,7 @@ export const DICIONARIO: Traducoes = {
   "Nenhum horário livre neste período.": { es: "Ningún horario libre en este período." },
   "Os blocos vazios continuam aqui, e o que estiver publicado fica clicável.": { es: "Los bloques vacíos siguen aquí, y lo que esté publicado queda clicable." },
   "Remarcar": { es: "Reprogramar" },
-  "para": { es: "para" },
+  "para": { es: "a" },
   "Remarcar {paciente} ({titulo}) de {de} para {para}?": { es: "¿Reprogramar a {paciente} ({titulo}) de {de} a {para}?" },
   "Remarcar {titulo} de {de} para {para}?": { es: "¿Reprogramar {titulo} de {de} a {para}?" },
   "Avise {paciente} do novo horário: a mudança não manda mensagem sozinha, a não ser por uma automação de remarcação.": { es: "Avisa a {paciente} del nuevo horario: el cambio no envía un mensaje solo, salvo con una automatización de reprogramación." },
