@@ -397,3 +397,34 @@ describe("crm_get_lead / crm_list_leads — governança + shape", () => {
     expect(keys).not.toContain("owner_phone");
   });
 });
+
+describe("crm_get_lead — campo desmarcado em \"A IA pode ler\" (porte do upstream #4684)", () => {
+  const CONTATO_DO_TURNO = "c0000000-0000-4000-8000-000000000009";
+  const funil = {
+    id: "e0000000-0000-4000-8000-000000000001",
+    settings: {
+      fields: [
+        { key: "documento", label: "Documento", type: "text", ia_pode_ler: false },
+        { key: "interesse", label: "Interesse", type: "text" },
+      ],
+    },
+  };
+  const row = leadRow({
+    contact_id: CONTATO_DO_TURNO,
+    custom_fields: { documento: "123.456.789-00", interesse: "botox", solta: "x" },
+  });
+  const resolver: Resolver = (q) => (q.table === "crm_pipelines" ? { data: [funil], error: null } : leadResolver([row])(q));
+
+  it("no turno, a chave desmarcada não vem; a sem marca e a não declarada vêm (ausência é ligado)", async () => {
+    const ctx = { ...makeCtx(resolver), contatoDoTurno: CONTATO_DO_TURNO } as McpContext;
+    const res = (await crmGetLead.handler({ lead_id: row.id as string }, ctx)) as { lead: Record<string, unknown> };
+    expect(res.lead.custom_fields).toEqual({ interesse: "botox", solta: "x" });
+  });
+
+  it("fora do turno (token de pessoa), a ficha volta inteira", async () => {
+    const res = (await crmGetLead.handler({ lead_id: row.id as string }, makeCtx(resolver))) as {
+      lead: Record<string, unknown>;
+    };
+    expect(res.lead.custom_fields).toEqual({ documento: "123.456.789-00", interesse: "botox", solta: "x" });
+  });
+});

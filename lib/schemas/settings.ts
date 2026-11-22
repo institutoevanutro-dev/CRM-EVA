@@ -169,6 +169,22 @@ export const customFieldSchema = z.object({
    * Ausente é o caminho de todo funil instalado hoje.
    */
   mostrar_quando: mostrarQuandoSchema.optional(),
+  /**
+   * A IA PODE LER ESTE CAMPO? (porte do upstream #4684, issue #4669 de lá)
+   *
+   * Só `false` EXPLÍCITO tira o valor do modelo: dentro de um turno de agente,
+   * as ferramentas de negócio (`lib/mcp/tools/leads.ts`) devolvem o
+   * `custom_fields` sem as chaves desmarcadas. Fora do turno (token de pessoa)
+   * nada muda.
+   *
+   * DIFERENÇA DELIBERADA PARA O ORIGINAL: lá a ausência é desmarcado, e todo
+   * campo existente parou de ir ao modelo no dia da atualização. Aqui a
+   * ausência é LIGADO, para o atendimento que hoje lê esses campos não perder
+   * contexto de repente; quem quer tirar um campo (documento, dado de saúde)
+   * desmarca a caixa na tela do funil, que grava `false`. Régua única em
+   * `campoLiberadoParaIa` (`lib/leads/campos-do-funil.ts`).
+   */
+  ia_pode_ler: z.boolean().optional(),
 });
 export type CustomFieldDef = z.infer<typeof customFieldSchema>;
 

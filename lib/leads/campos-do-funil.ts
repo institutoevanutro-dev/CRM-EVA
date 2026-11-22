@@ -16,6 +16,37 @@ export function camposDoFunil(settings: Record<string, unknown> | null | undefin
 }
 
 /**
+ * O campo está liberado para o MODELO? (porte do upstream #4684)
+ *
+ * Só `ia_pode_ler: false` explícito bloqueia; a ausência libera (ver o
+ * comentário de `ia_pode_ler` em `lib/schemas/settings.ts` — é o contrário do
+ * original, de propósito).
+ */
+export function campoLiberadoParaIa(campo: Pick<CustomFieldDef, "ia_pode_ler">): boolean {
+  return campo.ia_pode_ler !== false;
+}
+
+/**
+ * O recorte de `custom_fields` que a IA pode ler — o que as ferramentas de
+ * negócio devolvem DENTRO de um turno. Sai só a chave cuja definição no funil
+ * está desmarcada; chave que o funil não declara fica, como sempre ficou.
+ * `custom_fields` que não é objeto volta como veio.
+ */
+export function filtrarCamposLegiveisPelaIa(
+  settings: Record<string, unknown> | null | undefined,
+  custom: unknown,
+): unknown {
+  if (!custom || typeof custom !== "object" || Array.isArray(custom)) return custom;
+  const bloqueadas = new Set(
+    camposDoFunil(settings)
+      .filter((campo) => !campoLiberadoParaIa(campo))
+      .map((campo) => campo.key),
+  );
+  if (bloqueadas.size === 0) return custom;
+  return Object.fromEntries(Object.entries(custom).filter(([chave]) => !bloqueadas.has(chave)));
+}
+
+/**
  * O embed `crm_pipelines(settings)` do PostgREST vem objeto (FK to-one) ou,
  * se a relação vacilar, array. Os dois caem aqui — lixo vira `null`.
  */
