@@ -100,7 +100,11 @@ beforeAll(async () => {
     "insert into contacts(id,organization_id,display_name,is_anonymized,anonymized_at) values($1,$2,'Anon',true,now() - interval '1 hour')",
     [JA_ANONIMIZADO, ORG],
   );
+  // O resíduo é de ANTES de qualquer gatilho: desde a 0427 uma run criada antes
+  // de `anonymized_at` já nasceria redigida, então o gatilho dela sai só aqui.
+  await q("alter table ai_agent_runs disable trigger trg_lgpd_redige_escrita_tardia_da_ia");
   await semear(JA_ANONIMIZADO, "now() - interval '2 hours'");
+  await q("alter table ai_agent_runs enable trigger trg_lgpd_redige_escrita_tardia_da_ia");
 });
 
 describe("LGPD: a virada de is_anonymized alcança memória, ferramentas e estado da lead (0309)", () => {
