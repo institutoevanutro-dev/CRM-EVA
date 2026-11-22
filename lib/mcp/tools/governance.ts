@@ -58,7 +58,8 @@ export const crmAssignConversation: McpToolDefinition<typeof assignInputShape> =
     "Atribui/transfere uma conversa a um atendente (reason='transfer', to_user_id preenchido) " +
     "ou libera de volta à fila (reason='release', to_user_id null). Grava assignment event " +
     "auditado. Recusa destino de outra org (guard de membership). Idempotente: se a conversa " +
-    "já está no estado alvo, retorna sucesso sem duplicar evento.",
+    "já está no estado alvo, retorna sucesso sem duplicar evento. Atribuir não interrompe o seu " +
+    "próprio turno: pode ser chamada junto com a passagem para uma pessoa, em qualquer ordem.",
   inputSchema: assignInputShape,
   category: "write",
   requiresRole: "agent",
@@ -96,14 +97,24 @@ export const crmAssignConversation: McpToolDefinition<typeof assignInputShape> =
     // true com o dono que ACABAMOS de ler ⇒ optimistic lock: sob CORRIDA (dois
     // assigns idênticos leem o mesmo dono antigo), o 1º vence (1 evento) e o 2º
     // vê o dono já mudado (v_from ≠ expected) ⇒ 0 rows, SEM evento duplicado.
-    const { data: rows, error: assignErr } = await ctx.supabase.rpc("fn_conversation_assign", {
+    //
+    // No turno da IA (`ctx.sourceJobId`, que o runtime injeta e o modelo não
+    // escreve) a chamada passa pela variante que diz ao gatilho de "assumir"
+    // qual job pediu a atribuição (migration 0425, porte do original #3953):
+    // sem ela o próprio turno virava `conversation_command_taken`, e a passagem
+    // e a mudança de etapa que vinham depois eram recusadas. Fora do turno
+    // (rota MCP, token de integração) nada muda.
+    const args = {
       p_organization_id: ctx.organizationId,
       p_conversation_id: parsed.conversation_id,
       p_to_user_id: parsed.to_user_id,
       p_reason: parsed.reason,
       p_expected_assignee: currentOwner,
       p_enforce_expected: true,
-    });
+    };
+    const { data: rows, error: assignErr } = ctx.sourceJobId
+      ? await ctx.supabase.rpc("fn_conversation_assign_pelo_turno", { ...args, p_source_job_id: ctx.sourceJobId })
+      : await ctx.supabase.rpc("fn_conversation_assign", args);
     if (assignErr) throw new Error(assignErr.message);
     if (!Array.isArray(rows) || rows.length === 0) {
       // 0 rows = perdeu o optimistic lock. Re-lê: se o dono já é o alvo, foi a

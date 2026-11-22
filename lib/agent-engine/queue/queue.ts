@@ -380,17 +380,37 @@ export async function rescheduleJob(
   db: Queryable,
   jobId: string,
   workerId: string,
-  opts: { delayMs: number; reason: string; acquiredAt?: string },
+  opts: {
+    delayMs: number;
+    reason: string;
+    acquiredAt?: string;
+    /**
+     * Chaves gravadas no `payload` do MESMO job, no MESMO update (porte do
+     * original #3419): o rastro `adiado_por_janela` que o drain e o
+     * `PUT /api/v1/ai/pacing` leem. `||` não pisa em chave alheia.
+     */
+    payloadPatch?: Record<string, unknown>;
+  },
 ): Promise<JobRow | null> {
   const { rows } = await db.query<JobRow>(
     `update job_queue
      set status = 'pending', locked_by = null, locked_at = null,
          run_after = now() + ($3 * interval '1 millisecond'),
          attempts = greatest(attempts - 1, 0),
-         last_error = $4
+         last_error = $4${opts.payloadPatch === undefined ? '' : `,
+         payload = coalesce(payload, '{}'::jsonb) || $6::jsonb`}
      where id = $1 and status = 'running' and locked_by = $2 and ($5::timestamptz is null or locked_at=$5)
      returning *`,
-    [jobId, workerId, opts.delayMs, normalizeError(opts.reason), opts.acquiredAt ?? null],
+    [
+      jobId,
+      workerId,
+      opts.delayMs,
+      normalizeError(opts.reason),
+      opts.acquiredAt ?? null,
+      // Sem patch, o statement é o de antes: o payload (onde mora a mensagem do
+      // turno) nem é tocado.
+      ...(opts.payloadPatch === undefined ? [] : [JSON.stringify(opts.payloadPatch)]),
+    ],
   );
   return rows[0] ?? null;
 }

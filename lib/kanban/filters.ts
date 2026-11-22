@@ -42,6 +42,19 @@ export interface LeadFilters {
   valueCentsMin?: number | null;
   valueCentsMax?: number | null;
   overdueOnly?: boolean;
+  /** O `lost_reason` exato do card — filtro de perda (DeskcommCRM #1717). */
+  lostReason?: string;
+  /** A categoria do motivo de perda, resolvida no funil (DeskcommCRM #1717). */
+  lostCategory?: string;
+}
+
+/**
+ * O que a tela sabe e o lead não: a categoria NÃO é coluna, sai do
+ * `settings.lost_reasons` do funil (`categoriaDoMotivo`). Sem contexto, filtrar
+ * por categoria não acha nada — sem configuração não há o que agrupar.
+ */
+export interface ContextoDosFiltros {
+  categoriaDo?: (motivo: string) => string | undefined;
 }
 
 /**
@@ -99,6 +112,8 @@ export function filtersFromParams(
     ...(modoDeEtiqueta(modo) ? { tagMode: modoDeEtiqueta(modo) } : {}),
     search: search ?? undefined,
     overdueOnly: sp.get("overdue") === "1" || undefined,
+    lostReason: sp.get("motivo") ?? undefined,
+    lostCategory: sp.get("categoria") ?? undefined,
   };
 }
 
@@ -112,10 +127,12 @@ export function filtersToParams(f: LeadFilters): string {
   if (f.tagMode === "ou") p.set("modo", "ou");
   if (f.search?.trim()) p.set("q", f.search.trim());
   if (f.overdueOnly) p.set("overdue", "1");
+  if (f.lostReason) p.set("motivo", f.lostReason);
+  if (f.lostCategory) p.set("categoria", f.lostCategory);
   return p.toString();
 }
 
-export function applyFilters(leads: Lead[], f: LeadFilters): Lead[] {
+export function applyFilters(leads: Lead[], f: LeadFilters, contexto?: ContextoDosFiltros): Lead[] {
   // O "hoje" de quem olha o funil — NÃO o dia UTC. `toISOString()` adianta o
   // dia a oeste, e depois das 21h em Brasília "Apenas atrasados" marcava como
   // vencido o negócio que fecha HOJE. Portado do projeto original (DeskcommCRM,
@@ -158,6 +175,15 @@ export function applyFilters(leads: Lead[], f: LeadFilters): Lead[] {
       }
     }
     if (f.status && f.status !== "all" && l.status !== f.status) return false;
+    // Motivo e categoria só existem em negócio PERDIDO: escolher um deles é
+    // pedir perdas.
+    if ((f.lostReason || f.lostCategory) && l.status !== "lost") return false;
+    if (f.lostReason && l.lost_reason !== f.lostReason) return false;
+    if (f.lostCategory) {
+      const motivo = l.lost_reason?.trim() ?? "";
+      const categoria = motivo ? contexto?.categoriaDo?.(motivo) : undefined;
+      if (categoria !== f.lostCategory) return false;
+    }
     // As TRÊS caixas de marcador (negócio, contato e conversa) — ver
     // lib/kanban/marcadores-do-card.ts. Só `l.tags` deixava o marcador escrito
     // no contato ou na conversa sem casar card nenhum. O E/OU mora em

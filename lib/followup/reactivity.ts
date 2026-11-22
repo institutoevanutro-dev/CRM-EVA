@@ -145,6 +145,12 @@ export interface ReactivitySummary {
 function parseCancelOnReply(raw: unknown): boolean {
   const parsed = triggerConfigSchema.safeParse(raw);
   if (!parsed.success) return false;
+  // `appointment_no_show` CANCELA MESMO SEM O CAMPO GRAVADO (porte do
+  // DeskcommCRM #3755): a tela mostra o interruptor ligado e travado nesse
+  // gatilho, e todo fluxo salvo por ela até aqui está sem o campo. Ausente vale
+  // `true`; `false` DECLARADO (API, importação) continua respeitado. Mesma regra
+  // de `cancelaNaResposta` em `bloqueios-obrigatorios.ts`.
+  if (parsed.data.kind === "appointment_no_show") return parsed.data.cancel_on_reply ?? true;
   return parsed.data.cancel_on_reply ?? false;
 }
 

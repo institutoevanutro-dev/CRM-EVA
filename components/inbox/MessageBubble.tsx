@@ -1,10 +1,10 @@
 "use client";
 
-import { memo, useEffect, useId, useState, type ReactNode } from "react";
+import { memo, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { ArrowBendUpLeft, ArrowBendUpRight, CalendarX, Check, Checks, Clock, Robot, WarningOctagon } from "@/lib/ui/icons";
+import { ArrowBendUpLeft, ArrowBendUpRight, CalendarX, Check, Checks, Clock, DotsThree, PencilSimple, Robot, Trash, WarningOctagon } from "@/lib/ui/icons";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ApiError } from "@/lib/api/types";
 import { reenvioDaMensagem } from "@/lib/messaging/reenvio";
 import { motivoDaFalhaDaMensagem } from "@/lib/inbox/motivo-da-falha";
@@ -98,7 +104,17 @@ interface Props {
    * Sem quem calcule (a leitura do super-admin), cada bolha é um turno.
    */
   inicioDoTurno?: boolean;
+  /**
+   * Editar e apagar para todos a mensagem que ESTE atendente enviou pelo CRM
+   * (DeskcommCRM #1626). Só o `ChatThread` passa, e só quando o canal sabe
+   * fazer e a mensagem é de quem lê; a rota confere tudo de novo.
+   */
+  onEditar?: (m: Message, text: string) => Promise<void>;
+  onApagar?: (m: Message) => Promise<void>;
 }
+
+/** A janela do WhatsApp para editar: 15 minutos depois do envio (a rota usa a mesma). */
+const JANELA_DE_EDICAO_MS = 15 * 60 * 1000;
 
 /**
  * O botão de "Encaminhar" ao lado da bolha, com o mesmo desenho do "Responder":
@@ -194,8 +210,17 @@ export const MessageBubble = memo(function MessageBubble({
   quemEnviouAoProntuario = null,
   erroAoProntuario = null,
   inicioDoTurno = true,
+  onEditar,
+  onApagar,
 }: Props) {
   const [ocupado, setOcupado] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [textoEditado, setTextoEditado] = useState("");
+  const [confirmandoApagar, setConfirmandoApagar] = useState(false);
+  const editorRef = useRef<HTMLTextAreaElement | null>(null);
+  // O Radix devolve o foco ao gatilho ao fechar o menu; quando o item escolhido
+  // foi "Editar", o foco vai para o editor.
+  const abrindoEdicao = useRef(false);
   const [confirmandoReenvio, setConfirmandoReenvio] = useState(false);
   // Relógio de 60s: tira da tela o "Transcrevendo…" vencido sem chamar
   // `Date.now()` no render (DeskcommCRM e5216e26a).
@@ -276,6 +301,13 @@ export const MessageBubble = memo(function MessageBubble({
   // cartão de contato (o servidor recusa, ver `motivoParaNaoEncaminhar`) nem a
   // bolha otimista, que ainda não tem linha no banco para ser lida.
   const podeEncaminhar = Boolean(onEncaminhar) && !apagada && !isContact && !message.metadata?._optimistic;
+  // Editar e apagar: só o que já chegou ao WhatsApp (tem id do canal) e não
+  // foi apagado. Editar, só texto e dentro da janela de 15 minutos.
+  const alteravel = isOutbound && !apagada && Boolean(message.external_id)
+    && ["sent", "delivered", "read"].includes(message.status);
+  const podeEditar = alteravel && Boolean(onEditar) && message.type === "text" && Boolean(message.body)
+    && agora - new Date(message.sent_at).getTime() <= JANELA_DE_EDICAO_MS;
+  const podeApagar = alteravel && Boolean(onApagar);
   const aiGenerated = isAiGeneratedMessage(message.metadata);
   const citations = extractCitations(message.metadata);
   const showCitationButton =
@@ -327,6 +359,23 @@ export const MessageBubble = memo(function MessageBubble({
   const nomeDoAgente = senderLabel === "Automático" && typeof gravado === "string" ? gravado.trim() : "";
 
   const tentarDeNovo = () => (reenvio === "confirmar" ? setConfirmandoReenvio(true) : void reenviar(false));
+
+  async function salvarEdicao() {
+    const novo = textoEditado.trim();
+    if (!onEditar || !novo || ocupado) return;
+    setOcupado(true);
+    try { await onEditar(message, novo); setEditando(false); }
+    catch { /* O hook mostra o erro; o texto fica para nova tentativa. */ }
+    finally { setOcupado(false); }
+  }
+
+  async function apagarParaTodos() {
+    if (!onApagar || ocupado) return;
+    setOcupado(true);
+    try { await onApagar(message); setConfirmandoApagar(false); }
+    catch { /* O hook mostra o erro; a confirmação fica aberta. */ }
+    finally { setOcupado(false); }
+  }
 
   async function reenviar(confirmado: boolean) {
     if (!onReenviar || ocupado) return;
@@ -383,6 +432,42 @@ export const MessageBubble = memo(function MessageBubble({
         quando o mouse entra. Em telas de toque não há hover — por isso
         `focus-visible` também revela, e o teclado alcança.
       */}
+      {(podeEditar || podeApagar) && !editando && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" aria-label={t("Opções da mensagem")} disabled={ocupado}
+              className={cn(GESTO_AO_LADO_DA_BOLHA, "data-[state=open]:opacity-100")}>
+              <DotsThree size={14} weight="bold" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={(event) => {
+              if (!abrindoEdicao.current) return;
+              event.preventDefault();
+              abrindoEdicao.current = false;
+              editorRef.current?.focus({ preventScroll: true });
+              editorRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+            }}
+          >
+            {podeEditar && (
+              <DropdownMenuItem onSelect={() => {
+                abrindoEdicao.current = true;
+                setTextoEditado(message.body ?? "");
+                setEditando(true);
+              }}>
+                <PencilSimple size={16} aria-hidden />{t("Editar mensagem")}
+              </DropdownMenuItem>
+            )}
+            {podeApagar && (
+              <DropdownMenuItem onSelect={() => setConfirmandoApagar(true)}
+                className="text-destructive focus:text-destructive">
+                <Trash size={16} aria-hidden />{t("Apagar para todos")}
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       {podeEncaminhar && isOutbound && (
         <button type="button" onClick={() => onEncaminhar?.(message)} aria-label={t("Encaminhar")}
           className={GESTO_AO_LADO_DA_BOLHA}>
@@ -545,7 +630,29 @@ export const MessageBubble = memo(function MessageBubble({
           </div>
         )}
 
-        {apagada ? (
+        {editando ? (
+          <div className="w-72 max-w-full space-y-2">
+            <textarea
+              ref={editorRef}
+              aria-label={t("Editar mensagem")}
+              value={textoEditado}
+              onChange={(event) => setTextoEditado(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  void salvarEdicao();
+                }
+                if (event.key === "Escape") setEditando(false);
+              }}
+              maxLength={4096}
+              className="min-h-20 w-full rounded-md border border-border bg-background p-2 text-foreground"
+            />
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" disabled={ocupado} onClick={() => setEditando(false)}>{t("Cancelar")}</Button>
+              <Button size="sm" variant="secondary" disabled={ocupado || !textoEditado.trim()} onClick={() => void salvarEdicao()}>{t("Salvar")}</Button>
+            </div>
+          </div>
+        ) : apagada ? (
           // Nem corpo nem mídia: o anexo apagado também sai. Em itálico e
           // esmaecido porque não é texto de ninguém — é o CRM narrando o que
           // aconteceu com aquele lugar da conversa.
@@ -717,6 +824,18 @@ export const MessageBubble = memo(function MessageBubble({
           <ArrowBendUpRight size={14} />
         </button>
       )}
+      <AlertDialog open={confirmandoApagar} onOpenChange={setConfirmandoApagar}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("Apagar esta mensagem para todos?")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("O WhatsApp tira a mensagem também do celular do cliente. Aqui no CRM ela fica marcada como apagada.")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={ocupado}>{t("Cancelar")}</AlertDialogCancel>
+            <Button variant="destructive" disabled={ocupado} onClick={() => void apagarParaTodos()}>{t("Apagar para todos")}</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog open={confirmandoReenvio} onOpenChange={setConfirmandoReenvio}>
         <AlertDialogContent>
           <AlertDialogHeader>

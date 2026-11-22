@@ -88,6 +88,7 @@ describe("bloqueioDaExclusao", () => {
       mensagem: `Este contato tem 2 compromissos na Agenda (1 confirmado, 1 realizado). ${JUNTAR}`,
       agendaHref: "/app/agenda",
       sugerirJuntar: true,
+      destino: { href: "/app/agenda", rotulo: "Abrir Agenda" },
     });
   });
 
@@ -107,7 +108,25 @@ describe("bloqueioDaExclusao", () => {
         "2 compromissos já excluídos ainda não saíram do Google Agenda. Tente de novo em alguns minutos.",
       agendaHref: "/app/agenda",
       sugerirJuntar: false,
+      destino: { href: "/app/agenda", rotulo: "Abrir Agenda" },
     });
+  });
+
+  it("negócio aberto no funil (porte do #4896): singular, plural, junto da Agenda, e leva ao funil", () => {
+    const um = bloqueioDaExclusao({ por_tabela: { crm_leads: 1 } }, pt);
+    expect(um?.mensagem).toBe(
+      "Este contato tem 1 negócio aberto no funil. Feche ou mova o negócio antes de excluir.",
+    );
+    expect(um?.destino).toEqual({ href: "/app/crm", rotulo: "Abrir o funil" });
+    expect(bloqueioDaExclusao({ por_tabela: { crm_leads: 2 } }, es)?.mensagem).toBe(
+      "Este contacto tiene 2 negocios abiertos en el embudo. Cierra o mueve los negocios antes de eliminarlo.",
+    );
+    const junto = bloqueioDaExclusao(
+      { por_tabela: { crm_leads: 1 }, agenda: { por_situacao: {}, pendentes_no_google: 1 } },
+      pt,
+    );
+    expect(junto?.mensagem).toContain("Tente de novo em alguns minutos. Este contato tem 1 negócio aberto");
+    expect(junto?.destino.href).toBe("/app/agenda");
   });
 
   it("excluído travado no Google: diz que não sai sozinho e abre o compromisso", () => {

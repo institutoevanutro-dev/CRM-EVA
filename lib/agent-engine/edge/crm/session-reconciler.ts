@@ -512,11 +512,19 @@ async function stampExternalIdAfterEcho(
   }
 }
 
-/** Reenvia mensagens AI presas em queued com sessão WORKING. */
+/**
+ * Reenvia mensagens AI presas em queued com sessão WORKING.
+ *
+ * `signal` é o do desligamento e é OPCIONAL: sem ele o lote anda inteiro. Com
+ * ele, o laço PARA ENTRE itens — nunca cancela um envio já iniciado (o `fetch`
+ * em voo termina e grava o recibo); só o próximo item é recusado e continua
+ * `queued` para o processo que subir depois.
+ */
 export async function redriveQueued(
   pool: pg.Pool,
   cfg: WatchdogConfig,
   log: Logger,
+  signal?: AbortSignal,
 ): Promise<number> {
   const { rows } = await pool.query<QueuedRow>(
     `select m.id, m.organization_id, m.conversation_id, m.body, s.waha_session_name,
@@ -574,6 +582,7 @@ export async function redriveQueued(
 
   let sent = 0;
   for (const m of rows) {
+    if (signal?.aborted) break;
     const chatId = chatIdOf(m);
     if (chatId === null || m.body === null) {
       log.warn('watchdog: queued sem destino/corpo — pulada', { message_id: m.id });
@@ -600,6 +609,9 @@ export async function redriveQueued(
       );
       const atual = acesso[0];
       if (!atual) continue;
+      // Abort durante a releitura: nada foi enviado ainda, então parar aqui não
+      // larga envio no meio.
+      if (signal?.aborted) break;
       if (preGoLiveAtivo(atual.metadata) && !numeroPodeTestar(atual.phone_number ?? '', lerNumerosDeTeste(atual.metadata))) {
         await pool.query(
           `update messages set status = 'failed', error_code = 'pre_go_live',
@@ -663,8 +675,21 @@ export async function redriveQueued(
         });
       }
     }
-    // espaçamento anti-rajada entre reenvios
-    await new Promise((r) => setTimeout(r, cfg.redriveSpacingMs + Math.random() * cfg.redriveSpacingMs));
+    // Espaçamento anti-rajada entre reenvios, abortável: o shutdown não herda o
+    // ritmo do anti-rajada. O ouvinte é removido no fim de cada espera.
+    await new Promise<void>((resolve) => {
+      if (signal?.aborted) {
+        resolve();
+        return;
+      }
+      const finish = (): void => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', finish);
+        resolve();
+      };
+      const timer = setTimeout(finish, cfg.redriveSpacingMs + Math.random() * cfg.redriveSpacingMs);
+      signal?.addEventListener('abort', finish, { once: true });
+    });
   }
   return sent;
 }
@@ -679,7 +704,9 @@ export async function runSessionWatchdogLoop(
   while (!signal.aborted) {
     try {
       const fixed = await reconcileSessions(pool, cfg, log);
-      const redriven = await redriveQueued(pool, cfg, log);
+      // O abort pode ter chegado DURANTE o reconcile: não abrir lote novo.
+      if (signal.aborted) break;
+      const redriven = await redriveQueued(pool, cfg, log, signal);
       if (fixed + redriven > 0) {
         log.info('watchdog: tick com ação', { reconciled: fixed, redriven });
       }
@@ -688,12 +715,17 @@ export async function runSessionWatchdogLoop(
         error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
       });
     }
+    // `addEventListener` num signal JÁ abortado nunca dispara: sem esta linha o
+    // laço dormiria o intervalo inteiro com o shutdown pendurado atrás dele.
+    if (signal.aborted) break;
     await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, cfg.intervalMs);
-      signal.addEventListener('abort', () => {
+      const finish = (): void => {
         clearTimeout(timer);
+        signal.removeEventListener('abort', finish);
         resolve();
-      }, { once: true });
+      };
+      const timer = setTimeout(finish, cfg.intervalMs);
+      signal.addEventListener('abort', finish, { once: true });
     });
   }
 }

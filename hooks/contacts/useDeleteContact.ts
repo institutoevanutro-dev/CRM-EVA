@@ -11,6 +11,8 @@ export interface BloqueioDaExclusao {
   agendaHref: string;
   /** Há compromisso visível: o caminho para ficha duplicada é juntar. */
   sugerirJuntar: boolean;
+  /** Onde resolver o que barrou: a Agenda, se ela barra; senão o funil. */
+  destino: { href: string; rotulo: string };
 }
 
 /** Singular e plural por situação; a chave é o valor do banco (`status`). */
@@ -42,12 +44,15 @@ export function bloqueioDaExclusao(
         compromisso_id?: string | null;
       }
     | undefined;
-  if (!agenda) return null;
-  const porSituacao = Object.entries(agenda.por_situacao ?? {}).filter(([, n]) => n > 0);
+  // Negócio ABERTO no funil também barra (porte do DeskcommCRM #4896).
+  const negociosLidos = (details?.por_tabela as Record<string, unknown> | undefined)?.crm_leads;
+  const negocios = typeof negociosLidos === "number" && negociosLidos > 0 ? negociosLidos : 0;
+  const porSituacao = Object.entries(agenda?.por_situacao ?? {}).filter(([, n]) => n > 0);
   const visiveis = porSituacao.reduce((s, [, n]) => s + n, 0);
-  const pendentes = agenda.pendentes_no_google ?? 0;
-  const travados = agenda.travados_no_google ?? 0;
-  if (visiveis < 1 && pendentes < 1 && travados < 1) return null;
+  const pendentes = agenda?.pendentes_no_google ?? 0;
+  const travados = agenda?.travados_no_google ?? 0;
+  const agendaBarra = visiveis > 0 || pendentes > 0 || travados > 0;
+  if (!agendaBarra && negocios < 1) return null;
 
   const frases: string[] = [];
   if (visiveis > 0) {
@@ -90,12 +95,26 @@ export function bloqueioDaExclusao(
           ).replace("{n}", String(travados)),
     );
   }
+  if (negocios > 0) {
+    frases.push(
+      negocios === 1
+        ? t("Este contato tem 1 negócio aberto no funil. Feche ou mova o negócio antes de excluir.")
+        : t("Este contato tem {n} negócios abertos no funil. Feche ou mova os negócios antes de excluir.").replace(
+            "{n}",
+            String(negocios),
+          ),
+    );
+  }
+  const agendaHref = agenda?.compromisso_id
+    ? `/app/agenda?compromisso=${encodeURIComponent(agenda.compromisso_id)}`
+    : "/app/agenda";
   return {
     mensagem: frases.join(" "),
-    agendaHref: agenda.compromisso_id
-      ? `/app/agenda?compromisso=${encodeURIComponent(agenda.compromisso_id)}`
-      : "/app/agenda",
+    agendaHref,
     sugerirJuntar: visiveis > 0,
+    destino: agendaBarra
+      ? { href: agendaHref, rotulo: "Abrir Agenda" }
+      : { href: "/app/crm", rotulo: "Abrir o funil" },
   };
 }
 
@@ -105,7 +124,7 @@ export function useDeleteContact() {
     mutationFn: async (contactId: string) =>
       apiClient.delete<unknown>(`/api/v1/contacts/${contactId}`),
     onError: (err) => {
-      // O bloqueio pela Agenda é mostrado DENTRO do diálogo de exclusão, que
+      // O bloqueio (Agenda ou negócio aberto) é mostrado DENTRO do diálogo de exclusão, que
       // está aberto e é modal: um toast fora dele não recebe clique.
       if (err instanceof ApiError && bloqueioDaExclusao(err.details, (s) => s)) return;
       showApiError(err);

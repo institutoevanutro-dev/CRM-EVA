@@ -431,7 +431,7 @@ async function comEtapaAtual(supabase: SB, organizationId: string, page: Convers
   if (ids.length === 0) return page;
   const { data, error } = await supabase
     .from("crm_leads")
-    .select("contact_id, crm_stages(name)")
+    .select("contact_id, crm_stages!crm_leads_stage_id_fkey(name)")
     .eq("organization_id", organizationId)
     .eq("status", "open")
     .in("contact_id", ids)

@@ -18,6 +18,12 @@ import {
 import { updatePipelineConfig } from "@/app/actions/settings/updatePipelineConfig";
 import type { PipelineConfigPatch } from "@/lib/schemas/settings";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
+import {
+  SEM_CATEGORIA,
+  categoriasDoFunil,
+  motivosComCategoriaDoFunil,
+  motivosDoFunil,
+} from "@/lib/leads/motivos-de-perda-do-funil";
 import { customFieldSchema, type CustomFieldDef } from "@/lib/schemas/settings";
 import {
   mostrarQuandoSchema,
@@ -115,10 +121,27 @@ export function tipoTemOpcoes(tipo: CustomFieldDef["type"]): boolean {
 /** Contador das linhas novas de campo: só é lido no clique, nunca no render. */
 let proximaLinha = 0;
 
+/**
+ * Os RÓTULOS cadastrados: `lost_reasons` aceita texto puro E
+ * `{ label, categoria }` (DeskcommCRM #1717), e a caixa é sempre rótulo — o
+ * objeto é montado na hora de salvar.
+ */
 function readLostReasons(settings: Record<string, unknown> | null): string[] {
-  if (!settings) return [];
-  const r = (settings as { lost_reasons?: unknown }).lost_reasons;
-  return Array.isArray(r) ? (r as string[]) : [];
+  return motivosDoFunil(settings);
+}
+
+/** Rótulo → categoria gravada. Sem categoria é ausência, não "". */
+function readCategorias(settings: Record<string, unknown> | null): Record<string, string> {
+  const saida: Record<string, string> = {};
+  for (const m of motivosComCategoriaDoFunil(settings)) {
+    if (m.categoria) saida[m.valor.trim()] = m.categoria;
+  }
+  return saida;
+}
+
+/** A caixa de motivos vira lista: separada por vírgula, aparada, sem vazios. */
+function motivosDaCaixa(texto: string): string[] {
+  return texto.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
 }
 
 export function PipelinesClient({
@@ -171,6 +194,7 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
   const [won, setWon] = useState(v.won ?? "Ganho");
   const [lost, setLost] = useState(v.lost ?? "Perdido");
   const [reasonsText, setReasonsText] = useState(readLostReasons(pipeline.settings).join(", "));
+  const [categorias, setCategorias] = useState(readCategorias(pipeline.settings));
   const camposIniciais = camposDoFunil(pipeline.settings);
   const [fields, setFields] = useState<CustomFieldDef[]>(camposIniciais);
   // A `key` de cada linha é um id que nasce com ela, nunca a chave digitada:
@@ -206,10 +230,12 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
       }
       ok.push(parsed.data);
     }
-    const reasons = reasonsText
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+    // Motivo com categoria vira `{ label, categoria }`; sem categoria continua
+    // texto puro — o formato que todo funil já tem.
+    const reasons = motivosDaCaixa(reasonsText).map((rotulo) => {
+      const categoria = categorias[rotulo];
+      return categoria ? { label: rotulo, categoria } : rotulo;
+    });
 
     const patch: PipelineConfigPatch = {
       vocabulary: { lead, deal, won, lost },
@@ -250,6 +276,43 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
       <div className="space-y-1">
         <Label className="text-xs">{t("Motivos de perda (separados por vírgula)")}</Label>
         <Input value={reasonsText} onChange={(e) => setReasonsText(e.target.value)} />
+        {/* A categoria de CADA motivo escrito acima: é ela que o relatório
+            "Perdas" e o filtro do quadro agrupam. `__sem__` porque o Select
+            recusa value="". */}
+        {motivosDaCaixa(reasonsText).length > 0 && (
+          <p className="pt-1 text-xs text-muted-foreground">{t("Categoria de cada motivo, para o relatório de perdas:")}</p>
+        )}
+        {motivosDaCaixa(reasonsText).map((motivo) => (
+          <div key={motivo} className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-xs">{motivo}</span>
+            <Select
+              value={categorias[motivo] ?? "__sem__"}
+              onValueChange={(valor) =>
+                setCategorias((atual) => {
+                  const proximo = { ...atual };
+                  if (valor === "__sem__") delete proximo[motivo];
+                  else proximo[motivo] = valor;
+                  return proximo;
+                })
+              }
+            >
+              <SelectTrigger aria-label={`${t("Categoria do motivo")} ${motivo}`} className="h-8 w-48 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__sem__">{t(SEM_CATEGORIA)}</SelectItem>
+                {categoriasDoFunil(pipeline.settings)
+                  .concat(categorias[motivo] ? [categorias[motivo]] : [])
+                  .filter((c, i, a) => a.indexOf(c) === i)
+                  .map((categoria) => (
+                    <SelectItem key={categoria} value={categoria}>
+                      {t(categoria)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ))}
       </div>
 
       <div className="space-y-2">
@@ -339,6 +402,26 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
                 }}
               />
             )}
+            {/* A IA pode ler (porte do upstream #4684). Ausência é LIGADO
+                (ver `ia_pode_ler` no schema): desmarcar grava `false`, marcar
+                apaga a chave e o campo volta ao padrão. */}
+            <label className="flex items-center gap-1 text-xs md:col-span-4">
+              <input
+                type="checkbox"
+                aria-label={`${t("A IA pode ler este campo")} — ${f.label || i + 1}`}
+                checked={f.ia_pode_ler !== false}
+                onChange={(ev) => {
+                  const next = [...fields];
+                  const { ia_pode_ler: _apagada, ...semOpcao } = f;
+                  next[i] = ev.target.checked ? semOpcao : { ...f, ia_pode_ler: false };
+                  setFields(next);
+                }}
+              />
+              {t("A IA pode ler este campo")}
+              <span className="text-muted-foreground">
+                {t("(desligado, o valor fica só no card e o assistente de IA não o recebe)")}
+              </span>
+            </label>
             {/* Quando este campo aparece (porte do upstream #2793). Os
                 operadores são os três que `campoVisivel` aplica. */}
             <div className="space-y-1 md:col-span-4">

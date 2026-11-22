@@ -15,6 +15,9 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logger } from "@/lib/logger";
+import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
+import { soltarAdiadosDaSessao } from "@/lib/agent-engine/pacing/adiados-da-janela";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { providersDeEnvioAutomatico } from "@/lib/channels";
 import {
@@ -222,6 +225,30 @@ export async function PUT(req: NextRequest): Promise<Response> {
     resourceId: channel_session_id,
     metadata: { ...knobFields, daily_message_limit: daily_message_limit ?? null },
   });
+
+  // A janela muda AGORA, não no próximo contato (porte do original #3419): os
+  // turnos que esperavam a abertura antiga rodam já se a janela de resposta
+  // recém-gravada está aberta. Fechada: ninguém mexe. Falha aqui não derruba o
+  // PUT; os knobs já foram salvos.
+  try {
+    const soltos = await soltarAdiadosDaSessao(getRequestPool(), {
+      organizationId: org.orgId,
+      channelSessionId: channel_session_id,
+    });
+    if (soltos > 0) {
+      logger.info("[pacing] turnos adiados soltos pela janela de resposta que abriu", {
+        organization_id: org.orgId,
+        channel_session_id,
+        soltos,
+      });
+    }
+  } catch (err) {
+    logger.warn("[pacing] não consegui reavaliar os turnos adiados pela janela de resposta", {
+      organization_id: org.orgId,
+      channel_session_id,
+      error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+    });
+  }
 
   const { data: savedRow } = await admin
     .from("channel_knobs")

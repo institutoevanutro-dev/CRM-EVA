@@ -491,11 +491,12 @@ export function ehLembreteDeCompromisso(fatos: Pick<FatosDoEnvio, 'trigger_confi
 }
 
 function cancelaNaResposta(triggerConfig: unknown): boolean {
-  return (
-    typeof triggerConfig === 'object' &&
-    triggerConfig !== null &&
-    (triggerConfig as { cancel_on_reply?: unknown }).cancel_on_reply === true
-  );
+  if (typeof triggerConfig !== 'object' || triggerConfig === null) return false;
+  const t = triggerConfig as { kind?: unknown; cancel_on_reply?: unknown };
+  // Falta confirmada: ausente vale `true` (mesma regra de `parseCancelOnReply`
+  // em `reactivity.ts`, porte do DeskcommCRM #3755).
+  if (t.kind === 'appointment_no_show') return t.cancel_on_reply !== false;
+  return t.cancel_on_reply === true;
 }
 
 function etapaDoGatilho(triggerConfig: unknown): string | null {

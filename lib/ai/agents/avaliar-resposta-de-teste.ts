@@ -66,6 +66,10 @@ const NAO_AVALIAVEIS_SEM_TURNO: ReadonlyArray<{ gate: string; porque: string }> 
   { gate: "messaging_window", porque: "depende de quando o contato falou com você pela última vez" },
   { gate: "spinning", porque: "depende das últimas mensagens enviadas por este número" },
   { gate: "promise", porque: "depende da tabela de preços e condições da organização" },
+  {
+    gate: "concessao_sem_lastro",
+    porque: "depende do que o cliente e a empresa já escreveram na conversa — não há conversa real no teste",
+  },
   { gate: "semantic_promise", porque: "usa uma chamada de modelo extra, que o teste não gasta" },
   { gate: "case_promise", porque: "depende de haver um chamado aberto para este contato" },
   {
@@ -82,6 +86,11 @@ const NAO_AVALIAVEIS_SEM_TURNO: ReadonlyArray<{ gate: string; porque: string }> 
       "depende do que as ferramentas de agenda devolveram neste turno e dos compromissos do contato — não há turno real no teste",
   },
   { gate: "disclosure", porque: "depende de esta ser a primeira mensagem ao contato" },
+  {
+    gate: "clinical_claim",
+    porque:
+      "depende de a organização ter ligado \"Não fazer afirmação clínica\" em Segurança; quando ligada, a prévia do motor aplica",
+  },
 ];
 
 /**

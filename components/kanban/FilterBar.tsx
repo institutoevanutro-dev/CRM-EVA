@@ -27,12 +27,19 @@ import {
   parseAgentOwnerFilter,
   type LeadFilters,
 } from "@/lib/kanban/filters";
+import { categoriaDoMotivo } from "@/lib/leads/motivos-de-perda-do-funil";
+import { rotuloDoMotivoDePerda } from "@/lib/schemas/leads";
 import { cn } from "@/lib/utils";
 
 interface FilterBarProps {
   filters: LeadFilters;
   onChange: (next: LeadFilters) => void;
   leads: Lead[];
+  /**
+   * O `settings` do funil do quadro: é dele que sai a categoria de cada motivo
+   * de perda, que não é coluna do lead (DeskcommCRM #1717).
+   */
+  settings?: Record<string, unknown> | null;
 }
 
 const STATUS_OPTIONS: Array<{ value: NonNullable<LeadFilters["status"]>; label: string }> = [
@@ -42,7 +49,7 @@ const STATUS_OPTIONS: Array<{ value: NonNullable<LeadFilters["status"]>; label: 
   { value: "lost", label: "Perdidos" },
 ];
 
-export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
+export function FilterBar({ filters, onChange, leads, settings }: FilterBarProps) {
   const t = useT();
   const user = useUser();
   const { data: members } = useAssignableMembers(true);
@@ -174,6 +181,23 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
     });
   };
 
+  // Motivo e categoria da perda (DeskcommCRM #1717): as opções vêm do que ESTÁ
+  // no quadro, e a categoria resolve pela MESMA régua de quem filtra.
+  const motivosPerdidos = (() => {
+    const set = new Set<string>();
+    for (const l of leads) if (l.status === "lost" && l.lost_reason) set.add(l.lost_reason);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  })();
+  const categoriasPerdidas = Array.from(
+    new Set(motivosPerdidos.map((m) => categoriaDoMotivo(m, settings)).filter((c): c is string => !!c)),
+  ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  // Só com a situação em Perdidos: fora dela os dois filtros esconderiam tudo.
+  const mostraPerda = (filters.status ?? "all") === "lost" && motivosPerdidos.length > 0;
+  const rotuloDoMotivo = (motivo: string) => {
+    const rotulo = rotuloDoMotivoDePerda(motivo);
+    return rotulo === motivo ? motivo : t(rotulo);
+  };
+
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2">
       <Input
@@ -251,6 +275,47 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {mostraPerda ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm">
+              {t("Motivo")}: {filters.lostReason ? rotuloDoMotivo(filters.lostReason) : t("Todos")}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => onChange({ ...filters, lostReason: undefined })}>
+              {t("Todos")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {motivosPerdidos.map((motivo) => (
+              <DropdownMenuItem key={motivo} onClick={() => onChange({ ...filters, lostReason: motivo })}>
+                {rotuloDoMotivo(motivo)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+      {mostraPerda && categoriasPerdidas.length > 0 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm">
+              {t("Categoria")}: {filters.lostCategory ? t(filters.lostCategory) : t("Todas")}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => onChange({ ...filters, lostCategory: undefined })}>
+              {t("Todas")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {categoriasPerdidas.map((categoria) => (
+              <DropdownMenuItem key={categoria} onClick={() => onChange({ ...filters, lostCategory: categoria })}>
+                {t(categoria)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" disabled={tagOptions.length === 0}>
@@ -320,6 +385,8 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
         filters.owner ||
         marcadoresEscolhidos.length > 0 ||
         filters.overdueOnly ||
+        filters.lostReason ||
+        filters.lostCategory ||
         (filters.status && filters.status !== "all")) && (
         <Button
           variant="ghost"

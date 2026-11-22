@@ -18,7 +18,11 @@
  * antes de gravar: "o que eu ofereço?" e "este valor passa?".
  */
 
-import { CANONICAL_LOST_REASONS } from "@/lib/schemas/leads";
+import {
+  CANONICAL_LOST_REASONS,
+  CATEGORIAS_DE_PERDA,
+  categoriaPadraoDoMotivo,
+} from "@/lib/schemas/leads";
 import { pipelineConfigPatchSchema } from "@/lib/schemas/settings";
 
 /** O valor canônico de "outro": a saída de quem não acha o motivo na lista. */
@@ -39,31 +43,87 @@ const MAX_MOTIVOS = 50;
  * lista de seis, por exemplo) não pode derrubar os cinco motivos bons e jogar
  * o funil inteiro de volta no padrão do produto.
  */
-export function motivosDoFunil(settings: unknown): string[] {
+export interface MotivoDePerdaCadastrado {
+  /** O que vai para `lost_reason`: o rótulo COMO ESTÁ NO BANCO (ver abaixo). */
+  valor: string;
+  /** A categoria que o funil deu a este motivo; ausente resolve no padrão. */
+  categoria?: string;
+}
+
+/**
+ * Os motivos do funil COM a categoria (porte de DeskcommCRM #1717). Aceita os
+ * dois formatos de `settings.lost_reasons` — `"Preço"` e
+ * `{ label: "Preço", categoria: "Cliente" }` —, porque o texto puro é o que já
+ * existe em todo funil instalado. Categoria inválida derruba só a categoria,
+ * nunca o motivo.
+ */
+export function motivosComCategoriaDoFunil(settings: unknown): MotivoDePerdaCadastrado[] {
   const bruto = (settings as { lost_reasons?: unknown } | null | undefined)?.lost_reasons;
   if (!Array.isArray(bruto)) return [];
 
   const regra = pipelineConfigPatchSchema.shape.lost_reasons;
   const vistos = new Set<string>();
-  const limpos: string[] = [];
+  const limpos: MotivoDePerdaCadastrado[] = [];
 
   for (const item of bruto) {
-    if (typeof item !== "string") continue;
-    const texto = item.trim();
+    const rotuloBruto = typeof item === "string" ? item : (item as { label?: unknown } | null)?.label;
+    if (typeof rotuloBruto !== "string") continue;
+    const texto = rotuloBruto.trim();
     if (vistos.has(texto)) continue;
     if (!regra.safeParse([texto]).success) continue;
+    const categoriaBruta =
+      typeof item === "object" && item !== null ? (item as { categoria?: unknown }).categoria : undefined;
+    const categoria =
+      typeof categoriaBruta === "string" && categoriaBruta.trim() ? categoriaBruta.trim() : null;
+    const categoriaOk = categoria ? regra.safeParse([{ label: texto, categoria }]).success : false;
     vistos.add(texto);
     // O texto COMO ESTÁ NO BANCO, não o aparado. O trigger compara por
-    // IGUALDADE EXATA (`new.lost_reason = any(jsonb_array_elements_text(...))`),
-    // então oferecer a versão aparada de um `lost_reasons` com espaço nas pontas
-    // — gravado por script, seed ou API, nunca pela tela de Funis, que apara —
-    // faria a janela mostrar um rótulo que o banco recusa com 22023 no clique.
-    // É a classe de defeito que este arquivo existe para fechar. O HTML colapsa
-    // espaço nas pontas, então o rótulo na tela continua o mesmo.
-    limpos.push(item);
+    // IGUALDADE EXATA, então oferecer a versão aparada de um rótulo gravado com
+    // espaço nas pontas (por script, seed ou API — a tela de Funis apara) faria
+    // a janela mostrar um rótulo que o banco recusa com 22023 no clique. O HTML
+    // colapsa espaço nas pontas, então o rótulo na tela continua o mesmo.
+    limpos.push(categoria && categoriaOk ? { valor: rotuloBruto, categoria } : { valor: rotuloBruto });
   }
 
   return limpos.slice(0, MAX_MOTIVOS);
+}
+
+/** Os rótulos do funil, na ordem cadastrada — o que a janela de perder quer. */
+export function motivosDoFunil(settings: unknown): string[] {
+  return motivosComCategoriaDoFunil(settings).map((m) => m.valor);
+}
+
+/** O rótulo do que não tem categoria: o relatório, o filtro e a tela de Funis usam o mesmo. */
+export const SEM_CATEGORIA = "Sem categoria";
+
+/**
+ * As categorias que o funil oferece: as do produto e, depois, as que os motivos
+ * já usam (uma categoria gravada à mão não some do menu nem do agrupamento).
+ */
+export function categoriasDoFunil(settings: unknown): string[] {
+  const vistos = new Set<string>(CATEGORIAS_DE_PERDA);
+  const saida: string[] = [...CATEGORIAS_DE_PERDA];
+  for (const motivo of motivosComCategoriaDoFunil(settings)) {
+    if (motivo.categoria && !vistos.has(motivo.categoria)) {
+      vistos.add(motivo.categoria);
+      saida.push(motivo.categoria);
+    }
+  }
+  return saida;
+}
+
+/**
+ * A categoria DESTE motivo para ESTE funil: primeiro a que o funil gravou em
+ * `{ label, categoria }`; não achando, a padrão do motivo canônico. Um motivo
+ * cadastrado como texto puro herda o padrão.
+ */
+export function categoriaDoMotivo(valor: string, settings: unknown): string | undefined {
+  const alvo = valor.trim();
+  if (!alvo) return undefined;
+  for (const motivo of motivosComCategoriaDoFunil(settings)) {
+    if (motivo.categoria && motivo.valor.trim() === alvo) return motivo.categoria;
+  }
+  return categoriaPadraoDoMotivo(alvo);
 }
 
 export interface OpcaoDeMotivo {

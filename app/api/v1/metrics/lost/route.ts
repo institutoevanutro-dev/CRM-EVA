@@ -1,0 +1,129 @@
+/**
+ * GET /api/v1/metrics/lost — relatório "Perdas".
+ *
+ * Por motivo, por categoria e pela etapa de onde o negócio saiu
+ * (`lost_from_stage_id`), em QUANTIDADE e em VALOR agrupado por moeda — o
+ * agrupamento é `agruparPerdas` (`lib/metrics/perdas.ts`), que é a conta testada;
+ * aqui só se lê e se monta o contexto.
+ *
+ * Escopo: manager+ (este relatório mostra o funil INTEIRO, não o pedaço do
+ * atendente). Client da sessão + `organization_id` explícito da organização
+ * ativa, nunca da query. Read-only ⇒ sem audit. Porte de
+ * melgarafael/DeskcommCRM#1717 (com a paginação do #2548).
+ */
+import { randomUUID } from "node:crypto";
+import { type NextRequest } from "next/server";
+import { z } from "zod";
+
+import { fail, ok } from "@/lib/api/wrappers";
+import { requireRole } from "@/lib/auth/require-role";
+import { traduzir } from "@/lib/i18n/dicionario";
+import { createClient } from "@/lib/supabase/server";
+import { agruparPerdas, type PerdaLinha } from "@/lib/metrics/perdas";
+
+export const dynamic = "force-dynamic";
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * Teto da leitura: até 5 páginas de 1000, acima disso o relatório diz que está
+ * cortado. PAGINADO, não `.limit(5000)`: o PostgREST corta toda resposta em
+ * `max_rows` (1000, `supabase/config.toml`) sem erro nenhum — um `.limit`
+ * maior que isso devolve 1000 linhas caladas e o `truncado` nunca ligava.
+ */
+const TAMANHO_DA_PAGINA = 1000;
+const PAGINAS_MAXIMAS = 5;
+
+const querySchema = z.object({
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional(),
+});
+
+export async function GET(req: NextRequest): Promise<Response> {
+  const requestId = randomUUID();
+
+  const authz = await requireRole("manager", { requestId, resource: "metrics" });
+  if (!authz.ok) return authz.response;
+  const t = (texto: string) => traduzir(texto, authz.user.idioma);
+  const organizationId = authz.org.orgId;
+
+  const url = new URL(req.url);
+  const parsed = querySchema.safeParse({
+    from: url.searchParams.get("from") ?? undefined,
+    to: url.searchParams.get("to") ?? undefined,
+  });
+  if (!parsed.success) {
+    return fail("validation_failed", t("Query inválida."), 422, {
+      details: parsed.error.flatten().fieldErrors as Record<string, unknown>,
+      requestId,
+    });
+  }
+
+  const to = parsed.data.to ? new Date(parsed.data.to) : new Date();
+  const from = parsed.data.from
+    ? new Date(parsed.data.from)
+    : new Date(to.getTime() - THIRTY_DAYS_MS);
+  if (from.getTime() >= to.getTime()) {
+    return fail("validation_failed", t("Janela inválida: 'from' deve ser anterior a 'to'."), 422, {
+      requestId,
+    });
+  }
+
+  const supabase = await createClient();
+
+  const [funis, etapas] = await Promise.all([
+    supabase
+      .from("crm_pipelines")
+      .select("id, settings")
+      .eq("organization_id", organizationId),
+    supabase.from("crm_stages").select("id, name").eq("organization_id", organizationId),
+  ]);
+
+  if (funis.error) return fail("internal_error", funis.error.message, 500, { requestId });
+  if (etapas.error) return fail("internal_error", etapas.error.message, 500, { requestId });
+
+  // Ordem DESCENDENTE: se o teto cortar, sobra o período mais RECENTE. O fim é
+  // provado pelo `count` exato ou por página VAZIA — nunca por página curta
+  // (`lib/agenda/protecao-followup.ts`): numa instalação com `max_rows`
+  // menor que a página, página curta não é fim.
+  const linhas: PerdaLinha[] = [];
+  let totalNaJanela: number | null = null;
+  let acabou = false;
+  for (let pagina = 0; pagina < PAGINAS_MAXIMAS && !acabou; pagina++) {
+    const inicio = linhas.length;
+    const { data, error, count } = await supabase
+      .from("crm_leads")
+      .select(
+        "lost_reason, lost_from_stage_id, value_cents, currency, pipeline_id, movido_para:source_metadata->movido_para",
+        pagina === 0 ? { count: "exact" } : undefined,
+      )
+      .eq("organization_id", organizationId)
+      .eq("status", "lost")
+      .gte("closed_at", from.toISOString())
+      .lt("closed_at", to.toISOString())
+      .order("closed_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(inicio, inicio + TAMANHO_DA_PAGINA - 1);
+    if (error) return fail("internal_error", error.message, 500, { requestId });
+    if (pagina === 0) totalNaJanela = count;
+    const lote = (data ?? []) as PerdaLinha[];
+    linhas.push(...lote);
+    acabou = lote.length === 0 || (totalNaJanela !== null && linhas.length >= totalNaJanela);
+  }
+
+  const settingsPorFunil: Record<string, unknown> = {};
+  for (const funil of funis.data ?? []) settingsPorFunil[funil.id] = funil.settings;
+
+  const nomesDasEtapas: Record<string, string> = {};
+  for (const etapa of etapas.data ?? []) nomesDasEtapas[etapa.id] = etapa.name;
+
+  const relatorio = agruparPerdas(linhas, { settingsPorFunil, etapas: nomesDasEtapas });
+
+  return ok(
+    {
+      janela: { from: from.toISOString(), to: to.toISOString() },
+      ...relatorio,
+      truncado: !acabou,
+    },
+    { requestId },
+  );
+}

@@ -51,6 +51,7 @@ const CAPABILITIES = [
   "limiteDeTexto",
   "midiaDeEnvio",
   "marcaLidasPorMensagem",
+  "alteraMensagemEnviada",
 ] as const;
 
 describe("matriz capability × provider é exaustiva", () => {
