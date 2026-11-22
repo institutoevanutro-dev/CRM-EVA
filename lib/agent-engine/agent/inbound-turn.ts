@@ -121,7 +121,14 @@ import {
   type StageClassifierKnobs,
 } from './stage-classifier';
 import { classificadoresDoTurno } from './classificadores-do-turno';
-import { loadPlaybook } from './playbook';
+import { loadPlaybook, textoDaOrganizacao } from './playbook';
+import {
+  concessoesSemLastro,
+  lastroDoContexto,
+  valoresDoRegistro,
+  type LastroComercial,
+  type LinhaDoHistorico,
+} from '../guardrails/lastro-comercial';
 import {
   DECLARACAO_INSTRUCTION,
   declaracaoDoTurnoSchema,
@@ -147,8 +154,10 @@ import {
 } from './agent-config';
 import { msAteAJanelaAbrir, msAteAJanelaAbrirPulandoFeriado } from './janela-de-atendimento';
 import { turnoDisparaNasMensagens } from './palavra-chave-do-gatilho';
+import { agenteJaRespondeuNoAtendimento } from './agente-ja-respondeu';
 import { enviaAvisoForaDoHorario, portasDeProducao } from './aviso-fora-do-horario';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
+import { adiadoPorJanela } from '../pacing/adiados-da-janela';
 import { loadChannelKnobs } from '../pacing/store';
 import { avisarJanelaFechada, resolverAvisoDeJanela } from '../pacing/aviso-de-janela';
 import { resolveConversationTurn, type TurnAgentResolution } from './resolve-turn-agent';
@@ -515,6 +524,14 @@ export const AGENT_TOOL_DEFS = {
  * que o modelo não fez não vale um cliente sem resposta.
  */
 export const MAX_VETOS_DE_VOCABULARIO_INTERNO = 2;
+
+/**
+ * Quantos vetos de `clinical_claim` o turno tolera antes do fail-safe (porte do #2321). A
+ * saída é a OPOSTA da do vocabulário interno: este NUNCA solta o envio. O que o fail-safe
+ * faz é chamar a equipe (abre um caso), e aí o modelo tem uma saída honesta: dizer que a
+ * equipe vai falar com a pessoa.
+ */
+export const MAX_VETOS_DE_AFIRMACAO_CLINICA = 2;
 
 /**
  * O mesmo degrau para o veto de `false_empty_inbound`, e pela mesma assimetria.
@@ -1183,6 +1200,20 @@ export function blocosDeAgendaResidentes(toolIds: readonly string[]): string[] {
   }
   return blocos;
 }
+
+/**
+ * Leituras de REGISTRO da organização cujo retorno dá lastro aos valores do
+ * `concessaoSemLastroGate` (`guardrails/lastro-comercial.ts`; porte do #3965). A ponte MCP
+ * já filtra organização e contato.
+ * ponytail: `crm_query_external_data` fica de fora — coluna livre de banco alheio.
+ */
+const LEITURAS_DE_REGISTRO_DA_ORG = new Set([
+  'crm_search_products',
+  'crm_search_knowledge',
+  'crm_list_contact_orders',
+  'crm_list_honorarios_parcelas',
+  'crm_get_honorarios_contrato',
+]);
 
 /**
  * Tools de agenda cuja EXECUÇÃO neste turno arma o `agendaStallGate` (before-send.ts) —
@@ -2513,6 +2544,13 @@ async function executarTurnoDoAgente(
         acquiredAt: claimOfJob(liveJob())?.acquired_at,
         delayMs: Math.max(abertura.getTime() - agora.getTime(), 1_000),
         reason: 'fora da janela anti-ban de envio — turno adiado para a abertura',
+        // O rastro que torna o adiamento alcançável (porte do original #3419):
+        // abrir a janela acorda este job, e a mensagem nova não pega carona nele.
+        payloadPatch: adiadoPorJanela({
+          tipo: resposta ? 'resposta' : 'disparo',
+          abertura: abertura.toISOString(),
+          janela: janelaDoTurno,
+        }),
       });
       runLog.info('turno adiado — fora da janela anti-ban de envio', {
         janela: janelaDoTurno,
@@ -3043,7 +3081,21 @@ async function executarTurnoDoAgente(
   // tela. Regex quebrada, corpo sem texto ou nada a julgar ⇒ o turno SEGUE —
   // entrar de menos cala o cliente, e esta porta é a única que este gate
   // existe para não criar.
-  if (!preview && liveJob().kind === 'inbound_turn' && agentConfig?.filtroDePalavraChave != null) {
+  //
+  // O FILTRO DECIDE A ENTRADA, NÃO CADA MENSAGEM (porte do original #3240):
+  // se ESTE agente já respondeu neste atendimento, a resposta do paciente à
+  // pergunta dele passa sem filtro (`agente-ja-respondeu.ts`). A consulta só
+  // roda para agente com filtro; o miss na ENTRADA segue calando.
+  if (
+    !preview &&
+    liveJob().kind === 'inbound_turn' &&
+    agentConfig?.filtroDePalavraChave != null &&
+    !(await agenteJaRespondeuNoAtendimento(pool, {
+      organizationId: tenantId,
+      conversationId: input.conversationId,
+      agentId: agentConfig.agentId,
+    }))
+  ) {
     const corposDoTurno =
       inboundsPendentes.length > 0
         ? inboundsPendentes
@@ -3393,6 +3445,9 @@ async function executarTurnoDoAgente(
   // (`internal_vocabulary_leak`): 1º veto no turno ensina o modelo a reescrever; persistir
   // solta o envio com registro. Por turno (closure), nunca cross-turno.
   let internalVocabularyVetoCount = 0;
+  // Fail-safe do gate de afirmação clínica (`clinical_claim`): 1º veto ensina; persistir
+  // abre caso para a equipe — e o envio continua barrado. Por turno (closure).
+  let clinicalClaimVetoCount = 0;
   // Uma recusa deste tipo devolve o texto confirmado ao modelo para que ele
   // reescreva antes de falar com o cliente. Não gasta envio nem toca no canal.
   let falseEmptyInboundVetoCount = 0;
@@ -3528,6 +3583,94 @@ async function executarTurnoDoAgente(
   const skillSignal = latestInboundSignal(effectiveContext.messages);
   const skillMatch = matchSkills(skills, skillSignal);
   const matchedSkillsBlock = renderMatchedSkillBodies(skillMatch.matched);
+  // Lastro comercial (gate `concessao_sem_lastro`, porte do #3965/#3995): o que a EMPRESA
+  // escreveu e o que só o CLIENTE trouxe, pela `direction` do banco.
+  const fontesDoLastro = {
+    contexto: openingContext.context,
+    atual: { texto: currentInboundText, remetente: null },
+    memoriaDoModelo: [
+      effectivePrevious?.rolling_summary ?? '',
+      ...(effectivePrevious?.commitments ?? []),
+      effectivePrevious?.next_action ?? '',
+    ],
+  };
+  // Valores e trechos de registros da organização lidos NESTE turno (busca no conhecimento,
+  // produto, pedido): a lista cresce nas ferramentas de leitura, mais abaixo.
+  const valoresConsultados: string[] = [];
+  // Só o que a ORGANIZAÇÃO escreveu: a skill da plataforma é texto nosso.
+  const skillsDaOrganizacao = renderMatchedSkillBodies(
+    skillMatch.matched.filter((sk) => sk.daPlataforma !== true),
+  );
+  let historico: LinhaDoHistorico[] | undefined;
+  let historicoLido = false;
+  let conhecimentoConsultado = false;
+  const lastroDoTurno = (): LastroComercial =>
+    lastroDoContexto({
+      ...fontesDoLastro,
+      tabela: promiseTable,
+      materialDaOrganizacao: [
+        textoDaOrganizacao(playbook.prompt),
+        renderOrgMemory(orgMemory),
+        skillsDaOrganizacao,
+        ...valoresConsultados,
+      ],
+      ...(historico !== undefined ? { historico } : {}),
+    });
+  // A janela do contexto não traz a conversa inteira. Só sob suspeita: UMA busca no
+  // conhecimento do agente com a própria candidata, e UMA leitura por turno da conversa (as
+  // duas direções, com a hora: quem trouxe o valor primeiro). Se a leitura falhar, vale a
+  // janela: a falha fica FECHADA (o veto continua de pé).
+  // ponytail: as 500 mensagens mais recentes DESTA conversa.
+  const lastroComercialPara = async (corpo: string): Promise<LastroComercial> => {
+    const semConsulta = lastroDoTurno();
+    if (concessoesSemLastro(corpo, semConsulta).length === 0) return semConsulta;
+    const fontes = agentConfig?.knowledgeSourceIds ?? [];
+    if (!conhecimentoConsultado && (fontes.length > 0 || agentConfig?.activeKbVersionId != null)) {
+      conhecimentoConsultado = true;
+      const achados = await searchKnowledge(
+        pool,
+        {
+          organizationId: tenantId,
+          knowledgeSourceIds: fontes,
+          kbVersionId: agentConfig?.activeKbVersionId ?? null,
+          query: corpo,
+          topK: agentConfig?.ragTopK ?? 5,
+          threshold: agentConfig?.ragSimilarityThreshold ?? 0.4,
+          jobId: job?.id,
+          agentId: agentConfig?.agentId ?? null,
+        },
+        { log: runLog, embed: deps.embed },
+      ).catch(() => null);
+      if (achados?.ok) valoresConsultados.push(...achados.results.map((r) => r.content));
+    }
+    if (!historicoLido) {
+      historicoLido = true;
+      historico = await pool
+        .query<{ direction: 'inbound' | 'outbound'; body: string; sent_at: Date | string | null; humana: boolean }>(
+          `select direction, body, sent_at, sent_by_user_id is not null as humana from messages
+           where organization_id = $1 and conversation_id = $2 and body is not null
+           order by sent_at desc limit 500`,
+          [tenantId, input.conversationId],
+        )
+        .then(
+          (r) =>
+            r.rows.map((m) => ({
+              direction: m.direction,
+              body: m.body,
+              // Sem data legível, a linha não decide a ordem a favor de ninguém.
+              sent_at: m.sent_at instanceof Date ? m.sent_at.toISOString() : String(m.sent_at),
+              humana: m.humana === true,
+            })),
+          (err: unknown) => {
+            runLog.warn('lastro comercial: conversa indisponível — vale a janela', {
+              error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+            });
+            return undefined;
+          },
+        );
+    }
+    return lastroDoTurno();
+  };
   if (!preview && deps.knobs.goldenCandidatesDir !== undefined) {
     await recordSkillMissCandidates(
       deps.knobs.goldenCandidatesDir,
@@ -3709,6 +3852,7 @@ async function executarTurnoDoAgente(
             humanPromiseExtraTargets: agentConfig?.handoffKeywords ?? [],
             enforceUnscheduledFollowUp: true,
             enforceInternalVocabulary: true,
+            enforceClinicalClaim: camadaLigada(camadas.afirmacao_clinica, false),
             agenda: {
               active: agentConfig !== null && temFerramentaDeAgenda(agentConfig.toolIds),
               ferramentas: agentConfig === null ? [] : ferramentasDeAgendaDoAgente(agentConfig.toolIds),
@@ -4001,6 +4145,8 @@ async function executarTurnoDoAgente(
           // cru — é por isso que os ids podem sair do que vai ao modelo sem
           // perder nada: quem precisa deles é esta linha, não o modelo.
           pendingCitations = citationsFromHits(out.results);
+          // Lastro comercial: o trecho devolvido é material da organização.
+          valoresConsultados.push(...out.results.map((r) => r.content));
         }
         // `chunk_id` e `knowledge_source_id` viajavam CRUS para o modelo em toda
         // busca com RAG — dois UUIDs por resultado, sem uso nenhum do lado dele
@@ -4255,6 +4401,10 @@ async function executarTurnoDoAgente(
             // não é dele, e a única saída seria o silêncio. O follow-up determinístico
             // idem (ver GateContext.internalVocabularyEnforced).
             enforceInternalVocabulary: true,
+            // Afirmação clínica: só o corpo do MODELO, e só para a organização que ligou a
+            // camada. Sem linha, desligada: não há padrão de ambiente para uma proteção que
+            // só faz sentido em saúde.
+            enforceClinicalClaim: camadaLigada(camadas.afirmacao_clinica, false),
             // Mesmo padrão do vocabulário interno: só o `send_message` arma — é o único
             // corpo escrito pelo modelo. `active` é ter QUALQUER ferramenta de agenda:
             // um agente que só CONSULTA promete "vou verificar" igual, e enquanto a
@@ -4272,6 +4422,9 @@ async function executarTurnoDoAgente(
               disponivel: rawTools.schedule_followup !== undefined,
               agendadoNesteTurno: followupAgendadoNesteTurno,
             },
+            // Só o `send_message` do `inbound_turn` arma: é o único corpo escrito pelo modelo
+            // com a correção do turno mudo atrás. Ver `GateContext.lastroComercial`.
+            ...(job?.kind === 'inbound_turn' ? { lastroComercial: await lastroComercialPara(body) } : {}),
             ...(deps.knobs.disclosureMode !== undefined
               ? { disclosureMode: deps.knobs.disclosureMode }
               : {}),
@@ -4412,6 +4565,52 @@ async function executarTurnoDoAgente(
               hasOpenCase: true,
               openedCaseThisTurn: true,
             });
+          }
+          if (chain.status === 'vetoed' && chain.code === 'clinical_claim') {
+            // Fail-safe do gate de afirmação clínica. NUNCA solta o envio: não existe
+            // "frase com diagnóstico, mas melhor que silêncio". Na insistência o sistema
+            // chama a equipe (abre um caso com a frase barrada) e o erro devolvido ao
+            // modelo diz que a equipe foi acionada, para ele avisar a pessoa.
+            clinicalClaimVetoCount += 1;
+            if (
+              clinicalClaimVetoCount >= MAX_VETOS_DE_AFIRMACAO_CLINICA &&
+              agentConfig?.casesEnabled === true &&
+              !openedCaseThisTurn &&
+              !hasOpenCase
+            ) {
+              const auto = await openCase(
+                pool,
+                {
+                  tenantId,
+                  conversationId: input.conversationId,
+                  agentId: agentConfig?.agentId ?? null,
+                },
+                {
+                  title: 'Pergunta clínica que precisa de um profissional',
+                  summary: body, // a mensagem que o assistente tentou enviar e foi barrada
+                  blocker:
+                    'Aberto automaticamente: o assistente insistiu numa afirmação clínica ' +
+                    '(diagnóstico, remédio, promessa de resultado ou câncer) e o envio foi barrado.',
+                  source: 'guardrail_autofallback',
+                  contextSnapshot: buildCaseContextSnapshot(),
+                },
+              );
+              if (auto.ok) {
+                openedCaseThisTurn = true;
+                moverParaHandoffBestEffort('clinical_claim_autofallback');
+                return {
+                  ok: false,
+                  error: {
+                    code: chain.code,
+                    message:
+                      'A mensagem continua barrada. A equipe já foi acionada: diga à pessoa, ' +
+                      'em uma frase, que um profissional da equipe vai falar com ela, sem ' +
+                      'repetir nada sobre diagnóstico, remédio ou resultado.',
+                  },
+                };
+              }
+            }
+            return { ok: false, error: { code: chain.code, message: chain.message } };
           }
           if (chain.status === 'vetoed' && chain.code === 'internal_vocabulary_leak') {
             // Fail-safe do gate de vazamento — O CLIENTE NUNCA FICA SEM RESPOSTA.
@@ -5203,6 +5402,19 @@ async function executarTurnoDoAgente(
                   return resultado;
                 }) as typeof mcpTool.execute,
               };
+            } else if (LEITURAS_DE_REGISTRO_DA_ORG.has(name) && typeof mcpTool.execute === 'function') {
+              const executeOriginal = mcpTool.execute.bind(mcpTool);
+              rawTools[name] = {
+                ...mcpTool,
+                execute: (async (...args: Parameters<typeof executeOriginal>) => {
+                  const resultado = await executeOriginal(...args);
+                  // Lastro comercial: o valor do registro (produto, pedido, parcela); da busca
+                  // no conhecimento, o texto devolvido.
+                  if (name !== 'crm_search_knowledge') valoresConsultados.push(...valoresDoRegistro(resultado));
+                  else valoresConsultados.push(JSON.stringify(resultado));
+                  return resultado;
+                }) as typeof mcpTool.execute,
+              };
             } else if (name === 'crm_confirm_appointment' && typeof mcpTool.execute === 'function') {
               const executeOriginal = mcpTool.execute.bind(mcpTool);
               rawTools[name] = {
@@ -5300,6 +5512,9 @@ async function executarTurnoDoAgente(
                 ...horariosDaAgenda(),
                 vetosAnteriores: preview.result.impediments.filter((i) => VETOS_DO_HORARIO.has(i.code)).length,
               },
+              // Síncrono: sem a leitura das enviadas fora da janela — o Testar pode mostrar
+              // um veto que a produção resolveria com elas.
+              lastroComercial: lastroDoTurno(),
             }),
           )
         : rawTools;

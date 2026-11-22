@@ -19,7 +19,14 @@ import { sincronizarSaudeDaConexao } from "@/lib/channels/health";
 import { marcarConversaComMensagem } from "@/lib/channels/marcar-conversa";
 import { aplicarEfeitosPosEntrada } from "@/lib/channels/pos-entrada";
 import { garantirLeadDaConversa } from "@/lib/leads/nascimento-do-lead";
-import { pausarIaPorAtendimentoManual } from "@/lib/escalacao/atendimento-manual";
+import {
+  MOTIVO_COMANDO_OFF,
+  pausarIaDuravelmente,
+  pausarIaPorAtendimentoManual,
+} from "@/lib/escalacao/atendimento-manual";
+import { agenteAceitaComandoDeCelular, lerComandoDeControle } from "@/lib/escalacao/comando-de-canal";
+import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
+import { getWahaClient } from "@/lib/waha/client";
 import { MARCA_DE_ECO_NOSSO } from "@/lib/escalacao/fala-da-equipe";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
@@ -164,6 +171,12 @@ async function ehEcoDeEnvioNosso(
 interface Session {
   id: string;
   organization_id: string;
+  /**
+   * Nome da sessão no WAHA. Só usado para chamar o transporte de volta (revogar
+   * o comando `#on`/`#off`). Opcional: há chamadas sintéticas sem a linha de
+   * `channel_sessions` inteira.
+   */
+  waha_session_name?: string | null;
 }
 
 /**
@@ -1036,6 +1049,27 @@ async function nascerLeadDaConversaPeloCelular(
  * Contato = destinatário (`to`). `from` é o próprio número do operador — nunca
  * vira contato. Registrado como outbound p/ o operador ver o histórico completo.
  */
+/**
+ * Esconde do cliente os comandos `#on`/`#off`: o operador digita no MESMO chat
+ * do cliente. `DELETE .../messages/{id}` numa mensagem nossa é "apagar para
+ * todos". BEST-EFFORT: a mensagem já está gravada e o efeito já foi aplicado —
+ * falhar só deixa o comando visível.
+ */
+async function revogarComando(session: Session, chatId: string, messageId: string): Promise<void> {
+  const sessionName = session.waha_session_name;
+  const client = getWahaClient();
+  if (!sessionName || !client) return;
+  try {
+    await client.deleteMessage(sessionName, chatId, messageId);
+  } catch (err) {
+    logger.warn("[waha.ingest] não consegui revogar o comando do celular", {
+      organization_id: session.organization_id,
+      message_id: messageId,
+      detail: err instanceof Error ? err.message.slice(0, 160) : "erro",
+    });
+  }
+}
+
 async function handleOutboundFromUserPhone(
   admin: Admin,
   session: Session,
@@ -1252,12 +1286,53 @@ async function handleOutboundFromUserPhone(
   //   silenciar o bot -> ESTRITO    (na dúvida NÃO cala; calar a IA por engano é
   //                                  pior que não calar)
   // Quem reaproveitar esta condição para pular o INSERT reabre o #108.
+  //
+  // Comandos `#on`/`#off` (porte do DeskcommCRM #1631): só para o agente que
+  // ligou "Comandos pelo celular" (`ai_agents.config.aceita_comandos_celular`,
+  // FAIL-CLOSED). Ligado, `#off` pausa durável, `#on` devolve ao automático e
+  // qualquer outra fala pelo celular pausa durável. Desligado (padrão), nada
+  // muda: `#on`/`#off` são texto comum e a pausa tem prazo.
+  let comandoAplicado: ReturnType<typeof lerComandoDeControle> = null;
   if (!(await ehEcoDeEnvioNosso(admin, session.organization_id, conversationId, p, idCandidates))) {
-    await pausarIaPorAtendimentoManual(admin, {
-      organizationId: session.organization_id,
-      conversationId,
-      canal: "waha",
-    });
+    const aceita = await agenteAceitaComandoDeCelular(admin, session.organization_id, conversationId);
+    comandoAplicado = aceita ? lerComandoDeControle(bodyOf(p)) : null;
+    let revogar = true;
+    if (comandoAplicado === "off") {
+      await pausarIaDuravelmente(admin, {
+        organizationId: session.organization_id,
+        conversationId,
+        canal: "waha",
+        motivo: MOTIVO_COMANDO_OFF,
+      });
+    } else if (comandoAplicado === "on") {
+      const devolucao = await devolverAtendimentoAoAgente(
+        {
+          supabase: admin,
+          organizationId: session.organization_id,
+          actor: { type: "webhook_source", id: session.id },
+          requestId,
+        },
+        { conversationId },
+      );
+      if (!devolucao.ok) {
+        // O `#on` fica VISÍVEL no chat: é o sinal de que precisa repetir.
+        revogar = false;
+        logger.warn("waha.ingest: #on do celular não devolveu o atendimento ao agente", {
+          organization_id: session.organization_id,
+          conversation_id: conversationId,
+          erro: devolucao.erro,
+          detalhe: devolucao.detalhe,
+        });
+      }
+    } else {
+      await pausarIaPorAtendimentoManual(admin, {
+        organizationId: session.organization_id,
+        conversationId,
+        canal: "waha",
+        duravel: aceita,
+      });
+    }
+    if (comandoAplicado && revogar) await revogarComando(session, chatId, p.id);
     // A conversa que começa pelo celular nasce no funil (DeskcommCRM #2543).
     // Só o que não é eco: o eco é o envio do PRÓPRIO CRM.
     await nascerLeadDaConversaPeloCelular(admin, session, contactId, conversationId);
@@ -1279,7 +1354,13 @@ async function handleOutboundFromUserPhone(
     organizationId: session.organization_id,
     resourceType: "message",
     requestId,
-    metadata: { conversation_id: conversationId, type: p.type, external_id: p.id, from_user_phone: true },
+    metadata: {
+      conversation_id: conversationId,
+      type: p.type,
+      external_id: p.id,
+      from_user_phone: true,
+      ...(comandoAplicado ? { control_command: comandoAplicado } : {}),
+    },
   });
 
   if (insertedOutbound?.id && mediaUrlOf(p)) {

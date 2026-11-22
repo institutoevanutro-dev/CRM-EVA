@@ -88,10 +88,17 @@ describe("painel de segurança — o que se confere antes de enviar", () => {
     // ou o que impede o número do cliente de ser bloqueado, não é preferência.
     const { container } = renderPainel();
     await waitFor(() =>
-      expect(container.querySelectorAll('[role="switch"]')).toHaveLength(2),
+      expect(container.querySelectorAll('[role="switch"]')).toHaveLength(3),
     );
+    // As PAGAS continuam duas; a afirmação clínica é o terceiro interruptor, mas não
+    // custa nada (é escolha porque só serve a saúde) — contada à parte.
+    const pagas = [...CONFERENCIAS_DE_SAIDA, CONFERENCIA_DE_ENTRADA].filter(
+      (c) => c.escolha?.consultaModelo === true,
+    );
+    expect(pagas.map((c) => c.nome).sort()).toEqual(["jailbreak_detect", "semantic_promise"]);
     expect(screen.getByTestId("conferencia-semantic_promise-liga")).toBeTruthy();
     expect(screen.getByTestId("conferencia-jailbreak_detect-liga")).toBeTruthy();
+    expect(screen.getByTestId("conferencia-clinical_claim-liga")).toBeTruthy();
   });
 
   it("o interruptor reflete o que VALE hoje, não o que a organização digitou", async () => {
@@ -128,11 +135,12 @@ describe("painel de segurança — o que se confere antes de enviar", () => {
     renderPainel();
 
     const fixas = CONFERENCIAS_DE_SAIDA.filter((c) => c.escolha === null);
-    // 12 das 13 hoje (a proteção contra retorno não programado e a de horário que a agenda
-    // não devolveu também são fixas — ver `before-send.ts`). A contagem entra na asserção
+    // 13 das 15 hoje (a proteção contra retorno não programado, a de horário que a agenda
+    // não devolveu e a de condição que só o cliente citou também são fixas — ver
+    // `before-send.ts`; a afirmação clínica é escolha). A contagem entra na asserção
     // de propósito: se alguém tornar uma delas "configurável", este número muda e a
     // mudança tem de ser deliberada.
-    expect(fixas).toHaveLength(12);
+    expect(fixas).toHaveLength(13);
     for (const c of fixas) {
       const linha = screen.getByTestId(`conferencia-${c.nome}-fixa`);
       expect(linha.textContent).toContain("não se desliga");
@@ -153,7 +161,12 @@ describe("painel de segurança — o que se confere antes de enviar", () => {
     for (const c of [...CONFERENCIAS_DE_SAIDA, CONFERENCIA_DE_ENTRADA]) {
       if (c.escolha === null) continue;
       const linha = screen.getByTestId(`conferencia-${c.nome}-escolha`);
-      expect(linha.textContent).toContain("consulta ao modelo");
+      if (c.escolha.consultaModelo) {
+        expect(linha.textContent).toContain("consulta ao modelo");
+      } else {
+        expect(linha.textContent).toContain("Não custa nada");
+        expect(linha.textContent).not.toContain("Provedores de IA");
+      }
     }
   });
 

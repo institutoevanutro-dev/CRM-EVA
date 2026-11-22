@@ -4,6 +4,7 @@ import { janelaDoRelatorio } from "./janela";
 import {
   DIAS_DA_SERIE_DIARIA,
   chavesDaSerie,
+  comVendasDoFinanceiro,
   diasDaJanela,
   montarPainelDeVendas,
   type NegocioDoPainel,
@@ -233,5 +234,86 @@ describe("montarPainelDeVendas — vendas registradas", () => {
     expect(p.rankings.funis[0]).toEqual({ chave: FUNIL, centavos: 42_000, vendas: 4 });
     expect(p.lista[0]!.id).toBe("r1");
     expect(p.opcoes.tags).toEqual(["atacado", "recompra", "varejo"]);
+  });
+});
+
+describe("comVendasDoFinanceiro — o Financeiro ligado", () => {
+  const C1 = "c1c1c1c1-c1c1-4c1c-8c1c-c1c1c1c1c1c1";
+  const doCrm = () =>
+    montarPainelDeVendas({
+      negocios: [ganho("2026-11-03T15:00:00Z", 30_000), ganho("2026-11-04T15:00:00Z", 10_000), perdido("2026-11-05T15:00:00Z")],
+      janela: NOVEMBRO,
+      moedaDaOrganizacao: "BRL",
+      vendasRegistradas: [{ id: "r1", lead_id: null, contact_id: null, valor_cents: 77_700, currency: "BRL", data: "2026-11-06", tags: ["atacado"] }],
+    });
+  const FIN = {
+    currency: "BRL" as const,
+    vendas: { quantidade: 3, com_valor: 2, valor_cents: "150000" },
+    por_dia: [
+      { dia: "2026-11-02", quantidade: 2, valor_cents: "100000" },
+      { dia: "2026-11-10", quantidade: 1, valor_cents: "50000" },
+      { dia: "2026-12-01", quantidade: 9, valor_cents: "999" }, // fora da janela: ignorado
+    ],
+    por_contato: [{ contato_id: C1, vendas: 2, valor_cents: "100000" }],
+    sem_vinculo: { quantidade: 1, valor_cents: "50000" },
+  };
+
+  it("cartões, série e clientes vêm do Financeiro; vendas registradas e ganhos do CRM ficam fora dos cartões", () => {
+    const p = comVendasDoFinanceiro(doCrm(), FIN, NOVEMBRO);
+
+    expect(p.fonte).toBe("financeiro");
+    expect(p.vendas).toBe(3);
+    expect(p.vendido_centavos).toBe(150_000); // nada dos 77.700 registrados nem dos 40.000 ganhos
+    expect(p.vendas_com_valor).toBe(2);
+    expect(p.vendas_sem_valor).toBe(1);
+    expect(p.ticket_medio_centavos).toBe(75_000);
+    expect(p.serie).toHaveLength(19);
+    expect(p.serie.find((x) => x.chave === "2026-11-02")).toEqual({ chave: "2026-11-02", vendas: 2, centavos: 100_000 });
+    expect(p.serie.reduce((s, x) => s + x.centavos, 0)).toBe(150_000);
+    expect(p.rankings.clientes).toEqual([{ chave: C1, centavos: 100_000, vendas: 2 }]);
+    expect(p.sem_vinculo).toEqual({ vendas: 1, centavos: 50_000 });
+  });
+
+  it("tags e funis não se atribuem a venda do Financeiro: rankings vazios", () => {
+    const p = comVendasDoFinanceiro(doCrm(), FIN, NOVEMBRO);
+
+    expect(p.rankings.tags).toEqual([]);
+    expect(p.rankings.funis).toEqual([]);
+  });
+
+  it("a conversão e a lista continuam do CRM", () => {
+    const crm = doCrm();
+    const p = comVendasDoFinanceiro(crm, FIN, NOVEMBRO);
+
+    expect(p.conversao).toBeCloseTo(2 / 3);
+    expect(p.negocios_ganhos).toBe(2);
+    expect(p.lista).toEqual(crm.lista);
+    expect(p.vendas_no_recorte).toBe(3);
+  });
+
+  it("período longo: a série do Financeiro é somada por mês", () => {
+    const janela = janelaDoRelatorio("2026-09-01", "2026-11-30", TZ);
+    const crm = montarPainelDeVendas({ negocios: [], janela, moedaDaOrganizacao: "BRL" });
+    const p = comVendasDoFinanceiro(crm, FIN, janela);
+
+    expect(p.granularidade).toBe("mes");
+    expect(p.serie.find((x) => x.chave === "2026-11")).toEqual({ chave: "2026-11", vendas: 3, centavos: 150_000 });
+  });
+
+  it("Financeiro fora: os números dele ficam null ('—'), nunca os do funil no lugar; a conversão segue", () => {
+    const p = comVendasDoFinanceiro(doCrm(), null, NOVEMBRO);
+
+    expect(p.fonte).toBe("financeiro_indisponivel");
+    expect(p.vendas).toBeNull();
+    expect(p.vendido_centavos).toBeNull();
+    expect(p.ticket_medio_centavos).toBeNull();
+    expect(p.serie).toEqual([]);
+    expect(p.rankings).toEqual({ tags: [], clientes: [], funis: [] });
+    expect(p.conversao).toBeCloseTo(2 / 3);
+  });
+
+  it("sem o Financeiro, o painel diz que a fonte é o CRM", () => {
+    expect(doCrm().fonte).toBe("crm");
+    expect(doCrm().sem_vinculo).toBeNull();
   });
 });

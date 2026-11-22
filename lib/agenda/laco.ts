@@ -85,11 +85,14 @@ export function atividadeDaTransicao(
  * vira compromisso, e é o gancho de "mandar a confirmação para a cliente".
  * Reaproveitar a função da timeline aqui apagaria o gatilho mais útil dos três.
  *
- * `completed` e `no_show` ficam de fora porque já têm emissor próprio, no
- * banco (`fn_appointment_change_core`): `appointment.attended` e
- * `appointment.outcome_confirmed`, os dois consumidos por
- * `lib/followup/gatilho-presenca.handler.ts`. Dois eventos para o mesmo fato
- * fariam a regra rodar duas vezes.
+ * `completed` e `no_show` emitem `appointment.completed` e
+ * `appointment.no_show` (porte de melgarafael/DeskcommCRM#1709): são os
+ * gatilhos das REGRAS de automação ("Quando alguém comparecer/faltar"). O
+ * banco continua emitindo `appointment.attended` e
+ * `appointment.outcome_confirmed` para o follow-up
+ * (`lib/followup/gatilho-presenca.handler.ts`) — nomes e consumidores
+ * diferentes, então nenhuma regra roda duas vezes pelo mesmo fato. A guarda de
+ * "uma vez cada" é do handler, que só chama com transição quando o status mudou.
  */
 export function gatilhoDaTransicao(de: SituacaoAnterior, para: Transicao): string | null {
   if (de === null) {
@@ -105,6 +108,10 @@ export function gatilhoDaTransicao(de: SituacaoAnterior, para: Transicao): strin
       return "appointment.rescheduled";
     case "cancelled":
       return "appointment.cancelled";
+    case "completed":
+      return "appointment.completed";
+    case "no_show":
+      return "appointment.no_show";
     default:
       return null;
   }

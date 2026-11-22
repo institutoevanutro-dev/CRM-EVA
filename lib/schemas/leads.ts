@@ -77,6 +77,57 @@ export const CANONICAL_LOST_REASONS = [
 export type CanonicalLostReason = (typeof CANONICAL_LOST_REASONS)[number];
 
 /**
+ * O rótulo legível de cada motivo canônico (pt-BR; a tela passa por `t()`).
+ * Ao lado da lista para a janela de perda, o filtro do quadro e o relatório
+ * "Perdas" mostrarem o MESMO texto, nunca a chave crua (DeskcommCRM #1717).
+ */
+export const ROTULO_DO_MOTIVO_CANONICO: Record<CanonicalLostReason, string> = {
+  requested_by_customer: "Cliente solicitou cancelamento",
+  price: "Preço",
+  no_response: "Sem resposta do cliente",
+  product_unavailable: "Produto indisponível",
+  cancelled_by_store: "Cancelado pela loja",
+  cancelled_by_customer: "Cancelado pelo cliente",
+  payment_failed: "Falha no pagamento",
+  other: "Outro motivo",
+  opted_out_of_messages: "Pediu para não receber mensagens",
+};
+
+/** O rótulo pt-BR do motivo: o do canônico, ou o próprio texto do motivo do funil. */
+export function rotuloDoMotivoDePerda(motivo: string): string {
+  return (ROTULO_DO_MOTIVO_CANONICO as Record<string, string | undefined>)[motivo] ?? motivo;
+}
+
+/**
+ * As categorias com que o relatório "Perdas" e o filtro do quadro agrupam
+ * (DeskcommCRM #1717). O funil atribui a categoria a cada motivo em
+ * `settings.lost_reasons` (`{ label, categoria }`).
+ */
+export const CATEGORIAS_DE_PERDA = ["Cliente", "Concorrência", "Mérito", "Nós", "Ausência"] as const;
+export type CategoriaDePerda = (typeof CATEGORIAS_DE_PERDA)[number];
+
+/**
+ * A categoria PADRÃO de cada motivo canônico: o motivo já nasce agrupado sem
+ * ninguém cadastrar nada, e o funil pode sobrescrever. `other` fica sem: sem
+ * saber o que aconteceu, a tela estaria inventando informação.
+ */
+export const CATEGORIA_PADRAO_DO_MOTIVO: Partial<Record<CanonicalLostReason, CategoriaDePerda>> = {
+  requested_by_customer: "Cliente",
+  opted_out_of_messages: "Cliente",
+  cancelled_by_customer: "Cliente",
+  payment_failed: "Cliente",
+  price: "Nós",
+  product_unavailable: "Nós",
+  cancelled_by_store: "Nós",
+  no_response: "Ausência",
+};
+
+/** A categoria de um valor gravado em `lost_reason`, se o produto tem uma. */
+export function categoriaPadraoDoMotivo(valor: string): CategoriaDePerda | undefined {
+  return CATEGORIA_PADRAO_DO_MOTIVO[valor.trim() as CanonicalLostReason];
+}
+
+/**
  * loseLeadSchema accepts canonical reasons OR any string (pipeline-extended).
  * The server-side DB trigger is the source of truth; we keep the Zod schema
  * permissive here to not block tenant-specific extensions.

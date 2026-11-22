@@ -5,7 +5,8 @@
  *
  * "Quanto vendi no período, quantas vendas foram, qual o ticket médio, quanto
  * converti e como isso andou dia a dia?" — tudo numa tela só, em cartões
- * grandes. A fonte são os negócios do funil, e não as comandas.
+ * grandes. A fonte são os negócios do funil, e não as comandas — ou, com o
+ * Financeiro ligado, as vendas dele (ver abaixo).
  *
  * ─── O que é uma VENDA aqui (duas origens, nunca em dobro) ──────────────────
  *
@@ -36,7 +37,25 @@
  *    (`passaNoFiltro`). Vale para as vendas e para a conversão. Os cartões, os
  *    rankings e a lista desta tela saem da MESMA lista de vendas — nunca de
  *    réguas diferentes.
+ *
+ * ─── Com o Financeiro ligado (decisão do André, 22/11/2026) ─────────────────
+ *
+ * `comVendasDoFinanceiro` troca a FONTE de Vendas, Valor vendido, Ticket médio,
+ * série e "Clientes que mais compram" pelo VENDIDO do Financeiro no período
+ * (venda ativa pela data dela). O resto fica do CRM:
+ *
+ *  - CONVERSÃO segue do funil, com o recorte;
+ *  - FUNIL e TAG não recortam o Financeiro: a venda dele só se liga ao CONTATO,
+ *    e um contato pode ter negócios em vários funis e com várias tags. Pelo
+ *    mesmo motivo os rankings de tags e funis saem vazios (a tela os esconde);
+ *  - VENDAS REGISTRADAS e ganhos do CRM ficam FORA dos cartões (seriam o mesmo
+ *    dinheiro duas vezes) e continuam na lista, rotulada como do CRM;
+ *  - FINANCEIRO FORA (`fin === null`): os números dele ficam `null` ("—"),
+ *    nunca os do funil no lugar — eles não batem com o Financeiro e seriam
+ *    lidos como se fossem dele.
  */
+import type { VendasDoPeriodo } from "@/lib/integrations/financeiro/vendas-do-periodo";
+
 import { normalizarTagDoRelatorio, passaNoFiltro, type FiltroDoRelatorio } from "./comercial";
 import { dataNoFuso, proximoDia, type JanelaDoRelatorio } from "./janela";
 
@@ -110,12 +129,17 @@ export interface LinhaDeRanking {
   vendas: number;
 }
 
+/** De onde vêm Vendas, Valor, Ticket, série e clientes. */
+export type FonteDoPainel = "crm" | "financeiro" | "financeiro_indisponivel";
+
 export interface PainelDeVendas {
+  fonte: FonteDoPainel;
   moeda: string;
-  vendas: number;
-  vendido_centavos: number;
-  vendas_com_valor: number;
-  vendas_sem_valor: number;
+  /** `null` só com o Financeiro ligado e sem responder. */
+  vendas: number | null;
+  vendido_centavos: number | null;
+  vendas_com_valor: number | null;
+  vendas_sem_valor: number | null;
   ticket_medio_centavos: number | null;
   /** Negócios ganhos e perdidos FECHADOS na janela — a base da conversão. */
   negocios_ganhos: number;
@@ -134,6 +158,8 @@ export interface PainelDeVendas {
   lista: VendaDoPeriodo[];
   /** Quantas vendas o recorte tem no total (a lista pode estar cortada). */
   vendas_no_recorte: number;
+  /** Só no modo Financeiro: vendas de pacientes sem vínculo com o CRM (contam nos cartões, não em clientes). */
+  sem_vinculo: { vendas: number; centavos: number } | null;
 }
 
 /** Quantos dias de calendário a janela cobre (`de` e `ate` inclusivos). */
@@ -300,6 +326,7 @@ export function montarPainelDeVendas(entrada: {
   // ── 6. Rankings e a lista ────────────────────────────────────────────────
   const ordenadas = [...vendas].sort((a, b) => b.dia.localeCompare(a.dia) || a.id.localeCompare(b.id));
   return {
+    fonte: "crm",
     moeda,
     vendas: vendas.length,
     vendido_centavos: vendido,
@@ -324,5 +351,64 @@ export function montarPainelDeVendas(entrada: {
     },
     lista: ordenadas.slice(0, LIMITE_DA_LISTA_DO_PAINEL),
     vendas_no_recorte: vendas.length,
+    sem_vinculo: null,
+  };
+}
+
+/**
+ * O painel do CRM com os números do Financeiro no lugar (ver o cabeçalho).
+ * `fin === null` = o Financeiro está ligado e não respondeu.
+ */
+export function comVendasDoFinanceiro(
+  painel: PainelDeVendas,
+  fin: VendasDoPeriodo | null,
+  janela: JanelaDoRelatorio,
+): PainelDeVendas {
+  const semTagsNemFunis = { tags: [], funis: [] };
+  if (!fin) {
+    return {
+      ...painel,
+      fonte: "financeiro_indisponivel",
+      vendas: null,
+      vendido_centavos: null,
+      vendas_com_valor: null,
+      vendas_sem_valor: null,
+      ticket_medio_centavos: null,
+      serie: [],
+      excluidos: { outra_moeda: 0 },
+      rankings: { ...semTagsNemFunis, clientes: [] },
+      sem_vinculo: null,
+    };
+  }
+  const serie: PontoDaSerie[] = chavesDaSerie(janela.de, janela.ate, painel.granularidade).map((chave) => ({
+    chave,
+    vendas: 0,
+    centavos: 0,
+  }));
+  const indice = new Map(serie.map((ponto, i) => [ponto.chave, i]));
+  for (const d of fin.por_dia) {
+    const ponto = serie[indice.get(painel.granularidade === "dia" ? d.dia : d.dia.slice(0, 7)) ?? -1];
+    if (!ponto) continue;
+    ponto.vendas += d.quantidade;
+    ponto.centavos += Number(d.valor_cents);
+  }
+  const vendido = Number(fin.vendas.valor_cents);
+  const comValor = Math.min(fin.vendas.com_valor, fin.vendas.quantidade);
+  return {
+    ...painel,
+    fonte: "financeiro",
+    moeda: fin.currency,
+    vendas: fin.vendas.quantidade,
+    vendido_centavos: vendido,
+    vendas_com_valor: comValor,
+    vendas_sem_valor: fin.vendas.quantidade - comValor,
+    ticket_medio_centavos: comValor > 0 ? Math.round(vendido / comValor) : null,
+    serie,
+    excluidos: { outra_moeda: 0 },
+    rankings: {
+      ...semTagsNemFunis,
+      clientes: fin.por_contato.map((c) => ({ chave: c.contato_id, centavos: Number(c.valor_cents), vendas: c.vendas })),
+    },
+    sem_vinculo: { vendas: fin.sem_vinculo.quantidade, centavos: Number(fin.sem_vinculo.valor_cents) },
   };
 }

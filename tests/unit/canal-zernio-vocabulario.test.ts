@@ -41,6 +41,7 @@ describe("capabilities do canal intermediado", () => {
       limiteDeTexto: null,
       midiaDeEnvio: "completa",
       marcaLidasPorMensagem: false,
+      alteraMensagemEnviada: false,
     });
   });
 

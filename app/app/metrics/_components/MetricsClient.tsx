@@ -8,6 +8,7 @@ import { formatarDuracao } from "@/lib/metrics/atrito";
 import { useAttendantMetrics, type AttendantMetric } from "@/hooks/metrics/useAttendantMetrics";
 import { AtritoPanel } from "./AtritoPanel";
 import { CanaisPanel } from "./CanaisPanel";
+import { PerdasPanel } from "./PerdasPanel";
 import { useTeamMembers } from "@/hooks/team/useTeamMembers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -180,6 +181,9 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
           filtro de atendente, agora pelo NÚMERO. Leitura de gestão: só para
           quem compara a equipe (a rota também exige gerente). */}
       {canCompare ? <CanaisPanel owner={selectedOwner} /> : null}
+      {/* Perdas por motivo, categoria e etapa de saída (porte do upstream
+          #1717): o funil inteiro, então só para gerente (a rota exige). */}
+      {canCompare ? <PerdasPanel /> : null}
     </div>
   );
 }

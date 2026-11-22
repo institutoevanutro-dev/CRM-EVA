@@ -54,6 +54,7 @@ import { PainelDeSeguranca } from "./PainelDeSeguranca";
 import { BasesDoAgente, type MaterialDoAcervo } from "./BasesDoAgente";
 import { FunisDoAgente, type CoberturaPorFunil } from "./FunisDoAgente";
 import { PublishConfirmDialog } from "./PublishConfirmDialog";
+import { ComandosDoCelular } from "./ComandosDoCelular";
 import {
   saveAgentDraftAction,
   publishAgentAction,
@@ -1426,6 +1427,17 @@ export function AgentForm(props: Props) {
             </div>
           </div>
         </Sanfona>
+
+        {/* `#on`/`#off` pelo celular — salva em `ai_agents.config.aceita_comandos_celular`. */}
+        {isEdit ? (
+          <Sanfona titulo={t("Comandos pelo celular")}>
+            <ComandosDoCelular
+              agentId={props.agent.id}
+              inicial={(props.agent.config ?? {}).aceita_comandos_celular}
+              disabled={disabled}
+            />
+          </Sanfona>
+        ) : null}
       </div>
 
       {/* Publish dialog */}

@@ -38,6 +38,8 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     midiaDeEnvio: "completa",
     // O NOWEB sem store só marca leitura por id (porte de melgarafael/DeskcommCRM#5047).
     marcaLidasPorMensagem: true,
+    // Editar e apagar para todos o que o atendente enviou (DeskcommCRM #1626).
+    alteraMensagemEnviada: true,
   },
   // Hetero-restrição: não me banem, mas a Meta me proíbe e me cobra.
   meta_cloud: {
@@ -58,6 +60,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     limiteDeTexto: null,
     midiaDeEnvio: "completa",
     marcaLidasPorMensagem: false,
+    alteraMensagemEnviada: false,
   },
   // Mesma hetero-restrição do canal oficial, por baixo: é um BSP: a WABA é da
   // Meta, os templates são aprovados pela Meta e a janela de 24h é da Meta. O
@@ -98,6 +101,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     limiteDeTexto: null,
     midiaDeEnvio: "completa",
     marcaLidasPorMensagem: false,
+    alteraMensagemEnviada: false,
   },
   // O Direct não tem template aprovado nem janela de 24h formal como o
   // WhatsApp — a restrição real da API é a janela de 24h desde a última
@@ -130,6 +134,7 @@ export const CHANNEL_CAPABILITIES: Record<ProviderDeMensagem, ChannelCapabilitie
     limiteDeTexto: 1000,
     midiaDeEnvio: "so_foto",
     marcaLidasPorMensagem: false,
+    alteraMensagemEnviada: false,
   },
 };
 

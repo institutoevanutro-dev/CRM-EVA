@@ -55,10 +55,11 @@ describe("camadaLigada — a precedência entre a organização e o ambiente", (
     }
   });
 
-  it("o vocabulário tem as duas camadas, e só elas", () => {
+  it("o vocabulário tem as três camadas, e só elas", () => {
     // A lista é o contrato com o banco (coluna `layer`, sem CHECK de propósito) e
     // com a tela. Crescer aqui sem crescer lá dos dois lados é como a lista da
     // tela passa a divergir do que roda.
-    expect([...CAMADAS_SEMANTICAS]).toEqual(["promessa_semantica", "jailbreak"]);
+    // A terceira (`afirmacao_clinica`, porte do #2321) entrou com o `clinical_claim` e o item da tela.
+    expect([...CAMADAS_SEMANTICAS]).toEqual(["promessa_semantica", "jailbreak", "afirmacao_clinica"]);
   });
 });

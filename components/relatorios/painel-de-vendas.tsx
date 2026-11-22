@@ -113,6 +113,10 @@ export function PainelDeVendas({ periodoInicial, tz }: { periodoInicial: Periodo
   }, [tagDeIdioma]);
 
   const moeda = painel?.moeda ?? "BRL";
+  const doFinanceiro = painel?.fonte === "financeiro" || painel?.fonte === "financeiro_indisponivel";
+  // `null` = o Financeiro está ligado e não respondeu: "—", nunca o número do funil no lugar.
+  const numero = (v: number | null, formatar: (n: number) => string) => (v === null ? "—" : formatar(v));
+  const dinheiro = (v: number) => formatCents(v, moeda);
   const formatarMetrica = (v: number) => (metrica === "valor" ? formatCents(v, moeda) : inteiro.format(v));
 
   return (
@@ -204,6 +208,25 @@ export function PainelDeVendas({ periodoInicial, tz }: { periodoInicial: Periodo
         )}
       </div>
 
+      {/* ── De onde vêm os números ────────────────────────────────────────── */}
+      {painel && (
+        <div className="flex flex-col gap-1 text-xs text-text-muted" data-testid="fonte-do-painel">
+          <p>
+            {painel.fonte === "crm"
+              ? t("Negócios ganhos e vendas registradas no CRM.")
+              : t("Vendas do Financeiro; a conversão vem do funil.")}
+          </p>
+          {doFinanceiro && comRecorte && (
+            <p>{t("Funil e tag filtram só a conversão e a lista do CRM: a venda do Financeiro não se liga a funil nem a tag.")}</p>
+          )}
+        </div>
+      )}
+      {painel?.fonte === "financeiro_indisponivel" && (
+        <p className="rounded-md border border-danger/40 bg-danger/5 p-3 text-sm text-danger" role="alert" data-testid="financeiro-fora">
+          {t("O Financeiro não respondeu. Vendas, valor e ticket ficam em branco até ele voltar; a conversão continua vindo do funil.")}
+        </p>
+      )}
+
       {isLoading ? (
         <p className="text-sm text-text-muted">{t("Carregando…")}</p>
       ) : isError || !painel ? (
@@ -212,16 +235,16 @@ export function PainelDeVendas({ periodoInicial, tz }: { periodoInicial: Periodo
         <>
           {/* ── Os cartões ──────────────────────────────────────────────────── */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Cartao testId="cartao-vendas" titulo={t("Vendas")} valor={inteiro.format(painel.vendas)} />
+            <Cartao testId="cartao-vendas" titulo={t("Vendas")} valor={numero(painel.vendas, (n) => inteiro.format(n))} />
             <Cartao
               testId="cartao-valor"
               titulo={t("Valor vendido")}
-              valor={formatCents(painel.vendido_centavos, painel.moeda)}
+              valor={numero(painel.vendido_centavos, dinheiro)}
             />
             <Cartao
               testId="cartao-ticket"
               titulo={t("Ticket médio")}
-              valor={painel.ticket_medio_centavos === null ? "—" : formatCents(painel.ticket_medio_centavos, painel.moeda)}
+              valor={numero(painel.ticket_medio_centavos, dinheiro)}
             />
             <Cartao
               testId="cartao-conversao"
@@ -231,7 +254,8 @@ export function PainelDeVendas({ periodoInicial, tz }: { periodoInicial: Periodo
             />
           </div>
 
-          {/* ── O gráfico ───────────────────────────────────────────────────── */}
+          {/* ── O gráfico (sem ele quando o Financeiro não respondeu) ──────────── */}
+          {painel.vendas !== null && (
           <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
               <CardTitle className="text-base">
@@ -316,13 +340,24 @@ export function PainelDeVendas({ periodoInicial, tz }: { periodoInicial: Periodo
               )}
             </CardContent>
           </Card>
+          )}
 
           {/* ── O que ficou fora, dito em vez de escondido ──────────────────── */}
-          {(painel.vendas_sem_valor > 0 || painel.excluidos.outra_moeda > 0 || painel.truncado) && (
+          {((painel.vendas_sem_valor ?? 0) > 0 ||
+            painel.excluidos.outra_moeda > 0 ||
+            painel.truncado ||
+            (painel.sem_vinculo?.vendas ?? 0) > 0) && (
             <ul className="list-disc pl-5 text-xs text-text-muted" data-testid="avisos-do-painel">
-              {painel.vendas_sem_valor > 0 && (
+              {painel.sem_vinculo && painel.sem_vinculo.vendas > 0 && (
+                <li data-testid="cobertura-do-financeiro">
+                  {inteiro.format(painel.sem_vinculo.vendas)} {t("venda(s) do Financeiro")} (
+                  {dinheiro(painel.sem_vinculo.centavos)}){" "}
+                  {t("de pacientes sem vínculo com o CRM: contam nos cartões, não em Clientes que mais compram.")}
+                </li>
+              )}
+              {(painel.vendas_sem_valor ?? 0) > 0 && (
                 <li>
-                  {inteiro.format(painel.vendas_sem_valor)}{" "}
+                  {inteiro.format(painel.vendas_sem_valor ?? 0)}{" "}
                   {t("venda(s) sem valor preenchido: contam em Vendas, mas não no valor nem no ticket médio.")}
                 </li>
               )}
@@ -338,10 +373,12 @@ export function PainelDeVendas({ periodoInicial, tz }: { periodoInicial: Periodo
         </>
       )}
 
-      {/* ── Rankings e a lista — da MESMA lista de vendas dos cartões ─────── */}
-      {painel && painel.vendas > 0 && (
+      {/* ── Rankings — da MESMA fonte dos cartões. No modo Financeiro, só
+           clientes: a venda dele não se liga a tag nem a funil. ──────────── */}
+      {painel && (painel.vendas ?? 0) > 0 && (
         <>
-          <div className="grid gap-3 lg:grid-cols-3">
+          <div className={cn("grid gap-3", !doFinanceiro && "lg:grid-cols-3")}>
+            {!doFinanceiro && (
             <Ranking
               titulo={t("Tags que mais vendem")}
               testId="ranking-tags"
@@ -351,6 +388,7 @@ export function PainelDeVendas({ periodoInicial, tz }: { periodoInicial: Periodo
               aoClicar={(chave) => setRecorte((r) => ({ ...r, tag: chave }))}
               tituloDoClique={t("Ver as vendas desta tag")}
             />
+            )}
             <Ranking
               titulo={t("Clientes que mais compram")}
               testId="ranking-clientes"
@@ -358,6 +396,7 @@ export function PainelDeVendas({ periodoInicial, tz }: { periodoInicial: Periodo
               rotulo={(chave) => nomeDoContato(painel.contatos[chave], t)}
               moeda={painel.moeda}
             />
+            {!doFinanceiro && (
             <Ranking
               titulo={t("Funis que mais vendem")}
               testId="ranking-funis"
@@ -365,12 +404,18 @@ export function PainelDeVendas({ periodoInicial, tz }: { periodoInicial: Periodo
               rotulo={(chave) => painel.nomes_dos_funis[chave] ?? t("Funil sem nome")}
               moeda={painel.moeda}
             />
+            )}
           </div>
+        </>
+      )}
 
+      {/* ── A lista: sempre do CRM (no modo Financeiro, dita como tal) ────── */}
+      {painel && painel.vendas_no_recorte > 0 && (
+        <>
           <Card data-testid="lista-do-painel">
             <CardHeader>
               <CardTitle className="text-base">
-                {t("Vendas")} ({inteiro.format(painel.vendas_no_recorte)})
+                {doFinanceiro ? t("Vendas no CRM") : t("Vendas")} ({inteiro.format(painel.vendas_no_recorte)})
               </CardTitle>
               {painel.vendas_no_recorte > painel.lista.length && (
                 <p className="text-xs text-text-muted">

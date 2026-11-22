@@ -32,6 +32,9 @@ export const TRIGGER_LABELS: Record<TriggerEvent, string> = {
   "appointment.confirmed": "Quando um horário pendente for confirmado",
   "appointment.rescheduled": "Quando um horário for remarcado",
   "appointment.cancelled": "Quando um horário for cancelado",
+  // As palavras dos botões do histórico do compromisso (Realizado/Faltou).
+  "appointment.completed": "Quando alguém comparecer ao compromisso",
+  "appointment.no_show": "Quando alguém faltar ao compromisso",
   "contact.birthday": "No aniversário de um contato",
   "contact.phone_added": "Quando um contato ganhar um telefone",
 };

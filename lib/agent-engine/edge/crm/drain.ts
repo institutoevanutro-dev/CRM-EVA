@@ -18,6 +18,11 @@ import type pg from 'pg';
 import { insertInboxItem } from '../../db/repository';
 import type { Logger } from '../../obs/logger';
 import { enqueueJob } from '../../queue/queue';
+import {
+  adiadoPelaJanelaDeResposta,
+  janelaDeRespostaAberta,
+  soltarAdiadoPelaJanela,
+} from '../../pacing/adiados-da-janela';
 import { avisoDeEventoMorto, IA_QUE_NAO_RESPONDEU } from '@/lib/event-log/aviso-de-evento-morto';
 import { TETO_ESPERA_DERIVACAO_MS } from '@/lib/messaging/media/derivable';
 import { midiaDerivavelPendente } from './midia-derivavel';
@@ -516,8 +521,8 @@ async function processEvent(
   // nova como vista por esse job. Envio que FALHOU não segura: o ledger roda a
   // chave e o retry envia naquela posição.
   if (knobs.debounceMs > 0) {
-    const { rows: pendingRows } = await pool.query<{ id: string }>(
-      `select id from job_queue j
+    const { rows: pendingRows } = await pool.query<{ id: string; payload: unknown }>(
+      `select id, payload from job_queue j
        where organization_id = $1 and contact_id = $2
          and kind = 'inbound_turn' and status = 'pending' and run_after > now()
          and not (payload ? 'held_run_after')
@@ -530,6 +535,29 @@ async function processEvent(
        limit 1`,
       [event.organization_id, p.contact_id, p.conversation_id],
     );
+    // Job adiado pela JANELA DE RESPOSTA (rastro `adiado_por_janela`, porte do
+    // original #3419) com a janela já aberta: acorda o MESMO job e a mensagem
+    // vai nele, que agora roda já, e não na abertura antiga. Se o job saiu do
+    // estado pendente-futuro no meio (o worker pegou), a mensagem ganha job
+    // próprio logo abaixo. Janela fechada: carona como sempre.
+    const candidato = pendingRows[0];
+    if (
+      candidato &&
+      adiadoPelaJanelaDeResposta(candidato.payload) &&
+      (await janelaDeRespostaAberta(pool, {
+        organizationId: event.organization_id,
+        channelSessionId: p.channel_session_id,
+        log,
+      }))
+    ) {
+      const acordado = await soltarAdiadoPelaJanela(pool, event.organization_id, candidato.id);
+      log.info('drain: janela de resposta aberta — job adiado acordado', {
+        event_id: event.id,
+        job_id: candidato.id,
+        acordado,
+      });
+      if (!acordado) pendingRows.length = 0;
+    }
     if (pendingRows[0]) {
       log.info('drain: rajada coalescida em job pendente', {
         event_id: event.id,

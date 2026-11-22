@@ -376,7 +376,7 @@ export function ContactsTable({ contacts, orderBy, orderDir, onSort }: Props) {
                 </Button>
               ) : null}
               <Button asChild>
-                <Link href={bloqueio.agendaHref}>{t("Abrir Agenda")}</Link>
+                <Link href={bloqueio.destino.href}>{t(bloqueio.destino.rotulo)}</Link>
               </Button>
             </>
           ) : (

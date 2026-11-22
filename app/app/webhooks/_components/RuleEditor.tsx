@@ -132,6 +132,9 @@ const CURATED_FIELDS: Record<TriggerEvent, CuratedField[]> = {
   "appointment.confirmed": AGENDAMENTO_FIELDS,
   "appointment.rescheduled": AGENDAMENTO_FIELDS,
   "appointment.cancelled": AGENDAMENTO_FIELDS,
+  // A situação não vira condição: ela É o gatilho.
+  "appointment.completed": AGENDAMENTO_FIELDS,
+  "appointment.no_show": AGENDAMENTO_FIELDS,
   // O aniversário não tem campo próprio para filtrar: o que a organização quer
   // decidir é sobre QUEM faz aniversário, e não sobre a data. Por isso os campos
   // são os do contato — "só quem tem a tag cliente", tipicamente.

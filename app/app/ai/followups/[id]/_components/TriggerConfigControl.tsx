@@ -132,7 +132,10 @@ function parseTriggerConfig(raw: Record<string, unknown>): TriggerFormState {
 function toTriggerConfig(form: TriggerFormState): Record<string, unknown> {
   const cancelOnReply = form.cancelOnReply ? { cancel_on_reply: true } : {};
   const canal = form.channelSessionId ? { channel_session_id: form.channelSessionId } : {};
-  if (form.kind === "appointment_no_show") return {kind:"appointment_no_show",params:{event_type_ids:form.eventTypeIds,...canal}};
+  // Grava o interruptor LIGADO, sempre: a tela o mostra ligado e travado neste
+  // gatilho, e o valor visível precisa estar no `trigger_config` (porte do
+  // DeskcommCRM #3755). Literal, não `form.cancelOnReply`, de propósito.
+  if (form.kind === "appointment_no_show") return {kind:"appointment_no_show",params:{event_type_ids:form.eventTypeIds,...canal},cancel_on_reply:true};
   if (form.kind === "appointment_attended") return { kind: "appointment_attended", params: { event_type_ids: form.eventTypeIds, ...canal }, ...cancelOnReply };
   if (form.kind === "manual") return { kind: "manual", ...cancelOnReply };
 
