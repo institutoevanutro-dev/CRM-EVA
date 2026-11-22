@@ -8646,6 +8646,62 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      fn_conversation_assign_pelo_turno: {
+        Args: {
+          p_conversation_id: string
+          p_enforce_expected: boolean
+          p_expected_assignee: string | null
+          p_organization_id: string
+          p_reason: string
+          p_source_job_id: string
+          p_to_user_id: string
+        }
+        Returns: {
+          active_agent_set_at: string | null
+          active_ai_agent_id: string | null
+          active_intent: string | null
+          assigned_at: string | null
+          assigned_to_user_id: string | null
+          assigned_to_user_name: string | null
+          assignee_kind: string | null
+          awaiting_since: string | null
+          bot_silenced_until: string | null
+          channel: string
+          channel_session_id: string
+          contact_id: string
+          created_at: string
+          group_chat_id: string | null
+          id: string
+          is_group: boolean
+          last_handoff_at: string | null
+          last_handoff_reason: string | null
+          last_inbound_at: string | null
+          last_message_at: string | null
+          last_message_preview: string | null
+          last_outbound_at: string | null
+          metadata: Json
+          organization_id: string
+          provider_conversation_id: string | null
+          rag_review_status: string | null
+          snooze_until: string | null
+          snoozed_at: string | null
+          snoozed_by_user_id: string | null
+          status: string
+          status_changed_at: string
+          tags: string[]
+          unread_count_for_assignee: number
+          updated_at: string
+          usable_for_rag: boolean
+          usable_for_rag_marked_at: string | null
+          usable_for_rag_marked_by: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "conversations"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       fn_decrypt_oauth: { Args: { ciphertext: string }; Returns: string }
       fn_definir_logo_da_organizacao: {
         Args: { p_actor: string; p_org: string; p_path: string }
