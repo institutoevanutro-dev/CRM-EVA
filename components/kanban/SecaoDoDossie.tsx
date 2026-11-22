@@ -23,10 +23,11 @@ export const CHAVE_DAS_SECOES_RECOLHIDAS = "dossie:secoes-recolhidas";
 
 /**
  * As seções recolhíveis do dossiê do fork. O upstream tem também "contato"
- * (bloco `ContatoDoNegocio`), que o fork não tem. Tarefas fica de fora:
- * é trabalho em curso, não consulta.
+ * (bloco `ContatoDoNegocio`), que o fork não tem. Depois dos dados, a seção
+ * das vendas registradas do negócio. Tarefas fica de fora: é trabalho em
+ * curso, não consulta.
  */
-export type IdDeSecao = "dados-do-negocio" | "linha-do-tempo";
+export type IdDeSecao = "dados-do-negocio" | "vendas" | "linha-do-tempo";
 
 function gravar(fechadas: Set<string>): void {
   try {

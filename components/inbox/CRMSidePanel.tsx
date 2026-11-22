@@ -1,6 +1,9 @@
 "use client";
 
 import { useAuth } from "@/hooks/auth/AuthProvider";
+import { roleAtLeast } from "@/lib/auth/types";
+import { VendasDoNegocio } from "@/components/vendas/VendasDoNegocio";
+import { MOEDA_PADRAO } from "@/lib/money";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import type { Locale } from "date-fns";
@@ -350,6 +353,32 @@ function ondeEstaOLead(l: LeadRow): string {
  */
 const CLASSES_DE_ONDE_ESTA = "line-clamp-2 text-muted-foreground";
 
+/** A seção "Vendas" do negócio ativo no painel do Inbox. */
+function VendasDoInbox({
+  lead,
+  somenteLeitura,
+  aoMudar,
+}: {
+  lead: LeadRow;
+  somenteLeitura: boolean;
+  aoMudar: () => void;
+}) {
+  const t = useT();
+  return (
+    <div className="mt-3" data-testid="inbox-vendas">
+      <h4 className="mb-1 text-xs font-semibold text-text">{t("Vendas")}</h4>
+      <VendasDoNegocio
+        key={lead.id}
+        leadId={lead.id}
+        titulo={lead.title}
+        moeda={(lead.currency ?? MOEDA_PADRAO).toUpperCase()}
+        somenteLeitura={somenteLeitura}
+        aoMudar={aoMudar}
+      />
+    </div>
+  );
+}
+
 function InboxLeadEditor({
   leads,
   selecionadoId,
@@ -642,8 +671,12 @@ export function CRMSidePanel({ conversation, recolhido = false, onAlternarRecolh
 }
 
 function PainelDoContato({ conversation, onAlternarRecolhido }: Omit<Props, "recolhido">) {
-  const { user } = useAuth();
+  const { user, activeOrg } = useAuth();
   const readonly = user.support?.access_mode === "support_readonly";
+  // O piso de `/api/v1/vendas` (registrar e apagar): `agent`+, como
+  // `usePermission("vendas.registrar")`, lido do mesmo `useAuth` do painel.
+  const podeRegistrarVenda =
+    (user.is_platform_admin && !user.support) || roleAtLeast(activeOrg?.role, "agent");
   const localeDaData = useLocaleDeData();
   const t = useT();
   const contact = conversation?.contacts ?? null;
@@ -948,12 +981,22 @@ function PainelDoContato({ conversation, onAlternarRecolhido }: Omit<Props, "rec
         {sectionsLoading ? (
           <Skeleton className="mt-2 h-14 w-full" />
         ) : leads && leads.length > 0 ? (
+          <>
           <fieldset disabled={readonly}><InboxLeadEditor
             leads={leads}
             selecionadoId={leadAtivoId}
             onSelecionar={setLeadAtivoId}
             onSalvo={recarregar}
           /></fieldset>
+          {/* As VENDAS do negócio ativo (porte do original #5087): registrar a
+              compra daqui, sem sair da conversa. Mesma lista do negócio aberto
+              no funil; registrar e apagar são `agent`+, o piso da rota. */}
+          <VendasDoInbox
+            lead={leads.find((l) => l.id === leadAtivoId) ?? leads[0]!}
+            somenteLeitura={readonly || !podeRegistrarVenda}
+            aoMudar={recarregar}
+          />
+          </>
         ) : (
           <SemLista vazio="Nenhum negócio aberto." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
         )}

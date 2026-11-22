@@ -223,6 +223,16 @@ beforeAll(() => {
             values (v_org, v_contact, 'email', 'rls-invariant@exemplo.test', now() + interval '7 days');
         end if;
 
+        -- migration 0423 (porte do original #5087): a venda registrada. A
+        -- leitura e org-scoped sem gate de papel; a escrita nao e concedida a
+        -- authenticated (so a rota /api/v1/vendas, pelo admin). A semente fica
+        -- so no contato: o valor do negocio pelas vendas e medido em outro
+        -- invariante.
+        if not exists (select 1 from public.vendas_registradas where organization_id = v_org) then
+          insert into public.vendas_registradas (organization_id, contact_id, valor_cents, data)
+            values (v_org, v_contact, 18000, current_date);
+        end if;
+
         if not exists (select 1 from public.catalog_products where organization_id = v_org) then
           insert into public.catalog_products
             (organization_id, codigo, nome, preco_cents)
@@ -370,6 +380,11 @@ beforeAll(() => {
  * cabeçalho do caso de `contact_field_proposals` abaixo.
  */
 export const TABLES = [
+  // migration 0423 (porte do original #5087) — a venda registrada no negócio ou
+  // no contato: valor, dia, tags e observação (texto livre sobre o cliente).
+  // Vazar entrega ao vizinho quanto e quando a outra empresa vendeu. Leitura
+  // org-scoped sem gate de papel; a escrita só pela rota.
+  "vendas_registradas",
   // migration 0416 (porte do original #4131) — a mensagem agendada na conversa. A
   // leitura exige a conversa visível pela sessão; a semente usa v_conv, sem dono,
   // que o agent semeado enxerga (visibility_mode padrão).

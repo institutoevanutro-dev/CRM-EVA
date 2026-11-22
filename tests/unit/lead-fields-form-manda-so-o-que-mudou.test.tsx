@@ -19,6 +19,13 @@ const mutateAsync = vi.fn(async (_: unknown) => ({}));
 
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 vi.mock("@/hooks/auth/AuthProvider", () => ({ useActiveOrg: () => ({ orgId: "org-1" }) }));
+// As vendas registradas do negócio (porte do original #5087): sem venda, o
+// Valor segue editável como antes.
+vi.mock("@/hooks/vendas/useVendasRegistradas", () => ({
+  useVendasDoNegocio: () => ({ data: [] }),
+  useRegistrarVenda: () => ({ mutateAsync: async () => ({}), isPending: false }),
+  useApagarVenda: () => ({ mutate: () => {}, isPending: false }),
+}));
 vi.mock("@/hooks/contacts/useContactTagVocabulary", () => ({
   useContactTagVocabulary: () => ({ data: [] }),
 }));

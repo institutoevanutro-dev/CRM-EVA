@@ -19,6 +19,8 @@ import { LeadTimeline } from "./LeadTimeline";
 import { TarefasDoNegocio } from "./TarefasDoNegocio";
 import { OwnerBadge } from "./OwnerBadge";
 import { SecaoDoDossie, useSecoesRecolhidas } from "./SecaoDoDossie";
+import { VendasDoNegocio } from "@/components/vendas/VendasDoNegocio";
+import { MOEDA_PADRAO } from "@/lib/money";
 import { resolveLeadOwner } from "@/lib/kanban/owner";
 import type { CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 
@@ -211,6 +213,25 @@ export function LeadDossier({
           <div ref={campos}>
             <LeadFieldsForm lead={lead} pipelineId={pipelineId} fieldDefs={fieldDefs} />
           </div>
+        </SecaoDoDossie>
+
+        {/* As VENDAS registradas: cada compra do cliente neste negócio, com
+            valor, data e tags — várias por negócio (recompra). Conta no painel
+            de vendas em qualquer etapa do card. Escrever é `agent`+, a mesma
+            régua da rota; o leitor vê a lista sem o botão. */}
+        <SecaoDoDossie
+          id="vendas"
+          titulo={t("Vendas")}
+          recolhida={fechadas.has("vendas")}
+          aoAlternar={alternar}
+        >
+          <VendasDoNegocio
+            leadId={lead.id}
+            titulo={lead.title}
+            moeda={(lead.currency ?? MOEDA_PADRAO).toUpperCase()}
+            somenteLeitura={!podeEditarTarefas}
+            semRegistrar
+          />
         </SecaoDoDossie>
 
         {/* As tarefas ANTES da linha do tempo: a timeline conta o que já
