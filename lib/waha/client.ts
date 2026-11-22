@@ -571,16 +571,22 @@ export class WahaClient {
    */
   /**
    * O visto azul: marca como lida a conversa (`POST /api/sendSeen` do WAHA).
-   * Sessão no CORPO, como `sendText`; sem `messageIds` — o pedido é "li esta
-   * conversa". LANÇA `waha_<status>` como os vizinhos; a falha macia é de quem
+   * Sessão no CORPO, como `sendText`. Sem `messageIds` o pedido é "li esta
+   * conversa", que o NOWEB só atende com o store ligado (sem ele, 400). Com os
+   * ids serializados (`false_<chat>_<id>`), o WAHA marca cada mensagem sem
+   * depender do store (porte de melgarafael/DeskcommCRM#5047). LANÇA `waha_<status>` como os vizinhos; a falha macia é de quem
    * chama (`marcarConversaComoLida`, em `./send`). Porte de
    * upstream #2987.
    */
-  async sendSeen(session: string, chatId: string): Promise<void> {
+  async sendSeen(session: string, chatId: string, messageIds?: readonly string[]): Promise<void> {
     const res = await this.fetchComTeto(`${this.baseUrl}/api/sendSeen`, {
       method: "POST",
       headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ session, chatId }),
+      body: JSON.stringify({
+        session,
+        chatId,
+        ...(messageIds && messageIds.length > 0 ? { messageIds } : {}),
+      }),
     });
     if (!res.ok) throw new Error(`waha_${res.status}`);
   }

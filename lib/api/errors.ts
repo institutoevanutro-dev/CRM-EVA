@@ -44,6 +44,8 @@ export const ApiErrorCodes = {
   agenda_sem_responsavel: "agenda_sem_responsavel",
   agenda_disponibilidade_invalida: "agenda_disponibilidade_invalida",
   agenda_ja_cancelado: "agenda_ja_cancelado",
+  // 422: mudar só a duração para um fim que já passou (a borda do card na grade).
+  agenda_horario_passado: "agenda_horario_passado",
   agenda_listagem_sem_recorte: "agenda_listagem_sem_recorte",
   // 422: o profissional escolhido não atende este procedimento (o tipo tem outro
   // dono) ou não atende nesta unidade (a jornada dele diz onde atende). A tela

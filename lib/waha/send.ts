@@ -77,6 +77,12 @@ export interface MarcarConversaComoLidaInput {
   organizationId: string;
   sessionName: string;
   chatId: string;
+  /**
+   * Os ids serializados das mensagens lidas (`false_<chat>_<id>`). Sem eles o
+   * pedido é "li a conversa", que o NOWEB sem store recusa com 400 (porte de
+   * melgarafael/DeskcommCRM#5047).
+   */
+  messageIds?: readonly string[];
 }
 
 /**
@@ -99,7 +105,7 @@ export async function marcarConversaComoLida(
   const client = getWahaClient();
   if (!client) return false;
   try {
-    await client.sendSeen(input.sessionName, input.chatId);
+    await client.sendSeen(input.sessionName, input.chatId, input.messageIds);
     return true;
   } catch (erro) {
     logger.warn("waha: conversa não marcada como lida (a resposta já saiu)", {

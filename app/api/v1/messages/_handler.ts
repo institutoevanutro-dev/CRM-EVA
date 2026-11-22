@@ -38,7 +38,7 @@ import {
   type ChannelSessionRef,
 } from "@/lib/channels";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
-import { CHANNEL_PROVIDER_INSTAGRAM } from "@/lib/channels/capabilities";
+import { CHANNEL_PROVIDER_INSTAGRAM, canalMarcaLidasPorMensagem } from "@/lib/channels/capabilities";
 import { automaticoPodeEnviar, estadoDaJanela } from "@/lib/channels/janela";
 import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
 import { nomeDeArquivoLimpo, nomeDoAnexoParaEnviar } from "@/lib/messaging/media/nome-de-arquivo";
@@ -66,6 +66,7 @@ import { logger } from "@/lib/logger";
 import { carregarPrazoDaPausa } from "@/lib/escalacao/pausa-por-resposta-humana";
 import { devolverIdOriginalAoEcoDeOutraConversa } from "@/lib/messaging/eco-em-outra-conversa";
 import { previaDaMensagem } from "@/lib/messaging/previa-da-mensagem";
+import { recebidasQueARespostaLe } from "@/lib/messaging/recebidas-a-ler";
 import { aplicarAssinatura, configAssinatura, linhaDeAssinatura } from "@/lib/messaging/assinatura";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -1063,6 +1064,22 @@ export async function sendMessageHandler(
       // adapter preserva o mesmo branch (e a mesma mensagem de erro de cada
       // método) do outro lado do seam.
       let externalId: string | null;
+      // As mensagens do cliente que ESTA resposta lê, para o canal marcá-las
+      // como lidas (visto azul): o NOWEB sem store só marca por mensagem (porte
+      // de melgarafael/DeskcommCRM#5047). Template não passa por `adapter.send`;
+      // grupo não leva visto; canal que não marca por id não paga a leitura.
+      // Nada novo, falha ou leitura lenta = `undefined`: o pedido de antes.
+      const readExternalIds =
+        input.type === "template" ||
+        c.is_group ||
+        !canalMarcaLidasPorMensagem(c.channel_sessions?.provider ?? DEFAULT_CHANNEL_PROVIDER)
+          ? undefined
+          : await recebidasQueARespostaLe(supabase, {
+              organizationId: ctx.organization_id,
+              conversationId: c.id,
+              envioId: message.id,
+            });
+      const lidas = readExternalIds !== undefined ? { readExternalIds } : {};
       if (input.type === "template") {
         // Template é caminho próprio: não passa pelo `adapter.send` (que fala em
         // texto/mídia) porque o payload da plataforma é outro — e porque o envio
@@ -1154,6 +1171,7 @@ export async function sendMessageHandler(
           // O id que a PLATAFORMA conhece, lido da linha citada agora — não uma
           // cópia guardada no envio, que poderia divergir da linha.
           replyToExternalId: idDaCitadaNoCanal,
+          ...lidas,
         }));
       } else if (midiaDaBiblioteca) {
         // Mesmo storage-first do ramo acima, no bucket da biblioteca.
@@ -1181,6 +1199,7 @@ export async function sendMessageHandler(
             caption: corpoDoCanal(input.body ?? null),
           },
           replyToExternalId: idDaCitadaNoCanal,
+          ...lidas,
         }));
       } else if (input.type === "contact") {
         const sc = outboundMetadata.shared_contact as
@@ -1211,6 +1230,7 @@ export async function sendMessageHandler(
             whatsappId: phoneToWhatsappId(telefone),
             vcard: buildVcard(nome, telefone),
           },
+          ...lidas,
         }));
       } else {
         await checkBoundary();
@@ -1224,6 +1244,7 @@ export async function sendMessageHandler(
           kind: input.type,
           body: corpoDoCanal(input.body ?? "") ?? "",
           replyToExternalId: idDaCitadaNoCanal,
+          ...lidas,
         }));
       }
 

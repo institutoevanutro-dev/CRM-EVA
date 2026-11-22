@@ -786,4 +786,25 @@ describe("duração escolhida na marcação", () => {
     const linha = banco.tabelas.calendar_appointments!.find((l) => l.id === MEU_COMPROMISSO)!;
     expect(linha.ends_at).toBe("2026-10-07T15:00:00.000Z");
   });
+
+  // A borda do card na grade (porte de melgarafael/DeskcommCRM#5082): só a duração.
+  it("só `duration_minutes`: o fim muda, o início fica, e não é remarcação", async () => {
+    const banco = agenda({ agendamentos: [{ ...agendamento(NA_GRADE, "2026-10-07T14:00:00.000Z"), id: MEU_COMPROMISSO }] });
+    await alterarAgendamentoHandler(banco.client, ctx(PESSOA), { id: MEU_COMPROMISSO, duration_minutes: 90 });
+    const linha = banco.tabelas.calendar_appointments!.find((l) => l.id === MEU_COMPROMISSO)!;
+    expect(linha.starts_at).toBe(NA_GRADE);
+    expect(linha.ends_at).toBe("2026-10-07T14:30:00.000Z");
+  });
+
+  it("só `duration_minutes` por cima de OUTRO compromisso do mesmo responsável é RECUSADO", async () => {
+    const banco = agenda({
+      agendamentos: [
+        { ...agendamento(NA_GRADE, "2026-10-07T14:00:00.000Z"), id: MEU_COMPROMISSO },
+        agendamento("2026-10-07T14:00:00.000Z", "2026-10-07T15:00:00.000Z"),
+      ],
+    });
+    await expect(
+      alterarAgendamentoHandler(banco.client, ctx(PESSOA), { id: MEU_COMPROMISSO, duration_minutes: 90 }),
+    ).rejects.toMatchObject(RECUSA);
+  });
 });
