@@ -8,6 +8,24 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.32.0] — 2026-11-22
+
+### Adicionado
+
+- **Painel de vendas e registro de venda em qualquer negócio** Nova tela Análise › Vendas (`/app/vendas`): cartões de Vendas, Valor
+  vendido, Ticket médio e Conversão, o gráfico do período com atalhos (este
+  mês, mês passado…), a lista das vendas e os rankings de negócios ganhos por
+  funil, tag e cliente, com filtro por funil e tag.
+
+  Agora dá para registrar uma venda em qualquer negócio, em qualquer etapa do
+  card: pelo "+" ao lado do Valor no negócio aberto, pelo "+" no card do funil
+  ou na seção Vendas do painel da conversa no Inbox. O mesmo negócio aceita
+  várias vendas (recompra); cada uma tem valor, data, tags e observação, e
+  conta no painel pela data dela. Com venda registrada, o Valor do negócio
+  passa a ser a soma das vendas; apagar a última devolve o valor digitado
+  antes. Registrar é para atendente para cima; apagar, para quem registrou ou
+  gestor. Anonimizar o contato apaga a observação e as tags das vendas dele.
+
 ## [5.31.1] — 2026-11-22
 
 ### Corrigido
@@ -9782,7 +9800,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.31.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.32.0...HEAD
+[5.32.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.31.1...v5.32.0
 [5.31.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.31.0...v5.31.1
 [5.31.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.30.0...v5.31.0
 [5.30.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.29.0...v5.30.0
