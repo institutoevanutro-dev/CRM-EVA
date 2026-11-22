@@ -24,6 +24,16 @@
  * os próprios negócios; gestor, a organização). O `organization_id` vai
  * explícito na consulta, e a organização vem do cookie validado em
  * `requireRole`, NUNCA da query. Read-only ⇒ sem audit.
+ *
+ * ─── Com o Financeiro ligado ────────────────────────────────────────────────
+ *
+ * "Ligado" = `configFinanceiro(org)` devolve configuração (o mesmo critério da
+ * aba Financeiro do contato e do painel de anúncios). Aí Vendas, Valor, Ticket,
+ * série e clientes vêm de `vendas-do-periodo` do Financeiro (regra em
+ * `comVendasDoFinanceiro`). Só para `manager`+, o mesmo piso da aba Financeiro
+ * do contato: o número do Financeiro é da clínica inteira, e a RLS que recorta
+ * o atendente não o alcança — abaixo disso, a tela segue com o cálculo do CRM.
+ * Financeiro fora não derruba a rota: sai `fonte: "financeiro_indisponivel"`.
  */
 import { randomUUID } from "node:crypto";
 
@@ -32,6 +42,10 @@ import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { roleAtLeast } from "@/lib/auth/types";
+import { configFinanceiro } from "@/lib/integrations/financeiro/cliente";
+import { consultaVendasDoPeriodo, type VendasDoPeriodo } from "@/lib/integrations/financeiro/vendas-do-periodo";
+import { logger } from "@/lib/logger";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { MOEDA_PADRAO } from "@/lib/money";
 import {
@@ -42,6 +56,7 @@ import {
 } from "@/lib/relatorios/janela";
 import { normalizarTagDoRelatorio } from "@/lib/relatorios/comercial";
 import {
+  comVendasDoFinanceiro,
   montarPainelDeVendas,
   type NegocioDaVenda,
   type NegocioDoPainel,
@@ -104,6 +119,18 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const janela = janelaDoRelatorio(de, ate, tz);
   const supabase = await createClient();
+
+  // O Financeiro é pedido JÁ, em paralelo às leituras do CRM. `null` = não respondeu.
+  const fin = roleAtLeast(org.role, "manager") ? configFinanceiro(org.orgId) : null;
+  const vendasDoFinanceiro: Promise<VendasDoPeriodo | null> | null = fin
+    ? consultaVendasDoPeriodo(fin, de, ate).catch((err: unknown) => {
+        logger.warn("painel_de_vendas: Financeiro não respondeu", {
+          org: org.orgId,
+          error: err instanceof Error ? err.message : "desconhecido",
+        });
+        return null;
+      })
+    : null;
 
   // ─── 1. Negócios ganhos e perdidos fechados na janela ─────────────────────
   const leitura = await lerPaginado<NegocioDoPainel>(async (inicio, fim, contar) => {
@@ -170,7 +197,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     }
   }
 
-  const painel = montarPainelDeVendas({
+  const doCrm = montarPainelDeVendas({
     negocios: leitura.linhas,
     janela,
     // O fork não tem `organizations.currency`: a moeda é a padrão do produto.
@@ -183,6 +210,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     negociosDasVendas,
     negociosComVendaRegistrada: comVendaRegistrada,
   });
+  const painel = vendasDoFinanceiro ? comVendasDoFinanceiro(doCrm, await vendasDoFinanceiro, janela) : doCrm;
 
   // ─── 5. Os nomes que a tela escreve: clientes e funis ───────────────────
   const idsDeContato = [
