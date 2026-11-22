@@ -24,6 +24,17 @@
  * O transporte por QR (WAHA) TAMBÉM recebe o `ctwa_clid` (`externalAdReply`,
  * medido desde 09/10/2026), então o caminho com clique vale para os dois.
  *
+ * ─── O nome do evento muda no caminho da conversa ───────────────────────────
+ *
+ * Em `business_messaging` a Meta só aceita a lista fechada de eventos de
+ * conversa (Purchase, LeadSubmitted, QualifiedLead, InitiateCheckout…). Com
+ * `Schedule` ou `CompleteRegistration` ela recusa com 100/2804066 ("Invalid
+ * event type for messaging event") — medido em produção de 13/11 a 18/11/2026:
+ * TODO aviso de paciente vindo do anúncio clique-para-WhatsApp foi recusado.
+ * Ali o agendamento vira `QualifiedLead` e o sinal pago `InitiateCheckout`,
+ * os dois sem valor (Purchase exigiria valor, que fica de fora de propósito).
+ * No caminho `chat` os nomes originais seguem.
+ *
  * ─── Regras da plataforma que quebram calado ────────────────────────────────
  *
  * `event_time` em SEGUNDOS (em ms o evento cai no futuro e volta 200), e evento
@@ -33,6 +44,7 @@ import { VERSAO_PADRAO_DA_GRAPH } from "@/lib/graph-version";
 import { logger } from "@/lib/logger";
 import { emailHashMeta, telefoneHashMeta } from "../identificadores";
 import type {
+  NomeDoEvento,
   ConversaoDeAgendamento,
   CredencialMeta,
   ResultadoDeEnvio,
@@ -42,6 +54,12 @@ import type {
 const VERSAO_DA_API = VERSAO_PADRAO_DA_GRAPH;
 const IDADE_MAXIMA_MS = 7 * 24 * 60 * 60 * 1000;
 const TEMPO_LIMITE_MS = 10_000;
+
+/** O nome que a Meta aceita em `business_messaging` para cada evento nosso. */
+export const NOME_NA_CONVERSA: Record<NomeDoEvento, string> = {
+  Schedule: "QualifiedLead",
+  CompleteRegistration: "InitiateCheckout",
+};
 
 /** O corpo exato que sai. Exportado para o teste vigiar campo a campo. */
 export function montarCorpoMeta(
@@ -66,7 +84,7 @@ export function montarCorpoMeta(
   }
 
   const evento: Record<string, unknown> = {
-    event_name: conversao.evento,
+    event_name: clique ? NOME_NA_CONVERSA[conversao.evento] : conversao.evento,
     event_time: Math.floor(conversao.ocorridoEm.getTime() / 1000),
     event_id: conversao.eventoId,
     action_source: clique ? "business_messaging" : "chat",
