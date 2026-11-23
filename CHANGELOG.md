@@ -8,6 +8,39 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.36.0] — 2026-11-23
+
+### Adicionado
+
+- **Cada conexão escolhe se as conversas novas criam negócio no funil** O cartão de cada número em **Conexões** ganha o interruptor
+  **Conversas novas criam negócio no funil**. Desligado, a conversa nova que chega
+  por aquele número continua aparecendo no Inbox, o contato é criado e a IA atende
+  normalmente; só o card no funil não nasce. Criar o negócio à mão continua igual.
+  Ligado é o padrão e é o comportamento de hoje: quem só atualiza não precisa abrir
+  tela nenhuma. Só quem administra muda a opção, e cada mudança fica na auditoria.
+  Porte de melgarafael/DeskcommCRM#4683 (migration 0432).
+
+- **Um passo de follow-up pode sair por outro número de WhatsApp** No editor de follow-up, o passo de envio ganhou "Enviar pelo número": o
+  padrão continua sendo o número da conversa; escolhendo outro, aquele passo
+  sai por ele. Se o contato ainda não tem conversa nesse número, ela é criada no
+  envio, e valem as travas e a janela de envio desse número. Num número com
+  risco de banimento (WhatsApp não oficial), o follow-up abre no máximo 20
+  conversas novas por dia com quem nunca falou com ele; acima disso o passo volta
+  no dia seguinte. O teto se ajusta em `FOLLOWUP_PRIMEIRO_CONTATO_TETO_DIA`
+  (opcional; nenhuma edição de `.env` é necessária). Fluxos já publicados não
+  mudam.
+
+### Corrigido
+
+- **Mensagens seguidas do mesmo contato viram uma resposta só, e a espera para de crescer sem fim** Quando o cliente escreve em várias bolhas, o CRM já juntava as mensagens do
+  mesmo contato numa resposta só, mas a janela dessa junção era fixa: nascia com
+  a primeira mensagem e não andava. Bolhas com 10 a 20 segundos de intervalo
+  caíam fora dela, e o agente respondia uma vez para cada bolha. Agora a janela
+  anda a cada mensagem nova e para num teto contado da primeira: 45 s por padrão,
+  na variável `INBOUND_BURST_MAX_MS` do worker (`0` volta à janela fixa de antes).
+  Quem escreveu uma mensagem só recebe a resposta no mesmo tempo de antes. Nada a
+  fazer na atualização. Porte de melgarafael/DeskcommCRM#4977.
+
 ## [5.35.0] — 2026-11-22
 
 ### Adicionado
@@ -9975,7 +10008,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.35.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.36.0...HEAD
+[5.36.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.35.0...v5.36.0
 [5.35.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.34.0...v5.35.0
 [5.34.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.33.0...v5.34.0
 [5.33.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.32.0...v5.33.0
