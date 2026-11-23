@@ -22,7 +22,7 @@ export function canalFixadoDoGatilho(cfg: unknown): string | null {
   return typeof id === "string" && id.length > 0 ? id : null;
 }
 
-type Canal = { provider: string | null; archived_at: string | null } | null;
+export type Canal = { provider: string | null; archived_at: string | null } | null;
 
 /** Mínimo que a conferência pede do client — o supabase real ou um dublê. */
 export type LeitorDeCanal = (orgId: string, channelId: string) => Promise<{ data: Canal; error: { message: string } | null }>;
@@ -36,8 +36,26 @@ export async function conferirCanalDoGatilho(
 ): Promise<RecusaDoCanal | null> {
   const id = canalFixadoDoGatilho(cfg);
   if (!id) return null;
-  const { data, error } = await ler(orgId, id);
+  return conferirCanal(ler, orgId, id);
+}
+
+/**
+ * A mesma conferência para qualquer número escolhido pelo operador — o do
+ * gatilho de consulta e o "Enviar pelo número" do passo de envio. Filtra a
+ * organização: canal de outra conta responde "não existe".
+ */
+export async function conferirCanal(
+  ler: LeitorDeCanal,
+  orgId: string,
+  channelId: string,
+): Promise<RecusaDoCanal | null> {
+  const { data, error } = await ler(orgId, channelId);
   if (error) return { code: "internal_error", message: error.message, status: 500 };
+  return recusaDoCanal(data);
+}
+
+/** Pura: o que recusa um canal já lido (ausente, excluído ou que não é WhatsApp). */
+export function recusaDoCanal(data: Canal): RecusaDoCanal | null {
   if (!data) {
     return { code: "trigger_channel_not_found", message: "O número escolhido para o envio não existe nesta conta. Escolha outro.", status: 422 };
   }

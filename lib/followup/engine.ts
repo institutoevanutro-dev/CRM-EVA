@@ -23,12 +23,19 @@ import { idsDoContatoEGemeos } from "@/lib/channels/contato-por-telefone";
 import { audit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { fusoUtilizavel } from "@/lib/tempo/fusos";
+import {
+  bancoDoNumeroSupabase,
+  conversaNoNumeroDoPasso,
+  tetoDePrimeirosContatos,
+  type EnvioPeloNumero,
+} from "./numero-do-passo";
 import { indiceDaVariante } from "@/lib/agent-engine/agent/reentry-template";
 
 import { COLUNA_DA_ANCORA, TEXTO_DO_AVISO_MAX, flowGraphSchema, type AppointmentAnchor, type FlowGraph, type FlowNode, type ReplySaveTo } from "./graph-schema";
 import {
   ACTION_RECHECK_MS,
   BACKOFF_MS,
+  EVENTO_TETO_DE_PRIMEIRO_CONTATO,
   ehConfirmacao,
   latestRepeatIndex,
   occupancyEventCount,
@@ -148,6 +155,17 @@ export interface AdminClient {
   loadAppointmentAnchor?(orgId: string, appointmentId: string, contactId: string, anchor: AppointmentAnchor): Promise<string | null>;
   /** `organizations.timezone` cru. Só exigido pela âncora `appointment_day`; ausente/inválido cai em `FUSO_PADRAO`. */
   loadOrgTimezone?(orgId: string): Promise<string | null>;
+  /**
+   * Passo de envio com "Enviar pelo número": a conversa do contato NESSE número
+   * (achada, reaberta ou criada) ou por que não sai. Ausente = o passo é recusado
+   * (falha fechada: nunca sai pelo número errado).
+   */
+  conversaNoNumeroDoPasso?(input: {
+    organization_id: string;
+    contact_id: string;
+    channel_session_id: string;
+    agora: Date;
+  }): Promise<EnvioPeloNumero>;
   loadLeadFacts(orgId: string, contactId: string): Promise<{
     lead_stage: string | null;
     tags: string[];
@@ -450,6 +468,8 @@ async function applyResult(
   smartWaits: EsperaAdaptativa[] = [],
   events: EnrollmentEventRef[] = [],
   respostaParaGravar: string | null = null,
+  /** Passo com "Enviar pelo número": a fronteira da conversa NESSE número vai no job. */
+  fronteiraDoEnvio: ServiceBoundary | null = null,
 ): Promise<void> {
   const { db, clock, enqueueJob } = deps;
   await db.assertServiceBoundary?.(enrollment);
@@ -601,7 +621,7 @@ async function applyResult(
           organization_id: enrollment.organization_id,
           contact_id: enrollment.contact_id,
           payload: {
-            service_boundary: enrollment.service_boundary ?? null,
+            service_boundary: fronteiraDoEnvio ?? enrollment.service_boundary ?? null,
             followup_enrollment_id: enrollment.id,
             node_id: node.id,
             source_step_key: idemKey,
@@ -913,6 +933,49 @@ async function processEnrollment(
         : undefined,
     puladoComAAcao: cadeiaDaAcaoVencida(events, node.id),
   });
+
+  // "Enviar pelo número": decidido ANTES do evento do passo — segurar pelo teto
+  // depois do `turn_enqueued` faria o motor ler o turno como em voo.
+  let fronteiraDoEnvio: ServiceBoundary | null = null;
+  if (result.kind === "enqueue_turn" && node.type === "action" && node.config.channel_session_id) {
+    const envio: EnvioPeloNumero = db.conversaNoNumeroDoPasso
+      ? await db.conversaNoNumeroDoPasso({
+          organization_id: enrollment.organization_id,
+          contact_id: enrollment.contact_id,
+          channel_session_id: node.config.channel_session_id,
+          agora: clock(),
+        })
+      : { kind: "recusado", message: "o envio por outro número não está disponível aqui." };
+    if (envio.kind === "recusado") {
+      await markDead(db, clock, enrollment, `passo "${node.label}" não saiu: ${envio.message}`);
+      summary.dead++;
+      return;
+    }
+    if (envio.kind === "teto") {
+      const ate = envio.ate.toISOString();
+      logger.info("[followup] passo segurado pelo teto de primeiros contatos do número", {
+        organization_id: enrollment.organization_id,
+        enrollment_id: enrollment.id,
+        node_id: node.id,
+        channel_session_id: node.config.channel_session_id,
+        usados: envio.usados,
+        teto: envio.teto,
+        ate,
+      });
+      await db.insertEnrollmentEvent({
+        organization_id: enrollment.organization_id,
+        enrollment_id: enrollment.id,
+        node_id: node.id,
+        event_type: EVENTO_TETO_DE_PRIMEIRO_CONTATO,
+        payload: { next_eval_at: ate, usados: envio.usados, teto: envio.teto },
+        idempotency_key: `${node.id}:${enrollment.steps_taken}:teto:${ate}`,
+      });
+      await db.updateEnrollment(enrollment.id, enrollment.organization_id, { next_eval_at: ate, claimed_until: null });
+      return;
+    }
+    fronteiraDoEnvio = envio.boundary;
+  }
+
   await applyResult(
     deps,
     enrollment,
@@ -922,6 +985,7 @@ async function processEnrollment(
     smartWaits,
     events,
     node.type === "match_reply" && wokeEarly ? (lastInboundBody ?? "").trim() || null : null,
+    fronteiraDoEnvio,
   );
 }
 
@@ -1046,6 +1110,18 @@ export function createSupabaseAdminClient(admin: SupabaseClient): AdminClient {
       const { data, error } = await admin.from("organizations").select("timezone").eq("id", orgId).maybeSingle();
       if (error) throw new Error(error.message);
       return (data as { timezone: string | null } | null)?.timezone ?? null;
+    },
+    async conversaNoNumeroDoPasso(input) {
+      const { data, error } = await admin.from("organizations").select("timezone").eq("id", input.organization_id).maybeSingle();
+      if (error) throw new Error(error.message);
+      return conversaNoNumeroDoPasso(bancoDoNumeroSupabase(admin), {
+        org: input.organization_id,
+        contactId: input.contact_id,
+        channelSessionId: input.channel_session_id,
+        agora: input.agora,
+        fuso: fusoUtilizavel((data as { timezone: string | null } | null)?.timezone),
+        teto: tetoDePrimeirosContatos(),
+      });
     },
     async loadLeadFacts(orgId, contactId) {
       const [{ data: lead, error: leadErr }, { data: contact, error: contactErr }] = await Promise.all([

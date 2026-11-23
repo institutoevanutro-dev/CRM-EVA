@@ -437,6 +437,17 @@ export function descreveEvento(
         ...motor,
       };
     }
+    case "held_by_first_contact_cap": {
+      // Teto anti-ban do número escolhido no passo: segurar, não falhar.
+      const ate = quandoLegivel(p.next_eval_at, idioma);
+      return {
+        titulo: "Segurou o envio: o número já abriu as conversas novas permitidas hoje",
+        detalhe: ate
+          ? traduzir("tenta de novo em {ate}", idioma as Idioma).replace("{ate}", ate)
+          : null,
+        ...motor,
+      };
+    }
     case "action_deferred": {
       // Adiar NÃO é falhar: sem esta linha o operador vê o passo parado por
       // horas e lê defeito onde há obediência à janela que ele configurou.

@@ -194,6 +194,7 @@ const NOS_PULADOS_COM_A_ACAO: ReadonlySet<FlowNode["type"]> = new Set([
 const EVENTOS_FORA_DO_PASSO = new Set([
   "inbound_woke",
   "held_by_return",
+  "held_by_first_contact_cap",
   // Pausa e retomada (passagem para pessoa, intervenção manual) não são passo:
   // retomar no meio da cadeia não pode trazer de volta carência, etiqueta e aviso.
   "handoff_paused",
@@ -269,6 +270,14 @@ export const MAX_ACTION_RECHECKS = 14;
 export const EVENTO_ACAO_ADIADA = "action_deferred";
 
 /**
+ * O passo de envio com "Enviar pelo número" foi SEGURADO até o dia seguinte
+ * pelo teto diário de conversas novas daquele número (anti-ban,
+ * `numero-do-passo.ts`). Não é passo (a chave não é `${nó}:${passo}`) e é prova
+ * de vida: não conta para o dead-man.
+ */
+export const EVENTO_TETO_DE_PRIMEIRO_CONTATO = "held_by_first_contact_cap";
+
+/**
  * O turno de classificar rodou e o cliente ainda não tinha respondido ao envio
  * do fluxo: o nó segue esperando até a carência. Não é passo (a chave não é
  * `${nó}:${passo}`), então nenhum guarda de ocupação do motor a conta.
@@ -286,7 +295,12 @@ export function rechecksOciososDaAcao(events: EnrollmentEventRef[], nodeId: stri
   for (let i = events.length - 1; i >= 0; i--) {
     const evento = events[i]!;
     if (evento.node_id !== nodeId) break;
-    if (evento.event_type === EVENTO_ACAO_ADIADA || evento.event_type === EVENTO_TURNO_DESCARTADO) return n;
+    if (
+      evento.event_type === EVENTO_ACAO_ADIADA ||
+      evento.event_type === EVENTO_TURNO_DESCARTADO ||
+      evento.event_type === EVENTO_TETO_DE_PRIMEIRO_CONTATO
+    )
+      return n;
     n++;
   }
   return n;
