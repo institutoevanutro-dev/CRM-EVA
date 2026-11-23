@@ -26,7 +26,7 @@ let linhas: Array<{ layer: string; enabled: boolean }>;
 beforeEach(() => {
   vi.unstubAllEnvs();
   // O mínimo que o `loadEnv` do motor exige; as variáveis das camadas, AUSENTES.
-  vi.stubEnv("SUPABASE_DB_URL", "postgres://u:p@localhost:5432/db");
+  vi.stubEnv("SUPABASE_DB_URL", "postgres://localhost:5432/db");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "http://localhost:54321");
   vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "chave-de-teste");
   vi.stubEnv("PROMISE_SEMANTIC_ENABLED", undefined);
