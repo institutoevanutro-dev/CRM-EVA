@@ -17,6 +17,7 @@ import { MODOS_DA_ACAO, opcoes, type ModoDaAcao } from "@/lib/followup/vocabular
 import { useMessageTemplates } from "@/hooks/inbox/useMessageTemplates";
 import { useT } from "@/hooks/i18n/useT";
 import { useMidias } from "@/hooks/ai/useMidias";
+import { canaisQueEnviam, channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { SITUACAO_LEGIVEL } from "@/lib/midias/termo";
 import { VARIAVEIS_DO_TEMPLATE, variaveisDesconhecidas } from "@/lib/inbox/template-vars";
 
@@ -146,6 +147,47 @@ function SeletorDeMidia({ id, valor, onChange }: { id: string; valor: string; on
   );
 }
 
+const NUMERO_DA_CONVERSA = "__numero_da_conversa__";
+
+/**
+ * "Enviar pelo número": padrão é o número da conversa. Escolher outro serve
+ * para o toque que a janela de 24h do número oficial já não deixa sair.
+ */
+function SeletorDeNumero({ valor, onChange }: { valor: string; onChange: (channelSessionId: string) => void }) {
+  const t = useT();
+  const canais = useChannelSessions();
+  const opcoes = canaisQueEnviam(canais.data) ?? [];
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="action-channel">{t("Enviar pelo número")}</Label>
+      <Select value={valor || NUMERO_DA_CONVERSA} onValueChange={(v) => onChange(v === NUMERO_DA_CONVERSA ? "" : v)}>
+        <SelectTrigger id="action-channel" data-testid="action-channel-select">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NUMERO_DA_CONVERSA}>{t("O da conversa (padrão)")}</SelectItem>
+          {opcoes.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {channelLabel(c, t)}
+            </SelectItem>
+          ))}
+          {valor && canais.data && !opcoes.some((c) => c.id === valor) && (
+            <SelectItem value={valor} disabled>
+              {t("Número excluído — escolha outro")}
+            </SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+      {valor ? (
+        <p className="text-xs text-text-muted">
+          {t("Se o contato ainda não tem conversa neste número, ela é criada no envio. As travas e a janela de envio que valem são as deste número.")}
+        </p>
+      ) : null}
+      {canais.isError ? <p role="alert" className="text-xs text-error-fg">{t("Não foi possível carregar os números.")}</p> : null}
+    </div>
+  );
+}
+
 export function ActionForm({
   config,
   onChange,
@@ -164,6 +206,7 @@ export function ActionForm({
   const [templateId, setTemplateId] = useState(config.mode === "template" ? config.template_id : "");
   const [mediaId, setMediaId] = useState(config.mode === "media" ? config.media_id : "");
   const [caption, setCaption] = useState(config.mode === "media" ? (config.caption ?? "") : "");
+  const [channelSessionId, setChannelSessionId] = useState(config.channel_session_id ?? "");
   const [error, setError] = useState<string | null>(null);
 
   const commit = (next: {
@@ -175,8 +218,10 @@ export function ActionForm({
     templateId: string;
     mediaId: string;
     caption: string;
+    channelSessionId: string;
   }) => {
-    const candidate =
+    const numero = next.channelSessionId ? { channel_session_id: next.channelSessionId } : {};
+    const porModo =
       next.mode === "text"
         ? { mode: "text" as const, body: next.body, ...(next.variants.length ? { variants: next.variants } : {}) }
         : next.mode === "ai_message"
@@ -192,7 +237,7 @@ export function ActionForm({
                 ...(next.caption.trim() ? { caption: next.caption } : {}),
               }
             : { mode: "template" as const, template_id: next.templateId };
-    const parsed = actionConfigSchema.safeParse(candidate);
+    const parsed = actionConfigSchema.safeParse({ ...porModo, ...numero });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? t("Configuração inválida."));
       return;
@@ -201,7 +246,7 @@ export function ActionForm({
     onChange(parsed.data);
   };
 
-  const fields = { body, variants, promptHint, fallbackTemplateId, templateId, mediaId, caption };
+  const fields = { body, variants, promptHint, fallbackTemplateId, templateId, mediaId, caption, channelSessionId };
 
   return (
     <div className="space-y-3">
@@ -364,6 +409,13 @@ export function ActionForm({
           />
         </div>
       )}
+      <SeletorDeNumero
+        valor={channelSessionId}
+        onChange={(v) => {
+          setChannelSessionId(v);
+          commit({ mode, ...fields, channelSessionId: v });
+        }}
+      />
       {error && <p className="text-xs text-error-fg">{error}</p>}
     </div>
   );

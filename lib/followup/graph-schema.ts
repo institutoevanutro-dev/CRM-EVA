@@ -240,9 +240,17 @@ export const aiClassifyConfigSchema = z
  * - ai_message: generate a message using AI with a prompt hint
  * - template: send a canned message from Ajustes → Modelos
  * - media: send an image/video from the media library, optional caption
+ *
+ * `channel_session_id` (todos os modos, opcional): o passo sai por ESTE número,
+ * e não pelo da conversa. Ausente = o número da conversa, como sempre foi. O
+ * motor confere a organização e cria a conversa nesse número se ela não existe
+ * (`numero-do-passo.ts`).
  */
+const numeroDoPasso = { channel_session_id: z.string().uuid().optional() };
+
 export const actionConfigSchema = z.discriminatedUnion('mode', [
   z.strictObject({
+    ...numeroDoPasso,
     mode: z.literal('text'),
     body: z.string().min(1).max(4000),
     /**
@@ -257,15 +265,18 @@ export const actionConfigSchema = z.discriminatedUnion('mode', [
       .optional(),
   }),
   z.strictObject({
+    ...numeroDoPasso,
     mode: z.literal('ai_message'),
     prompt_hint: z.string().min(1).max(1000),
     fallback_template_id: z.string().uuid().optional(),
   }),
   z.strictObject({
+    ...numeroDoPasso,
     mode: z.literal('template'),
     template_id: z.string().uuid(),
   }),
   z.strictObject({
+    ...numeroDoPasso,
     mode: z.literal('media'),
     media_id: z.string().uuid(),
     caption: z.string().max(1024).optional(),

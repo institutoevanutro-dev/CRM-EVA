@@ -341,6 +341,13 @@ const schema = z.object({
    * `atrasoMaximoDoSilencioMs`, onde lixo cai no padrão (24 h).
    */
   FOLLOWUP_SILENCIO_ATRASO_MAXIMO_HORAS: z.string().optional().default(""),
+  /**
+   * Anti-ban do passo que sai por OUTRO número: quantas conversas NOVAS por dia,
+   * por número com risco de banimento, o follow-up pode abrir com quem nunca
+   * falou com ele. Acima disso o passo volta no dia seguinte. Quem lê é
+   * `tetoDePrimeirosContatos` (`lib/followup/numero-do-passo.ts`); vazio ou lixo = 20.
+   */
+  FOLLOWUP_PRIMEIRO_CONTATO_TETO_DIA: z.string().optional().default(""),
 
   /**
    * Jev (System One, da TypeSafe AI) — decisões rápidas: observa e, nos dois
