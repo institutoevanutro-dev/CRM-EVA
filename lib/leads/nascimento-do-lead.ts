@@ -54,6 +54,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { marcaDaOrigem, origemDeCampanhaDaConversa } from "@/lib/campanhas/origem-do-lead";
 
 import { logger } from "@/lib/logger";
+import { conversaAbreNegocio } from "@/lib/channels/negocio-da-conversa";
 
 import { contatoEClienteParaOFunil } from "@/lib/contacts/cliente-pela-agenda";
 import { ehIdentificadorTecnico, rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
@@ -80,12 +81,16 @@ const ROTULO_DE_ANUNCIO: Record<string, string> = {
  */
 export type MotivoSemLead =
   | "ja_existe" // o contato já tem lead aberto: um por demanda, não um por mensagem
+  // Upstream #4683 (migration 0432): a CONEXÃO por onde a conversa entrou está com
+  // "conversas novas criam negócio" desligada. Não é recusa da pessoa nem falha:
+  // a conversa, o contato, o Inbox e a IA seguem iguais — só o card não nasce.
+  | "conexao_nao_cria_negocio"
   | "contato_bloqueado" // pediu para sair; criar oportunidade seria desrespeito registrado
   | "contato_oculto" // a equipe tirou do Inbox (migration 0372): não é paciente, não ganha card
   | "contato_interno" // #2353 do original: equipe/sócio/família/fornecedor, etiqueta interna, não é negócio
   | "sem_funil_de_entrada" // a organização não tem funil padrão — falha de configuração, visível
   | "sem_etapa" // o funil existe e não tem etapa utilizável
-  | "erro"; // qualquer falha de escrita
+  | "erro"; // qualquer falha de escrita — e, desde a 0432, falha ao LER a conexão
 
 export type NascimentoDoLead =
   | { criado: true; leadId: string; pipelineId: string; stageId: string }
@@ -314,6 +319,46 @@ export async function garantirLeadDaConversa(
     .maybeSingle();
 
   if (existente) return { criado: false, motivo: "ja_existe" };
+
+  // 2b · A CONEXÃO decide se a conversa nova abre negócio (upstream #4683,
+  // migration 0432).
+  //
+  // Depois do "já existe" — o card que já existe é um fato do contato, e desligar
+  // a chave num número não fecha nem esconde o que já nasceu ali — e ANTES de
+  // tudo que decide destino (cliente, campanha, funil, etapa): se este número
+  // não abre negócio, nada abaixo tem o que decidir. A conexão sai da conversa
+  // (`channel_session_id`), e é isso que faz este ponto único cobrir a
+  // pós-entrada e a mensagem do celular sem editá-las.
+  //
+  // ⚠️ FALHA DE LEITURA NÃO CRIA O CARD NESTA MENSAGEM. O card que a chave mandou
+  // não criar não se desfaz sozinho; não criar agora se desfaz na próxima
+  // mensagem (o nascimento é idempotente por contato, pela RPC do passo 4).
+  const decisaoDaConexao = await conversaAbreNegocio(db, organizationId, conversationId);
+  if ("erro" in decisaoDaConexao) {
+    logger.warn("[nascimento-do-lead] não foi possível ler a conexão — o card NÃO nasce nesta mensagem", {
+      organization_id: organizationId,
+      contact_id: contactId,
+      conversation_id: conversationId,
+      error: decisaoDaConexao.erro,
+    });
+    return { criado: false, motivo: "erro", detalhe: `conexão: ${decisaoDaConexao.erro}` };
+  }
+  if (decisaoDaConexao.colunaAusente) {
+    // Instalação que subiu o código sem rodar a migration: a chave não existe, e
+    // ausência não é "desligado" — é o comportamento de sempre.
+    logger.warn("[nascimento-do-lead] coluna da chave da conexão ausente — migration pendente?", {
+      organization_id: organizationId,
+      conversation_id: conversationId,
+    });
+  }
+  if (!decisaoDaConexao.cria) {
+    logger.info("[nascimento-do-lead] a conexão não cria negócio para conversa nova", {
+      organization_id: organizationId,
+      contact_id: contactId,
+      conversation_id: conversationId,
+    });
+    return { criado: false, motivo: "conexao_nao_cria_negocio" };
+  }
 
   // 3 · onde entra
   //

@@ -39967,6 +39967,17 @@ grant execute on function public.fn_marketing_semana(uuid, timestamptz, timestam
 notify pgrst, 'reload schema';
 -- ---- fim resumo semanal (migration 0431) ----
 
+-- ---- a conexão decide se a conversa nova cria negócio (migration 0432) ----
+-- Espelho da 0432 (porte do upstream #4683); o porquê está no cabeçalho da migration.
+-- `default true` torna a atualização invisível: toda instalação continua criando card em
+-- todo número. Reaplicável por `add column if not exists`; não cria função nem concede nada.
+alter table public.channel_sessions
+  add column if not exists conversa_nova_cria_negocio boolean not null default true;
+
+comment on column public.channel_sessions.conversa_nova_cria_negocio is
+  'Migration 0432: a conversa nova que chega por esta conexão abre negócio no funil? true (DEFAULT, e o estado de toda instalação de antes) = sim, como sempre foi. false = a conversa e o contato nascem, o Inbox e a IA seguem, e só o card não nasce; criar à mão (crm_create_lead, painel da conversa, ficha do contato) continua igual.';
+-- ---- fim: a conexão decide se a conversa nova cria negócio (migration 0432) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

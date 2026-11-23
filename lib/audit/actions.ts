@@ -240,6 +240,9 @@ export const AUDIT_ACTIONS = [
   "channel.official_connected_es",
   "channel.official_sync_requested",
   "channel.ai_access_updated",
+  // Upstream #4683: o interruptor "conversas novas criam negócio" do cartão da
+  // conexão. Por CONEXÃO — nunca da organização inteira.
+  "channel.negocio_da_conversa_updated",
   "channel.reconnected",
   // Duas ações distintas de propósito: `deleted` apagou a linha (canal virgem),
   // `archived` só a escondeu porque conversas/mensagens ainda a referenciam.

@@ -589,6 +589,16 @@ export const DICIONARIO: Traducoes = {
   "IA aberta ao público": { es: "IA abierta al público" },
   "IA restrita por origem": { es: "IA restringida por origen" },
   "Configurar acesso da IA": { es: "Configurar acceso de la IA" },
+  "Conversas novas criam negócio no funil": { es: "Las conversaciones nuevas crean negocio en el embudo" },
+  "Ligado: cada conversa nova neste número abre um card no funil.": {
+    es: "Activo: cada conversación nueva en este número abre una ficha en el embudo.",
+  },
+  "Desligado: a conversa chega, o contato nasce, a IA atende — só o card não nasce. Criar o negócio à mão continua igual.": {
+    es: "Desactivado: la conversación llega, el contacto nace, la IA atiende; solo la ficha no nace. Crear el negocio a mano sigue igual.",
+  },
+  "Opção de negócio salva.": { es: "Opción de negocio guardada." },
+  "Não foi possível ler esta opção.": { es: "No se pudo leer esta opción." },
+  "Não foi possível guardar esta opção.": { es: "No se pudo guardar esta opción." },
   "Acesso da IA no WhatsApp": { es: "Acceso de la IA en WhatsApp" },
   "Teste com pessoas de confiança antes de liberar o atendimento automático.": { es: "Prueba con personas de confianza antes de habilitar la atención automática." },
   "Não foi possível carregar o acesso da IA.": { es: "No se pudo cargar el acceso de la IA." },
