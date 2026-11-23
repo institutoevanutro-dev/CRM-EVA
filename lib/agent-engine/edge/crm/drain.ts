@@ -26,6 +26,7 @@ import {
 import { avisoDeEventoMorto, IA_QUE_NAO_RESPONDEU } from '@/lib/event-log/aviso-de-evento-morto';
 import { TETO_ESPERA_DERIVACAO_MS } from '@/lib/messaging/media/derivable';
 import { midiaDerivavelPendente } from './midia-derivavel';
+import { estenderJanelaDaRajada, tetoDaRajada } from './debounce';
 import { decidirElegibilidadeDaConversa } from '@/lib/ai/elegibilidade/consulta-pg';
 
 const DRAIN_CONSUMER = 'agent-engine';
@@ -53,6 +54,13 @@ export interface DrainKnobs {
   idleIntervalMs: number;
   /** Janela de coalescência de rajada inbound por contato (0 = sem debounce). */
   debounceMs: number;
+  /**
+   * Teto da rajada DESLIZANTE (`INBOUND_BURST_MAX_MS`, porte do upstream #4977):
+   * quanto tempo, contado do `created_at` do job da primeira mensagem, ele ainda
+   * aceita carona e é empurrado para frente. Ausente = janela ancorada (o
+   * `run_after` nasce e não anda), o comportamento de antes.
+   */
+  debounceMaxMs?: number;
   /** Evento 'processing' órfão volta a 'pending' após isto. */
   reapTimeoutMs: number;
   /**
@@ -520,11 +528,25 @@ async function processEvent(
   // É a mesma régua de `anotarUltimaInboundVista`, que já não conta a mensagem
   // nova como vista por esse job. Envio que FALHOU não segura: o ledger roda a
   // chave e o retry envia naquela posição.
+  //
+  // A janela ANDA e para no teto (porte do upstream #4977): além de `run_after >
+  // now()` — a única porta que alcança o job adiado pela janela de resposta, com
+  // `run_after` às 07:00 —, o job segue recebendo carona enquanto `created_at +
+  // teto > now()`, mesmo com o `run_after` original vencido, e cada carona o
+  // empurra (`estenderJanelaDaRajada`). Com dois pendentes, a âncora é o mais
+  // antigo: é dele que o teto conta.
   if (knobs.debounceMs > 0) {
-    const { rows: pendingRows } = await pool.query<{ id: string; payload: unknown }>(
-      `select id, payload from job_queue j
+    const tetoMs = tetoDaRajada(knobs.debounceMaxMs, knobs.debounceMs);
+    const { rows: pendingRows } = await pool.query<{
+      id: string;
+      payload: unknown;
+      created_at?: unknown;
+      run_after?: unknown;
+    }>(
+      `select id, payload, created_at, run_after from job_queue j
        where organization_id = $1 and contact_id = $2
-         and kind = 'inbound_turn' and status = 'pending' and run_after > now()
+         and kind = 'inbound_turn' and status = 'pending'
+         and (run_after > now() or created_at + ($4::int * interval '1 millisecond') > now())
          and not (payload ? 'held_run_after')
          and not (payload ? 'passagem_feita')
          and payload->>'conversation_id' = $3
@@ -532,8 +554,9 @@ async function processEvent(
            select 1 from send_ledger s
             where s.organization_id = j.organization_id and s.job_id = j.id
               and s.status in ('requested', 'accepted', 'queued'))
+       order by created_at asc
        limit 1`,
-      [event.organization_id, p.contact_id, p.conversation_id],
+      [event.organization_id, p.contact_id, p.conversation_id, tetoMs],
     );
     // Job adiado pela JANELA DE RESPOSTA (rastro `adiado_por_janela`, porte do
     // original #3419) com a janela já aberta: acorda o MESMO job e a mensagem
@@ -541,6 +564,7 @@ async function processEvent(
     // estado pendente-futuro no meio (o worker pegou), a mensagem ganha job
     // próprio logo abaixo. Janela fechada: carona como sempre.
     const candidato = pendingRows[0];
+    let acordou = false;
     if (
       candidato &&
       adiadoPelaJanelaDeResposta(candidato.payload) &&
@@ -557,11 +581,30 @@ async function processEvent(
         acordado,
       });
       if (!acordado) pendingRows.length = 0;
+      acordou = acordado;
     }
     if (pendingRows[0]) {
+      // Job acordado roda já: empurrá-lo seria atrasar o que a janela soltou.
+      const extensao = acordou
+        ? { ate: null }
+        : await estenderJanelaDaRajada(pool, event.organization_id, pendingRows[0], {
+            agora: Date.now(),
+            debounceMs: knobs.debounceMs,
+            tetoMs,
+          });
+      if (extensao.erro !== undefined) {
+        // Não derruba o evento: a mensagem JÁ está na carona, só a janela ficou
+        // onde estava — o lote responde um pouco antes.
+        log.warn('drain: não consegui empurrar a janela da rajada — lote segue no horário antigo', {
+          event_id: event.id,
+          job_id: pendingRows[0].id,
+          error: extensao.erro.slice(0, 160),
+        });
+      }
       log.info('drain: rajada coalescida em job pendente', {
         event_id: event.id,
         job_id: pendingRows[0].id,
+        janela_estendida_ate: extensao.ate?.toISOString() ?? null,
       });
       return 'processado';
     }
