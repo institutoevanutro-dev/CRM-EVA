@@ -134,6 +134,16 @@ const envSchema = z.object({
   // Coalescência de rajada inbound: mensagens do MESMO contato dentro desta
   // janela viram UM job (responder em rajada é gatilho de ban). 0 = sem debounce.
   INBOUND_DEBOUNCE_MS: z.coerce.number().int().min(0).default(8_000),
+  // TETO da rajada deslizante (porte do upstream #4977): a janela acima é
+  // empurrada a cada mensagem nova do mesmo contato, até este teto contado do
+  // `created_at` do job da PRIMEIRA mensagem. Passado o teto, a mensagem seguinte
+  // abre rajada nova. 0 = janela ANCORADA, o comportamento anterior.
+  //
+  // 45 s vem da medição de lá: a rajada que escapou foram gaps de 12,1 s e
+  // 17,5 s — 29,6 s da primeira à última. 30 s cobriria por 0,4 s; 45 s cobre
+  // com folga. Custo: com o contato escrevendo sem parar, a primeira mensagem
+  // espera no máximo 45 s; parando de escrever, o turno sai nos 8 s de sempre.
+  INBOUND_BURST_MAX_MS: z.coerce.number().int().min(0).default(45_000),
   // Resposta obsoleta: o cliente escreveu de novo enquanto o turno pensava → a
   // resposta desatualizada não sai e o turno seguinte responde a tudo junto,
   // enquanto a mensagem mais antiga sem resposta tiver menos que isto. 0 = desliga.

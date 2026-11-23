@@ -17,6 +17,12 @@ vi.mock("@/hooks/ai/useMidias", () => ({
     ],
   }),
 }));
+const NUMERO = "66666666-6666-4666-8666-666666666666";
+vi.mock("@/hooks/channels/useChannelSessions", () => ({
+  useChannelSessions: () => ({ isError: false, data: [{ id: NUMERO, display_name: "Número antigo", phone_number: null }] }),
+  canaisQueEnviam: (s: unknown[] | undefined) => s,
+  channelLabel: (c: { display_name: string }) => c.display_name,
+}));
 vi.mock("@/hooks/inbox/useMessageTemplates", () => ({
   useMessageTemplates: () => ({ isLoading: false, isError: false, data: [] }),
 }));
@@ -49,5 +55,18 @@ describe("ActionForm — modo mídia", () => {
     expect(
       await screen.findByText("Foto da clínica (não pode ser enviada agora: sem termo de uso de imagem)"),
     ).toBeTruthy();
+  });
+});
+
+describe("ActionForm — Enviar pelo número", () => {
+  it("padrão é o da conversa; escolher outro número entra no config", async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup({ delay: null });
+    render(<ActionForm config={{ mode: "media", media_id: M1 }} onChange={onChange} />);
+
+    await user.click(screen.getByRole("combobox", { name: "Enviar pelo número" }));
+    await user.click(await screen.findByRole("option", { name: "Número antigo" }));
+
+    expect(onChange).toHaveBeenLastCalledWith({ mode: "media", media_id: M1, channel_session_id: NUMERO });
   });
 });

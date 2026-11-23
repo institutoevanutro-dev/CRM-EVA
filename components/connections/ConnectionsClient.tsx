@@ -21,6 +21,7 @@ import {
 import { usePacingKnobs } from "@/hooks/channels/usePacingKnobs";
 import { AntiBanSheet } from "./AntiBanSheet";
 import { ChannelAiAccess } from "./ChannelAiAccess";
+import { NegocioDaConversa } from "./NegocioDaConversa";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -418,6 +419,10 @@ export function ConnectionsClient({
                     : t("Ainda não verificado")}
                 </p>
                 <ChannelAiAccess channelId={c.id} />
+                {/* Upstream #4683: a chave é POR CONEXÃO — o cartão de cada número
+                    tem o interruptor, e não há nada disso nas configurações da
+                    organização, onde só caberia desligar para todo mundo. */}
+                <NegocioDaConversa channelId={c.id} />
                 <p className="text-xs text-muted-foreground">{t(!policy ? "Consulte os responsáveis em Atendimento." : policy.mode === "legacy_unconfigured" ? "Usa todos os atendentes elegíveis da organização." : policy.mode === "restricted_empty" ? "Ninguém configurado — as conversas ficarão na fila." : "Somente as pessoas selecionadas recebem este número.")}</p>
                 <div className="mt-auto flex flex-wrap gap-2">
                   <RenomearConexao

@@ -19,7 +19,7 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { idsDeEtapaCitados, validateFlowForPublish } from "@/lib/followup/validate-publish";
-import { conferirCanalDoGatilho, leitorDeCanal } from "@/lib/followup/canal-do-gatilho";
+import { conferirCanal, conferirCanalDoGatilho, leitorDeCanal } from "@/lib/followup/canal-do-gatilho";
 import { publishFollowupFlowVersion } from "@/lib/followup/publish";
 import type { FlowGraph } from "@/lib/followup/graph-schema";
 import { logger } from "@/lib/logger";
@@ -148,6 +148,17 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
   }
 
   const graph = pointer.draft_graph as unknown as FlowGraph;
+  // "Enviar pelo número" de cada passo: da organização, não excluído, WhatsApp.
+  // O motor confere de novo no envio; aqui é para o operador saber na hora.
+  for (const no of graph.nodes ?? []) {
+    if (no.type !== "action" || !no.config.channel_session_id) continue;
+    const recusa = UUID_RX.test(no.config.channel_session_id)
+      ? await conferirCanal(leitorDeCanal(admin), activeOrg.orgId, no.config.channel_session_id)
+      : { code: "trigger_channel_not_found", message: "O número escolhido para o envio não existe nesta conta. Escolha outro.", status: 422 };
+    if (recusa) {
+      return fail(recusa.code, `${t("Passo")} «${no.label}»: ${t(recusa.message)}`, recusa.status, { requestId, details: { node_id: no.id } });
+    }
+  }
   // As etapas que caixas "mover no funil" citam — da organização, nunca de outra.
   // Só ids com forma de uuid vão ao banco (outro texto viraria 500); o resto
   // fica fora do mapa e o publish recusa como etapa inexistente.

@@ -54,7 +54,7 @@ function pool(calls: string[], candidato: { payload: unknown } | null, acorda = 
       };
     }
     if (sql.includes('media_derived_status')) return { rows: [{ type: 'text', media_derived_status: null }] };
-    if (sql.includes('select id, payload from job_queue')) return { rows: candidato ? [{ id: 'job-adiado', ...candidato }] : [] };
+    if (sql.includes('select id, payload, created_at, run_after from job_queue')) return { rows: candidato ? [{ id: 'job-adiado', ...candidato }] : [] };
     if (sql.includes('set run_after = now()')) return { rows: acorda ? [{ id: 'job-adiado' }] : [] };
     if (sql.includes('insert into job_queue')) return { rows: [{ id: 'job-novo' }] };
     return { rows: [] };

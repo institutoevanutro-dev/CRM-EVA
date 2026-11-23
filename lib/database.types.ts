@@ -3151,6 +3151,7 @@ export type Database = {
           ai_access_since: string | null
           archived_at: string | null
           consecutive_health_fails: number
+          conversa_nova_cria_negocio: boolean
           created_at: string
           created_by: string | null
           daily_message_limit: number
@@ -3185,6 +3186,7 @@ export type Database = {
           ai_access_since?: string | null
           archived_at?: string | null
           consecutive_health_fails?: number
+          conversa_nova_cria_negocio?: boolean
           created_at?: string
           created_by?: string | null
           daily_message_limit?: number
@@ -3219,6 +3221,7 @@ export type Database = {
           ai_access_since?: string | null
           archived_at?: string | null
           consecutive_health_fails?: number
+          conversa_nova_cria_negocio?: boolean
           created_at?: string
           created_by?: string | null
           daily_message_limit?: number
