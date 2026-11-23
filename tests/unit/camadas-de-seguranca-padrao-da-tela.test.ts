@@ -11,6 +11,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { CamadaSemantica } from "@/lib/agent-engine/guardrails/camadas-da-org";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 
@@ -42,11 +43,16 @@ beforeEach(() => {
   } as never);
 });
 
-async function camadas(): Promise<Record<string, { escolha: boolean | null; padraoDoAmbiente: boolean; efetivo: boolean }>> {
+type Estado = { escolha: boolean | null; padraoDoAmbiente: boolean; efetivo: boolean };
+
+async function camadas(): Promise<Record<CamadaSemantica, Estado>> {
   const res = await GET();
   expect(res.status).toBe(200);
-  const corpo = (await res.json()) as { data: { camadas: Array<{ layer: string; escolha: boolean | null; padraoDoAmbiente: boolean; efetivo: boolean }> } };
-  return Object.fromEntries(corpo.data.camadas.map(({ layer, ...resto }) => [layer, resto]));
+  const corpo = (await res.json()) as { data: { camadas: Array<Estado & { layer: CamadaSemantica }> } };
+  return Object.fromEntries(corpo.data.camadas.map(({ layer, ...resto }) => [layer, resto])) as Record<
+    CamadaSemantica,
+    Estado
+  >;
 }
 
 describe("padrão das camadas na tela = padrão do motor", () => {
