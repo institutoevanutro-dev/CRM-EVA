@@ -16,6 +16,7 @@ import { lgpdRedactHandler } from "@/workers/lgpd-redact-worker.handler";
 import { automationRulesHandler } from "@/lib/automation/engine.handler";
 import { followupReactivityHandler } from "@/lib/followup/reactivity.handler";
 import { campanhaRespostaHandler } from "@/lib/campanhas/resposta.handler";
+import { retomadaAoDevolverHandler } from "@/lib/escalacao/retomada-ao-devolver.handler";
 import { followupGatilhoEtapaHandler } from "@/lib/followup/gatilho-etapa.handler";
 import { avisoDeEtapaHandler } from "@/lib/leads/aviso-de-etapa.handler";
 import { followupGatilhoCasoHandler } from "@/lib/followup/gatilho-caso.handler";
@@ -40,6 +41,11 @@ export function ensureHandlersRegistered(): void {
   // LLM, pelo mesmo motivo dela — é escrita curta no banco, sem rede de
   // terceiro, e não pode ficar atrás de um consumidor que pode estourar.
   registerHandler(campanhaRespostaHandler);
+  // Retomar ao devolver (porte do upstream #5105): escrita curta no banco (um
+  // job na fila do agente). DEPOIS da reatividade, que consome o MESMO
+  // `ai.handoff_resolved` e retoma o follow-up pausado — a decisão cede a vez a
+  // ele (uma voz só).
+  registerHandler(retomadaAoDevolverHandler);
   registerHandler(aiResponseHandler);
   registerHandler(aiSentimentHandler);
   // Migration 0407: lê o cadastro (CPF, e-mail, nascimento, endereço) das

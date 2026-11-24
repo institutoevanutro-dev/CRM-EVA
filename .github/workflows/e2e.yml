@@ -453,6 +453,7 @@ jobs:
         followup-dossie.spec.ts
         followup-tempo-adaptativo.spec.ts
         gatilho-de-etapa.spec.ts
+        retomar-ao-devolver.spec.ts
         gatilho-de-caso.spec.ts
         followup-publicado-abre-no-construtor.spec.ts
         automacao-diz-a-verdade.spec.ts

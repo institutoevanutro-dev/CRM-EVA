@@ -52,6 +52,12 @@ const triggerConfigSchema = z
       })
       .default({ ignore_groups: true, ignore_self: true, keyword_regex: null, business_hours: null }),
     concurrency: z.enum(["one_per_conversation", "one_per_contact"]).default("one_per_conversation"),
+    // Retomar ao devolver (porte do upstream #5105): quando a equipe devolve o
+    // atendimento ao automático e a última fala é dela, o agente continua NA
+    // HORA, sem esperar o cliente escrever (lib/escalacao/retomada-ao-devolver.ts).
+    // Opcional e sem default de propósito: versão antiga sem o campo lê como
+    // desligado, e salvar uma versão não grava a chave em quem nunca mexeu.
+    resume_on_handback: z.boolean().optional(),
   })
   .strict();
 
