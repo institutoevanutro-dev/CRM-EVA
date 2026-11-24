@@ -40160,6 +40160,43 @@ revoke execute on function public.fn_agenda_clinicorp_gravar(uuid, jsonb) from p
 grant execute on function public.fn_agenda_clinicorp_gravar(uuid, jsonb) to service_role;
 
 -- ─── (3) a ocupação externa do dono ──────────────────────────────────────────
+-- ---- a tabela da foto importada (migration 0435), AQUI e não no bloco dela: a função
+-- abaixo já nasce com o corpo FINAL, que a lê (reaplicar-o-baseline-nao-abre-janela).
+create table if not exists public.calendar_clinicorp_imported_events (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  starts_at timestamptz not null,
+  ends_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  constraint calendar_clinicorp_imported_events_periodo_valido check (ends_at > starts_at),
+  constraint calendar_clinicorp_imported_events_integracao_fk foreign key (organization_id)
+    references public.calendar_clinicorp_integrations(organization_id) on delete cascade
+);
+
+create index if not exists calendar_clinicorp_imported_events_ocupam_idx
+  on public.calendar_clinicorp_imported_events (organization_id, user_id, starts_at);
+
+comment on table public.calendar_clinicorp_imported_events is
+  'Migration 0435: a foto do que já estava marcado na Clinicorp, importada do relatório exportado (lido no navegador). Só a pessoa da Agenda, início e fim: nada do paciente. Cada importação substitui a anterior.';
+
+alter table public.calendar_clinicorp_imported_events enable row level security;
+revoke all on table public.calendar_clinicorp_imported_events from anon, authenticated;
+grant select, insert, update, delete on table public.calendar_clinicorp_imported_events to service_role;
+
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_clinicorp_imported_events' and policyname = 'tenant_isolation_calendar_clinicorp_imported_events_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ee7e7ff06c35a294715a7034954149bb') then
+drop policy if exists tenant_isolation_calendar_clinicorp_imported_events_select on public.calendar_clinicorp_imported_events;
+create policy tenant_isolation_calendar_clinicorp_imported_events_select on public.calendar_clinicorp_imported_events
+  for select to authenticated using (
+    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
+  );
+end if;
+end $politica$;
+
+-- O corpo FINAL (o da 0435): reaplicar o baseline não pode deixar a função, nem por um
+-- comando, sem o ramo da foto importada. O bloco da 0435 repete o mesmo corpo.
 create or replace function public.fn_agenda_ocupacao_externa_do_dono(
   p_org uuid,
   p_owner uuid,
@@ -40203,7 +40240,18 @@ as $$
      and o.status <> 'cancelled'
      -- Cruzamento ESTRITO, a régua de `colide`: encostar não é ocupar.
      and o.starts_at < p_ate
-     and o.ends_at > p_de;
+     and o.ends_at > p_de
+  union all
+  -- A foto importada do relatório da Clinicorp (0435): já ligada à pessoa.
+  select m.starts_at, m.ends_at, 'opaque'::text, 'confirmed'::text, 'healthy'::text, 'clinicorp'::text
+    from public.calendar_clinicorp_imported_events m
+   where (auth.uid() is null
+          or p_org in (select public.fn_user_org_ids())
+          or public.fn_is_platform_admin())
+     and m.organization_id = p_org
+     and m.user_id = p_owner
+     and m.starts_at < p_ate
+     and m.ends_at > p_de;
 $$;
 
 create or replace function public.fn_agenda_conexoes_externas_do_dono(
@@ -40291,38 +40339,8 @@ notify pgrst, 'reload schema';
 -- com `if not exists`, policy recriada só quando difere, funções `create or replace`
 -- (a de ocupação com a mesma assinatura e o mesmo retorno da 0433). Cria função, então
 -- entra ANTES da VARREDURA anon.
-create table if not exists public.calendar_clinicorp_imported_events (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references public.organizations(id) on delete cascade,
-  user_id uuid not null references auth.users(id) on delete cascade,
-  starts_at timestamptz not null,
-  ends_at timestamptz not null,
-  created_at timestamptz not null default now(),
-  constraint calendar_clinicorp_imported_events_periodo_valido check (ends_at > starts_at),
-  constraint calendar_clinicorp_imported_events_integracao_fk foreign key (organization_id)
-    references public.calendar_clinicorp_integrations(organization_id) on delete cascade
-);
-
-create index if not exists calendar_clinicorp_imported_events_ocupam_idx
-  on public.calendar_clinicorp_imported_events (organization_id, user_id, starts_at);
-
-comment on table public.calendar_clinicorp_imported_events is
-  'Migration 0435: a foto do que já estava marcado na Clinicorp, importada do relatório exportado (lido no navegador). Só a pessoa da Agenda, início e fim: nada do paciente. Cada importação substitui a anterior.';
-
-alter table public.calendar_clinicorp_imported_events enable row level security;
-revoke all on table public.calendar_clinicorp_imported_events from anon, authenticated;
-grant select, insert, update, delete on table public.calendar_clinicorp_imported_events to service_role;
-
-do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
-if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_clinicorp_imported_events' and policyname = 'tenant_isolation_calendar_clinicorp_imported_events_select'
-    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ee7e7ff06c35a294715a7034954149bb') then
-drop policy if exists tenant_isolation_calendar_clinicorp_imported_events_select on public.calendar_clinicorp_imported_events;
-create policy tenant_isolation_calendar_clinicorp_imported_events_select on public.calendar_clinicorp_imported_events
-  for select to authenticated using (
-    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
-  );
-end if;
-end $politica$;
+-- A tabela `calendar_clinicorp_imported_events` nasce no bloco da 0433, logo antes
+-- da primeira definição de `fn_agenda_ocupacao_externa_do_dono`, que a lê.
 
 -- A importação: apaga a foto anterior e grava a nova, numa instrução só (CTE que
 -- escreve sempre executa). Linha repetida no lote entra uma vez.
