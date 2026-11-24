@@ -125,11 +125,13 @@ async function horariosDoDia(page: Page, creds: Creds, dia: string): Promise<str
   await page.getByRole("button", { name: /novo agendamento/i }).click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible({ timeout: 10_000 });
   await escolherProfissionalEProcedimento(page, new RegExp(`^${creds.agenda!.tipo_nome}`), creds.agenda!.dono_user_id);
-  const botao = page.getByTestId(`dia-${dia}`);
-  await expect(page.locator('[data-testid^="dia-"]').first()).toBeVisible({ timeout: 20_000 });
-  if (!(await botao.isVisible())) await page.getByTestId("mes-seguinte").click();
-  await expect(botao).toBeVisible({ timeout: 20_000 });
-  await botao.click();
+  // Espera a consulta responder (algum dia aceso). O mini-calendário mostra os
+  // dias VIZINHOS do mês seguinte desabilitados: dia de outro mês pede avançar.
+  await expect(page.locator('[data-testid^="dia-"][data-disponivel="true"]').first()).toBeVisible({ timeout: 20_000 });
+  const aceso = page.locator(`[data-testid="dia-${dia}"][data-disponivel="true"]`);
+  if (!(await aceso.isVisible())) await page.getByTestId("mes-seguinte").click();
+  await expect(aceso, `o dia ${dia} não ficou disponível no painel`).toBeVisible({ timeout: 20_000 });
+  await aceso.click();
   const horarios = page.locator('[data-testid^="horario-"]');
   await expect(horarios.first(), `o dia ${dia} não ofereceu horário nenhum`).toBeVisible({ timeout: 20_000 });
   return (await horarios.evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")!.replace("horario-", "")))).sort();
@@ -252,12 +254,14 @@ test("o gestor liga a Clinicorp pela tela e a agenda passa a descontar o que est
     await tela.getByLabel("Dia", { exact: true }).fill(dias[5]!);
     await tela.getByTestId("unidade-do-dia").selectOption({ label: UNIDADE });
     await expect(tela.getByTestId("aviso-do-dia-aberto")).toBeVisible();
-    await tela.getByLabel("Das").fill("07:00");
-    await tela.getByLabel("Até").fill("08:30");
+    await tela.getByLabel("Das", { exact: true }).fill("07:00");
+    await tela.getByLabel("Até", { exact: true }).fill("08:30");
     await tela.getByLabel("Motivo (opcional)").fill("e2e-clinicorp");
     await tela.getByRole("button", { name: "Abrir este dia" }).click();
     await expect(tela.getByTestId("resultado-do-lote")).toHaveText("2 dia(s) gravado(s)", { timeout: 15_000 });
-    await expect(tela.getByText(UNIDADE).first()).toBeVisible();
+    // A lista diz ONDE: as duas linhas novas trazem a unidade (e "aberto excepcionalmente").
+    await expect(tela.locator("li", { hasText: UNIDADE })).toHaveCount(2);
+    await expect(tela.locator("li", { hasText: UNIDADE }).first()).toContainText("aberto excepcionalmente");
     await info.attach("dias-avulsos-na-unidade", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
   });
 

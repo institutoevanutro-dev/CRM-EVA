@@ -739,6 +739,29 @@ describe("o procedimento e a unidade são do profissional", () => {
     expect(criados(banco)[0]?.unit_id).toBe(SERRA);
   });
 
+  it("o DIA ABERTO noutra unidade (migration 0433) vale naquela data — e só nela", async () => {
+    const diaAberto = (exception_date: string) => ({
+      organization_id: ORG,
+      user_id: DONO,
+      exception_date,
+      is_unavailable: false,
+      start_minute: 9 * 60,
+      end_minute: 18 * 60,
+      unit_id: CAMBURI,
+    });
+    // Noutra data: a jornada (Serra) segue mandando, e Camburi é recusada.
+    const outraData = agenda({ unidadeDaJornada: SERRA });
+    outraData.tabelas.calendar_availability_exceptions!.push(diaAberto("2026-10-14"));
+    await expect(
+      marcarAgendamentoHandler(outraData.client, ctx(PESSOA), { event_type_id: TIPO, starts_at: NA_GRADE, unit_id: CAMBURI }),
+    ).rejects.toMatchObject({ status: 422, code: "agenda_unidade_fora_da_jornada" });
+    // Na data aberta: o horário que o motor ofereceu em Camburi marca em Camburi.
+    const banco = agenda({ unidadeDaJornada: SERRA });
+    banco.tabelas.calendar_availability_exceptions!.push(diaAberto("2026-10-07"));
+    await marcarAgendamentoHandler(banco.client, ctx(PESSOA), { event_type_id: TIPO, starts_at: NA_GRADE, unit_id: CAMBURI });
+    expect(criados(banco)[0]?.unit_id).toBe(CAMBURI);
+  });
+
   it("jornada que não diz unidade nenhuma não restringe — como sempre foi", async () => {
     const banco = agenda();
     await marcarAgendamentoHandler(banco.client, ctx(PESSOA), { event_type_id: TIPO, starts_at: NA_GRADE, unit_id: CAMBURI });

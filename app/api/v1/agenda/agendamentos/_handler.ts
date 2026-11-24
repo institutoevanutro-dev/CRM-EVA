@@ -39,6 +39,7 @@ import {
 import { colide, type Slot } from "@/lib/agenda/horarios-livres";
 import { lerJornadaDoBanco } from "@/lib/agenda/jornada";
 import { atendeOProcedimento, unidadesDaJornada } from "@/lib/agenda/marcacao-simples";
+import { diaLocalISO } from "@/lib/agenda/fuso";
 import { idsForaDaOrg } from "@/lib/tenancy/pertence-a-org";
 import {
   atividadeDaTransicao,
@@ -270,7 +271,7 @@ async function executarCriacaoDeAgendamento(
       `"${tipo.name}" não está cadastrado para este profissional. Escolha um procedimento dele.`,
     );
   }
-  if (input.unit_id) await exigeUnidadeDaJornada(supabase, ctx, donoId, input.unit_id);
+  if (input.unit_id) await exigeUnidadeDaJornada(supabase, ctx, donoId, input.unit_id, input.starts_at);
   const conversao = await quemConverteu(supabase, ctx, input);
 
   // O `contact_id` É INPUT EXTERNO E PRECISA SER RESOLVIDO, não repassado.
@@ -1074,7 +1075,13 @@ async function exigeHorarioLivre(
  * Jornada ilegível ou ausente também não decide aqui: quem recusa esse caso, com
  * o motivo certo, é `exigeHorarioLivre` logo depois.
  */
-async function exigeUnidadeDaJornada(supabase: SB, ctx: HandlerCtx, donoId: string, unitId: string): Promise<void> {
+async function exigeUnidadeDaJornada(
+  supabase: SB,
+  ctx: HandlerCtx,
+  donoId: string,
+  unitId: string,
+  startsAt: string,
+): Promise<void> {
   const { data, error } = await supabase
     .from("attendant_availability")
     .select("schedule")
@@ -1086,6 +1093,20 @@ async function exigeUnidadeDaJornada(supabase: SB, ctx: HandlerCtx, donoId: stri
   if (!leitura.ok) return;
   const { unidades } = unidadesDaJornada(leitura.jornada.windows);
   if (unidades.length > 0 && !unidades.includes(unitId)) {
+    // O DIA ABERTO nesta unidade também vale (migration 0433): ele substitui a
+    // jornada daquele dia, e é de lá que o motor tirou o horário. Sem isto o
+    // "dia em outra unidade" oferecia horário que a marcação recusava.
+    const { data: diaAberto, error: erroDoDia } = await supabase
+      .from("calendar_availability_exceptions")
+      .select("id")
+      .eq("organization_id", ctx.organization_id)
+      .eq("user_id", donoId)
+      .eq("unit_id", unitId)
+      .eq("is_unavailable", false)
+      .eq("exception_date", diaLocalISO(new Date(startsAt), leitura.jornada.timezone))
+      .maybeSingle();
+    if (erroDoDia) throw new ApiError(500, "internal_error", undefined, ctx.requestId, erroDoDia.message);
+    if (diaAberto) return;
     throw new ApiError(
       422,
       "agenda_unidade_fora_da_jornada",
