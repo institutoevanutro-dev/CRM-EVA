@@ -129,10 +129,12 @@ const interruptor = () => pagina.getByRole("switch", { name: "Continuar a conver
 
 async function abrirAgente(): Promise<void> {
   await pagina.goto(`/app/ai/agents/${agentId}`);
-  // Neste fork a seção é uma sanfona (`<details>`), fechada a cada carga.
+  // Neste fork a seção é uma sanfona (`<details open>`) que NASCE ABERTA (5.26.1):
+  // clicar no título a FECHA e esconde o interruptor. Só abre se estiver fechada.
   const secao = pagina.locator("summary", { hasText: "Quando ele entra em ação" });
   await expect(secao).toBeVisible({ timeout: ESPERA });
-  await secao.click();
+  const aberta = await secao.evaluate((s) => (s.parentElement as HTMLDetailsElement | null)?.open === true);
+  if (!aberta) await secao.click();
   await interruptor().scrollIntoViewIfNeeded();
 }
 
