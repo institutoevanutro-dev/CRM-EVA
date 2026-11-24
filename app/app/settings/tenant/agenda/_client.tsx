@@ -360,6 +360,7 @@ export function TiposDeAgendamentoClient({
   clientePelaAgendaLigado,
   podeLigarClientePelaAgenda,
   pacientePeloCadastroLigado = false,
+  unidades = [],
 }: {
   tiposIniciais: TipoRow[];
   pessoas: Array<{ id: string; papel: string; nome: string }>;
@@ -374,6 +375,8 @@ export function TiposDeAgendamentoClient({
   podeLigarClientePelaAgenda: boolean;
   /** `organizations.settings.crm.paciente_pelo_cadastro` (migration 0360), lido pela página. */
   pacientePeloCadastroLigado?: boolean;
+  /** As unidades ATIVAS, para o dia aberto dizer onde a pessoa atende (migration 0433). */
+  unidades?: Array<{ id: string; nome: string }>;
 }) {
   const t = useT();
   const router = useRouter();
@@ -946,6 +949,7 @@ export function TiposDeAgendamentoClient({
           euId={usuarioAtualId}
           // `viewer` só acompanha e não tem agenda para fechar.
           pessoas={pessoas.filter((p) => p.papel !== "viewer")}
+          unidades={unidades}
         />
       </Sanfona>
     </div>

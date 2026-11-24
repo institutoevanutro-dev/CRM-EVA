@@ -254,6 +254,10 @@ function payloadDeHorarios(
     // evitar.
     total_de_horarios: slotsDoPeriodo.length,
     ha_mais: slotsDoPeriodo.length > escolhidos.length,
+    // Quantos horários sobram em CADA dia, contados ANTES do corte do `limite`:
+    // a lista espalhada não deixa comparar um dia com outro, e é comparando que
+    // se acha o dia mais perto e o que está acabando.
+    livres_por_dia: livresPorDia(slotsDoPeriodo, consulta.fusoDaRegra),
     fuso_da_regra: consulta.fusoDaRegra,
     /** false = o atendente NÃO publicou jornada. Diferente de "sem vaga" (DECISÃO 1.1). */
     publicou_horarios: consulta.publicouHorarios,
@@ -275,6 +279,21 @@ function payloadDeHorarios(
      */
     agenda_externa_nunca_lida: consulta.agendaExternaNuncaLida,
   };
+}
+
+/**
+ * `{ "2026-12-02": 6, ... }` em ordem de data, só com os dias que têm horário,
+ * até `DIAS_NA_CONTAGEM` dias (a resposta vai ao modelo e cada chave custa token).
+ */
+const DIAS_NA_CONTAGEM = 31;
+function livresPorDia(slots: ConsultaOk["slots"], fuso: string): Record<string, number> {
+  const contagem: Record<string, number> = {};
+  for (const s of slots) {
+    const dia = diaLocalISO(s.inicio, fuso);
+    if (contagem[dia] === undefined && Object.keys(contagem).length >= DIAS_NA_CONTAGEM) break;
+    contagem[dia] = (contagem[dia] ?? 0) + 1;
+  }
+  return contagem;
 }
 
 /** A ressalva de agenda nunca sincronizada, ACRESCENTADA à mensagem da marcação. */
@@ -300,6 +319,8 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
     "à pessoa onde é o atendimento. " +
     "A lista vem cortada no `limite` e espalhada ao longo do período: `total_de_horarios` diz quantos " +
     "existem e `ha_mais` avisa que sobraram — lista cortada NÃO é agenda cheia. " +
+    "`livres_por_dia` diz quantos horários sobram em cada dia (antes do corte): use para comparar " +
+    "dias e achar o mais próximo; dia que não aparece não tem horário livre. " +
     "QUANDO: informe `dias_a_frente` (a partir de agora — ex.: 7 para a próxima semana). " +
     "Para uma data que o cliente nomeou, use `dia` em YYYY-MM-DD; o servidor aplica o fuso da agenda. " +
     "Se mandar os DOIS, o período começa em `dia` e anda `dias_a_frente` dias — `dia` recorta a um dia só quando vier sozinho. " +

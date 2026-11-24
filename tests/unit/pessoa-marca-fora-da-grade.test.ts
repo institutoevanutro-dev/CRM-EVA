@@ -148,7 +148,7 @@ function bancoEmMemoria(tabelas: Record<string, Linha[]>, olhar: Olhar = "tudo")
       if (fn === "fn_google_coverage") return { data: false, error: null };
       // As duas da migration 0260 leem a tabela INTEIRA — independem do olhar —
       // e aplicam o que o corpo SQL aplica: organização, dono e cruzamento estrito.
-      if (fn === "fn_agenda_ocupacao_google_do_dono") {
+      if (fn === "fn_agenda_ocupacao_externa_do_dono") {
         const ocupam = (tabelas.calendar_selected_external_events ?? []).filter((l) => {
           const conexao = l.calendar_connections as Linha;
           return (
@@ -169,7 +169,7 @@ function bancoEmMemoria(tabelas: Record<string, Linha[]>, olhar: Olhar = "tudo")
           error: null,
         };
       }
-      if (fn === "fn_agenda_conexoes_google_do_dono") {
+      if (fn === "fn_agenda_conexoes_externas_do_dono") {
         const doDono = (tabelas.calendar_connections ?? []).filter(
           (l) => l.organization_id === args.p_org && l.user_id === args.p_owner,
         );

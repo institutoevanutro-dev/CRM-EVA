@@ -351,12 +351,14 @@ export default async function AgendaPage() {
         externos.map((e) => {
           return {
             id: e.id,
-            titulo: "Ocupado",
+            // Mesmo rótulo da rota: "Ocupado (Clinicorp)" diz a fonte, nunca o conteúdo de lá.
+            titulo: e.fonte === "clinicorp" ? "Ocupado (Clinicorp)" : "Ocupado",
             responsavelId: e.donoId ?? "",
             comeca: e.iniciaEm,
             termina: e.terminaEm,
             origem: "google_sync" as const,
             situacao: "confirmed" as const,
+            ...(e.fonte === "clinicorp" ? { fonteExterna: "clinicorp" as const } : {}),
           };
         }) as AgendamentoDaTela[],
         bloqueios.map((b) => ({

@@ -49,7 +49,7 @@ import { fusoUtilizavel } from "@/lib/tempo/fusos";
 
 export const dynamic = "force-dynamic";
 
-const COLUNAS = "id, user_id, exception_date, is_unavailable, start_minute, end_minute, reason";
+const COLUNAS = "id, user_id, exception_date, is_unavailable, start_minute, end_minute, reason, unit_id";
 
 const criarSchema = z
   .object({
@@ -60,10 +60,20 @@ const criarSchema = z
     start_minute: z.number().int().min(0).max(1440).default(0),
     end_minute: z.number().int().min(0).max(1440).default(1440),
     reason: z.string().trim().max(200).optional(),
+    /**
+     * Onde a pessoa atende no dia ABERTO (migration 0433). O dia aberto substitui
+     * a jornada do dia, então lançar "dia em outra unidade" já fecha a de sempre.
+     * A FK composta recusa unidade de outra organização.
+     */
+    unit_id: z.string().uuid().nullish(),
   })
   .refine((v) => v.end_minute > v.start_minute, {
     message: "O fim precisa ser depois do começo.",
     path: ["end_minute"],
+  })
+  .refine((v) => !v.unit_id || !v.is_unavailable, {
+    message: "A unidade só vale para o dia aberto.",
+    path: ["unit_id"],
   });
 
 export async function GET(req: NextRequest): Promise<Response> {
@@ -116,6 +126,7 @@ type LinhaListada = {
   start_minute: number;
   end_minute: number;
   reason: string | null;
+  unit_id: string | null;
 };
 
 /**
@@ -201,6 +212,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       start_minute: lido.data.start_minute,
       end_minute: lido.data.end_minute,
       reason: lido.data.reason ?? null,
+      unit_id: lido.data.unit_id ?? null,
     })
     .select(COLUNAS)
     .single();
@@ -216,6 +228,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
     if (error.code === "42501") {
       return fail("forbidden", t("Você só pode alterar a sua própria agenda."), 403, { requestId });
+    }
+    // 23503 é a FK composta da unidade (migration 0433): não é desta organização.
+    if (error.code === "23503") {
+      return fail("validation_failed", t("Essa unidade não existe nesta organização."), 422, { requestId });
     }
     return fail("internal_error", error.message, 500, { requestId });
   }
@@ -233,6 +249,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       dia_inteiro: lido.data.start_minute === 0 && lido.data.end_minute === 1440,
       start_minute: lido.data.start_minute,
       end_minute: lido.data.end_minute,
+      unit_id: lido.data.unit_id ?? null,
     },
   });
 

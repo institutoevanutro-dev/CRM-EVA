@@ -79,6 +79,9 @@ CRONS="
 17 * * * *|60|api/v1/cron/precificaeva-catalogo
 */10 * * * *|60|api/v1/cron/agenda-google-refresh
 * * * * *|90|api/v1/cron/agenda-google-sync
+# A CLINICORP. A cada 10 minutos copia a ocupação da agenda de fora (migration
+# 0433). ~4 pedidos por organização; mais frequente só gastaria a API de lá.
+*/10 * * * *|90|api/v1/cron/agenda-clinicorp
 # A IDA. Cadência mais curta que a volta de propósito: quem marcou pela tela
 # espera ver o compromisso no celular dele em minutos, e a ida é barata (só
 # manda o que mudou). A volta é cara — varre calendário inteiro — e por isso

@@ -63,6 +63,12 @@
  * (`coletaOQueOcupa`).
  *
  * Porte de melgarafael/DeskcommCRM 42c558397 (issue #896, item 3).
+ *
+ * ─── E a Clinicorp (migration 0433) ─────────────────────────────────────────
+ *
+ * A pergunta é `fn_agenda_ocupacao_externa_do_dono`: o Google da 0260 sem
+ * mudança mais a cópia da Clinicorp, com a `fonte`. É a MESMA função que o motor
+ * lê (`coletaOQueOcupa`), então tela e IA seguem respondendo igual.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -75,6 +81,8 @@ export interface BlocoExternoDaTela {
   iniciaEm: string;
   /** ISO — fim da fatia visível (nunca depois de `ate`). */
   terminaEm: string;
+  /** De onde veio: decide o rótulo ("Ocupado" ou "Ocupado (Clinicorp)"), nunca o título de lá. */
+  fonte?: "google" | "clinicorp";
 }
 
 export interface RecorteDaAgenda {
@@ -108,6 +116,8 @@ interface LinhaDaOcupacaoDoGoogle {
   ends_at: string;
   transparency?: string | null;
   status?: string | null;
+  /** `fn_agenda_ocupacao_externa_do_dono` (0433): "google" ou "clinicorp". */
+  fonte?: string | null;
 }
 
 const instante = (iso: string): number => new Date(iso).getTime();
@@ -136,7 +146,7 @@ export async function lerOcupacaoExterna(
   // depois do começo (issue #525).
   const leituras = await Promise.all(
     donos.map(async (dono) => {
-      const { data, error } = await supabase.rpc("fn_agenda_ocupacao_google_do_dono", {
+      const { data, error } = await supabase.rpc("fn_agenda_ocupacao_externa_do_dono", {
         p_org: recorte.organizationId,
         p_owner: dono,
         p_de: recorte.de,
@@ -161,7 +171,7 @@ export async function lerOcupacaoExterna(
           // DERIVADO: a função não devolve `id`. Dono + fatia visível bastam
           // para a chave do React — dois blocos do mesmo dono com a MESMA fatia
           // são indistinguíveis na tela por definição.
-          id: `${dono}:${fatiaDe(linha.starts_at, recorte)}:${fatiaAte(linha.ends_at, recorte)}`,
+          id: `${dono}:${linha.fonte === "clinicorp" ? "clinicorp:" : ""}${fatiaDe(linha.starts_at, recorte)}:${fatiaAte(linha.ends_at, recorte)}`,
           donoId: dono,
           // A FATIA VISÍVEL: o bloco não começa antes do recorte nem termina
           // depois dele. `GradeDaAgenda` atribui cada bloco à coluna do dia pelo
@@ -169,6 +179,7 @@ export async function lerOcupacaoExterna(
           // fora de toda coluna desenhada e sumiria da tela de novo.
           iniciaEm: fatiaDe(linha.starts_at, recorte),
           terminaEm: fatiaAte(linha.ends_at, recorte),
+          fonte: linha.fonte === "clinicorp" ? ("clinicorp" as const) : ("google" as const),
         })),
     );
 

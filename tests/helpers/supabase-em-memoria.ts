@@ -1,9 +1,9 @@
 /**
  * Um PostgREST de mentira, com estado, para testar rota contra dado que muda.
  *
- * Só o que as rotas de pedido LGPD e de campanha usam: `select/eq/neq/in/gt/gte/order/limit/range`,
+ * Só o que as rotas de pedido LGPD, de campanha e a cópia da Clinicorp usam: `select/eq/neq/in/gt/gte/lt/order/limit/range`,
  * `not(…, "is", null)`, a contagem `select(…, { count, head })`, `maybeSingle/single`, `insert`,
- * `update`, `delete` e `rpc` (espionado). `from` também é espionado: é como o teste conta
+ * `update`, `upsert`, `delete` e `rpc` (espionado). `from` também é espionado: é como o teste conta
  * quantas consultas uma rota faz por tabela (N+1). Embutidos do `select` são
  * ignorados. Os filtros são
  * aplicados de verdade: é o que deixa o teste de isolamento entre organizações
@@ -34,6 +34,7 @@ export function supabaseEmMemoria(
       | { tipo: "select" }
       | { tipo: "insert"; linha: Linha | Linha[] }
       | { tipo: "update"; patch: Linha }
+      | { tipo: "upsert"; linha: Linha | Linha[]; chaves: string[] }
       | { tipo: "delete" } = {
       tipo: "select",
     };
@@ -51,6 +52,17 @@ export function supabaseEmMemoria(
         }));
         linhas.push(...criadas);
         return { data: criadas, error: null };
+      }
+      if (acao.tipo === "upsert") {
+        const { chaves } = acao;
+        const gravadas = (Array.isArray(acao.linha) ? acao.linha : [acao.linha]).map((linha) => {
+          const existente = linhas.find((l) => chaves.every((c) => l[c] === linha[c]));
+          if (existente) return Object.assign(existente, linha);
+          const nova = { ...linha };
+          linhas.push(nova);
+          return nova;
+        });
+        return { data: gravadas, error: null };
       }
       const todas = linhas.filter((l) => filtros.every((f) => f(l)));
       if (descPor) {
@@ -85,6 +97,9 @@ export function supabaseEmMemoria(
       // Só `not(coluna, "is", null)` — "o carimbo existe".
       not: (c: string, _op: "is", _v: null) => (filtros.push((l) => l[c] !== null && l[c] !== undefined), q),
       gte: (c: string, v: unknown) => (filtros.push((l) => String(l[c]) >= String(v)), q),
+      lt: (c: string, v: unknown) => (filtros.push((l) => String(l[c]) < String(v)), q),
+      // Só `is(coluna, null)` — "o carimbo não existe".
+      is: (c: string, _v: null) => (filtros.push((l) => l[c] === null || l[c] === undefined), q),
       // Só a ordem descendente reordena: as rotas LGPD contam com a ordem de
       // inserção nas consultas ascendentes, e ela continua igual.
       order: (c: string, o?: { ascending?: boolean }) => ((descPor = o?.ascending === false ? c : descPor), q),
@@ -92,6 +107,10 @@ export function supabaseEmMemoria(
       range: (de: number, ate: number) => ((inicio = de), (limite = ate - de + 1), q),
       insert: (linha: Linha | Linha[]) => ((acao = { tipo: "insert", linha }), q),
       update: (patch: Linha) => ((acao = { tipo: "update", patch }), q),
+      // `onConflict` = as colunas da chave; sem ele, `id`.
+      upsert: (linha: Linha | Linha[], o?: { onConflict?: string }) => (
+        (acao = { tipo: "upsert", linha, chaves: o?.onConflict?.split(",") ?? ["id"] }), q
+      ),
       delete: () => ((acao = { tipo: "delete" }), q),
       maybeSingle: uma(false),
       single: uma(true),

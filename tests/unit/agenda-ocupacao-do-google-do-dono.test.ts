@@ -115,7 +115,7 @@ function clienteFalso(tabelas: Record<string, Linha[]>, veConexao: boolean): Sup
   }
 
   async function rpc(fn: string, args: { p_org: string; p_owner: string; p_de: string; p_ate: string }) {
-    if (fn === "fn_agenda_ocupacao_google_do_dono") {
+    if (fn === "fn_agenda_ocupacao_externa_do_dono") {
       const ocupam = (tabelas.calendar_selected_external_events ?? []).filter(
         (l) =>
           l.organization_id === args.p_org &&
@@ -134,7 +134,7 @@ function clienteFalso(tabelas: Record<string, Linha[]>, veConexao: boolean): Sup
         error: null,
       };
     }
-    if (fn === "fn_agenda_conexoes_google_do_dono") {
+    if (fn === "fn_agenda_conexoes_externas_do_dono") {
       const doDono = (tabelas.calendar_connections ?? []).filter(
         (l) => l.organization_id === args.p_org && l.user_id === args.p_owner,
       );

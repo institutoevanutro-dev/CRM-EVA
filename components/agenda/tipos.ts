@@ -103,6 +103,12 @@ export type Agendamento = {
    * troca o que o leitor de tela ouve.
    */
   bloqueio?: boolean;
+  /**
+   * Ocupação copiada da Clinicorp (migration 0433). Também chega com `origem:
+   * "google_sync"` para ser inerte; este campo só tira do leitor de tela o
+   * "ocupado na agenda do Google", que ali seria mentira.
+   */
+  fonteExterna?: "clinicorp";
 };
 
 /** Um horário oferecido pelo painel de marcação. */

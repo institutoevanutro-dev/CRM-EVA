@@ -93,6 +93,12 @@ export interface ExcecaoDeData {
   /** Minutos desde a meia-noite local. Dia inteiro é `0`…`1440`. */
   inicioMinuto: number;
   fimMinuto: number;
+  /**
+   * A unidade do dia ABERTO (`calendar_availability_exceptions.unit_id`, migration
+   * 0433). O dia aberto substitui a jornada do dia, então é ele que diz ONDE a
+   * pessoa atende. Ausente ou `null` = sem unidade, como antes.
+   */
+  unidadeId?: string | null;
 }
 
 /** Um intervalo que já está tomado: agendamento do dono ou evento vindo do Google. */
@@ -119,8 +125,8 @@ export interface Slot {
   inicio: Date;
   fim: Date;
   /**
-   * A unidade da janela da jornada que gerou este horário; `null` quando a
-   * janela não tem unidade (ou o dia veio de exceção disponível, que não tem).
+   * A unidade da janela da jornada (ou do dia aberto) que gerou este horário;
+   * `null` quando ela não tem unidade.
    *
    * É daqui que quem marca tira o `unit_id`: tipo que exige sala é recusado
    * pelo gatilho do compromisso sem unidade (`agenda_unidade_obrigatoria`).
@@ -264,9 +270,18 @@ function janelasDoDia(
 ): Array<FaixaEmMinutos & { unitId: string | null }> {
   const disponiveis = excecoesDoDia.filter((e) => !e.indisponivel);
   if (disponiveis.length > 0) {
-    return unirFaixas(disponiveis.map((e) => ({ inicio: e.inicioMinuto, fim: e.fimMinuto }))).map(
-      (f) => ({ ...f, unitId: null }),
-    );
+    // A mesma união POR UNIDADE da jornada, logo abaixo. Até a 0433 a exceção não
+    // tinha unidade e o horário saía com `null`: o "dia em outra unidade" lançado
+    // pela tela virava horário de lugar nenhum.
+    const porUnidade = new Map<string | null, FaixaEmMinutos[]>();
+    for (const e of disponiveis) {
+      const unitId = e.unidadeId ?? null;
+      const faixa = { inicio: e.inicioMinuto, fim: e.fimMinuto };
+      const grupo = porUnidade.get(unitId);
+      if (grupo) grupo.push(faixa);
+      else porUnidade.set(unitId, [faixa]);
+    }
+    return [...porUnidade].flatMap(([unitId, faixas]) => unirFaixas(faixas).map((f) => ({ ...f, unitId })));
   }
 
   // ⚠️ A UNIÃO É POR UNIDADE. Vitória 09:00–12:00 e Serra 12:00–14:00 fundidas

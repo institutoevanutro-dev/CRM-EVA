@@ -914,6 +914,13 @@ export const AUDIT_ACTIONS = [
   "venda.registrada",
   "venda.apagada",
   "marketing.resumo_enviado",
+  // A agenda da Clinicorp (migration 0433). A credencial registra QUE mudou
+  // (primeira_vez, token_trocado), nunca o valor; a cópia registra contagens e o
+  // motivo da falha, nunca a resposta da Clinicorp (traz paciente).
+  "agenda.clinicorp_credencial_salva",
+  "agenda.clinicorp_profissionais_mapeados",
+  "agenda.clinicorp_desligada",
+  "agenda.clinicorp_copiada",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

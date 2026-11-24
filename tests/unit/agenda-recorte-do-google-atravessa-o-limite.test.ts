@@ -148,7 +148,7 @@ function clienteFalso(tabelas: Record<string, Linha[]>): SupabaseClient {
     fn: string,
     args: { p_org: string; p_owner: string; p_de: string; p_ate: string },
   ) {
-    if (fn === "fn_agenda_ocupacao_google_do_dono") {
+    if (fn === "fn_agenda_ocupacao_externa_do_dono") {
       const ocupam = (tabelas.calendar_selected_external_events ?? []).filter(
         (l) =>
           l.organization_id === args.p_org &&
@@ -167,7 +167,7 @@ function clienteFalso(tabelas: Record<string, Linha[]>): SupabaseClient {
         error: null,
       };
     }
-    if (fn === "fn_agenda_conexoes_google_do_dono") {
+    if (fn === "fn_agenda_conexoes_externas_do_dono") {
       const doDono = (tabelas.calendar_connections ?? []).filter(
         (l) => l.organization_id === args.p_org && l.user_id === args.p_owner,
       );
@@ -265,6 +265,7 @@ describe("a tela mostra — e o motor já recusava — o compromisso que atraves
         donoId: DONO,
         iniciaEm: FATIA.de,
         terminaEm: FATIA.ate,
+        fonte: "google",
       },
     ]);
   });
@@ -376,6 +377,7 @@ describe("a tela mostra — e o motor já recusava — o compromisso que atraves
         donoId: DONO,
         iniciaEm: "2026-09-16T15:00:00.000Z",
         terminaEm: "2026-09-16T16:00:00.000Z",
+        fonte: "google",
       },
     ]);
   });

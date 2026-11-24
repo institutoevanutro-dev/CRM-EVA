@@ -206,6 +206,26 @@ describe("crm_find_free_slots", () => {
     });
   });
 
+  it("`livres_por_dia` conta o que sobra em cada dia ANTES do corte do limite", async () => {
+    // Três horários num dia e um no outro, com limite 2: a lista cortada não deixa
+    // comparar os dias; a contagem deixa (o dia que está acabando e o mais perto).
+    respondeCom({
+      ...SUCESSO,
+      slots: [
+        { inicio: new Date("2026-09-01T13:00:00.000Z"), fim: new Date("2026-09-01T14:30:00.000Z") },
+        { inicio: new Date("2026-09-01T14:30:00.000Z"), fim: new Date("2026-09-01T16:00:00.000Z") },
+        { inicio: new Date("2026-09-01T16:00:00.000Z"), fim: new Date("2026-09-01T17:30:00.000Z") },
+        { inicio: new Date("2026-09-03T13:00:00.000Z"), fim: new Date("2026-09-03T14:30:00.000Z") },
+      ],
+    });
+    const r = (await crmFindFreeSlots.handler({ event_type_slug: "c", limite: 2 }, ctx)) as {
+      horarios: unknown[];
+      livres_por_dia: Record<string, number>;
+    };
+    expect(r.horarios).toHaveLength(2);
+    expect(r.livres_por_dia).toEqual({ "2026-09-01": 3, "2026-09-03": 1 });
+  });
+
   it("o pedido legítimo de dia único NÃO muda: `dia` sozinho ainda recorta naquele dia", async () => {
     // O trade-off do fix #2889, na outra perna: `dia` sem `dias_a_frente` é o
     // caminho de "o cliente pediu dia 13", e ele segue recortando pelo dia
