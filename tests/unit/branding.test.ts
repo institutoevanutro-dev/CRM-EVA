@@ -827,6 +827,11 @@ const HOSTS_DECLARADOS: Record<string, EntradaDeHost> = {
     motivo:
       "endpoint da API da OpenAI (embeddings da busca e transcrição de áudio). É o destino do request: trocar pelo domínio do revendedor faria a chamada não chegar a lugar nenhum.",
   },
+  "api.clinicorp.com": {
+    categoria: "FORNECEDOR",
+    motivo:
+      "endpoint da API REST da Clinicorp (`lib/agenda/clinicorp/copia.ts`, migration 0433): de onde se copia a ocupação da agenda de quem marca lá. Só é chamado com a credencial da Clinicorp salva na organização. É o destino do request, não texto de interface.",
+  },
   "api.typesafe.ai": {
     categoria: "FORNECEDOR",
     motivo:

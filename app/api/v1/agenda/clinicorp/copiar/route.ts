@@ -34,7 +34,7 @@ export async function POST(): Promise<Response> {
     actorUserId: authz.user.id,
     organizationId: org,
     resourceType: "calendar_clinicorp_integration",
-    resourceId: org,
+    resourceId: authz.org.orgId,
     requestId,
     metadata: r.ok
       ? { origem: "tela", itens: r.itens, gravados: r.gravados, profissionais: r.profissionais }

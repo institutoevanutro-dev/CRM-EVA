@@ -149,7 +149,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
     actorUserId: authz.user.id,
     organizationId: org,
     resourceType: "calendar_clinicorp_integration",
-    resourceId: org,
+    resourceId: authz.org.orgId,
     requestId,
     // Que mudou, nunca o valor.
     metadata: { primeira_vez: !atual, token_trocado: Boolean(tokenCifrado), com_assinante: Boolean(linha.subscriber_id) },
@@ -203,7 +203,7 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       actorUserId: authz.user.id,
       organizationId: org,
       resourceType: "calendar_clinicorp_integration",
-      resourceId: org,
+      resourceId: authz.org.orgId,
       requestId,
       metadata: { mapeamento: lido.data.profissionais },
     });
@@ -233,7 +233,7 @@ export async function DELETE(): Promise<Response> {
       actorUserId: authz.user.id,
       organizationId: org,
       resourceType: "calendar_clinicorp_integration",
-      resourceId: org,
+      resourceId: authz.org.orgId,
       requestId,
     });
   }
