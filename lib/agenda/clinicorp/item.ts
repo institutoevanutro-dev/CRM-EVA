@@ -28,6 +28,9 @@ import { z } from "zod";
 
 import { instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
 
+/** O CHECK de `calendar_clinicorp_events.status` (migration 0433), espelhado aqui. */
+export const SITUACOES_DA_OCUPACAO_CLINICORP = ["confirmed", "cancelled"] as const;
+
 /** A ocupação como `fn_agenda_clinicorp_gravar` (migration 0433) a recebe. */
 export interface OcupacaoDaClinicorp {
   external_id: string;
@@ -35,7 +38,7 @@ export interface OcupacaoDaClinicorp {
   clinic_id: string | null;
   starts_at: string;
   ends_at: string;
-  status: "confirmed" | "cancelled";
+  status: (typeof SITUACOES_DA_OCUPACAO_CLINICORP)[number];
   external_updated_at: string | null;
 }
 

@@ -40069,6 +40069,43 @@ grant select, insert, update, delete on table public.calendar_clinicorp_integrat
 grant select, insert, update, delete on table public.calendar_clinicorp_professionals to service_role;
 grant select, insert, update, delete on table public.calendar_clinicorp_events to service_role;
 
+-- A policy é a SEGUNDA tranca: `authenticated` não tem privilégio nenhum nestas
+-- tabelas (acima), e quem lê é a rota com o service role. Se alguém conceder
+-- SELECT um dia, a leitura nasce limitada à organização — e, na tabela do
+-- token, a gestor para cima. Toda tabela `calendar%` declara a sua
+-- (tests/invariants/agenda-nenhuma-tabela-sem-rls.test.ts).
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_clinicorp_integrations' and policyname = 'tenant_isolation_calendar_clinicorp_integrations_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'f1a6046c32e954e0fea721b630e4139a') then
+drop policy if exists tenant_isolation_calendar_clinicorp_integrations_select on public.calendar_clinicorp_integrations;
+create policy tenant_isolation_calendar_clinicorp_integrations_select on public.calendar_clinicorp_integrations
+  for select to authenticated using (
+    public.fn_is_platform_admin()
+    or ((organization_id in (select public.fn_user_org_ids())) and public.fn_role_at_least(organization_id, 'manager'))
+  );
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_clinicorp_professionals' and policyname = 'tenant_isolation_calendar_clinicorp_professionals_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ee7e7ff06c35a294715a7034954149bb') then
+drop policy if exists tenant_isolation_calendar_clinicorp_professionals_select on public.calendar_clinicorp_professionals;
+create policy tenant_isolation_calendar_clinicorp_professionals_select on public.calendar_clinicorp_professionals
+  for select to authenticated using (
+    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
+  );
+end if;
+end $politica$;
+do $politica$ begin -- só recria quando a definição no banco não é esta (reaplicar-o-baseline-nao-abre-janela.test.ts)
+if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'calendar_clinicorp_events' and policyname = 'tenant_isolation_calendar_clinicorp_events_select'
+    and md5(concat_ws('|', permissive, cmd, roles::text, coalesce(qual, '~'), coalesce(with_check, '~'))) = 'ee7e7ff06c35a294715a7034954149bb') then
+drop policy if exists tenant_isolation_calendar_clinicorp_events_select on public.calendar_clinicorp_events;
+create policy tenant_isolation_calendar_clinicorp_events_select on public.calendar_clinicorp_events
+  for select to authenticated using (
+    (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
+  );
+end if;
+end $politica$;
+
 -- A gravação da cópia: um lote por chamada, idempotente por (organização, id).
 -- O mesmo id duas vezes no lote fica com a versão mais nova. Uma versão MAIS
 -- VELHA que a gravada não sobrescreve (resposta atrasada de uma cópia anterior).

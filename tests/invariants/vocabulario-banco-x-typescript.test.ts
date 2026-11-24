@@ -49,6 +49,13 @@ const PARES: Array<{
   simbolo: string;
 }> = [
   {
+    tabela: "calendar_clinicorp_events",
+    coluna: "status",
+    // lib/agenda/clinicorp/item.ts → SITUACOES_DA_OCUPACAO_CLINICORP (tupla `as const`, 0433).
+    arquivo: "lib/agenda/clinicorp/item.ts",
+    simbolo: "SITUACOES_DA_OCUPACAO_CLINICORP",
+  },
+  {
     tabela: "crm_lead_activities",
     coluna: "actor_kind",
     // lib/leads/activity-emitter.ts → ActivityActorKind
