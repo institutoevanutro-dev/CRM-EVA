@@ -1857,6 +1857,13 @@ export const DICIONARIO: Traducoes = {
   "Um de cada vez por conversa": { es: "Una a la vez por conversación" },
   "Um de cada vez por cliente": { es: "Una a la vez por cliente" },
   "Só atender em horário de funcionamento": { es: "Solo atender en horario de funcionamiento" },
+  // Retomar ao devolver (porte do upstream #5105).
+  "Continuar a conversa assim que a equipe devolver ao automático": {
+    es: "Continuar la conversación en cuanto el equipo la devuelva al automático",
+  },
+  "Quando alguém da equipe atende, manda a última mensagem (um orçamento, por exemplo) e clica em Devolver ao automático, o agente continua dali na hora, sem esperar o cliente escrever. Ele não fala se o cliente já respondeu, se a conversa tem um follow-up em andamento ou se o contato está marcado para atendimento humano.": {
+    es: "Cuando alguien del equipo atiende, envía el último mensaje (un presupuesto, por ejemplo) y hace clic en Devolver al automático, el agente continúa desde ahí al instante, sin esperar a que el cliente escriba. No habla si el cliente ya respondió, si la conversación tiene un seguimiento en curso o si el contacto está marcado para atención humana.",
+  },
   "Mensagem fora do horário (opcional)": { es: "Mensaje fuera del horario (opcional)" },
   "Ex.: Nosso atendimento funciona de segunda a sexta, das 8h às 18h. Recebemos sua mensagem e respondemos no próximo horário de atendimento.": {
     es: "Ej.: Nuestra atención funciona de lunes a viernes, de 8h a 18h. Recibimos su mensaje y respondemos en el próximo horario de atención.",

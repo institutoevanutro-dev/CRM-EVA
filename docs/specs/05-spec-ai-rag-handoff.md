@@ -1121,6 +1121,14 @@ motivos de exclusão em `lib/escalacao/devolucao-automatica.ts`. Motivação med
 conversas ativas de um dia estavam em handoff formal e nenhuma foi devolvida — o cliente que
 escreveu de novo ficou sem resposta, com humano ocupado e IA proibida.
 
+**Devolver não redistribui, e a resposta do responsável cala a IA (porte do upstream #5176).**
+Toda devolução grava `metadata.ia_retomada`; enquanto a marca existir, a conversa não tiver
+passado para humano de novo (`last_handoff_at` nulo) e houver IA no ar para a conversa, o
+`routing-worker` com rodízio guarda o pedido de distribuição (reavaliado a cada 5 min, sem prazo)
+em vez de entregar — `lib/routing/retomada-da-ia.ts`. A resposta pela tela de quem é o
+responsável pela conversa (`assigned_to_user_id`) grava `bot_silenced_until = 'infinity'` até a
+devolução; a de quem não é o responsável segue com a janela da pausa da organização.
+
 **A IA só volta no fim do dia seguinte depois que a equipe fala (opcional, por organização).**
 Com `organizations.settings.atendimento.ia_volta_apos_equipe = "fim_do_dia_seguinte"` (Configurações ›
 Distribuição de atendimento, chave "Depois que a equipe responde, a IA só volta no fim do dia

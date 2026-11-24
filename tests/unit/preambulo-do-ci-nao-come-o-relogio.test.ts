@@ -49,8 +49,10 @@ const ACTION = join(process.cwd(), ".github/actions/preparar-node/action.yml");
  */
 const TETOS: Record<string, { minutos: number; razao: string }> = {
   "ci.yml::verify": {
-    minutos: 30,
-    razao: "no fork CRM-EVA, job 105440660087 mediu ~28 min até o fim dos 9.630 unitários; " +
+    minutos: 40,
+    razao: "no fork CRM-EVA, em 24/11/2026 o job 138204268772 foi cancelado aos 30 min AINDA PASSANDO " +
+      "(2.273 linhas verdes, zero vermelhas; suíte com 1.965 arquivos e ~21 mil testes, ~27 min só de unitários); " +
+      "antes, o job 105440660087 mediu ~28 min até o fim dos 9.630 unitários; " +
       "o teto antigo de 15 min cancelou o job 105436395909 ainda com testes passando. " +
       "O aumento é do trabalho real no runner, não do preâmbulo (que já tem teto próprio)",
   },

@@ -8,6 +8,40 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.37.0] — 2026-11-24
+
+### Adicionado
+
+- **O agente pode continuar a conversa assim que a equipe devolver ao automático** Até aqui, quando alguém da equipe atendia um cliente, mandava a última mensagem
+  (um orçamento, por exemplo) e clicava em "Devolver ao automático", o agente só
+  voltava a falar quando o cliente escrevesse de novo. Agora há uma opção por
+  agente, na seção "Quando ele entra em ação" do editor: "Continuar a conversa
+  assim que a equipe devolver ao automático". Ligada, o agente continua dali em
+  poucos segundos, lendo o que a equipe enviou e o resumo do atendimento, sem
+  repetir o que já foi dito. Ele não fala se o cliente já respondeu, se a IA já
+  falou depois da equipe, se o contato tem um follow-up em andamento (o follow-up
+  fala, uma voz só), se o contato está marcado para atendimento humano ou
+  bloqueado, ou se o número ainda não foi liberado (go-live). O envio respeita o
+  horário de envio de follow-up da empresa. Vem desligada: quem não ligar não vê
+  mudança. Porte de melgarafael/DeskcommCRM#5105 (contribuição de @Lucas-BritoDev).
+
+### Corrigido
+
+- **O rodízio não tira mais da IA a conversa devolvida ao automático** Com a distribuição em rodízio, depois de alguém clicar em
+  **Devolver ao automático**, a conversa voltava para a fila e era entregue a um
+  atendente em menos de um minuto, com a IA atendendo. Agora a conversa devolvida
+  ao automático só volta para a distribuição quando a IA passar o atendimento para
+  uma pessoa (ou se a IA estiver pausada ou sem agente no número). No modo manual
+  nada muda. Porte de melgarafael/DeskcommCRM#5176 (contribuição de @fcostamil-hub).
+
+- **A resposta do responsável pela conversa cala a IA até a devolução** Quando o responsável pela conversa responde pela tela, a IA fica calada até
+  alguém clicar em **Devolver ao automático**, e não só pela janela da pausa
+  (5 minutos, ou o ajuste da empresa). A resposta de quem não é o responsável
+  continua pausando a IA só pela janela de sempre. A opção «Devolver ao agente
+  sozinho depois de um tempo sem resposta da equipe», em Configurações ›
+  Distribuição de atendimento, continua funcionando como antes. Porte de
+  melgarafael/DeskcommCRM#5176 (contribuição de @fcostamil-hub).
+
 ## [5.36.0] — 2026-11-23
 
 ### Adicionado
@@ -10008,7 +10042,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.36.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.37.0...HEAD
+[5.37.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.36.0...v5.37.0
 [5.36.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.35.0...v5.36.0
 [5.35.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.34.0...v5.35.0
 [5.34.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.33.0...v5.34.0

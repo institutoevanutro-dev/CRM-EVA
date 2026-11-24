@@ -37,6 +37,7 @@ import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { resolveActiveLeadForContact, type LeadCandidate } from "@/lib/leads/active-lead";
 import { logger } from "@/lib/logger";
 import { autorizarContatoParaIA } from "@/lib/ai/elegibilidade/autorizacao";
+import { CHAVE_DA_RETOMADA_DA_IA, marcaDeRetomada } from "@/lib/routing/retomada-da-ia";
 
 import { lerContinuidadeHumana, type ContinuidadeHumana } from "./continuidade";
 import { CHAVE_DA_DEVOLUCAO_MANUAL } from "./fala-da-equipe";
@@ -185,19 +186,22 @@ export async function devolverAtendimentoAoAgente(
       assignee_kind: "ai",
       status: proximoStatus,
       status_changed_at: new Date().toISOString(),
-      // Só a manual libera os assuntos de `nao_reabre_apos_equipe`.
+      // Duas marcas, na MESMA escrita da devolução:
+      //  - `ia_retomada` (toda devolução, porte do upstream #5176): segura a
+      //    distribuição automática enquanto a IA atende e a conversa não passa
+      //    para humano de novo (`lib/routing/retomada-da-ia.ts`). Gravada numa
+      //    escrita à parte, o pedido de distribuição que a devolução dispara
+      //    (`trg_routing_assignment_changed`) ganharia a corrida;
+      //  - a da devolução manual: só ela libera os assuntos de `nao_reabre_apos_equipe`.
       // ponytail: read-modify-write do jsonb; outro escritor no mesmo instante
       // perde a chave dele. Vira `jsonb_set` por RPC se isso aparecer.
-      ...(input.origem
-        ? {}
-        : {
-            metadata: {
-              ...(conv.metadata && typeof conv.metadata === "object" && !Array.isArray(conv.metadata)
-                ? (conv.metadata as Record<string, unknown>)
-                : {}),
-              [CHAVE_DA_DEVOLUCAO_MANUAL]: new Date().toISOString(),
-            },
-          }),
+      metadata: {
+        ...(conv.metadata && typeof conv.metadata === "object" && !Array.isArray(conv.metadata)
+          ? (conv.metadata as Record<string, unknown>)
+          : {}),
+        [CHAVE_DA_RETOMADA_DA_IA]: marcaDeRetomada(input.origem ? "automatica" : "pessoa", new Date()),
+        ...(input.origem ? {} : { [CHAVE_DA_DEVOLUCAO_MANUAL]: new Date().toISOString() }),
+      },
     })
     .eq("id", input.conversationId)
     .eq("organization_id", organizationId)

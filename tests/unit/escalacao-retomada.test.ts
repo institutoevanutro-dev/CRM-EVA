@@ -22,6 +22,7 @@ import {
   type OrigemDaRetomada,
 } from "@/lib/escalacao/retomada";
 import type { Actor } from "@/lib/api/handlers/types";
+import { CHAVE_DA_RETOMADA_DA_IA } from "@/lib/routing/retomada-da-ia";
 
 vi.mock("@/lib/audit", () => ({ audit: vi.fn().mockResolvedValue(undefined) }));
 
@@ -393,7 +394,27 @@ describe("devolver o atendimento ao agente", () => {
     expect(res.ok).toBe(true);
     const valores = cap.updates.find((u) => u.tabela === "conversations")?.valores;
     expect(valores).toBeDefined();
-    expect(valores).not.toHaveProperty("metadata");
+    const meta = valores!.metadata as Record<string, unknown>;
+    expect(meta).not.toHaveProperty(CHAVE_DA_DEVOLUCAO_MANUAL);
+    // A marca que segura o rodízio (porte do upstream #5176) sai também na
+    // automática — por `automatica`, e não libera assunto nenhum.
+    expect(meta[CHAVE_DA_RETOMADA_DA_IA]).toMatchObject({ por: "automatica" });
+  });
+
+  it("⭐ a marca `ia_retomada` sai na MESMA escrita que devolve o comando, sem perder o metadata (porte do upstream #5176)", async () => {
+    const cap = novaCaptura();
+    const res = await retomar(
+      cenarioComAtendimentoHumano({ conversa: conversaPassadaAHumano({ metadata: { outra_chave: 1 } }) }),
+      cap,
+    );
+    expect(res.ok).toBe(true);
+    const naConversa = cap.updates.find((u) => u.tabela === "conversations");
+    expect(naConversa?.valores).toMatchObject({ assignee_kind: "ai", bot_silenced_until: null, last_handoff_at: null });
+    const meta = naConversa?.valores.metadata as Record<string, unknown>;
+    expect(meta.outra_chave).toBe(1);
+    const marca = meta[CHAVE_DA_RETOMADA_DA_IA] as { em: string; por: string };
+    expect(marca.por).toBe("pessoa");
+    expect(Number.isFinite(Date.parse(marca.em))).toBe(true);
   });
 
   it("negócio ambíguo não vira atividade no card errado", async () => {
