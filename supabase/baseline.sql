@@ -40244,6 +40244,48 @@ grant  execute on function public.fn_agenda_conexoes_externas_do_dono(uuid, uuid
 notify pgrst, 'reload schema';
 -- ---- fim: a ocupação da Clinicorp (migration 0433) ----
 
+-- ---- a agenda da Clinicorp também por webhook, em modo de captura (migration 0434) ----
+-- Espelho da 0434; o porquê está no cabeçalho da migration. Idempotente: `drop not null`
+-- repetido não falha, colunas e índice com `if not exists`, CHECKs conferidos pelo nome.
+-- Não cria função; fica antes da VARREDURA anon pela ordem do apêndice.
+alter table public.calendar_clinicorp_integrations
+  alter column api_user drop not null,
+  alter column api_token_encrypted drop not null;
+
+alter table public.calendar_clinicorp_integrations
+  add column if not exists webhook_token_hash text,
+  add column if not exists webhook_last_received_at timestamptz,
+  add column if not exists webhook_formatos jsonb not null default '[]'::jsonb;
+
+do $c$ begin
+  if not exists (select 1 from pg_constraint where conname = 'calendar_clinicorp_credencial_inteira') then
+    alter table public.calendar_clinicorp_integrations
+      add constraint calendar_clinicorp_credencial_inteira
+      check ((api_user is null) = (api_token_encrypted is null));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'calendar_clinicorp_webhook_token_hash_formato') then
+    alter table public.calendar_clinicorp_integrations
+      add constraint calendar_clinicorp_webhook_token_hash_formato
+      check (webhook_token_hash is null or webhook_token_hash ~ '^[0-9a-f]{64}$');
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'calendar_clinicorp_webhook_formatos_lista') then
+    alter table public.calendar_clinicorp_integrations
+      add constraint calendar_clinicorp_webhook_formatos_lista
+      check (jsonb_typeof(webhook_formatos) = 'array');
+  end if;
+end $c$;
+
+create unique index if not exists calendar_clinicorp_integrations_webhook_token_hash_key
+  on public.calendar_clinicorp_integrations (webhook_token_hash);
+
+comment on column public.calendar_clinicorp_integrations.webhook_token_hash is
+  'Migration 0434: sha256 (hex) do token do endereço do webhook da Clinicorp. O token em claro só aparece na tela ao ser gerado; nunca é gravado.';
+comment on column public.calendar_clinicorp_integrations.webhook_formatos is
+  'Migration 0434: os formatos distintos que o webhook da Clinicorp mandou (caminho → tipo), no máximo 20. Nunca um valor do payload.';
+
+notify pgrst, 'reload schema';
+-- ---- fim: a agenda da Clinicorp por webhook (migration 0434) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

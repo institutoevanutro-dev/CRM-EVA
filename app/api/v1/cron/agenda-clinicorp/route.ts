@@ -1,6 +1,6 @@
 /**
  * Cron da cópia da Clinicorp (migration 0433) — a cada 10 minutos, pelo
- * `scheduler`. Copia a ocupação de toda organização com credencial
+ * `scheduler`. Copia a ocupação de toda organização com credencial da API
  * (`lib/agenda/clinicorp/copia.ts`).
  *
  * Audita só rodada com EFEITO (CLAUDE.md, "Audit log"): cópia que gravou alguma
@@ -33,6 +33,8 @@ async function executar(req: NextRequest) {
   const { data, error } = await db
     .from("calendar_clinicorp_integrations")
     .select("organization_id")
+    // Só quem tem credencial da API; a clínica só de webhook (0434) não tem o que copiar.
+    .not("api_token_encrypted", "is", null)
     .order("last_sync_at", { nullsFirst: true })
     .limit(LIMITE);
   if (error)

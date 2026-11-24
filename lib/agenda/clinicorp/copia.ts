@@ -106,7 +106,8 @@ export async function copiarDaClinicorp(
       .maybeSingle(),
     admin.from("organizations").select("timezone").eq("id", organizationId).maybeSingle(),
   ]);
-  if (!integracao) return { ok: false, motivo: "nao_configurada", erroAnterior: null };
+  // Só de webhook (0434): a linha existe, mas sem credencial não há o que pedir à API.
+  if (!integracao?.api_token_encrypted) return { ok: false, motivo: "nao_configurada", erroAnterior: null };
   const erroAnterior = (integracao.last_sync_error as string | null) ?? null;
 
   const registrarFalha = async (motivo: keyof typeof MOTIVOS): Promise<ResultadoDaCopia> => {

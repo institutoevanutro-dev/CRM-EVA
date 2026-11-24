@@ -2,7 +2,7 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "Ocupação da Clinicorp na Agenda (migration 0433)",
+    "title": "Ocupação da Clinicorp na Agenda (migrations 0433 e 0434)",
     "output": "agenda-clinicorp.html"
   },
   "lanes": [
@@ -16,9 +16,11 @@
     { "id": "config", "lane": "entrada", "col": 1, "type": "service", "label": "Configurações › Agenda da Clinicorp (credencial, quem é quem)" },
     { "id": "clinicorp", "lane": "entrada", "col": 2, "type": "external", "label": "API da Clinicorp: GET /appointment/list (Basic)" },
     { "id": "dias", "lane": "entrada", "col": 3, "type": "service", "label": "Dias fora da rotina: dia aberto com unidade" },
+    { "id": "gestao_webhook", "lane": "entrada", "col": 4, "type": "external", "label": "Gestão de Webhook da Clinicorp (qualquer plano)" },
     { "id": "cron", "lane": "copia", "col": 1, "type": "service", "label": "cron agenda-clinicorp (10 min) e Copiar agora" },
     { "id": "copia", "lane": "copia", "col": 2, "type": "service", "label": "lib/agenda/clinicorp/copia.ts + item.ts (descarta paciente)" },
     { "id": "eventos", "lane": "copia", "col": 3, "type": "database", "label": "calendar_clinicorp_events / professionals / integrations" },
+    { "id": "receptor", "lane": "copia", "col": 4, "type": "service", "label": "/api/v1/webhooks/clinicorp/[token] (modo de captura: só formato)" },
     { "id": "funcao", "lane": "leitura", "col": 1, "type": "database", "label": "fn_agenda_ocupacao_externa_do_dono (Google da 0260 + Clinicorp)" },
     { "id": "excecoes", "lane": "leitura", "col": 2, "type": "database", "label": "calendar_availability_exceptions.unit_id" },
     { "id": "motor", "lane": "saida", "col": 1, "type": "service", "label": "lib/agenda/consulta.ts (horários livres, encaixe, marcação)" },
@@ -40,6 +42,10 @@
     { "id": "e10", "from": "copia", "to": "config", "label": "laço de retorno: falha vira aviso na seção (last_sync_error)" },
     { "id": "e11", "from": "funcao", "to": "ia", "label": "laço de retorno: cópia com erro vira fontes_defasadas; nunca copiada vira agenda_externa_nunca_lida" },
     { "id": "e12", "from": "cron", "to": "audit", "label": "só rodada com efeito ou falha nova" },
-    { "id": "e13", "from": "config", "to": "audit", "label": "que mudou, nunca o token" }
+    { "id": "e13", "from": "config", "to": "audit", "label": "que mudou, nunca o token" },
+    { "id": "e14", "from": "config", "to": "eventos", "label": "gera o endereço: token uma vez na tela, só o sha256 no banco" },
+    { "id": "e15", "from": "gestao_webhook", "to": "receptor", "label": "eventos de agendamento, com paciente" },
+    { "id": "e16", "from": "receptor", "to": "eventos", "label": "webhook_formatos: caminho → tipo, nunca valor" },
+    { "id": "e17", "from": "receptor", "to": "config", "label": "laço de retorno: última batida e formatos medidos aparecem na seção" }
   ]
 }

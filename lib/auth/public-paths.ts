@@ -33,6 +33,8 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/500$/,
   /^\/503$/,
   /^\/api\/v1\/health$/,
+  // Inclui `/api/v1/webhooks/clinicorp/[token]` (migration 0434): a organização sai
+  // do sha256 do token do path, conferido na rota, que também limita por IP.
   /^\/api\/v1\/webhooks\//,
   /^\/api\/v1\/cron\//,
   // Heartbeat do agente do host (bearer INTERNAL_SECRET/INTERNAL_CRON_SECRET,

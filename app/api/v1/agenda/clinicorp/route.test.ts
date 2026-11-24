@@ -3,6 +3,8 @@
  * volta, nunca vai à auditoria), a organização vem da sessão, a pessoa do
  * mapeamento tem de ser da equipe. Banco em memória; dados fictícios.
  */
+import { createHash } from "node:crypto";
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -20,6 +22,7 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
 vi.mock("@/lib/webhooks/secrets", () => ({ encryptWebhookSecret: vi.fn(async () => "\\xcifrado") }));
 
 const { GET, PUT, PATCH, DELETE } = await import("./route");
+const { POST: GERAR_WEBHOOK } = await import("./webhook/route");
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const OUTRA = "44444444-4444-4444-8444-444444444444";
@@ -139,5 +142,53 @@ describe("desligar", () => {
     expect((await DELETE()).status).toBe(200);
     expect(db.tabelas.calendar_clinicorp_integrations).toEqual([{ organization_id: OUTRA }]);
     expect(vi.mocked(audit).mock.calls[0]?.[0]).toMatchObject({ action: "agenda.clinicorp_desligada", organizationId: ORG });
+  });
+});
+
+describe("o endereço do webhook (0434)", () => {
+  const caminhoDe = async (res: Response) => ((await res.json()) as { data: { caminho: string } }).data.caminho;
+  const tokenDe = (caminho: string) => caminho.split("/").at(-1)!;
+
+  it("nasce sem credencial da API; o token volta UMA vez e só o hash é gravado, nem na auditoria", async () => {
+    const res = await GERAR_WEBHOOK();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    const caminho = await caminhoDe(res);
+    expect(caminho).toMatch(/^\/api\/v1\/webhooks\/clinicorp\/[0-9a-f]{64}$/);
+    const token = tokenDe(caminho);
+
+    const [linha] = db.tabelas.calendar_clinicorp_integrations!;
+    expect(linha).toMatchObject({ organization_id: ORG, webhook_token_hash: createHash("sha256").update(token).digest("hex") });
+    expect(linha!.api_user).toBeUndefined();
+    expect(JSON.stringify(db.tabelas)).not.toContain(token);
+    expect(JSON.stringify(vi.mocked(audit).mock.calls)).not.toContain(token);
+    expect(JSON.stringify(vi.mocked(audit).mock.calls)).not.toContain(linha!.webhook_token_hash as string);
+    expect(vi.mocked(audit).mock.calls[0]?.[0]).toMatchObject({
+      action: "agenda.clinicorp_webhook_gerado",
+      organizationId: ORG,
+      metadata: { trocou_endereco: false },
+    });
+
+    // O GET diz que há endereço e o que chegou nele, nunca o hash.
+    const lido = await (await GET()).text();
+    expect(lido).not.toContain(token);
+    expect(lido).not.toContain(linha!.webhook_token_hash as string);
+    expect(JSON.parse(lido).data).toMatchObject({ configurada: true, credencial: false, webhook: { ativo: true } });
+  });
+
+  it("gerar de novo troca o endereço: o hash anterior some", async () => {
+    const primeiro = tokenDe(await caminhoDe(await GERAR_WEBHOOK()));
+    const segundo = tokenDe(await caminhoDe(await GERAR_WEBHOOK()));
+    expect(segundo).not.toBe(primeiro);
+    expect(db.tabelas.calendar_clinicorp_integrations).toHaveLength(1);
+    expect(db.tabelas.calendar_clinicorp_integrations![0]!.webhook_token_hash).toBe(createHash("sha256").update(segundo).digest("hex"));
+    expect(vi.mocked(audit).mock.calls[1]?.[0]).toMatchObject({ metadata: { trocou_endereco: true } });
+  });
+
+  it("com a linha só de webhook, salvar a credencial ainda exige o token", async () => {
+    await GERAR_WEBHOOK();
+    expect((await PUT(pedir("PUT", { usuario_api: "u" }))).status).toBe(422);
+    expect((await PUT(pedir("PUT", { usuario_api: "u", token_api: TOKEN }))).status).toBe(200);
+    expect(db.tabelas.calendar_clinicorp_integrations![0]).toMatchObject({ api_user: "u", webhook_token_hash: expect.any(String) });
   });
 });

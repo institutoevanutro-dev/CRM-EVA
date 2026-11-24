@@ -2637,34 +2637,43 @@ export type Database = {
       }
       calendar_clinicorp_integrations: {
         Row: {
-          api_token_encrypted: string
-          api_user: string
+          api_token_encrypted: string | null
+          api_user: string | null
           created_at: string
           last_sync_at: string | null
           last_sync_error: string | null
           organization_id: string
           subscriber_id: string | null
           updated_at: string
+          webhook_formatos: Json
+          webhook_last_received_at: string | null
+          webhook_token_hash: string | null
         }
         Insert: {
-          api_token_encrypted: string
-          api_user: string
+          api_token_encrypted?: string | null
+          api_user?: string | null
           created_at?: string
           last_sync_at?: string | null
           last_sync_error?: string | null
           organization_id: string
           subscriber_id?: string | null
           updated_at?: string
+          webhook_formatos?: Json
+          webhook_last_received_at?: string | null
+          webhook_token_hash?: string | null
         }
         Update: {
-          api_token_encrypted?: string
-          api_user?: string
+          api_token_encrypted?: string | null
+          api_user?: string | null
           created_at?: string
           last_sync_at?: string | null
           last_sync_error?: string | null
           organization_id?: string
           subscriber_id?: string | null
           updated_at?: string
+          webhook_formatos?: Json
+          webhook_last_received_at?: string | null
+          webhook_token_hash?: string | null
         }
         Relationships: [
           {
