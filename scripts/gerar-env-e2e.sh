@@ -149,6 +149,10 @@ E2E_META_APP_SECRET=e2e-app-secret-0123456789abcdef
 PRONTUARIO_URL=http://127.0.0.1:47814
 PRONTUARIO_EXAMES_SEGREDO=e2e-segredo-ficticio-do-prontuario-0123456789
 PRONTUARIO_ORGANIZATION_ID=e7a1e2e0-0000-4000-8000-0000000000e2
+# API da Clinicorp aponta para o receptor local que
+# \`tests/e2e/agenda-clinicorp.spec.ts\` sobe NESTA porta fixa (47815) e que guarda
+# o que o app pediu (Basic, período). Fora dessa spec nada escuta ali.
+CLINICORP_API_URL=http://127.0.0.1:47815/rest/v1
 # Login pela Conta EvaLink LIGADO na suíte, contra a Conta falsa que o
 # playwright.config.ts sobe nesta porta fixa (tests/helpers/conta-falsa-servidor.ts).
 # Os usuários do seed não estão ligados à Conta, então continuam entrando por

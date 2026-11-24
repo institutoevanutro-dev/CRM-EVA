@@ -44,7 +44,12 @@ async function executar(req: NextRequest) {
   let copiadas = 0;
   let falhas = 0;
   for (const { organization_id: organizationId } of data ?? []) {
-    const r = await copiarDaClinicorp(db, organizationId as string);
+    // Uma organização que estoura (banco fora, erro inesperado) não segura as outras.
+    const r = await copiarDaClinicorp(db, organizationId as string).catch(() => null);
+    if (!r) {
+      falhas += 1;
+      continue;
+    }
     if (r.ok) {
       copiadas += 1;
       if (r.gravados > 0)
