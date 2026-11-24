@@ -40,6 +40,7 @@ const TOKEN_API = "token-e2e-ficticio-0123456789";
 const PROFISSIONAL = { id: 990001, name: "Dra. Clinicorp E2E" };
 const PACIENTE = { nome: "Paciente Ficticia Clinicorp", fone: "27900001111" };
 const UNIDADE = "Unidade Norte E2E";
+const EVIDENCIA = path.join(RAIZ, ".superpowers/evidence/agenda-clinicorp");
 
 interface Creds {
   password: string;
@@ -137,6 +138,13 @@ async function horariosDoDia(page: Page, creds: Creds, dia: string): Promise<str
   return (await horarios.evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")!.replace("horario-", "")))).sort();
 }
 
+/** A captura vai ao relatório e a `.superpowers/evidence/` (fora do git), como as irmãs. */
+async function evidencia(page: Page, info: import("@playwright/test").TestInfo, nome: string) {
+  fs.mkdirSync(EVIDENCIA, { recursive: true });
+  const corpo = await page.screenshot({ fullPage: true, path: path.join(EVIDENCIA, `${nome}.png`) });
+  await info.attach(nome, { body: corpo, contentType: "image/png" });
+}
+
 let creds: Creds;
 let dias: string[] = [];
 
@@ -211,7 +219,7 @@ test("o gestor liga a Clinicorp pela tela e a agenda passa a descontar o que est
     await expect(sanfona.getByLabel("Token API")).toHaveValue("");
     await expect(sanfona.getByLabel("Token API")).toHaveAttribute("placeholder", "Guardado. Digite só para trocar.");
     expect(await page.content()).not.toContain(TOKEN_API);
-    await info.attach("credencial-salva", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+    await evidencia(page, info, "credencial-salva");
   });
 
   await test.step("sem pessoa ligada, a ocupação ainda não tira horário", async () => {
@@ -241,7 +249,7 @@ test("o gestor liga a Clinicorp pela tela e a agenda passa a descontar o que est
     const html = await page.content();
     expect(html).not.toContain(PACIENTE.nome);
     expect(html).not.toContain(PACIENTE.fone);
-    await info.attach("grade-com-ocupacao-da-clinicorp", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+    await evidencia(page, info, "grade-com-ocupacao-da-clinicorp");
   });
 
   await test.step("lança, de uma vez, dois dias avulsos em outra unidade", async () => {
@@ -262,7 +270,7 @@ test("o gestor liga a Clinicorp pela tela e a agenda passa a descontar o que est
     // A lista diz ONDE: as duas linhas novas trazem a unidade (e "aberto excepcionalmente").
     await expect(tela.locator("li", { hasText: UNIDADE })).toHaveCount(2);
     await expect(tela.locator("li", { hasText: UNIDADE }).first()).toContainText("aberto excepcionalmente");
-    await info.attach("dias-avulsos-na-unidade", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+    await evidencia(page, info, "dias-avulsos-na-unidade");
   });
 
   await test.step("nos dias lançados, só a faixa lançada; a jornada de sempre não vale ali", async () => {
@@ -270,6 +278,6 @@ test("o gestor liga a Clinicorp pela tela e a agenda passa a descontar o que est
     expect(await horariosDoDia(page, creds, dias[5]!)).toEqual(["07:00", "07:30", "08:00"]);
     // CONTROLE: a quinta, sem data lançada, segue a jornada (09:00 em diante).
     expect((await horariosDoDia(page, creds, dias[4]!))[0]).toBe("09:00");
-    await info.attach("horarios-do-dia-avulso", { body: await page.screenshot({ fullPage: true }), contentType: "image/png" });
+    await evidencia(page, info, "horarios-do-dia-avulso");
   });
 });

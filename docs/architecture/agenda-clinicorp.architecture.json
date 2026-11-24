@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Ocupação da Clinicorp na Agenda (migration 0433)",
+    "output": "agenda-clinicorp.html"
+  },
+  "lanes": [
+    { "id": "entrada", "label": "De onde vem" },
+    { "id": "copia", "label": "Cópia (só ocupação)" },
+    { "id": "leitura", "label": "Uma leitura só" },
+    { "id": "saida", "label": "Quem usa" }
+  ],
+  "mainPath": ["clinicorp", "copia", "eventos", "funcao", "motor", "ia"],
+  "nodes": [
+    { "id": "config", "lane": "entrada", "col": 1, "type": "service", "label": "Configurações › Agenda da Clinicorp (credencial, quem é quem)" },
+    { "id": "clinicorp", "lane": "entrada", "col": 2, "type": "external", "label": "API da Clinicorp: GET /appointment/list (Basic)" },
+    { "id": "dias", "lane": "entrada", "col": 3, "type": "service", "label": "Dias fora da rotina: dia aberto com unidade" },
+    { "id": "cron", "lane": "copia", "col": 1, "type": "service", "label": "cron agenda-clinicorp (10 min) e Copiar agora" },
+    { "id": "copia", "lane": "copia", "col": 2, "type": "service", "label": "lib/agenda/clinicorp/copia.ts + item.ts (descarta paciente)" },
+    { "id": "eventos", "lane": "copia", "col": 3, "type": "database", "label": "calendar_clinicorp_events / professionals / integrations" },
+    { "id": "funcao", "lane": "leitura", "col": 1, "type": "database", "label": "fn_agenda_ocupacao_externa_do_dono (Google da 0260 + Clinicorp)" },
+    { "id": "excecoes", "lane": "leitura", "col": 2, "type": "database", "label": "calendar_availability_exceptions.unit_id" },
+    { "id": "motor", "lane": "saida", "col": 1, "type": "service", "label": "lib/agenda/consulta.ts (horários livres, encaixe, marcação)" },
+    { "id": "ia", "lane": "saida", "col": 2, "type": "service", "label": "crm_find_free_slots (livres_por_dia)" },
+    { "id": "tela", "lane": "saida", "col": 3, "type": "service", "label": "Agenda: Ocupado (Clinicorp)" },
+    { "id": "audit", "lane": "saida", "col": 4, "type": "service", "label": "api_audit_log (credencial, mapeamento, cópia com efeito)" }
+  ],
+  "edges": [
+    { "id": "e0", "from": "config", "to": "eventos", "label": "token cifrado, profissional → pessoa" },
+    { "id": "e1", "from": "cron", "to": "clinicorp", "label": "a cada 10 min, 90 dias" },
+    { "id": "e2", "from": "clinicorp", "to": "copia", "label": "agenda com paciente" },
+    { "id": "e3", "from": "copia", "to": "eventos", "label": "só início, fim, profissional, clínica, situação, id" },
+    { "id": "e4", "from": "eventos", "to": "funcao", "label": "do profissional ligado ao dono" },
+    { "id": "e5", "from": "funcao", "to": "motor", "label": "o que ocupa" },
+    { "id": "e6", "from": "funcao", "to": "tela", "label": "a fatia do recorte" },
+    { "id": "e7", "from": "dias", "to": "excecoes", "label": "várias datas, unidade e horário" },
+    { "id": "e8", "from": "excecoes", "to": "motor", "label": "o dia aberto substitui a jornada" },
+    { "id": "e9", "from": "motor", "to": "ia", "label": "mesmos horários que a tela" },
+    { "id": "e10", "from": "copia", "to": "config", "label": "laço de retorno: falha vira aviso na seção (last_sync_error)" },
+    { "id": "e11", "from": "funcao", "to": "ia", "label": "laço de retorno: cópia com erro vira fontes_defasadas; nunca copiada vira agenda_externa_nunca_lida" },
+    { "id": "e12", "from": "cron", "to": "audit", "label": "só rodada com efeito ou falha nova" },
+    { "id": "e13", "from": "config", "to": "audit", "label": "que mudou, nunca o token" }
+  ]
+}
