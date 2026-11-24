@@ -38,6 +38,9 @@ const duble = vi.hoisted(() => ({
   /** `attendant_availability` de quem tem jornada — de onde sai ONDE cada um atende. */
   jornadas: [] as Array<{ user_id: string; schedule: unknown }>,
   filtrosDaJornada: [] as Array<[string, unknown]>,
+  /** Dias ABERTOS com unidade, de hoje em diante (migration 0433). */
+  diasAbertos: [] as Array<{ user_id: string; unit_id: string }>,
+  filtrosDosDias: [] as Array<[string, unknown]>,
 }));
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
@@ -67,8 +70,17 @@ vi.mock("@/lib/supabase/admin", () => ({
       in: (k: string, v: unknown) => (duble.filtrosDaJornada.push([k, v]), jornadas),
       then: (res: (v: unknown) => unknown) => Promise.resolve({ data: duble.jornadas, error: null }).then(res),
     };
+    const dias = {
+      select: () => dias,
+      eq: (k: string, v: unknown) => (duble.filtrosDosDias.push([k, v]), dias),
+      in: (k: string, v: unknown) => (duble.filtrosDosDias.push([k, v]), dias),
+      gte: (k: string, v: unknown) => (duble.filtrosDosDias.push([k, v]), dias),
+      not: (k: string, op: string, v: unknown) => (duble.filtrosDosDias.push([k, `${op}:${String(v)}`]), dias),
+      then: (res: (v: unknown) => unknown) => Promise.resolve({ data: duble.diasAbertos, error: null }).then(res),
+    };
     return {
-      from: (tabela: string) => (tabela === "attendant_availability" ? jornadas : q),
+      from: (tabela: string) =>
+        tabela === "attendant_availability" ? jornadas : tabela === "calendar_availability_exceptions" ? dias : q,
       auth: {
         admin: {
           getUserById: (id: string) =>
@@ -315,6 +327,35 @@ describe("(b) GET /api/v1/agenda/pessoas — a lista mínima da Agenda", () => {
       expect(duble.filtrosDaJornada[0]).toEqual(["organization_id", "org-1"]);
     } finally {
       duble.jornadas = [];
+    }
+  });
+
+  it("o dia ABERTO noutra unidade soma à oferta de quem já declara unidade (migration 0433)", async () => {
+    const SEDE = "6f1c1f0e-7a52-4c1e-9d55-2d1e8d0a0001";
+    const FILIAL = "6f1c1f0e-7a52-4c1e-9d55-2d1e8d0a0002";
+    duble.filtrosDosDias = [];
+    duble.jornadas = [
+      { user_id: "u-dona", schedule: { timezone: "America/Sao_Paulo", windows: [{ dow: 1, start: "10:00", end: "19:30", unit_id: SEDE }] } },
+      // Jornada SEM unidade: não restringe (todas as unidades), e o dia aberto não muda isso.
+      { user_id: "u-recepcao", schedule: { timezone: "America/Sao_Paulo", windows: [{ dow: 1, start: "09:00", end: "12:00" }] } },
+    ];
+    duble.diasAbertos = [
+      { user_id: "u-dona", unit_id: FILIAL },
+      { user_id: "u-dona", unit_id: FILIAL },
+      { user_id: "u-recepcao", unit_id: FILIAL },
+    ];
+    try {
+      sessao("agent", "u-recepcao");
+      const { corpo } = await pedirLista();
+      expect(corpo.data?.[0]).toMatchObject({ jornada_unidades: [SEDE, FILIAL] });
+      expect(corpo.data?.[1]).toMatchObject({ jornada_unidades: [] });
+      // Só dia ABERTO, com unidade, desta organização.
+      expect(duble.filtrosDosDias).toEqual(
+        expect.arrayContaining([["organization_id", "org-1"], ["is_unavailable", false], ["unit_id", "is:null"]]),
+      );
+    } finally {
+      duble.jornadas = [];
+      duble.diasAbertos = [];
     }
   });
 
