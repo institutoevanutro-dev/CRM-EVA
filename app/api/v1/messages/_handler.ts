@@ -467,7 +467,7 @@ export async function sendMessageHandler(
   // envio com 42703. Sem a coluna, nada está arquivado — e a consulta sem ela é a
   // consulta certa (ver lib/channels/archived).
   const convSelect = (comArchived: boolean) =>
-    `id, organization_id, contact_id, channel_session_id, is_group, group_chat_id, bot_silenced_until, provider_conversation_id, last_inbound_at, contacts:contact_id(phone_number, wa_identity, wa_lid, is_blocked, inbox_hidden_at), channel_sessions:channel_session_id(${CHANNEL_SESSION_REF_COLUMNS}, status${comArchived ? `, ${ARCHIVED_AT}` : ""})`;
+    `id, organization_id, contact_id, channel_session_id, is_group, group_chat_id, bot_silenced_until, assigned_to_user_id, provider_conversation_id, last_inbound_at, contacts:contact_id(phone_number, wa_identity, wa_lid, is_blocked, inbox_hidden_at), channel_sessions:channel_session_id(${CHANNEL_SESSION_REF_COLUMNS}, status${comArchived ? `, ${ARCHIVED_AT}` : ""})`;
   //
   // O filtro por `organization_id` NÃO é redundância com a RLS — é a única
   // proteção que existe na metade dos chamadores. Este handler é a porta de
@@ -522,6 +522,8 @@ export async function sendMessageHandler(
     is_group: boolean;
     group_chat_id: string | null;
     bot_silenced_until: string | null;
+    /** O responsável pela conversa: a resposta DELE cala a IA até a devolução. */
+    assigned_to_user_id?: string | null;
     /** Thread do provider, quando ele endereça por thread própria (migration 0132). */
     provider_conversation_id: string | null;
     /** Última mensagem do cliente: é dela que a janela da Meta conta. */
@@ -1462,7 +1464,18 @@ export async function sendMessageHandler(
     // a conversa contando a espera que a própria resposta acabou de encerrar.
     awaiting_since: c.last_inbound_at,
   };
-  if (ctx.actor.type === "user") {
+  // A RESPOSTA DO RESPONSÁVEL É ATENDIMENTO, NÃO PAUSA (porte do upstream #5176).
+  // Quem escreve é o dono da conversa: o silêncio vira `'infinity'`, o mesmo valor
+  // do "Assumir" (`fn_conversation_assign`), e só a devolução explícita ("Devolver
+  // ao automático", `#on`) ou o prazo de devolução automática da organização o
+  // soltam. O rodízio atribui sem gravar silêncio; o veto do dono segura o turno,
+  // mas `isLeadInHandoff` (follow-up, varreduras, "pessoa no comando" do fluxo) lê
+  // o SILÊNCIO, e via a conversa livre ao fim da janela da pausa.
+  // Quem NÃO é o dono (colega comentando, conversa sem responsável) segue com a
+  // janela da organização abaixo.
+  if (ctx.actor.type === "user" && c.assigned_to_user_id === ctx.actor.id) {
+    if (c.bot_silenced_until !== "infinity") conversationUpdate.bot_silenced_until = "infinity";
+  } else if (ctx.actor.type === "user") {
     const prazo = await carregarPrazoDaPausa(supabase, c.organization_id, new Date(now), (detail) =>
       logger.warn("[messages] ajuste da pausa da IA ilegível — usando o padrão", {
         organization_id: c.organization_id,

@@ -19,6 +19,8 @@ import { logger } from "@/lib/logger";
 import { motivoParaNaoRotear, type MotivoDoCaso } from "@/lib/routing/caso-da-conversa";
 import { decideRouting } from "@/lib/routing/decide";
 import { loadEligibleAttendants, InvalidRoutingChannel } from "@/lib/routing/eligibles";
+import { lerQualificacaoDaIA } from "@/lib/routing/qualificacao-da-ia";
+import { esperaPelaRetomada, lerMarcaDeRetomada } from "@/lib/routing/retomada-da-ia";
 import { routingConfigSchema } from "@/lib/schemas/routing";
 
 export const ROUTING_WORKER_KEY = "worker.routing.v1";
@@ -39,6 +41,11 @@ export type RoutingOutcome =
   /** O caso mais recente da conversa não pede uma pessoa agora (PR #3739 do original). */
   | "skipped_caso_sem_humano"
   | "skipped_invalid_payload"
+  /**
+   * Conversa devolvida ao automático com a IA atendendo: o pedido fica guardado e
+   * é reavaliado (`lib/routing/retomada-da-ia.ts`, porte do upstream #5176).
+   */
+  | "waiting_ia_retomada"
   | "assign_lost_race"
   | "error";
 
@@ -69,6 +76,7 @@ const EMPTY_OUTCOMES = (): Record<RoutingOutcome, number> => ({
   skipped_contato_oculto: 0,
   skipped_caso_sem_humano: 0,
   skipped_invalid_payload: 0,
+  waiting_ia_retomada: 0,
   assign_lost_race: 0,
   error: 0,
 });
@@ -151,7 +159,7 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
 
   const { data: conv, error: convError } = await admin
     .from("conversations")
-    .select("id, organization_id, contact_id, channel_session_id, assigned_to_user_id, status, contato_oculto, metadata, last_inbound_at")
+    .select("id, organization_id, contact_id, channel_session_id, assigned_to_user_id, status, contato_oculto, metadata, last_inbound_at, active_ai_agent_id, bot_silenced_until, last_handoff_at")
     .eq("id", conversationId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -188,6 +196,44 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
   const config = routingConfigSchema.parse(settings.routing ?? {});
 
   const alreadyAssigned = Boolean(conv.assigned_to_user_id);
+
+  // A CONVERSA QUE ALGUÉM JÁ DEVOLVEU AO AUTOMÁTICO (`lib/routing/retomada-da-ia.ts`,
+  // porte do upstream #5176). A marca `ia_retomada` que a devolução grava guarda o
+  // pedido enquanto a IA atende e a conversa não passou para humano de novo — sem
+  // prazo. Só no rodízio, nunca com caso que barra a fila; conversa com dono segue
+  // para o `already_assigned` de sempre. Reagenda sem gastar tentativa: não é
+  // "ninguém elegível", e o aviso da Central não pode nascer daqui.
+  if (
+    !alreadyAssigned &&
+    !motivoDoCaso &&
+    config.mode === "round_robin" &&
+    lerMarcaDeRetomada((conv as { metadata?: unknown }).metadata) !== null
+  ) {
+    const lastHandoffAt = (conv as { last_handoff_at?: string | null }).last_handoff_at ?? null;
+    const iaAtendendo = await lerQualificacaoDaIA(
+      admin,
+      orgId,
+      {
+        channel_session_id: conv.channel_session_id,
+        active_ai_agent_id: (conv as { active_ai_agent_id?: string | null }).active_ai_agent_id ?? null,
+        bot_silenced_until: (conv as { bot_silenced_until?: string | null }).bot_silenced_until ?? null,
+        last_handoff_at: lastHandoffAt,
+        assigned_to_user_id: conv.assigned_to_user_id ?? null,
+      },
+      now,
+    );
+    const ate = esperaPelaRetomada({
+      metadata: (conv as { metadata?: unknown }).metadata,
+      lastHandoffAt,
+      iaAtendendo,
+      agora: now,
+    });
+    if (ate !== null) {
+      await requeueEvent(event, now, event.attempts, { reason: "ia_retomada" }, ate);
+      return "waiting_ia_retomada";
+    }
+  }
+
   let eligibles: Awaited<ReturnType<typeof loadEligibleAttendants>> = [];
   if (!alreadyAssigned && config.mode === "round_robin") {
     try {

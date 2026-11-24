@@ -581,3 +581,93 @@ describe("o worker respeita a exclusão de 24 h ao decidir o rodízio", () => {
     expect(entrada.eligibles.map((c) => c.userId)).toEqual([PESSOA_A, PESSOA_B]);
   });
 });
+
+/**
+ * A CONVERSA DEVOLVIDA AO AUTOMÁTICO FICA COM A IA (porte do upstream #5176).
+ * A devolução solta o dono e o gatilho pede distribuição; com a marca
+ * `ia_retomada` e a IA no ar, o worker GUARDA o pedido em vez de entregar.
+ * SABOTAGEM: tirar o bloco da retomada do worker faz o primeiro caso decidir e
+ * atribuir.
+ */
+describe("o worker guarda o pedido da conversa devolvida à IA", () => {
+  const AGORA = Date.now();
+  const AGENTE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const VERSAO = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const devolvida = (sobrescreve: Linha = {}) =>
+    conversa({
+      assigned_to_user_id: null,
+      status: "ai_handling",
+      contact_id: CONTATO,
+      channel_session_id: CANAL,
+      bot_silenced_until: null,
+      last_handoff_at: null,
+      active_ai_agent_id: null,
+      metadata: { ia_retomada: { em: new Date(AGORA - 60_000).toISOString(), por: "pessoa" } },
+      ...sobrescreve,
+    });
+  const agente = (sobrescreve: Linha = {}) => ({
+    id: AGENTE,
+    organization_id: ORG,
+    kind: "mcp_agent",
+    is_active: true,
+    paused_at: null,
+    published_version_id: VERSAO,
+    archived_at: null,
+    priority: 0,
+    created_at: min(1000),
+    ...sobrescreve,
+  });
+
+  beforeEach(() => {
+    banco.organizations = [{ id: ORG, settings: { routing: { mode: "round_robin" } } }];
+    banco.contacts = [{ id: CONTATO, organization_id: ORG, is_personal: false }];
+    banco.ai_agents = [agente()];
+    banco.ai_agent_versions = [{ id: VERSAO, organization_id: ORG, channel_session_id: CANAL, status: "published" }];
+    banco.event_log = [
+      {
+        id: EVENTO,
+        organization_id: ORG,
+        event_type: "conversation.routing_requested",
+        status: "pending",
+        payload: { organization_id: ORG, conversation_id: CONVERSA },
+        metadata: {},
+        consumed_by: [],
+        attempts: 0,
+        next_attempt_at: null,
+        created_at: min(1),
+        updated_at: min(1),
+      },
+    ];
+    elegiveis.mockResolvedValue([{ userId: PESSOA_A, currentLoad: 0, lastAssignedAt: null, scheduleSnapshot: {} }]);
+    decidir.mockReturnValue({ kind: "assign", userId: PESSOA_A });
+  });
+
+  it("⭐ marca + IA no ar + sem passagem nova: o pedido volta para a fila em 5 min e ninguém é atribuído", async () => {
+    banco.conversations = [devolvida()];
+    const resumo = await runRoutingWorker({ now: new Date(AGORA) });
+
+    expect(resumo.errors).toEqual([]);
+    expect(resumo.outcomes.waiting_ia_retomada).toBe(1);
+    expect(decidir).not.toHaveBeenCalled();
+    expect(elegiveis).not.toHaveBeenCalled();
+    expect(rpcs.some((r) => r.fn === "fn_channel_routing_claim")).toBe(false);
+    const evento = banco.event_log![0]!;
+    expect(evento.status).toBe("pending");
+    expect(evento.attempts).toBe(0);
+    expect(evento.next_attempt_at).toBe(new Date(AGORA + 5 * 60_000).toISOString());
+    expect((evento.metadata as { last_requeue?: { reason?: string } }).last_requeue?.reason).toBe("ia_retomada");
+  });
+
+  it("controle: a IA passou para humano de novo (`last_handoff_at`) — distribui como sempre", async () => {
+    banco.conversations = [devolvida({ last_handoff_at: min(2), status: "pending" })];
+    await runRoutingWorker({ now: new Date(AGORA) });
+    expect(rpcs.find((r) => r.fn === "fn_channel_routing_claim")?.args.p_user).toBe(PESSOA_A);
+  });
+
+  it("controle: agente pausado (sem IA no ar) — distribui, ninguém fica sem atendimento", async () => {
+    banco.ai_agents = [agente({ paused_at: min(5) })];
+    banco.conversations = [devolvida()];
+    await runRoutingWorker({ now: new Date(AGORA) });
+    expect(rpcs.find((r) => r.fn === "fn_channel_routing_claim")?.args.p_user).toBe(PESSOA_A);
+  });
+});
