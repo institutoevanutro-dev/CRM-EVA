@@ -23,6 +23,7 @@ vi.mock("@/lib/webhooks/secrets", () => ({ encryptWebhookSecret: vi.fn(async () 
 
 const { GET, PUT, PATCH, DELETE } = await import("./route");
 const { POST: GERAR_WEBHOOK } = await import("./webhook/route");
+const { POST: IMPORTAR } = await import("./importar/route");
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const OUTRA = "44444444-4444-4444-8444-444444444444";
@@ -190,5 +191,56 @@ describe("o endereço do webhook (0434)", () => {
     expect((await PUT(pedir("PUT", { usuario_api: "u" }))).status).toBe(422);
     expect((await PUT(pedir("PUT", { usuario_api: "u", token_api: TOKEN }))).status).toBe(200);
     expect(db.tabelas.calendar_clinicorp_integrations![0]).toMatchObject({ api_user: "u", webhook_token_hash: expect.any(String) });
+  });
+});
+
+describe("a importação do relatório exportado (0435)", () => {
+  const importar = (corpo: unknown) =>
+    IMPORTAR(new NextRequest("http://localhost/api/v1/agenda/clinicorp/importar", { method: "POST", body: JSON.stringify(corpo) }));
+  const futuro = { dia: "2030-03-12", de: "10:00", ate: "11:30", user_id: DRA };
+
+  beforeEach(() => {
+    db.tabelas.calendar_clinicorp_integrations!.push({ organization_id: ORG, api_user: null });
+    db.tabelas.organizations = [{ id: ORG, timezone: "America/Sao_Paulo" }];
+    vi.mocked(db.cliente.rpc).mockResolvedValue({ data: 1, error: null } as never);
+  });
+
+  it("grava no fuso da clínica, deixa de fora o que já passou e audita só contagens", async () => {
+    const res = await importar({ horarios: [futuro, { ...futuro, dia: "2020-01-02" }] });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ recebidos: 2, gravados: 1, passados: 1 });
+    expect(db.cliente.rpc).toHaveBeenCalledWith("fn_agenda_clinicorp_importar", {
+      p_org: ORG,
+      p_itens: [{ user_id: DRA, starts_at: "2030-03-12T13:00:00.000Z", ends_at: "2030-03-12T14:30:00.000Z" }],
+    });
+    const auditoria = vi.mocked(audit).mock.calls[0]?.[0];
+    expect(auditoria).toMatchObject({ action: "agenda.clinicorp_importada", organizationId: ORG });
+    expect(auditoria?.metadata).toEqual({ recebidos: 2, gravados: 1, passados: 1 });
+    expect(JSON.stringify(vi.mocked(audit).mock.calls)).not.toContain(DRA);
+    expect(JSON.stringify(vi.mocked(audit).mock.calls)).not.toContain("2030");
+  });
+
+  it("campo a mais (um nome de paciente) recusa o pedido inteiro, sem gravar nada", async () => {
+    const res = await importar({ horarios: [{ ...futuro, paciente: "Paciente Ficticia" }] });
+    expect(res.status).toBe(422);
+    expect(db.cliente.rpc).not.toHaveBeenCalled();
+    expect(JSON.stringify(vi.mocked(audit).mock.calls)).not.toContain("Paciente Ficticia");
+  });
+
+  it("dia que não existe ou horário invertido também recusa", async () => {
+    expect((await importar({ horarios: [{ ...futuro, dia: "2030-02-31" }] })).status).toBe(422);
+    expect((await importar({ horarios: [{ ...futuro, de: "12:00", ate: "11:00" }] })).status).toBe(422);
+    expect(db.cliente.rpc).not.toHaveBeenCalled();
+  });
+
+  it("pessoa de fora da equipe é recusada", async () => {
+    expect((await importar({ horarios: [{ ...futuro, user_id: ESTRANHA }] })).status).toBe(422);
+    expect(db.cliente.rpc).not.toHaveBeenCalled();
+  });
+
+  it("sem a integração da Clinicorp, pede para ligar primeiro", async () => {
+    db.tabelas.calendar_clinicorp_integrations = [];
+    expect((await importar({ horarios: [futuro] })).status).toBe(404);
+    expect(db.cliente.rpc).not.toHaveBeenCalled();
   });
 });

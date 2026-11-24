@@ -924,6 +924,9 @@ export const AUDIT_ACTIONS = [
   // Endereço do webhook gerado (migration 0434): registra se TROCOU um anterior,
   // nunca o token nem o hash.
   "agenda.clinicorp_webhook_gerado",
+  // Importação do relatório exportado (migration 0435): só contagens (recebidos,
+  // gravados, passados), nunca horário, pessoa ou nada do arquivo.
+  "agenda.clinicorp_importada",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

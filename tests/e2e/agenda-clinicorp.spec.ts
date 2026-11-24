@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { test, expect, type Page } from "@playwright/test";
 
 import { credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
+import { gerarXlsx } from "../../lib/importador-de-clinicas/xlsx";
 
 import { irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
 import { escolherProfissionalEProcedimento } from "./helpers/marcacao-simples";
@@ -34,6 +35,14 @@ import { esperarAgenda } from "./helpers/tela-agenda";
  *  7. A "Clinicorp" (um `fetch` sem sessão nenhuma, com paciente fictício) bate
  *     no endereço; a seção passa a mostrar a última batida e o formato medido,
  *     com os nomes dos campos e nenhum valor, e o banco não guarda o token.
+ *
+ * E o que JÁ estava marcado, pela importação do relatório exportado (0435):
+ *
+ *  8. O gestor escolhe o .xlsx (montado aqui no formato medido do relatório da
+ *     Clinicorp, com paciente fictício); a tela lê no navegador, conta as faltas
+ *     e o que ficou sem pessoa, e só o horário de quem foi ligado é importado. O
+ *     pedido ao servidor não leva nada do paciente, e a terça deixa de oferecer
+ *     10:00–11:30.
  *
  * Dados: tudo fictício. Fixtures: `scripts/seed-e2e-agenda.ts` (tipo de 30 min
  * e jornada seg–sex 09:00–18:00 do atendente).
@@ -363,5 +372,60 @@ test("sem o módulo API, o gestor gera o endereço do webhook e vê o formato qu
       expect(gravado).not.toContain(proibido);
     }
     await evidencia(page, info, "webhook-formato-medido");
+  });
+});
+
+test("o que já está marcado entra pela importação do relatório, lido no navegador", async ({ page }, info) => {
+  const db = admin();
+  await db.from("calendar_clinicorp_integrations").delete().eq("organization_id", creds.org_id);
+  await db.from("calendar_clinicorp_integrations").insert({ organization_id: creds.org_id } as never);
+  await entrar(page, creds);
+
+  const terca = dias[2]!.split("-").reverse().join("/");
+  const arquivo = gerarXlsx([
+    {
+      nome: "Agendamentos",
+      linhas: [
+        ["Data", "Paciente", "Contato", "Horário", "", "Status", "Profissional", "Equipamento", "Sala", "Categoria"],
+        [terca, PACIENTE.nome, PACIENTE.fone, "10:00 às 11:30", "Recepcao E2E", "1-Confirmado", PROFISSIONAL.name, "", "", "Consulta"],
+        [terca, PACIENTE.nome, PACIENTE.fone, "14:00 às 15:00", "Recepcao E2E", "", "Outra Profissional E2E", "", "", ""],
+        [terca, PACIENTE.nome, PACIENTE.fone, "16:00 às 17:00", "Recepcao E2E", "6-Faltou", PROFISSIONAL.name, "", "", ""],
+      ],
+    },
+  ]);
+
+  await test.step("escolhe o arquivo, liga a profissional e importa", async () => {
+    const sanfona = await abrirSanfona(page, "Agenda da Clinicorp");
+    const secao = sanfona.getByTestId("importar-da-clinicorp");
+    await secao.getByLabel("Arquivo exportado da Clinicorp (.xlsx)").setInputFiles({
+      name: "Agendamentos.xlsx",
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer: Buffer.from(arquivo),
+    });
+    await expect(secao.getByTestId("leitura-da-importacao").getByRole("status")).toHaveText(
+      "2 horário(s) no arquivo · 1 falta(s) ou desmarcado(s), que não ocupam",
+    );
+    await secao.getByLabel(`Pessoa da Agenda para ${PROFISSIONAL.name}`).selectOption(creds.agenda!.dono_user_id);
+    await expect(secao.getByTestId("de-fora-da-importacao")).toHaveText("1 horário(s) ficam de fora, sem pessoa ligada.");
+    await evidencia(page, info, "importacao-lida-no-navegador");
+
+    const pedido = page.waitForRequest((r) => r.url().endsWith("/api/v1/agenda/clinicorp/importar") && r.method() === "POST");
+    await secao.getByRole("button", { name: "Importar 1 horário(s)" }).click();
+    const corpo = (await pedido).postData() ?? "";
+    for (const proibido of [PACIENTE.nome, PACIENTE.fone, "Recepcao E2E", "Consulta", PROFISSIONAL.name]) {
+      expect(corpo).not.toContain(proibido);
+    }
+    expect(JSON.parse(corpo)).toEqual({
+      horarios: [{ dia: dias[2], de: "10:00", ate: "11:30", user_id: creds.agenda!.dono_user_id }],
+    });
+    await expect(page.getByText("1 horário(s) importado(s).")).toBeVisible({ timeout: 15_000 });
+    await expect(secao.getByTestId("situacao-da-importacao")).toContainText("1 horário(s) daqui para a frente", { timeout: 15_000 });
+    await evidencia(page, info, "importacao-gravada");
+  });
+
+  await test.step("a terça deixa de oferecer 10:00–11:30; o horário sem pessoa ligada segue livre", async () => {
+    const horarios = await horariosDoDia(page, creds, dias[2]!);
+    for (const ocupado of ["10:00", "10:30", "11:00"]) expect(horarios).not.toContain(ocupado);
+    expect(horarios).toEqual(expect.arrayContaining(["09:30", "11:30", "14:00", "16:00"]));
   });
 });
