@@ -40,6 +40,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import { loginComoAdmin, lerCreds, type CredsE2E } from "./helpers/login-admin";
+import { abrirAcoesDaConversa } from "./helpers/acoes-da-conversa";
 import { carregarEnvLocal, credenciaisSupabaseDeTeste } from "../../scripts/lib/env-de-teste";
 
 const EVIDENCIA = path.join(process.cwd(), "evidence", "retomar-ao-devolver");
@@ -196,6 +197,8 @@ async function conversaComPassagem(mensagens: Array<{ direction: "inbound" | "ou
 
 async function devolverPelaTela(conversationId: string, foto: string): Promise<void> {
   await pagina.goto(`/app/inbox/${conversationId}`);
+  // Neste fork a volta mora no ⋯ do cabeçalho (desde 18/11), como em `escalacao-ciclo`.
+  await abrirAcoesDaConversa(pagina);
   const botao = pagina.getByTestId("devolver-ao-automatico");
   await expect(botao).toBeVisible({ timeout: ESPERA });
   const resposta = pagina.waitForResponse(
