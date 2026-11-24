@@ -45,7 +45,7 @@ export async function POST(): Promise<Response> {
     actorUserId: authz.user.id,
     organizationId: org,
     resourceType: "calendar_clinicorp_integration",
-    resourceId: org,
+    resourceId: authz.org.orgId,
     requestId,
     // Que mudou, nunca o token nem o hash.
     metadata: { trocou_endereco: Boolean(atual?.webhook_token_hash) },

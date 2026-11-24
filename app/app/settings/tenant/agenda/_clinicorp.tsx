@@ -26,6 +26,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
+import { copyToClipboard } from "@/lib/clipboard";
 
 type FormatoRecebido = {
   id: string;
@@ -220,10 +221,11 @@ function Conteudo({
                 variant="outline"
                 className="min-h-11"
                 onClick={() =>
-                  void navigator.clipboard
-                    .writeText(endereco)
-                    .then(() => toast.success(t("Endereço copiado.")))
-                    .catch(() => toast.error(t("Não consegui copiar. Selecione o endereço e copie à mão.")))
+                  void copyToClipboard(endereco).then((copiou) =>
+                    copiou
+                      ? toast.success(t("Endereço copiado."))
+                      : toast.error(t("Não consegui copiar. Selecione o endereço e copie à mão.")),
+                  )
                 }
               >
                 {t("Copiar")}
