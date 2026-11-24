@@ -123,7 +123,8 @@ async function entrar(page: Page, creds: Creds) {
 async function abrirSanfona(page: Page, titulo: string) {
   await page.goto("/app/settings/tenant/agenda");
   const sanfona = page.locator("details", { has: page.locator("summary", { hasText: titulo }) });
-  await sanfona.locator("summary").click();
+  // `:scope >`: a seção da Clinicorp tem um <details> dentro (os formatos do webhook).
+  await sanfona.locator(":scope > summary").click();
   return sanfona;
 }
 

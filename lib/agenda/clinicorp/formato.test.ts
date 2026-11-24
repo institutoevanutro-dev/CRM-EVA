@@ -72,6 +72,10 @@ describe("descreverFormato", () => {
     );
   });
 
+  it("em ordem de caminho: o pai antes dos filhos", () => {
+    expect(descreverFormato({ b: { c: 1 }, a: 1 })).toEqual(["$: objeto", "$.a: numero-inteiro", "$.b: objeto", "$.b.c: numero-inteiro"]);
+  });
+
   it("não se perde em JSON fundo nem gigante", () => {
     let fundo: unknown = "fim";
     for (let i = 0; i < 50; i++) fundo = { x: fundo };

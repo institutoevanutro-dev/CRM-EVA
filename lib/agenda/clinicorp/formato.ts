@@ -67,7 +67,10 @@ export function descreverFormato(raiz: unknown): string[] {
     }
   };
   visitar(raiz, "$", 0);
-  return [...tipos].map(([c, t]) => `${c}: ${[...t].sort().join("|")}`).sort();
+  // Ordem do CAMINHO (pai antes do filho), não da linha formatada: `:` vem depois de `.`.
+  return [...tipos]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([c, t]) => `${c}: ${[...t].sort().join("|")}`);
 }
 
 export interface FormatoRecebido {
