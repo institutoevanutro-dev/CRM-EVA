@@ -35,7 +35,7 @@ import { logger } from "@/lib/logger";
  * A tela precisa distinguir, porque bloco vindo do Google não abre, não arrasta
  * e não se clica.
  */
-type AgendamentoDaResposta = AgendamentoListado & { origem?: "google_sync"; bloqueio?: true };
+type AgendamentoDaResposta = AgendamentoListado & { origem?: "google_sync"; bloqueio?: true; fonte_externa?: "clinicorp" };
 import { ApiError } from "@/lib/api/types";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
@@ -289,7 +289,9 @@ export async function GET(req: NextRequest): Promise<Response> {
         // Rótulo, NUNCA o título do evento: a tabela tem a coluna `title` e esta
         // resposta não o lê. Despejar o conteúdo da agenda pessoal na tela de
         // trabalho é o que a consulta da semente também recusa.
-        titulo: "Ocupado",
+        // Da Clinicorp, o rótulo diz de onde veio (migration 0433) — e só isso:
+        // nada do agendamento de lá (paciente, título) chega a esta resposta.
+        titulo: e.fonte === "clinicorp" ? "Ocupado (Clinicorp)" : "Ocupado",
         donoId: e.donoId,
         iniciaEm: e.iniciaEm,
         terminaEm: e.terminaEm,
@@ -302,6 +304,7 @@ export async function GET(req: NextRequest): Promise<Response> {
         contatoId: null,
         contatoNome: null,
         origem: "google_sync",
+        ...(e.fonte === "clinicorp" ? { fonte_externa: "clinicorp" as const } : {}),
       });
     }
 

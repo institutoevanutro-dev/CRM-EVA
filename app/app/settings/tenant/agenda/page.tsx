@@ -11,6 +11,7 @@ import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 
 import { Sanfona, TiposDeAgendamentoClient, type TipoRow } from "./_client";
 import { CanalDoLembrete } from "./_canal-do-lembrete";
+import { AgendaDaClinicorp } from "./_clinicorp";
 import { RecursosDaAgenda, type SalaRow, type UnidadeRow } from "./_resources";
 
 export const dynamic = "force-dynamic";
@@ -129,6 +130,7 @@ export default async function TiposDeAgendamentoPage() {
         // `admin`, e não `manager` como os prazos ao lado: ligar reescreve as
         // etiquetas de todo contato com histórico. A RPC cobra de novo.
         podeLigarClientePelaAgenda={ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin}
+        unidades={(unidades ?? []).filter((u) => u.active).map((u) => ({ id: String(u.id), nome: String(u.name) }))}
       />
       {/* Depois da lista e fechados (item 126): a lista é o que se procura aqui. */}
       {canais.length > 0 ? (
@@ -143,6 +145,16 @@ export default async function TiposDeAgendamentoPage() {
       <Sanfona titulo={t("Unidades e salas")}>
         <RecursosDaAgenda unidades={(unidades ?? []) as UnidadeRow[]} salas={(salas ?? []) as SalaRow[]} podeEditar={podeEditar} />
       </Sanfona>
+      {/* Só gestor: a seção guarda credencial, e a rota cobra manager+ de novo. */}
+      {podeEditar ? (
+        <Sanfona titulo={t("Agenda da Clinicorp")}>
+          <AgendaDaClinicorp
+            pessoas={(pessoas ?? [])
+              .filter((p) => p.role !== "viewer")
+              .map((p) => ({ id: String(p.user_id), nome: nomes.get(String(p.user_id)) ?? `${String(p.user_id).slice(0, 8)} · ${String(p.role)}` }))}
+          />
+        </Sanfona>
+      ) : null}
     </div>
   );
 }

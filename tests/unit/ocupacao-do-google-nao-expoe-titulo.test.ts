@@ -167,7 +167,9 @@ const RELACOES_DO_ESPELHO = /\.from\("calendar_(?:selected_)?external_events"\)(
  * re-inlinear uma leitura nas telas, o caso "nenhuma delas pede `title`" a
  * enxerga de novo em vez de medir o vazio.
  */
-const CHAMADA_DA_FUNCAO_DO_DONO = /\.rpc\(\s*"fn_agenda_ocupacao_google_do_dono"/;
+// Desde a migration 0433 a tela lê `fn_agenda_ocupacao_externa_do_dono`, que lê a da 0260
+// sem mudá-la e soma a cópia da Clinicorp: o mesmo contrato (só ocupação), com a `fonte`.
+const CHAMADA_DA_FUNCAO_DO_DONO = /\.rpc\(\s*"fn_agenda_ocupacao_externa_do_dono"/;
 
 /**
  * ⚠️ O QUE PRENDE A PRIVACIDADE NO CAMINHO DA RPC — e por que faltava.
@@ -213,7 +215,9 @@ const CAMPOS_DE_CONTEUDO_DO_EVENTO = /\b(?:title|summary|description|location)\b
  * onde alguém teria de escrever, de propósito, que a tela passou a carregar
  * mais do que a fatia de tempo.
  */
-const CAMPOS_DO_BLOCO_DA_TELA = ["id", "donoId", "iniciaEm", "terminaEm"];
+// `fonte` (migration 0433) é FORMA, não conteúdo: "google" ou "clinicorp", e decide só o
+// rótulo ("Ocupado" ou "Ocupado (Clinicorp)"). Nada do compromisso de lá atravessa.
+const CAMPOS_DO_BLOCO_DA_TELA = ["id", "donoId", "iniciaEm", "terminaEm", "fonte"];
 
 /** A interface que o módulo entrega a quem desenha, sem os comentários. */
 const DECLARACAO_DO_BLOCO = /export interface BlocoExternoDaTela \{([\s\S]*?)\n\}/;
@@ -268,7 +272,7 @@ describe("a ocupação do Google não leva o nome do evento para a tela", () => 
 
     expect(
       CHAMADA_DA_FUNCAO_DO_DONO.test(fonte),
-      `nenhuma chamada a \`fn_agenda_ocupacao_google_do_dono\` em ${dono} — ou a ocupação ` +
+      `nenhuma chamada a \`fn_agenda_ocupacao_externa_do_dono\` em ${dono} — ou a ocupação ` +
         `deixou de ser buscada, ou ela mudou de endereço de novo e este gate ficou cego.`,
     ).toBe(true);
   });
@@ -339,7 +343,7 @@ describe("a ocupação do Google não leva o nome do evento para a tela", () => 
     // `pnpm typecheck` (`tsconfig.typecheck.json` inclui `tests/**`), o mesmo
     // passo que prende o tipo da view em `view-de-ocupacao-nao-tipa-o-titulo`.
     type RetornoDaFuncao =
-      Database["public"]["Functions"]["fn_agenda_ocupacao_google_do_dono"]["Returns"][number];
+      Database["public"]["Functions"]["fn_agenda_ocupacao_externa_do_dono"]["Returns"][number];
 
     expectTypeOf<RetornoDaFuncao>().not.toHaveProperty("title");
     // Controle: o tipo não virou vazio — a linha acima passaria por acidente.

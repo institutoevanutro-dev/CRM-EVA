@@ -52,8 +52,9 @@ import { googleRpc } from "./google/sync-store";
  *
  * As duas leituras do Google (os eventos, em `coletaOQueOcupa`, e a situação
  * das conexões, em `horariosLivresDaOrg`) saem por RPC —
- * `fn_agenda_ocupacao_google_do_dono` e `fn_agenda_conexoes_google_do_dono`
- * (migration 0260) — pelo MESMO client que veio de fora. São `security definer`
+ * `fn_agenda_ocupacao_externa_do_dono` e `fn_agenda_conexoes_externas_do_dono`
+ * (migration 0433), que leem as da 0260 (`..._google_do_dono`) sem mudá-las e
+ * somam a cópia da Clinicorp — pelo MESMO client que veio de fora. São `security definer`
  * que atravessam só a RLS da conexão, conferem o pertencimento no corpo
  * (`fn_user_org_ids()`, a régua das policies) e filtram o dono; o que devolvem é
  * ocupação (início, fim, transparência, situação), nunca título, descrição ou
@@ -340,7 +341,7 @@ export async function horariosLivresDaOrg(
   const [{ data: excecoesRaw, error: erroExc }, oQueOcupa] = await Promise.all([
     supabase
       .from("calendar_availability_exceptions")
-      .select("exception_date, is_unavailable, start_minute, end_minute")
+      .select("exception_date, is_unavailable, start_minute, end_minute, unit_id")
       .eq("organization_id", organizationId)
       .eq("user_id", donoId)
       .gte("exception_date", primeiroDiaDaRegra)
@@ -380,7 +381,7 @@ export async function horariosLivresDaOrg(
   // Por RPC, e não direto em `calendar_connections`: a RLS da tabela esconde a
   // conexão de um Atendente, e "nunca foi lida" passava a ser "não tem Google"
   // conforme quem perguntava (ver o cabeçalho, issue #879).
-  const { data: conexoesRaw } = await supabase.rpc("fn_agenda_conexoes_google_do_dono", {
+  const { data: conexoesRaw } = await supabase.rpc("fn_agenda_conexoes_externas_do_dono", {
     p_org: organizationId,
     p_owner: donoId,
   });
@@ -393,9 +394,10 @@ export async function horariosLivresDaOrg(
     indisponivel: linha.is_unavailable,
     inicioMinuto: linha.start_minute,
     fimMinuto: linha.end_minute,
+    unidadeId: (linha as { unit_id?: string | null }).unit_id ?? null,
   }));
 
-  const slots = horariosLivres({
+  const todos = horariosLivres({
     jornada: params.unitId
       ? { ...leitura.jornada, windows: leitura.jornada.windows.filter((w) => !w.unit_id || w.unit_id === params.unitId) }
       : leitura.jornada,
@@ -414,6 +416,10 @@ export async function horariosLivresDaOrg(
     ate: params.ate,
     agora: params.agora,
   });
+  // O dia aberto em OUTRA unidade substitui a jornada do dia e entrega a unidade
+  // dele (migration 0433): pedindo esta unidade, a pessoa não está aqui naquele
+  // dia. A jornada já foi filtrada acima; o dia aberto é filtrado aqui.
+  const slots = params.unitId ? todos.filter((s) => !s.unitId || s.unitId === params.unitId) : todos;
 
   // Leitura de apoio: sem o nome a IA ainda marca pelo id, então a falha aqui
   // não derruba a consulta.
@@ -459,13 +465,17 @@ export async function horariosLivresDaOrg(
 }
 
 
-/** Uma linha de `fn_agenda_ocupacao_google_do_dono` — as cinco colunas que a função declara, e só elas. */
+/**
+ * Uma linha de `fn_agenda_ocupacao_externa_do_dono` (migration 0433): o Google da
+ * 0260, sem mudança, mais a cópia da Clinicorp. A `fonte` só serve à tela.
+ */
 interface LinhaDaOcupacaoDoGoogle {
   starts_at: string;
   ends_at: string;
   transparency: string;
   status: string;
   connection_status: string | null;
+  fonte?: string;
 }
 
 export interface ParametrosDaOcupacao {
@@ -522,7 +532,7 @@ export async function coletaOQueOcupa(
     // esconde o Google do dono de um Atendente, e a ocupação sumia — da grade E
     // do encaixe, que é por isso que a leitura mora aqui (issue #879, ver o
     // cabeçalho). A função confere o pertencimento e devolve só ocupação.
-    supabase.rpc("fn_agenda_ocupacao_google_do_dono", {
+    supabase.rpc("fn_agenda_ocupacao_externa_do_dono", {
       p_org: organizationId,
       p_owner: params.donoId,
       p_de: params.de.toISOString(),

@@ -52,6 +52,8 @@ export type Excecao = {
   start_minute: number;
   end_minute: number;
   reason: string | null;
+  /** Onde a pessoa atende no dia ABERTO (migration 0433). */
+  unit_id?: string | null;
 };
 
 const DIA_INTEIRO = { start_minute: 0, end_minute: 1440 };
@@ -103,8 +105,15 @@ export function DiasBloqueados({
   pessoas = [],
   euId = null,
   podeEscolherQuem = false,
+  unidades = [],
 }: {
   podeEditar: boolean;
+  /**
+   * As unidades da organização. Com alguma, o dia ABERTO pergunta ONDE: ele
+   * substitui a jornada daquele dia, então "dia em outra unidade" já fecha a de
+   * sempre, e o horário sai com a unidade certa (migration 0433).
+   */
+  unidades?: Array<{ id: string; nome: string }>;
   /** A equipe, já com nome. Vazia = a tela não sabe nomes e fecha só a própria agenda. */
   pessoas?: PessoaDaAgenda[];
   /** Quem está logado: o "De quem" começa nele. */
@@ -125,6 +134,11 @@ export function DiasBloqueados({
   const [de, setDe] = useState("08:00");
   const [ate, setAte] = useState("12:00");
   const [repetirAte, setRepetirAte] = useState("");
+  const [unidade, setUnidade] = useState("");
+  // Datas AVULSAS lançadas de uma vez (ex.: os dias do mês em outra unidade,
+  // que mudam todo mês e não seguem semana nenhuma).
+  const [outras, setOutras] = useState<string[]>([]);
+  const nomeDaUnidade = (id: string | null | undefined) => (id ? unidades.find((u) => u.id === id)?.nome : undefined);
   const [resultado, setResultado] = useState<{
     criados: number;
     pulados: number;
@@ -160,7 +174,12 @@ export function DiasBloqueados({
       // Sem `quem` (tela sem a equipe), o corpo vai sem `user_id` e a rota usa
       // a própria pessoa, que é o comportamento de antes.
       const dono = quem || euId || null;
-      const alvos = repetirAte ? datasSemanais(data, repetirAte, TETO_DA_REPETICAO) : [data];
+      const alvos = [
+        ...new Set([
+          ...outras,
+          ...(data ? (repetirAte ? datasSemanais(data, repetirAte, TETO_DA_REPETICAO) : [data]) : []),
+        ]),
+      ].sort();
 
       // O QUE JÁ EXISTE É PULADO, e não recusado.
       //
@@ -187,6 +206,7 @@ export function DiasBloqueados({
           is_unavailable: !abrindo,
           ...faixa,
           ...(motivo.trim() ? { reason: motivo.trim() } : {}),
+          ...(abrindo && unidade ? { unit_id: unidade } : {}),
         });
       }
       return {
@@ -197,6 +217,7 @@ export function DiasBloqueados({
     },
     onSuccess: (r) => {
       setData("");
+      setOutras([]);
       setMotivo("");
       setRepetirAte("");
       setResultado(r);
@@ -274,6 +295,36 @@ export function DiasBloqueados({
               }}
             />
           </label>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            data-testid="adicionar-data"
+            disabled={!data || outras.includes(data)}
+            onClick={() => {
+              setOutras((o) => [...o, data].sort());
+              setData("");
+            }}
+          >
+            {t("Adicionar outra data")}
+          </Button>
+          {outras.length > 0 ? (
+            <ul className="flex w-full flex-wrap gap-1" data-testid="datas-escolhidas" aria-label={t("Datas escolhidas")}>
+              {outras.map((d) => (
+                <li key={d} className="flex items-center gap-1 rounded-md border px-2 py-1 text-sm">
+                  {new Date(`${d}T12:00:00`).toLocaleDateString()}
+                  <button
+                    type="button"
+                    className="min-h-6 px-1 text-text-muted"
+                    aria-label={`${t("Tirar")} ${new Date(`${d}T12:00:00`).toLocaleDateString()}`}
+                    onClick={() => setOutras((o) => o.filter((x) => x !== d))}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {!abrindo ? (
             <label className="flex min-h-11 items-center gap-2 text-sm">
               <input
@@ -308,6 +359,25 @@ export function DiasBloqueados({
               </label>
             </>
           ) : null}
+          {abrindo && unidades.length > 0 ? (
+            <label className="block">
+              <span className="block text-sm">{t("Onde")}</span>
+              <select
+                aria-label={t("Onde")}
+                className="mt-1 rounded-md border p-2"
+                data-testid="unidade-do-dia"
+                value={unidade}
+                onChange={(e) => setUnidade(e.target.value)}
+              >
+                <option value="">{t("Sem unidade")}</option>
+                {unidades.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="block flex-1">
             <span className="block text-sm">{t("Motivo (opcional)")}</span>
             <input
@@ -333,7 +403,7 @@ export function DiasBloqueados({
           <Button
             // Alvo de toque generoso: esta tela também é usada no celular.
             className="min-h-11"
-            disabled={!data || criar.isPending || faixaInvalida}
+            disabled={(!data && outras.length === 0) || criar.isPending || faixaInvalida}
             onClick={() => criar.mutate()}
           >
             {abrindo
@@ -342,6 +412,11 @@ export function DiasBloqueados({
                 ? t("Fechar este dia")
                 : t("Bloquear este horário")}
           </Button>
+          {abrindo && unidade ? (
+            <p className="w-full text-sm text-text-muted" data-testid="aviso-do-dia-aberto">
+              {t("Neste dia a pessoa atende só aqui, neste horário: a jornada de sempre não vale nesse dia.")}
+            </p>
+          ) : null}
           {faixaInvalida ? (
             <p className="w-full text-sm text-destructive">
               {t("A hora final precisa ser maior que a inicial.")}
@@ -390,6 +465,7 @@ export function DiasBloqueados({
                     ? ""
                     : ` · ${t("fechado nessas horas")}`
                   : ` · ${t("aberto excepcionalmente")}`}
+                {nomeDaUnidade(e.unit_id) ? ` · ${nomeDaUnidade(e.unit_id)}` : ""}
                 {e.reason ? ` · ${e.reason}` : ""}
               </span>
               {podeEditar && (podeEscolherQuem || !euId || e.user_id === euId) ? (

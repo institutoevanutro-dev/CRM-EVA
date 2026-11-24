@@ -75,6 +75,9 @@ const schema = z.object({
   PRONTUARIO_ORGANIZATION_ID: z.string().optional(),
   MARKETING_ORGANIZATION_ID: z.string().optional(),
   MARKETING_REPORT_TOKEN: z.string().optional(),
+  // Endereço da API da Clinicorp (opcional; migration 0433). Vazio = a oficial,
+  // https://api.clinicorp.com/rest/v1. Só existe para apontar a um receptor de teste.
+  CLINICORP_API_URL: z.string().optional(),
   // Origens (vírgula) do site que grava o código de clique do Google Ads (migration 0400).
   CLIQUE_GOOGLE_ORIGENS: z.string().optional(),
   // Node

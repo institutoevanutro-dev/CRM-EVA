@@ -207,12 +207,14 @@ describe("lerOcupacaoExterna — a ocupação do dono chega para quem não é do
         donoId: DONA,
         iniciaEm: "2026-09-16T14:00:00.000Z",
         terminaEm: "2026-09-16T15:00:00.000Z",
+        fonte: "google",
       },
       {
         id: `${ATENDENTE}:2026-09-16T16:00:00.000Z:2026-09-16T17:00:00.000Z`,
         donoId: ATENDENTE,
         iniciaEm: "2026-09-16T16:00:00.000Z",
         terminaEm: "2026-09-16T17:00:00.000Z",
+        fonte: "google",
       },
     ]);
 
@@ -222,11 +224,11 @@ describe("lerOcupacaoExterna — a ocupação do dono chega para quem não é do
     // E a pergunta foi feita POR DONO, à função, dentro da organização e do recorte.
     expect(falso.rpcs).toEqual([
       {
-        nome: "fn_agenda_ocupacao_google_do_dono",
+        nome: "fn_agenda_ocupacao_externa_do_dono",
         args: { p_org: ORG, p_owner: DONA, p_de: RECORTE.de, p_ate: RECORTE.ate },
       },
       {
-        nome: "fn_agenda_ocupacao_google_do_dono",
+        nome: "fn_agenda_ocupacao_externa_do_dono",
         args: { p_org: ORG, p_owner: ATENDENTE, p_de: RECORTE.de, p_ate: RECORTE.ate },
       },
     ]);

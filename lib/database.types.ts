@@ -2538,6 +2538,7 @@ export type Database = {
           organization_id: string
           reason: string | null
           start_minute: number
+          unit_id: string | null
           updated_at: string
           user_id: string
         }
@@ -2550,6 +2551,7 @@ export type Database = {
           organization_id: string
           reason?: string | null
           start_minute?: number
+          unit_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -2562,6 +2564,7 @@ export type Database = {
           organization_id?: string
           reason?: string | null
           start_minute?: number
+          unit_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -2572,6 +2575,146 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendar_clinicorp_events: {
+        Row: {
+          clinic_id: string | null
+          created_at: string
+          ends_at: string
+          external_id: string
+          external_updated_at: string | null
+          id: string
+          organization_id: string
+          professional_id: string
+          starts_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          clinic_id?: string | null
+          created_at?: string
+          ends_at: string
+          external_id: string
+          external_updated_at?: string | null
+          id?: string
+          organization_id: string
+          professional_id: string
+          starts_at: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string | null
+          created_at?: string
+          ends_at?: string
+          external_id?: string
+          external_updated_at?: string | null
+          id?: string
+          organization_id?: string
+          professional_id?: string
+          starts_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_clinicorp_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_clinicorp_events_integracao_fk"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_clinicorp_integrations"
+            referencedColumns: ["organization_id"]
+          },
+        ]
+      }
+      calendar_clinicorp_integrations: {
+        Row: {
+          api_token_encrypted: string
+          api_user: string
+          created_at: string
+          last_sync_at: string | null
+          last_sync_error: string | null
+          organization_id: string
+          subscriber_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          api_token_encrypted: string
+          api_user: string
+          created_at?: string
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          organization_id: string
+          subscriber_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          api_token_encrypted?: string
+          api_user?: string
+          created_at?: string
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          organization_id?: string
+          subscriber_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_clinicorp_integrations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendar_clinicorp_professionals: {
+        Row: {
+          created_at: string
+          name: string | null
+          organization_id: string
+          professional_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          name?: string | null
+          organization_id: string
+          professional_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          name?: string | null
+          organization_id?: string
+          professional_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_clinicorp_professionals_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_clinicorp_professionals_integracao_fk"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_clinicorp_integrations"
+            referencedColumns: ["organization_id"]
           },
         ]
       }
@@ -8319,6 +8462,15 @@ export type Database = {
         Args: { p_org: string; p_owner: string }
         Returns: { status: string; last_sync_at: string | null }[]
       }
+      fn_agenda_ocupacao_externa_do_dono: {
+        Args: { p_org: string; p_owner: string; p_de: string; p_ate: string }
+        Returns: { starts_at: string; ends_at: string; transparency: string; status: string; connection_status: string; fonte: string }[]
+      }
+      fn_agenda_conexoes_externas_do_dono: {
+        Args: { p_org: string; p_owner: string }
+        Returns: { status: string; last_sync_at: string | null; fonte: string }[]
+      }
+      fn_agenda_clinicorp_gravar: { Args: { p_org: string; p_itens: Json }; Returns: number }
       fn_appointment_change_core: { Args: { p_org: string; p_id: string; p_revision: number; p_patch: Json; p_remote: boolean; p_base: Json }; Returns: Json }
 
       fn_followup_job_current: { Args: { p_org: string; p_job: string; p_enrollment: string; p_node: string }; Returns: boolean }

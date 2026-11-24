@@ -70,7 +70,7 @@ function clienteFalso(tabelas: Record<string, Linha[]>): SupabaseClient {
     from: (tabela: string) => daTabela(tabela),
     rpc: async (fn: string) => {
       if (fn === "fn_google_coverage") return { data: false, error: null };
-      if (fn === "fn_agenda_ocupacao_google_do_dono" || fn === "fn_agenda_conexoes_google_do_dono") {
+      if (fn === "fn_agenda_ocupacao_externa_do_dono" || fn === "fn_agenda_conexoes_externas_do_dono") {
         return { data: [], error: null };
       }
       throw new Error(`[duble] rpc não prevista: ${fn}`);

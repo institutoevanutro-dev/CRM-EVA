@@ -84,6 +84,24 @@ export async function GET(_req: NextRequest): Promise<Response> {
         .eq("organization_id", orgId)
         .in("user_id", linhas.map((m) => m.user_id))
     : { data: [] };
+  // Os dias ABERTOS daqui para a frente também dizem onde a pessoa atende
+  // (migration 0433): "dia em outra unidade" lançado em Dias fora da rotina tem
+  // de aparecer no seletor de unidade do painel, senão o horário que o motor
+  // oferece naquele dia não tem por onde ser escolhido.
+  const { data: diasAbertos } = linhas.length
+    ? await client
+        .from("calendar_availability_exceptions")
+        .select("user_id, unit_id")
+        .eq("organization_id", orgId)
+        .eq("is_unavailable", false)
+        .not("unit_id", "is", null)
+        .gte("exception_date", new Date(Date.now() - 86_400_000).toISOString().slice(0, 10))
+        .in("user_id", linhas.map((m) => m.user_id))
+    : { data: [] };
+  const unidadesDosDiasAbertos = new Map<string, Set<string>>();
+  for (const d of (diasAbertos ?? []) as Array<{ user_id: string; unit_id: string }>) {
+    (unidadesDosDiasAbertos.get(d.user_id) ?? unidadesDosDiasAbertos.set(d.user_id, new Set()).get(d.user_id)!).add(d.unit_id);
+  }
   const ondeAtende = new Map(
     ((jornadas ?? []) as Array<{ user_id: string; schedule: unknown }>).map((j) => {
       const leitura = lerJornadaDoBanco(j.schedule);
@@ -93,7 +111,12 @@ export async function GET(_req: NextRequest): Promise<Response> {
   );
   const membros = linhas.map((m) => ({
     ...m,
-    jornada_unidades: ondeAtende.get(m.user_id)?.unidades ?? [],
+    // Só soma quando a jornada já declara unidade: jornada sem unidade nenhuma
+    // oferece todas (`ofertaDeUnidades`), e uma lista não vazia aqui a restringiria.
+    jornada_unidades:
+      (ondeAtende.get(m.user_id)?.unidades ?? []).length > 0
+        ? [...new Set([...(ondeAtende.get(m.user_id)?.unidades ?? []), ...(unidadesDosDiasAbertos.get(m.user_id) ?? [])])]
+        : [],
     jornada_sem_unidade: ondeAtende.get(m.user_id)?.semUnidade ?? false,
     jornada_de_min: ondeAtende.get(m.user_id)?.faixa?.de ?? null,
     jornada_ate_min: ondeAtende.get(m.user_id)?.faixa?.ate ?? null,

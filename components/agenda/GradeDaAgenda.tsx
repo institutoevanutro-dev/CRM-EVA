@@ -787,7 +787,7 @@ function BlocoDeAgendamento({
       aria-label={`${paciente ? `${paciente}, ` : ""}${agendamento.titulo}, ${rotuloHora(comeca, fuso)} ${t("às")} ${rotuloHora(termina, fuso)}${
         pessoa ? `, ${t("atendido por")} ${pessoa.nome}` : ""
       }${
-        doGoogle && !agendamento.bloqueio ? `, ${t("ocupado na agenda do Google")}` : ""
+        doGoogle && !agendamento.bloqueio && !agendamento.fonteExterna ? `, ${t("ocupado na agenda do Google")}` : ""
       }${situacao ? `, ${situacao}` : ""}${conflito ? `, ${t("conflito de horário")}` : ""}${
         semLembrete ? `, ${t("sem lembrete")}` : ""
       }${
