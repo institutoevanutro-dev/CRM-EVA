@@ -1,10 +1,10 @@
 /**
  * /api/v1/agenda/clinicorp — a agenda da Clinicorp desta organização (migration 0433).
  *
- *   GET    situação da cópia e os profissionais da Clinicorp com a pessoa do CRM
+ *   GET    situação da cópia, do webhook (0434) e os profissionais com a pessoa do CRM
  *   PUT    salva a credencial ("Usuário API" + "Token API" + assinante opcional)
  *   PATCH  mapeia profissional da Clinicorp -> pessoa da Agenda do CRM
- *   DELETE desliga: apaga credencial, mapeamento e a ocupação copiada
+ *   DELETE desliga: apaga credencial, endereço do webhook, mapeamento e a ocupação copiada
  *
  * Gate = manager+, o mesmo da tela onde mora (Configurações › Tipos de
  * agendamento). A organização vem da sessão, nunca do corpo. Escrita pelo admin
@@ -56,7 +56,7 @@ export async function GET(): Promise<Response> {
   const [{ data: integracao, error }, { data: profissionais }, { count }] = await Promise.all([
     admin
       .from("calendar_clinicorp_integrations")
-      .select("api_user, subscriber_id, last_sync_at, last_sync_error")
+      .select("api_user, subscriber_id, last_sync_at, last_sync_error, webhook_token_hash, webhook_last_received_at, webhook_formatos")
       .eq("organization_id", org)
       .maybeSingle(),
     admin
@@ -77,11 +77,19 @@ export async function GET(): Promise<Response> {
   return ok(
     {
       configurada: true,
+      // Só de webhook (0434): a linha existe sem credencial da API.
+      credencial: Boolean(integracao.api_user),
       usuario_api: integracao.api_user,
       assinante: integracao.subscriber_id,
       ultima_copia: integracao.last_sync_at,
       erro: integracao.last_sync_error,
       ocupacoes_futuras: count ?? 0,
+      // O hash nunca sai: a tela sabe só que há endereço, e o que já chegou nele.
+      webhook: {
+        ativo: Boolean(integracao.webhook_token_hash),
+        ultima_batida: integracao.webhook_last_received_at,
+        formatos: integracao.webhook_formatos ?? [],
+      },
       profissionais: (profissionais ?? []).map((p) => ({
         professional_id: p.professional_id,
         nome: p.name,
@@ -109,11 +117,12 @@ export async function PUT(req: NextRequest): Promise<Response> {
 
   const { data: atual, error: erroAtual } = await admin
     .from("calendar_clinicorp_integrations")
-    .select("organization_id")
+    .select("organization_id, api_user")
     .eq("organization_id", org)
     .maybeSingle();
   if (erroAtual) return fail("internal_error", erroAtual.message, 500, { requestId });
-  if (!atual && !lido.data.token_api) {
+  // Sem credencial guardada (nenhuma linha, ou só a do webhook), o token é obrigatório.
+  if (!atual?.api_user && !lido.data.token_api) {
     return fail("validation_failed", t("Informe o Token API."), 422, { requestId });
   }
 
@@ -152,7 +161,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
     resourceId: authz.org.orgId,
     requestId,
     // Que mudou, nunca o valor.
-    metadata: { primeira_vez: !atual, token_trocado: Boolean(tokenCifrado), com_assinante: Boolean(linha.subscriber_id) },
+    metadata: { primeira_vez: !atual?.api_user, token_trocado: Boolean(tokenCifrado), com_assinante: Boolean(linha.subscriber_id) },
   });
   return ok({ configurada: true }, { requestId });
 }

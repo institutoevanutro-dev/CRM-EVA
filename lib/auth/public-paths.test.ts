@@ -56,6 +56,11 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/evalink")).toBe(false);
   });
 
+  it("o webhook da Clinicorp atravessa o proxy (o token do path é conferido na rota); a tela que gera o endereço não", () => {
+    expect(isPublicPath(`/api/v1/webhooks/clinicorp/${"a".repeat(64)}`)).toBe(true);
+    expect(isPublicPath("/api/v1/agenda/clinicorp/webhook")).toBe(false);
+  });
+
   it("a âncora `$` impede que um sub-path passe de carona", () => {
     expect(isPublicPath("/api/v1/system/agent/qualquer")).toBe(false);
   });

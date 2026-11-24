@@ -27,6 +27,14 @@ import { esperarAgenda } from "./helpers/tela-agenda";
  *     uma vez, em "Dias fora da rotina"; nesses dias a marcação oferece só a
  *     faixa lançada: a jornada de sempre (09:00–18:00) não vale ali.
  *
+ * E, sem o módulo API Externa (migration 0434), pelo WEBHOOK em modo de captura:
+ *
+ *  5. A parte da credencial diz que é só com o módulo API Externa da Clinicorp.
+ *  6. O gestor gera o endereço do webhook e o vê UMA vez, para copiar.
+ *  7. A "Clinicorp" (um `fetch` sem sessão nenhuma, com paciente fictício) bate
+ *     no endereço; a seção passa a mostrar a última batida e o formato medido,
+ *     com os nomes dos campos e nenhum valor, e o banco não guarda o token.
+ *
  * Dados: tudo fictício. Fixtures: `scripts/seed-e2e-agenda.ts` (tipo de 30 min
  * e jornada seg–sex 09:00–18:00 do atendente).
  */
@@ -115,7 +123,8 @@ async function entrar(page: Page, creds: Creds) {
 async function abrirSanfona(page: Page, titulo: string) {
   await page.goto("/app/settings/tenant/agenda");
   const sanfona = page.locator("details", { has: page.locator("summary", { hasText: titulo }) });
-  await sanfona.locator("summary").click();
+  // `:scope >`: a seção da Clinicorp tem um <details> dentro (os formatos do webhook).
+  await sanfona.locator(":scope > summary").click();
   return sanfona;
 }
 
@@ -279,5 +288,80 @@ test("o gestor liga a Clinicorp pela tela e a agenda passa a descontar o que est
     // CONTROLE: a quinta, sem data lançada, segue a jornada (09:00 em diante).
     expect((await horariosDoDia(page, creds, dias[4]!))[0]).toBe("09:00");
     await evidencia(page, info, "horarios-do-dia-avulso");
+  });
+});
+
+test("sem o módulo API, o gestor gera o endereço do webhook e vê o formato que chegou, sem nada do paciente", async ({ page }, info) => {
+  // Começa sem integração nenhuma: a clínica do plano Standard nunca teve credencial.
+  const db = admin();
+  await db.from("calendar_clinicorp_integrations").delete().eq("organization_id", creds.org_id);
+  await entrar(page, creds);
+
+  let endereco = "";
+  await test.step("a credencial da API diz que é só com o módulo; gera o endereço", async () => {
+    const sanfona = await abrirSanfona(page, "Agenda da Clinicorp");
+    await expect(sanfona.getByTestId("api-da-clinicorp").getByRole("heading")).toHaveText(
+      "Pela API (só com o módulo API Externa da Clinicorp)",
+    );
+    await sanfona.getByRole("button", { name: "Gerar endereço do webhook" }).click();
+    const campo = sanfona.getByTestId("endereco-do-webhook");
+    await expect(campo).toHaveValue(/\/api\/v1\/webhooks\/clinicorp\/[0-9a-f]{64}$/, { timeout: 15_000 });
+    endereco = await campo.inputValue();
+    await expect(sanfona.getByTestId("batida-do-webhook")).toHaveText("Nenhuma batida recebida ainda.");
+    await expect(sanfona.getByRole("button", { name: "Gerar novo endereço" })).toBeVisible();
+    await evidencia(page, info, "webhook-endereco-gerado");
+  });
+
+  const token = endereco.split("/").at(-1)!;
+
+  await test.step("o banco guarda só o hash do token", async () => {
+    const { data } = await db.from("calendar_clinicorp_integrations").select("*").eq("organization_id", creds.org_id);
+    expect(data).toHaveLength(1);
+    expect(data![0]).toMatchObject({ api_user: null, webhook_token_hash: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(JSON.stringify(data)).not.toContain(token);
+  });
+
+  await test.step("a Clinicorp bate no endereço, sem sessão; token desconhecido é 404", async () => {
+    const corpo = {
+      event: "appointment_modified",
+      data: {
+        id: 7700002,
+        fromTime: "10:00",
+        toTime: "11:30",
+        Dentist_PersonId: PROFISSIONAL.id,
+        PatientName: PACIENTE.nome,
+        MobilePhone: PACIENTE.fone,
+        Notes: "observacao ficticia",
+      },
+    };
+    const res = await fetch(endereco, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corpo) });
+    expect(res.status).toBe(200);
+    const outro = endereco.replace(token, "f".repeat(64));
+    expect((await fetch(outro, { method: "POST", body: "{}" })).status).toBe(404);
+  });
+
+  await test.step("a seção mostra a batida e o formato, com os campos e sem valor nenhum", async () => {
+    const sanfona = await abrirSanfona(page, "Agenda da Clinicorp");
+    await expect(sanfona.getByTestId("batida-do-webhook")).toContainText("Última batida recebida", { timeout: 15_000 });
+    // Recarregada, a tela não tem mais o endereço: ele só aparece na hora de gerar.
+    await expect(sanfona.getByTestId("endereco-do-webhook")).toHaveCount(0);
+    await expect(sanfona.getByText("Endereço já gerado.", { exact: false })).toBeVisible();
+    const formatos = sanfona.getByTestId("formatos-do-webhook");
+    await formatos.locator("summary").click();
+    await expect(formatos.locator("summary")).toHaveText("Formatos recebidos (1)");
+    const pre = formatos.locator("pre");
+    await expect(pre).toContainText("$.event: evento:appointment_modified");
+    await expect(pre).toContainText("$.data.PatientName: texto");
+    await expect(pre).toContainText("$.data.fromTime: texto-hora");
+    const html = await page.content();
+    for (const proibido of [PACIENTE.nome, PACIENTE.fone, "observacao ficticia", "7700002", token]) {
+      expect(html).not.toContain(proibido);
+    }
+    const { data } = await db.from("calendar_clinicorp_integrations").select("*").eq("organization_id", creds.org_id);
+    const gravado = JSON.stringify(data);
+    for (const proibido of [PACIENTE.nome, PACIENTE.fone, "observacao ficticia", "7700002", token]) {
+      expect(gravado).not.toContain(proibido);
+    }
+    await evidencia(page, info, "webhook-formato-medido");
   });
 });

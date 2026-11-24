@@ -155,4 +155,19 @@ describe("copiarDaClinicorp", () => {
     expect(r).toEqual({ ok: false, motivo: "nao_configurada", erroAnterior: null });
     expect(pedidos).toEqual([]);
   });
+
+  it("organização só de webhook (0434, sem credencial da API): não chama ninguém nem grava erro", async () => {
+    const SO_WEBHOOK = "bbbbbbbb-0000-4000-8000-000000000003";
+    db.tabelas.calendar_clinicorp_integrations!.push({
+      organization_id: SO_WEBHOOK,
+      api_user: null,
+      api_token_encrypted: null,
+      last_sync_error: null,
+    });
+    const { pedidos, fetchImpl } = receptor(() => json([]));
+    const r = await copiarDaClinicorp(db.cliente as never, SO_WEBHOOK, { fetchImpl });
+    expect(r).toEqual({ ok: false, motivo: "nao_configurada", erroAnterior: null });
+    expect(pedidos).toEqual([]);
+    expect(db.tabelas.calendar_clinicorp_integrations!.find((l) => l.organization_id === SO_WEBHOOK)?.last_sync_error).toBeNull();
+  });
 });
