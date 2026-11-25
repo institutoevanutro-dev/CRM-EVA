@@ -53,9 +53,11 @@ type Situacao =
       ultima_copia: string | null;
       erro: string | null;
       ocupacoes_futuras: number;
+      /** O fuso da organização: o próximo horário sai no relógio da clínica. */
+      fuso: string;
       webhook: Webhook;
       importacao: Importacao;
-      profissionais: Array<{ professional_id: string; nome: string | null; user_id: string | null }>;
+      profissionais: Array<{ professional_id: string; nome: string | null; user_id: string | null; proximo: string | null }>;
     };
 
 const CHAVE = ["agenda", "clinicorp"];
@@ -328,12 +330,6 @@ function Conteudo({
             "Gere o endereço e cadastre-o na Clinicorp, em Gerenciar Assinatura › Acesso Externo e integrações › Gestão de Webhook, com os eventos de agendamento.",
           )}
         </p>
-        <p className="rounded-md bg-warning-bg p-2 text-sm text-warning-fg">
-          {t(
-            "Em teste: por enquanto o CRM só registra o formato do que a Clinicorp manda (nomes dos campos e tipos, nenhum valor). A Agenda passa a descontar esses horários depois que o formato for conferido.",
-          )}
-        </p>
-
         {endereco ? (
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -394,7 +390,7 @@ function Conteudo({
         {webhook?.ativo ? (
           <p className="text-sm" role="status" data-testid="batida-do-webhook">
             {webhook.ultima_batida
-              ? `${t("Última batida recebida")}: ${new Date(webhook.ultima_batida).toLocaleString()}`
+              ? `${t("Última batida recebida")}: ${new Date(webhook.ultima_batida).toLocaleString()} · ${situacao.configurada ? situacao.ocupacoes_futuras : 0} ${t("horário(s) ocupado(s) daqui para a frente")}`
               : t("Nenhuma batida recebida ainda.")}
           </p>
         ) : null}
@@ -500,12 +496,21 @@ function Conteudo({
         <div className="space-y-2" data-testid="profissionais-da-clinicorp">
           <h3 className="text-sm font-semibold">{t("Quem é quem")}</h3>
           <p className="text-sm text-text-muted">
-            {t("Ligue cada profissional da Clinicorp à pessoa da Agenda. Sem pessoa ligada, a ocupação dele não tira horário de ninguém.")}
+            {t(
+              "Ligue cada profissional da Clinicorp à pessoa da Agenda. Sem pessoa ligada, a ocupação dele não tira horário de ninguém. Pelo webhook o nome não vem: ache o profissional na Clinicorp pelo próximo horário dele.",
+            )}
           </p>
           <ul className="space-y-1">
             {situacao.profissionais.map((p) => (
               <li key={p.professional_id} className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="min-w-48">{p.nome ?? `${t("Profissional")} ${p.professional_id}`}</span>
+                <span className="min-w-48">
+                  {p.nome ?? `${t("Profissional")} ${p.professional_id}`}
+                  {p.proximo ? (
+                    <span className="block text-xs text-text-muted">
+                      {`${t("Próximo horário")}: ${new Date(p.proximo).toLocaleString(undefined, { timeZone: situacao.fuso })}`}
+                    </span>
+                  ) : null}
+                </span>
                 <select
                   aria-label={`${t("Pessoa da Agenda para")} ${p.nome ?? p.professional_id}`}
                   className="rounded-md border p-2"
