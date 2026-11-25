@@ -2646,6 +2646,8 @@ export const DICIONARIO: Traducoes = {
   },
   "Campos inválidos. Ajuste antes de salvar.": { es: "Campos inválidos. Ajusta antes de guardar." },
   "Citações mínimas": { es: "Citas mínimas" },
+  "Padrão (regex)": { es: "Patrón (regex)" },
+  "Opções da regex": { es: "Opciones de la regex" },
   "Hora início (0-23)": { es: "Hora inicio (0-23)" },
   "Hora fim (0-23)": { es: "Hora fin (0-23)" },
   "Valor esperado": { es: "Valor esperado" },
