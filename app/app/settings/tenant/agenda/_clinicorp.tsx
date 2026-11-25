@@ -328,12 +328,6 @@ function Conteudo({
             "Gere o endereço e cadastre-o na Clinicorp, em Gerenciar Assinatura › Acesso Externo e integrações › Gestão de Webhook, com os eventos de agendamento.",
           )}
         </p>
-        <p className="rounded-md bg-warning-bg p-2 text-sm text-warning-fg">
-          {t(
-            "Em teste: por enquanto o CRM só registra o formato do que a Clinicorp manda (nomes dos campos e tipos, nenhum valor). A Agenda passa a descontar esses horários depois que o formato for conferido.",
-          )}
-        </p>
-
         {endereco ? (
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">

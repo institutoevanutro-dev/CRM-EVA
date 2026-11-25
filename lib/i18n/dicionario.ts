@@ -12976,7 +12976,6 @@ export const DICIONARIO: Traducoes = {
   "Desligar a Clinicorp? A ocupação copiada sai da Agenda, a credencial é apagada e o endereço do webhook para de funcionar.": { es: "¿Desconectar Clinicorp? La ocupación copiada sale de la Agenda, la credencial se borra y la dirección del webhook deja de funcionar." },
   "Pelo webhook (qualquer plano da Clinicorp)": { es: "Por webhook (cualquier plan de Clinicorp)" },
   "Gere o endereço e cadastre-o na Clinicorp, em Gerenciar Assinatura › Acesso Externo e integrações › Gestão de Webhook, com os eventos de agendamento.": { es: "Genere la dirección y regístrela en Clinicorp, en Gerenciar Assinatura › Acesso Externo e integrações › Gestão de Webhook, con los eventos de citas." },
-  "Em teste: por enquanto o CRM só registra o formato do que a Clinicorp manda (nomes dos campos e tipos, nenhum valor). A Agenda passa a descontar esses horários depois que o formato for conferido.": { es: "En prueba: por ahora el CRM solo registra el formato de lo que Clinicorp envía (nombres de los campos y tipos, ningún valor). La Agenda empieza a descontar esos horarios después de que se verifique el formato." },
   "Endereço do webhook": { es: "Dirección del webhook" },
   "Não consegui copiar. Selecione o endereço e copie à mão.": { es: "No pude copiar. Seleccione la dirección y cópiela a mano." },
   "Guarde agora: por segurança, este endereço só aparece esta vez.": { es: "Guárdela ahora: por seguridad, esta dirección solo aparece esta vez." },
