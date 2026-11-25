@@ -249,7 +249,7 @@ export function ScheduleDialog({
                     )
                   }
                 >
-                  <SelectTrigger className="w-[90px]" aria-label="Dia da semana">
+                  <SelectTrigger className="w-[90px]" aria-label={t("Dia da semana")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -274,7 +274,7 @@ export function ScheduleDialog({
                 <Input
                   type="time"
                   value={w.end}
-                  aria-label="Fim"
+                  aria-label={t("Fim")}
                   onChange={(e) =>
                     setWindows((ws) =>
                       ws.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)),
@@ -302,7 +302,7 @@ export function ScheduleDialog({
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Remover janela"
+                  aria-label={t("Remover janela")}
                   onClick={() => setWindows((ws) => ws.filter((_, j) => j !== i))}
                 >
                   <Trash size={18} />
@@ -316,14 +316,14 @@ export function ScheduleDialog({
                 setWindows((ws) => [...ws, { dow: 1, start: "08:00", end: "18:00" }])
               }
             >
-              <Plus size={16} className="mr-1" /> Adicionar janela
+              <Plus size={16} className="mr-1" /> {t("Adicionar janela")}
             </Button>
             {/* Copia no RASCUNHO: ainda dá para ajustar ou cancelar antes de salvar.
                 Desligado sem janela ou se a cópia passaria do limite da rota (50). */}
             <Button
               variant="outline"
               size="sm"
-              className="ml-2"
+              className="max-sm:whitespace-normal sm:ml-2"
               disabled={!podeCopiar}
               title={
                 podeCopiar || windows.length === 0
@@ -361,10 +361,10 @@ export function ScheduleDialog({
           ) : (
             <>
               <Button variant="ghost" onClick={() => onOpenChange(false)}>
-                Cancelar
+                {t("Cancelar")}
               </Button>
               <Button disabled={isPending} onClick={salvar}>
-                Salvar
+                {t("Salvar")}
               </Button>
             </>
           )}
