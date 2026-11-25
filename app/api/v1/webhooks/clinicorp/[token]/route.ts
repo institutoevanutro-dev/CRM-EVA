@@ -125,7 +125,7 @@ async function receber(req: NextRequest, ctx: { params: Promise<{ token: string 
       action: "agenda.clinicorp_copiada",
       organizationId: org,
       resourceType: "calendar_clinicorp_integration",
-      resourceId: org,
+      resourceId: integracao.organization_id,
       requestId,
       // Só contagens: nem horário, nem profissional, nem nada do corpo.
       metadata: { origem: "webhook", gravados, conciliados },

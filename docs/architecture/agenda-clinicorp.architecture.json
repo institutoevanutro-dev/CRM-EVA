@@ -2,58 +2,343 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "Ocupação da Clinicorp na Agenda (migrations 0433, 0434 e 0435)",
+    "title": "Ocupação da Clinicorp na Agenda (migrations 0433, 0434, 0435 e 0438)",
     "output": "agenda-clinicorp.html"
   },
   "lanes": [
-    { "id": "entrada", "label": "De onde vem" },
-    { "id": "copia", "label": "Cópia (só ocupação)" },
-    { "id": "leitura", "label": "Uma leitura só" },
-    { "id": "saida", "label": "Quem usa" }
+    {
+      "id": "entrada",
+      "label": "De onde vem"
+    },
+    {
+      "id": "copia",
+      "label": "Cópia (só ocupação)"
+    },
+    {
+      "id": "leitura",
+      "label": "Uma leitura só"
+    },
+    {
+      "id": "saida",
+      "label": "Quem usa"
+    }
   ],
-  "mainPath": ["clinicorp", "copia", "eventos", "funcao", "motor", "ia"],
+  "mainPath": [
+    "clinicorp",
+    "copia",
+    "eventos",
+    "funcao",
+    "motor",
+    "ia"
+  ],
   "nodes": [
-    { "id": "config", "lane": "entrada", "col": 1, "type": "service", "label": "Configurações › Agenda da Clinicorp (credencial, quem é quem)" },
-    { "id": "clinicorp", "lane": "entrada", "col": 2, "type": "external", "label": "API da Clinicorp: GET /appointment/list (Basic)" },
-    { "id": "dias", "lane": "entrada", "col": 3, "type": "service", "label": "Dias fora da rotina: dia aberto com unidade" },
-    { "id": "gestao_webhook", "lane": "entrada", "col": 4, "type": "external", "label": "Gestão de Webhook da Clinicorp (qualquer plano)" },
-    { "id": "relatorio", "lane": "entrada", "col": 5, "type": "external", "label": "Relatório Agendamentos › Geral › Exportar (.xlsx, sem id)" },
-    { "id": "cron", "lane": "copia", "col": 1, "type": "service", "label": "cron agenda-clinicorp (10 min) e Copiar agora" },
-    { "id": "copia", "lane": "copia", "col": 2, "type": "service", "label": "lib/agenda/clinicorp/copia.ts + item.ts (descarta paciente)" },
-    { "id": "eventos", "lane": "copia", "col": 3, "type": "database", "label": "calendar_clinicorp_events / professionals / integrations" },
-    { "id": "receptor", "lane": "copia", "col": 4, "type": "service", "label": "/api/v1/webhooks/clinicorp/[token] (modo de captura: só formato)" },
-    { "id": "importacao", "lane": "copia", "col": 5, "type": "service", "label": "lib/agenda/clinicorp/exportacao.ts no navegador + /agenda/clinicorp/importar" },
-    { "id": "importados", "lane": "copia", "col": 6, "type": "database", "label": "calendar_clinicorp_imported_events (foto: pessoa, início, fim)" },
-    { "id": "funcao", "lane": "leitura", "col": 1, "type": "database", "label": "fn_agenda_ocupacao_externa_do_dono (Google da 0260 + Clinicorp)" },
-    { "id": "excecoes", "lane": "leitura", "col": 2, "type": "database", "label": "calendar_availability_exceptions.unit_id" },
-    { "id": "motor", "lane": "saida", "col": 1, "type": "service", "label": "lib/agenda/consulta.ts (horários livres, encaixe, marcação)" },
-    { "id": "ia", "lane": "saida", "col": 2, "type": "service", "label": "crm_find_free_slots (livres_por_dia)" },
-    { "id": "tela", "lane": "saida", "col": 3, "type": "service", "label": "Agenda: Ocupado (Clinicorp)" },
-    { "id": "audit", "lane": "saida", "col": 4, "type": "service", "label": "api_audit_log (credencial, mapeamento, cópia com efeito)" }
+    {
+      "id": "config",
+      "lane": "entrada",
+      "col": 1,
+      "type": "service",
+      "label": "Configurações › Agenda da Clinicorp (credencial, quem é quem)"
+    },
+    {
+      "id": "clinicorp",
+      "lane": "entrada",
+      "col": 2,
+      "type": "external",
+      "label": "API da Clinicorp: GET /appointment/list (Basic)"
+    },
+    {
+      "id": "dias",
+      "lane": "entrada",
+      "col": 3,
+      "type": "service",
+      "label": "Dias fora da rotina: dia aberto com unidade"
+    },
+    {
+      "id": "gestao_webhook",
+      "lane": "entrada",
+      "col": 4,
+      "type": "external",
+      "label": "Gestão de Webhook da Clinicorp (qualquer plano)"
+    },
+    {
+      "id": "relatorio",
+      "lane": "entrada",
+      "col": 5,
+      "type": "external",
+      "label": "Relatório Agendamentos › Geral › Exportar (.xlsx, sem id)"
+    },
+    {
+      "id": "cron",
+      "lane": "copia",
+      "col": 1,
+      "type": "service",
+      "label": "cron agenda-clinicorp (10 min) e Copiar agora"
+    },
+    {
+      "id": "copia",
+      "lane": "copia",
+      "col": 2,
+      "type": "service",
+      "label": "lib/agenda/clinicorp/copia.ts + item.ts (descarta paciente)"
+    },
+    {
+      "id": "eventos",
+      "lane": "copia",
+      "col": 3,
+      "type": "database",
+      "label": "calendar_clinicorp_events / professionals / integrations"
+    },
+    {
+      "id": "receptor",
+      "lane": "copia",
+      "col": 4,
+      "type": "service",
+      "label": "/api/v1/webhooks/clinicorp/[token] (mede o formato e grava pelo item.ts)"
+    },
+    {
+      "id": "importacao",
+      "lane": "copia",
+      "col": 5,
+      "type": "service",
+      "label": "lib/agenda/clinicorp/exportacao.ts no navegador + /agenda/clinicorp/importar"
+    },
+    {
+      "id": "importados",
+      "lane": "copia",
+      "col": 6,
+      "type": "database",
+      "label": "calendar_clinicorp_imported_events (foto: pessoa, início, fim)"
+    },
+    {
+      "id": "funcao",
+      "lane": "leitura",
+      "col": 1,
+      "type": "database",
+      "label": "fn_agenda_ocupacao_externa_do_dono (Google da 0260 + Clinicorp)"
+    },
+    {
+      "id": "excecoes",
+      "lane": "leitura",
+      "col": 2,
+      "type": "database",
+      "label": "calendar_availability_exceptions.unit_id"
+    },
+    {
+      "id": "motor",
+      "lane": "saida",
+      "col": 1,
+      "type": "service",
+      "label": "lib/agenda/consulta.ts (horários livres, encaixe, marcação)"
+    },
+    {
+      "id": "ia",
+      "lane": "saida",
+      "col": 2,
+      "type": "service",
+      "label": "crm_find_free_slots (livres_por_dia)"
+    },
+    {
+      "id": "tela",
+      "lane": "saida",
+      "col": 3,
+      "type": "service",
+      "label": "Agenda: Ocupado (Clinicorp)"
+    },
+    {
+      "id": "audit",
+      "lane": "saida",
+      "col": 4,
+      "type": "service",
+      "label": "api_audit_log (credencial, mapeamento, cópia com efeito)"
+    },
+    {
+      "id": "conciliar",
+      "lane": "copia",
+      "col": 7,
+      "type": "database",
+      "label": "fn_agenda_clinicorp_conciliar (0438): a foto cede à cópia"
+    }
   ],
   "edges": [
-    { "id": "e0", "from": "config", "to": "eventos", "label": "token cifrado, profissional → pessoa" },
-    { "id": "e1", "from": "cron", "to": "clinicorp", "label": "a cada 10 min, 90 dias" },
-    { "id": "e2", "from": "clinicorp", "to": "copia", "label": "agenda com paciente" },
-    { "id": "e3", "from": "copia", "to": "eventos", "label": "só início, fim, profissional, clínica, situação, id" },
-    { "id": "e4", "from": "eventos", "to": "funcao", "label": "do profissional ligado ao dono" },
-    { "id": "e5", "from": "funcao", "to": "motor", "label": "o que ocupa" },
-    { "id": "e6", "from": "funcao", "to": "tela", "label": "a fatia do recorte" },
-    { "id": "e7", "from": "dias", "to": "excecoes", "label": "várias datas, unidade e horário" },
-    { "id": "e8", "from": "excecoes", "to": "motor", "label": "o dia aberto substitui a jornada" },
-    { "id": "e9", "from": "motor", "to": "ia", "label": "mesmos horários que a tela" },
-    { "id": "e10", "from": "copia", "to": "config", "label": "laço de retorno: falha vira aviso na seção (last_sync_error)" },
-    { "id": "e11", "from": "funcao", "to": "ia", "label": "laço de retorno: cópia com erro vira fontes_defasadas; nunca copiada vira agenda_externa_nunca_lida" },
-    { "id": "e12", "from": "cron", "to": "audit", "label": "só rodada com efeito ou falha nova" },
-    { "id": "e13", "from": "config", "to": "audit", "label": "que mudou, nunca o token" },
-    { "id": "e14", "from": "config", "to": "eventos", "label": "gera o endereço: token uma vez na tela, só o sha256 no banco" },
-    { "id": "e15", "from": "gestao_webhook", "to": "receptor", "label": "eventos de agendamento, com paciente" },
-    { "id": "e16", "from": "receptor", "to": "eventos", "label": "webhook_formatos: caminho → tipo, nunca valor" },
-    { "id": "e17", "from": "receptor", "to": "config", "label": "laço de retorno: última batida e formatos medidos aparecem na seção" },
-    { "id": "e18", "from": "relatorio", "to": "importacao", "label": "o arquivo, com paciente, lido só no navegador" },
-    { "id": "e19", "from": "importacao", "to": "importados", "label": "dia, início, fim e a pessoa ligada na tela; substitui a foto anterior" },
-    { "id": "e20", "from": "importados", "to": "funcao", "label": "a foto da pessoa, como clinicorp" },
-    { "id": "e21", "from": "importacao", "to": "audit", "label": "só contagens" },
-    { "id": "e22", "from": "importados", "to": "config", "label": "laço de retorno: última importação e quantos horários daqui para a frente" }
+    {
+      "id": "e0",
+      "from": "config",
+      "to": "eventos",
+      "label": "token cifrado, profissional → pessoa"
+    },
+    {
+      "id": "e1",
+      "from": "cron",
+      "to": "clinicorp",
+      "label": "a cada 10 min, 90 dias"
+    },
+    {
+      "id": "e2",
+      "from": "clinicorp",
+      "to": "copia",
+      "label": "agenda com paciente"
+    },
+    {
+      "id": "e3",
+      "from": "copia",
+      "to": "eventos",
+      "label": "só início, fim, profissional, clínica, situação, id"
+    },
+    {
+      "id": "e4",
+      "from": "eventos",
+      "to": "funcao",
+      "label": "do profissional ligado ao dono"
+    },
+    {
+      "id": "e5",
+      "from": "funcao",
+      "to": "motor",
+      "label": "o que ocupa"
+    },
+    {
+      "id": "e6",
+      "from": "funcao",
+      "to": "tela",
+      "label": "a fatia do recorte"
+    },
+    {
+      "id": "e7",
+      "from": "dias",
+      "to": "excecoes",
+      "label": "várias datas, unidade e horário"
+    },
+    {
+      "id": "e8",
+      "from": "excecoes",
+      "to": "motor",
+      "label": "o dia aberto substitui a jornada"
+    },
+    {
+      "id": "e9",
+      "from": "motor",
+      "to": "ia",
+      "label": "mesmos horários que a tela"
+    },
+    {
+      "id": "e10",
+      "from": "copia",
+      "to": "config",
+      "label": "laço de retorno: falha vira aviso na seção (last_sync_error)"
+    },
+    {
+      "id": "e11",
+      "from": "funcao",
+      "to": "ia",
+      "label": "laço de retorno: cópia com erro vira fontes_defasadas; nunca copiada vira agenda_externa_nunca_lida"
+    },
+    {
+      "id": "e12",
+      "from": "cron",
+      "to": "audit",
+      "label": "só rodada com efeito ou falha nova"
+    },
+    {
+      "id": "e13",
+      "from": "config",
+      "to": "audit",
+      "label": "que mudou, nunca o token"
+    },
+    {
+      "id": "e14",
+      "from": "config",
+      "to": "eventos",
+      "label": "gera o endereço: token uma vez na tela, só o sha256 no banco"
+    },
+    {
+      "id": "e15",
+      "from": "gestao_webhook",
+      "to": "receptor",
+      "label": "eventos de agendamento, com paciente"
+    },
+    {
+      "id": "e16",
+      "from": "receptor",
+      "to": "eventos",
+      "label": "webhook_formatos: caminho → tipo, nunca valor"
+    },
+    {
+      "id": "e17",
+      "from": "receptor",
+      "to": "config",
+      "label": "laço de retorno: última batida e formatos medidos aparecem na seção"
+    },
+    {
+      "id": "e18",
+      "from": "relatorio",
+      "to": "importacao",
+      "label": "o arquivo, com paciente, lido só no navegador"
+    },
+    {
+      "id": "e19",
+      "from": "importacao",
+      "to": "importados",
+      "label": "dia, início, fim e a pessoa ligada na tela; substitui a foto anterior"
+    },
+    {
+      "id": "e20",
+      "from": "importados",
+      "to": "funcao",
+      "label": "a foto da pessoa, como clinicorp"
+    },
+    {
+      "id": "e21",
+      "from": "importacao",
+      "to": "audit",
+      "label": "só contagens"
+    },
+    {
+      "id": "e22",
+      "from": "importados",
+      "to": "config",
+      "label": "laço de retorno: última importação e quantos horários daqui para a frente"
+    },
+    {
+      "id": "e23",
+      "from": "receptor",
+      "to": "eventos",
+      "label": "fn_agenda_clinicorp_gravar: só início, fim, profissional, clínica, situação, id"
+    },
+    {
+      "id": "e24",
+      "from": "receptor",
+      "to": "conciliar",
+      "label": "depois de gravar o evento"
+    },
+    {
+      "id": "e25",
+      "from": "config",
+      "to": "conciliar",
+      "label": "depois de ligar profissional a pessoa"
+    },
+    {
+      "id": "e26",
+      "from": "importacao",
+      "to": "conciliar",
+      "label": "depois de gravar a foto nova"
+    },
+    {
+      "id": "e27",
+      "from": "conciliar",
+      "to": "importados",
+      "label": "apaga o horário que a cópia conhece (mesma pessoa, mesmo começo)"
+    },
+    {
+      "id": "e28",
+      "from": "receptor",
+      "to": "audit",
+      "label": "só batida com efeito, só contagens"
+    },
+    {
+      "id": "e29",
+      "from": "eventos",
+      "to": "config",
+      "label": "laço de retorno: o profissional sem nome aparece pelo próximo horário"
+    }
   ]
 }

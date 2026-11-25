@@ -44,6 +44,17 @@ import { esperarAgenda } from "./helpers/tela-agenda";
  *     pedido ao servidor não leva nada do paciente, e a terça deixa de oferecer
  *     10:00–11:30.
  *
+ * E o webhook GRAVANDO (0438), no formato medido em 25/11/2026:
+ *
+ *  9. A Clinicorp manda o agendamento criado (em `Payload.Data`) do MESMO
+ *     horário que a importação trouxe, de um profissional ainda sem pessoa. Em
+ *     "Quem é quem" ele aparece pelo número e pelo próximo horário (o webhook não
+ *     traz o nome), e a foto importada segue ocupando.
+ * 10. O gestor liga o profissional; o horário sai da foto e a grade desenha UM
+ *     bloco, não dois.
+ * 11. A Clinicorp manda o desmarque (direto em `Payload`); a terça volta a
+ *     oferecer 10:00. Nada do paciente chega ao banco nem à tela.
+ *
  * Dados: tudo fictício. Fixtures: `scripts/seed-e2e-agenda.ts` (tipo de 30 min
  * e jornada seg–sex 09:00–18:00 do atendente).
  */
@@ -427,5 +438,93 @@ test("o que já está marcado entra pela importação do relatório, lido no nav
     const horarios = await horariosDoDia(page, creds, dias[2]!);
     for (const ocupado of ["10:00", "10:30", "11:00"]) expect(horarios).not.toContain(ocupado);
     expect(horarios).toEqual(expect.arrayContaining(["09:30", "11:30", "14:00", "16:00"]));
+  });
+});
+
+test("o webhook grava a ocupação, substitui o horário importado e libera o desmarcado", async ({ page }, info) => {
+  // Continua da importação acima: a foto tem a terça 10:00–11:30 do atendente.
+  const db = admin();
+  await entrar(page, creds);
+  const terca = dias[2]!;
+  const documento = {
+    Name: PACIENTE.nome,
+    PatientName: PACIENTE.nome,
+    MobilePhone: PACIENTE.fone,
+    Notes: "observacao ficticia",
+    Patient_PersonId: 8800003,
+    AtomicDate: Number(terca.replaceAll("-", "")),
+    Clinic_BusinessId: 880001,
+    Dentist_PersonId: 990002,
+    ScheduleToId: 990102,
+    fromTime: "10:00",
+    toTime: "11:30",
+    id: 7700003,
+  };
+  const bater = (corpo: unknown) =>
+    fetch(endereco, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corpo) });
+  const naFoto = async () =>
+    (await db.from("calendar_clinicorp_imported_events").select("id", { count: "exact", head: true }).eq("organization_id", creds.org_id)).count;
+
+  let endereco = "";
+  await test.step("gera o endereço; a Clinicorp manda o agendamento criado do horário importado", async () => {
+    expect(await naFoto()).toBe(1);
+    const sanfona = await abrirSanfona(page, "Agenda da Clinicorp");
+    await sanfona.getByRole("button", { name: "Gerar endereço do webhook" }).click();
+    const campo = sanfona.getByTestId("endereco-do-webhook");
+    await expect(campo).toHaveValue(/\/api\/v1\/webhooks\/clinicorp\/[0-9a-f]{64}$/, { timeout: 15_000 });
+    endereco = await campo.inputValue();
+    expect((await bater({ Event: "Criado", Payload: { Data: documento, Kind: "Criado" } })).status).toBe(200);
+  });
+
+  await test.step("sem pessoa ligada, o profissional aparece pelo número e pelo próximo horário", async () => {
+    const sanfona = await abrirSanfona(page, "Agenda da Clinicorp");
+    await expect(sanfona.getByTestId("batida-do-webhook")).toContainText("1 horário(s) ocupado(s) daqui para a frente", {
+      timeout: 15_000,
+    });
+    const linha = sanfona.getByTestId("profissionais-da-clinicorp").locator("li", { hasText: "Profissional 990002" });
+    await expect(linha).toContainText("Próximo horário");
+    await expect(linha).toContainText("10:00");
+    expect(await naFoto()).toBe(1);
+    await evidencia(page, info, "webhook-profissional-pelo-proximo-horario");
+  });
+
+  await test.step("liga o profissional: o horário sai da foto e a grade desenha um bloco só", async () => {
+    const sanfona = await abrirSanfona(page, "Agenda da Clinicorp");
+    await sanfona.getByLabel("Pessoa da Agenda para 990002").selectOption(creds.agenda!.dono_user_id);
+    await sanfona.getByRole("button", { name: "Salvar quem é quem" }).click();
+    await expect(page.getByText("Profissionais ligados.")).toBeVisible({ timeout: 15_000 });
+    expect(await naFoto()).toBe(0);
+
+    const horarios = await horariosDoDia(page, creds, terca);
+    for (const ocupado of ["10:00", "10:30", "11:00"]) expect(horarios).not.toContain(ocupado);
+
+    await page.goto("/app/agenda");
+    await irParaASemanaSeguinte(page);
+    const blocos = page.locator('[data-origem="google_sync"]', { hasText: "Ocupado (Clinicorp)" });
+    await expect(blocos.first()).toBeVisible({ timeout: 20_000 });
+    await expect(blocos).toHaveCount(1);
+    await evidencia(page, info, "webhook-um-bloco-so");
+  });
+
+  await test.step("desmarcado na Clinicorp: a terça volta a oferecer 10:00–11:30", async () => {
+    const desmarque = { ...documento, Canceled: "X", CanceledDate: new Date().toISOString(), CancelReason: "motivo ficticio" };
+    expect((await bater({ Event: "Desmarcado", Payload: desmarque })).status).toBe(200);
+    expect(await horariosDoDia(page, creds, terca)).toEqual(expect.arrayContaining(["10:00", "10:30", "11:00"]));
+    await evidencia(page, info, "webhook-desmarcado-libera");
+  });
+
+  await test.step("nada do paciente no banco nem na tela", async () => {
+    const lidas = await Promise.all(
+      ["calendar_clinicorp_integrations", "calendar_clinicorp_professionals", "calendar_clinicorp_events", "calendar_clinicorp_imported_events"].map(
+        (tabela) => db.from(tabela).select("*").eq("organization_id", creds.org_id),
+      ),
+    );
+    const gravado = JSON.stringify(lidas.map((l) => l.data));
+    for (const proibido of [PACIENTE.nome, PACIENTE.fone, "observacao ficticia", "8800003", "motivo ficticio"]) {
+      expect(gravado).not.toContain(proibido);
+    }
+    const sanfona = await abrirSanfona(page, "Agenda da Clinicorp");
+    await expect(sanfona.getByTestId("profissionais-da-clinicorp")).toBeVisible();
+    expect(await page.content()).not.toContain(PACIENTE.nome);
   });
 });
