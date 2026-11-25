@@ -40431,6 +40431,52 @@ grant  execute on function public.fn_agenda_ocupacao_externa_do_dono(uuid, uuid,
 notify pgrst, 'reload schema';
 -- ---- fim: a importação do relatório da Clinicorp (migration 0435) ----
 
+-- ---- devolução automática confere o sinal humano sob o lock (migration 0436) ----
+-- Derivado de supabase/migrations/20261125010000_0436_devolucao_automatica_confere_o_sinal_humano.sql
+-- (o porquê inteiro está no cabeçalho de lá). Porte de melgarafael/DeskcommCRM
+-- #5183 (9472 lá). O cron `handoff-devolucao` solta o dono só se a conversa
+-- ainda estiver como a varredura a leu: mesmo dono e nenhum sinal humano depois
+-- do corte, conferidos sob o lock e no mesmo release. Função nova, só
+-- service_role; nenhuma tabela, coluna ou dado.
+create or replace function public.fn_conversation_release_if_idle(
+  p_organization_id uuid,
+  p_conversation_id uuid,
+  p_expected_assignee uuid,
+  p_sem_sinal_humano_desde timestamptz
+) returns boolean
+language plpgsql
+set search_path = public
+as $$
+begin
+  perform 1
+    from public.conversations
+   where id = p_conversation_id
+     and organization_id = p_organization_id
+     and assigned_to_user_id is not distinct from p_expected_assignee
+     and coalesce(last_handoff_at, '-infinity') <= p_sem_sinal_humano_desde
+     and coalesce(assigned_at, '-infinity') <= p_sem_sinal_humano_desde
+     and coalesce(last_outbound_at, '-infinity') <= p_sem_sinal_humano_desde
+   for no key update;
+  if not found then
+    return false;
+  end if;
+
+  return exists (
+    select 1
+      from public.fn_conversation_assign(
+        p_organization_id, p_conversation_id, null, 'release', p_expected_assignee, true)
+  );
+end;
+$$;
+
+revoke execute on function public.fn_conversation_release_if_idle(uuid, uuid, uuid, timestamptz)
+  from public, anon, authenticated;
+grant execute on function public.fn_conversation_release_if_idle(uuid, uuid, uuid, timestamptz)
+  to service_role;
+
+notify pgrst, 'reload schema';
+-- ---- fim: devolução automática confere o sinal humano sob o lock (migration 0436) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
