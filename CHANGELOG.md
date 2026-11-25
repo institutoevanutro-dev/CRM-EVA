@@ -8,6 +8,16 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.41.1] — 2026-11-25
+
+### Corrigido
+
+- **O pós-consulta não faz mais sair "chamei alguém da equipe" num número sem IA** Quando o paciente respondia ao texto fixo de um follow-up (como o pós-consulta) com uma mensagem
+  de tom negativo, o detector de sentimento passava a conversa para a equipe e mandava ao paciente
+  o aviso "chamei alguém da equipe", mesmo num número onde nenhum agente atende. O aviso só deve
+  sair onde a IA de fato conversou, e o texto fixo do fluxo passou a não contar como conversa da
+  IA. Onde um agente já falou com o paciente, o aviso continua saindo como antes.
+
 ## [5.41.0] — 2026-11-25
 
 ### Adicionado
@@ -10162,7 +10172,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.41.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.41.1...HEAD
+[5.41.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.41.0...v5.41.1
 [5.41.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.40.1...v5.41.0
 [5.40.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.40.0...v5.40.1
 [5.40.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.39.0...v5.40.0
