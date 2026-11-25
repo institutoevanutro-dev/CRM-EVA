@@ -8,6 +8,69 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.40.1] — 2026-11-25
+
+### Corrigido
+
+- **A leitura da agenda diz qual evento do sistema ficou sem compromisso** Quando um evento que o CRM publicou no Google Agenda continua ocupando horário,
+  mas o compromisso dele não existe mais no CRM, a leitura da agenda parava com a
+  frase genérica "A leitura não terminou". Agora a tela diz o dia e a hora do
+  evento e pede para corrigir ou remover esse evento no Google Agenda, e o
+  registro da leitura passa a levar a mesma frase. O evento cancelado que ficou
+  sem compromisso continua sendo descartado sem travar a leitura, agora também
+  quando o cancelamento chega escrito em maiúsculas. Porte de
+  melgarafael/DeskcommCRM#5136 (contribuição de @yunshu0909).
+
+- **A resposta em mensagens curtas não parte mais no meio de "Drs.", "Sras." ou "Eng."** Com **Responder em várias mensagens curtas** ligado, o parágrafo que passa do
+  limite de caracteres é dividido por frases. "Dr.", "Dra.", "Sr.", "Sra." e
+  "Prof." já não terminavam a frase; o plural e os títulos profissionais ainda
+  terminavam, e o cliente recebia duas mensagens cortadas no meio, como "Atendem
+  os Drs." e "Paulo e André às terças". Agora "Drs.", "Dras.", "Srs.", "Sras.",
+  "Srtas.", "Profs.", "Eng.", "Enga.", "Arq.", "Adv." e, em espanhol, "Lic." e
+  "Ing." também não terminam a frase. Porte de melgarafael/DeskcommCRM#5186
+  (contribuição de @AlecsanderAbreu).
+
+- **A devolução automática ao agente não toma mais a conversa que alguém da equipe acabou de assumir ou responder** Com a devolução automática ligada, a rotina lê as conversas e, logo depois,
+  devolve ao agente de IA as que passaram do prazo sem resposta da equipe, ou
+  aquelas em que o cliente escreveu durante a pausa e ninguém respondeu. Se nesse
+  intervalo alguém da equipe assumisse a conversa ou respondesse o cliente, a
+  rotina não via a mudança e devolvia a conversa à IA mesmo assim, logo depois de
+  a pessoa entrar nela.
+
+  Agora a devolução confere, na hora de gravar, que a conversa continua com o
+  mesmo responsável e que ninguém da equipe assumiu ou respondeu depois da
+  leitura. Se mudou, a conversa fica com a pessoa e a rodada segue para a
+  próxima, sem contar como falha. O banco ganha uma função de apoio (migration
+  0436), aplicada pela atualização normal. Nada a fazer. Porte de
+  melgarafael/DeskcommCRM#5183.
+
+- **Os campos da regra por regex nos guardrails aparecem no idioma escolhido** No agente › Guardrails, as regras por regex (de saída e de entrada) mostravam os
+  campos "Pattern (regex)" e "Flags" em inglês. Agora eles aparecem como "Padrão
+  (regex)" e "Opções da regex" em português e como "Patrón (regex)" e "Opciones
+  de la regex" em espanhol. Porte de melgarafael/DeskcommCRM#5218 (contribuição
+  de @Yshuro, com o caso da regra de entrada de @sniwas).
+
+- **O horário do atendente cabe na tela do celular e fala o idioma escolhido** Em Equipe › Atendimento › Horário, numa tela de celular, o diálogo rolava um
+  pouco para o lado por causa do botão "Copiar estes horários para os outros dias
+  úteis". Agora esse botão quebra a linha quando falta espaço, e o diálogo cabe
+  na largura da tela. Os botões "Adicionar janela", "Salvar" e "Cancelar", e os
+  nomes que o leitor de tela lê nos campos da janela, passam a seguir o idioma
+  escolhido. Porte de melgarafael/DeskcommCRM#5202 (contribuição de
+  @ningsiyuan1024).
+
+- **Regra «Quando um negócio for ganho» volta a enviar WhatsApp e iniciar fluxo de mensagens** Uma regra «Quando um negócio for ganho» com uma ação de WhatsApp (enviar
+  mensagem, iniciar fluxo de mensagens ou mensagem da IA) terminava pela metade:
+  o card criado pela regra aparecia, mas a mensagem falhava por dentro e a
+  execução ficava parcial. A causa era o resolvedor que liga o evento ao contato da
+  conversa: ele conhecia a criação, a mudança de etapa e a etiqueta do negócio,
+  mas não o ganho nem a perda.
+
+  Agora o ganho e a perda do negócio também resolvem o contato, e a ação de
+  mensagem sai como qualquer outra. Regras que já funcionavam continuam iguais, e
+  a reabertura do negócio segue fora. Vale para os negócios ganhos depois da
+  atualização (migration 0437), aplicada sozinha. Nada a fazer. Porte de
+  melgarafael/DeskcommCRM#5163 (contribuição de @webtecnica).
+
 ## [5.40.0] — 2026-11-25
 
 ### Adicionado
@@ -10085,7 +10148,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.40.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.40.1...HEAD
+[5.40.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.40.0...v5.40.1
 [5.40.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.39.0...v5.40.0
 [5.39.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.38.0...v5.39.0
 [5.38.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.37.0...v5.38.0
