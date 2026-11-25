@@ -48,6 +48,7 @@ import {
   textoDoAviso,
   type MotivoDoAviso,
 } from "@/lib/escalacao/aviso-ao-lead";
+import { MARCA_DO_TEXTO_FIXO_DO_FLUXO } from "@/lib/followup/resposta-a-automacao";
 import { comecaComPalavraDeSaida } from "@/lib/opt-out/deteccao";
 import { carregarRosterDeAtendimento, podeAssumirAgora } from "@/lib/escalacao/atendentes";
 import type { QuemPodeAssumir } from "@/lib/escalacao/disponibilidade";
@@ -78,11 +79,15 @@ type LinhaDeFala = { metadata: Record<string, unknown> | null; created_at: strin
  * lembrete da Agenda e automação enviam como `webhook_source`. Quem marca a
  * autoria: `ai_actor_id` (ator `ai_agent`, o motor e o runtime nativo),
  * `ai_generated` (worker legado) e `texto_escrito_pela_ia` (automação "mensagem
- * escrita pela IA"). O próprio aviso nunca conta.
+ * escrita pela IA"). O próprio aviso nunca conta, e o texto fixo do fluxo de
+ * follow-up (pós-consulta) também não: o turno do worker grava `ai_actor_id` ao
+ * lado da marca, e a marca vence, como em `ehEnvioAutomatico`. Medido em 25/11:
+ * sem isto o pós-consulta legitimava o aviso num canal sem agente.
  */
 function ehFalaDaIa(m: LinhaDeFala): boolean {
   const meta = m.metadata ?? {};
   if (meta.aviso_de_escalacao === true) return false;
+  if (meta[MARCA_DO_TEXTO_FIXO_DO_FLUXO] === "true") return false;
   return typeof meta.ai_actor_id === "string" || meta.ai_generated === true || meta.texto_escrito_pela_ia === true;
 }
 

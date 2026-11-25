@@ -154,6 +154,32 @@ describe("guarda 1 — a IA precisa ter falado nesta conversa", () => {
     expect(enviar).toHaveBeenCalledTimes(1);
   });
 
+  it("texto fixo do fluxo (pós-consulta) não é fala da IA, mesmo carimbado com ai_actor_id", async () => {
+    // Medido em produção em 25/11/2026, no número do Dr. André (canal sem agente):
+    // o pós-consulta mandou o texto fixo às 9h18, o paciente respondeu que estava
+    // gripado e o sentimento disparou a passagem. O turno de follow-up grava
+    // `ai_actor_id` ao lado da marca, e a guarda contava a linha como fala.
+    const posConsulta: Fala = {
+      metadata: { ai_actor_id: "agent-engine", idempotency_key: "k", texto_fixo_do_fluxo: "true" },
+      created_at: horasAtras(3),
+      status: "delivered",
+    };
+    const r = await avisarLeadDoCrm(banco([posConsulta]), ENTRADA);
+    expect(r).toEqual({ avisado: false, porque: "ia_nunca_falou_nesta_conversa" });
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it("texto fixo do fluxo depois de uma fala real da IA: a fala conta, e a frase sai", async () => {
+    const posConsulta: Fala = {
+      metadata: { ai_actor_id: "agent-engine", texto_fixo_do_fluxo: "true" },
+      created_at: horasAtras(1),
+      status: "delivered",
+    };
+    const r = await avisarLeadDoCrm(banco([posConsulta, falaDaIa(horasAtras(5))]), ENTRADA);
+    expect(r).toEqual({ avisado: true });
+    expect(enviar).toHaveBeenCalledTimes(1);
+  });
+
   it("passagem pedida pelo agente (ferramenta MCP) antes de qualquer fala: a frase sai", async () => {
     // O agente externo chamou `crm_request_human_handoff` na primeira mensagem,
     // sem ter enviado nada. O contrato da ferramenta manda o agente NÃO avisar
