@@ -10,7 +10,8 @@
  * inteiro. A auditoria registra só contagens.
  *
  * O dia e a hora são do relógio da clínica; o instante sai do fuso da
- * organização. O que já passou não entra. Cada importação substitui a anterior.
+ * organização. O que já passou não entra. Cada importação substitui a anterior,
+ * e o horário que o webhook já trouxe sai da foto nova (migration 0438).
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
@@ -105,8 +106,15 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const { data: gravados, error } = await admin.rpc("fn_agenda_clinicorp_importar", { p_org: org, p_itens: itens });
   if (error) return fail("internal_error", t("Não consegui gravar a importação."), 500, { requestId });
+  // O que o webhook já trouxe (com id) sai da foto nova: nada conta duas vezes (migration 0438).
+  const { data: conciliados, error: erroConciliacao } = await admin.rpc("fn_agenda_clinicorp_conciliar", { p_org: org });
+  if (erroConciliacao) return fail("internal_error", t("Não consegui gravar a importação."), 500, { requestId });
 
-  const resultado = { recebidos: horarios.length, gravados: Number(gravados ?? 0), passados: horarios.length - itens.length };
+  const resultado = {
+    recebidos: horarios.length,
+    gravados: Number(gravados ?? 0) - Number(conciliados ?? 0),
+    passados: horarios.length - itens.length,
+  };
   void audit({
     action: "agenda.clinicorp_importada",
     actorUserId: authz.user.id,

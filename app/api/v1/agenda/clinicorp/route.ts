@@ -2,6 +2,7 @@
  * /api/v1/agenda/clinicorp — a agenda da Clinicorp desta organização (migration 0433).
  *
  *   GET    situação da cópia, do webhook (0434), da importação (0435) e os profissionais com a pessoa do CRM
+ *          e o próximo horário de cada um (o webhook não traz o nome do profissional)
  *   PUT    salva a credencial ("Usuário API" + "Token API" + assinante opcional)
  *   PATCH  mapeia profissional da Clinicorp -> pessoa da Agenda do CRM
  *   DELETE desliga: apaga credencial, endereço do webhook, mapeamento e a ocupação copiada
@@ -54,7 +55,14 @@ export async function GET(): Promise<Response> {
   const admin = createAdminClient();
 
   const agora = new Date().toISOString();
-  const [{ data: integracao, error }, { data: profissionais }, { count }, { count: importados }, { data: ultimaImportacao }] = await Promise.all([
+  const [
+    { data: integracao, error },
+    { data: profissionais },
+    { count },
+    { count: importados },
+    { data: ultimaImportacao },
+    { data: proximos },
+  ] = await Promise.all([
     admin
       .from("calendar_clinicorp_integrations")
       .select("api_user, subscriber_id, last_sync_at, last_sync_error, webhook_token_hash, webhook_last_received_at, webhook_formatos")
@@ -84,9 +92,25 @@ export async function GET(): Promise<Response> {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // O próximo horário de cada profissional: o webhook não traz o nome dele, e é
+    // por este horário que o gestor o acha na Clinicorp para dizer quem é.
+    admin
+      .from("calendar_clinicorp_events")
+      .select("professional_id, starts_at")
+      .eq("organization_id", org)
+      .neq("status", "cancelled")
+      .gte("ends_at", agora)
+      .order("starts_at", { ascending: true })
+      .limit(1000),
   ]);
   if (error) return fail("internal_error", error.message, 500, { requestId });
   if (!integracao) return ok({ configurada: false }, { requestId });
+
+  const proximoDe = new Map<string, string>();
+  for (const o of proximos ?? []) {
+    const atual = proximoDe.get(o.professional_id);
+    if (!atual || new Date(o.starts_at) < new Date(atual)) proximoDe.set(o.professional_id, o.starts_at);
+  }
 
   return ok(
     {
@@ -109,6 +133,7 @@ export async function GET(): Promise<Response> {
         professional_id: p.professional_id,
         nome: p.name,
         user_id: p.user_id,
+        proximo: proximoDe.get(p.professional_id) ?? null,
       })),
     },
     { requestId },
@@ -222,6 +247,10 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   }
 
   if (alterados > 0) {
+    // O evento do webhook que chegou antes desta ligação não tinha pessoa: agora
+    // tem, e o horário dele sai da foto importada (migration 0438).
+    const { error: erroConciliacao } = await admin.rpc("fn_agenda_clinicorp_conciliar", { p_org: org });
+    if (erroConciliacao) return fail("internal_error", t("Não consegui conferir a importação."), 500, { requestId });
     void audit({
       action: "agenda.clinicorp_profissionais_mapeados",
       actorUserId: authz.user.id,

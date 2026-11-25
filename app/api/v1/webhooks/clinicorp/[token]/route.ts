@@ -1,20 +1,27 @@
 /**
- * /api/v1/webhooks/clinicorp/[token] — a "Gestão de Webhook" da Clinicorp (migration 0434).
+ * /api/v1/webhooks/clinicorp/[token] — a "Gestão de Webhook" da Clinicorp (migrations 0434 e 0438).
  *
- * MODO DE CAPTURA. O payload desse webhook não tem documentação pública e traz o
- * paciente dentro. Antes de supor campo, este receptor só MEDE: guarda o
- * formato do que chegou (caminho → tipo, `lib/agenda/clinicorp/formato.ts`),
- * nunca um valor, e responde 200 para a Clinicorp não dar o endereço por morto.
- * O parser que grava a ocupação por `fn_agenda_clinicorp_gravar` é escrito
- * depois, contra o formato medido aqui.
+ * Duas coisas por batida:
+ *
+ * 1. MEDE o formato do que chegou (caminho → tipo, `lib/agenda/clinicorp/formato.ts`),
+ *    nunca um valor. Foi assim que o formato foi conhecido (25/11/2026), e segue
+ *    ligado para que um evento novo (agendamento apagado, por exemplo) apareça
+ *    em Configurações › Agenda antes de alguém supor o campo dele.
+ * 2. GRAVA a ocupação (0438): o evento traz o mesmo documento da API, lido por
+ *    `lerEventoDoWebhook` (`lib/agenda/clinicorp/item.ts`), que só deixa sair
+ *    início, fim, profissional, clínica, situação e id. Grava por
+ *    `fn_agenda_clinicorp_gravar` e concilia a foto importada do relatório
+ *    (`fn_agenda_clinicorp_conciliar`): o horário que a cópia passou a conhecer
+ *    sai da foto, e nada conta duas vezes.
  *
  * A organização sai do token do PATH: 64 hex gerados em Configurações › Agenda,
  * guardados só como sha256 em `calendar_clinicorp_integrations.webhook_token_hash`.
- * Nada do corpo vai a banco, log, Sentry nem auditoria; o log leva só o id do
- * formato. Não audita: é batida de entrada, como `publico/clique-google`.
+ * Nada do corpo vai a log nem a Sentry; o log leva o id do formato e se gravou.
+ * A auditoria, como a da cópia pela API, registra só a batida que mudou a
+ * ocupação, e só contagens.
  *
- * Aceita GET, POST e PUT: não se sabe se a Clinicorp confere o endereço antes de
- * mandar eventos, nem com que método manda. O método também é medido.
+ * Aceita GET, POST e PUT: a Clinicorp manda POST JSON (medido), mas GET e PUT
+ * seguem medidos em vez de recusados.
  */
 import { createHash, randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
@@ -22,11 +29,14 @@ import { z } from "zod";
 
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import { descreverFormato, lerCorpo, nomesDosCabecalhos, somarFormato } from "@/lib/agenda/clinicorp/formato";
+import { jsonComIdsGrandes, lerEventoDoWebhook } from "@/lib/agenda/clinicorp/item";
 import { fail, ok } from "@/lib/api/wrappers";
+import { audit } from "@/lib/audit";
 import { BodyLimitError, readLimitedBody } from "@/lib/http/limited-body";
 import { ipDoCliente } from "@/lib/http/ip-do-cliente";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -68,6 +78,8 @@ async function receber(req: NextRequest, ctx: { params: Promise<{ token: string 
   }
 
   const tipoDeConteudo = req.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() || null;
+  const corpo = lerCorpo(texto, tipoDeConteudo);
+  const org = integracao.organization_id;
   const agora = new Date();
   const formatos = somarFormato(
     integracao.webhook_formatos,
@@ -75,24 +87,52 @@ async function receber(req: NextRequest, ctx: { params: Promise<{ token: string 
       metodo: req.method,
       tipo_de_conteudo: tipoDeConteudo,
       cabecalhos: nomesDosCabecalhos(req.headers),
-      linhas: descreverFormato(lerCorpo(texto, tipoDeConteudo)),
+      linhas: descreverFormato(corpo),
     },
     agora,
   );
 
   // ponytail: ler-somar-gravar sem trava; duas batidas no mesmo instante podem
-  // perder uma contagem. Na captura isso não importa; o parser grava por função.
+  // perder uma contagem do formato. A ocupação, abaixo, grava por função.
   const { error: erroGravacao } = await admin
     .from("calendar_clinicorp_integrations")
     .update({ webhook_formatos: formatos, webhook_last_received_at: agora.toISOString() })
-    .eq("organization_id", integracao.organization_id);
+    .eq("organization_id", org);
   if (erroGravacao) return fail("unavailable", "Tente de novo.", 503, { requestId });
 
-  logger.info("[clinicorp-webhook] formato capturado", {
-    requestId,
-    organizationId: integracao.organization_id,
-    formato: formatos[0]?.id,
-  });
+  // JSON de novo, agora sem arredondar id (o `lerCorpo` serve à medida, não ao id).
+  const json = corpo !== null && typeof corpo === "object" && !tipoDeConteudo?.includes("x-www-form-urlencoded");
+  let gravados = 0;
+  let conciliados = 0;
+  if (json) {
+    const { data: organizacao } = await admin.from("organizations").select("timezone").eq("id", org).maybeSingle();
+    const fuso = fusoUtilizavel((organizacao as { timezone?: string | null } | null)?.timezone);
+    const ocupacao = lerEventoDoWebhook(jsonComIdsGrandes(texto), fuso);
+    if (ocupacao) {
+      const { data, error } = await admin.rpc("fn_agenda_clinicorp_gravar", { p_org: org, p_itens: [ocupacao] });
+      // 503: a Clinicorp tenta de novo, e a gravação é idempotente pelo id.
+      if (error) return fail("unavailable", "Tente de novo.", 503, { requestId });
+      gravados = Number(data ?? 0);
+      // A conciliação roda a organização inteira: a que falhar agora a próxima faz.
+      const conciliacao = await admin.rpc("fn_agenda_clinicorp_conciliar", { p_org: org });
+      if (conciliacao.error) logger.warn("[clinicorp-webhook] conciliação falhou", { requestId, organizationId: org });
+      conciliados = Number(conciliacao.data ?? 0);
+    }
+  }
+
+  if (gravados > 0 || conciliados > 0) {
+    void audit({
+      action: "agenda.clinicorp_copiada",
+      organizationId: org,
+      resourceType: "calendar_clinicorp_integration",
+      resourceId: org,
+      requestId,
+      // Só contagens: nem horário, nem profissional, nem nada do corpo.
+      metadata: { origem: "webhook", gravados, conciliados },
+    });
+  }
+
+  logger.info("[clinicorp-webhook] batida recebida", { requestId, organizationId: org, formato: formatos[0]?.id, gravados });
   return ok({ recebido: true }, { requestId });
 }
 

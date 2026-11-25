@@ -55,7 +55,7 @@ type Situacao =
       ocupacoes_futuras: number;
       webhook: Webhook;
       importacao: Importacao;
-      profissionais: Array<{ professional_id: string; nome: string | null; user_id: string | null }>;
+      profissionais: Array<{ professional_id: string; nome: string | null; user_id: string | null; proximo: string | null }>;
     };
 
 const CHAVE = ["agenda", "clinicorp"];
@@ -394,7 +394,7 @@ function Conteudo({
         {webhook?.ativo ? (
           <p className="text-sm" role="status" data-testid="batida-do-webhook">
             {webhook.ultima_batida
-              ? `${t("Última batida recebida")}: ${new Date(webhook.ultima_batida).toLocaleString()}`
+              ? `${t("Última batida recebida")}: ${new Date(webhook.ultima_batida).toLocaleString()} · ${situacao.configurada ? situacao.ocupacoes_futuras : 0} ${t("horário(s) ocupado(s) daqui para a frente")}`
               : t("Nenhuma batida recebida ainda.")}
           </p>
         ) : null}
@@ -500,12 +500,21 @@ function Conteudo({
         <div className="space-y-2" data-testid="profissionais-da-clinicorp">
           <h3 className="text-sm font-semibold">{t("Quem é quem")}</h3>
           <p className="text-sm text-text-muted">
-            {t("Ligue cada profissional da Clinicorp à pessoa da Agenda. Sem pessoa ligada, a ocupação dele não tira horário de ninguém.")}
+            {t(
+              "Ligue cada profissional da Clinicorp à pessoa da Agenda. Sem pessoa ligada, a ocupação dele não tira horário de ninguém. Pelo webhook o nome não vem: ache o profissional na Clinicorp pelo próximo horário dele.",
+            )}
           </p>
           <ul className="space-y-1">
             {situacao.profissionais.map((p) => (
               <li key={p.professional_id} className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="min-w-48">{p.nome ?? `${t("Profissional")} ${p.professional_id}`}</span>
+                <span className="min-w-48">
+                  {p.nome ?? `${t("Profissional")} ${p.professional_id}`}
+                  {p.proximo ? (
+                    <span className="block text-xs text-text-muted">
+                      {`${t("Próximo horário")}: ${new Date(p.proximo).toLocaleString()}`}
+                    </span>
+                  ) : null}
+                </span>
                 <select
                   aria-label={`${t("Pessoa da Agenda para")} ${p.nome ?? p.professional_id}`}
                   className="rounded-md border p-2"

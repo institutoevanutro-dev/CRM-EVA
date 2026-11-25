@@ -134,6 +134,23 @@ describe("quem é quem", () => {
     const res = await PATCH(pedir("PATCH", { profissionais: [{ professional_id: "9001", user_id: ESTRANHA }] }));
     expect(res.status).toBe(422);
     expect(db.tabelas.calendar_clinicorp_professionals!.every((p) => p.user_id === null)).toBe(true);
+    expect(db.cliente.rpc).not.toHaveBeenCalled();
+  });
+
+  it("ligar concilia a foto importada desta organização (0438): o evento que chegou antes da ligação sai da foto", async () => {
+    await PATCH(pedir("PATCH", { profissionais: [{ professional_id: "9001", user_id: DRA }] }));
+    expect(db.cliente.rpc).toHaveBeenCalledWith("fn_agenda_clinicorp_conciliar", { p_org: ORG });
+  });
+
+  it("o GET traz o próximo horário de cada profissional, para achá-lo na Clinicorp", async () => {
+    db.tabelas.calendar_clinicorp_events!.push(
+      { organization_id: ORG, professional_id: "9001", status: "confirmed", starts_at: "2030-01-02T13:00:00.000Z", ends_at: "2030-01-02T14:00:00.000Z" },
+      { organization_id: ORG, professional_id: "9001", status: "confirmed", starts_at: "2030-01-01T13:00:00.000Z", ends_at: "2030-01-01T14:00:00.000Z" },
+      { organization_id: ORG, professional_id: "9001", status: "cancelled", starts_at: "2029-12-31T13:00:00.000Z", ends_at: "2029-12-31T14:00:00.000Z" },
+      { organization_id: OUTRA, professional_id: "9001", status: "confirmed", starts_at: "2029-12-30T13:00:00.000Z", ends_at: "2029-12-30T14:00:00.000Z" },
+    );
+    const { data } = await (await GET()).json();
+    expect(data.profissionais).toEqual([{ professional_id: "9001", nome: "Dra. Fictícia", user_id: null, proximo: "2030-01-01T13:00:00.000Z" }]);
   });
 });
 
@@ -202,7 +219,10 @@ describe("a importação do relatório exportado (0435)", () => {
   beforeEach(() => {
     db.tabelas.calendar_clinicorp_integrations!.push({ organization_id: ORG, api_user: null });
     db.tabelas.organizations = [{ id: ORG, timezone: "America/Sao_Paulo" }];
-    vi.mocked(db.cliente.rpc).mockResolvedValue({ data: 1, error: null } as never);
+    vi.mocked(db.cliente.rpc).mockImplementation((async (nome: string) => ({
+      data: nome === "fn_agenda_clinicorp_importar" ? 1 : 0,
+      error: null,
+    })) as never);
   });
 
   it("grava no fuso da clínica, deixa de fora o que já passou e audita só contagens", async () => {
@@ -218,6 +238,13 @@ describe("a importação do relatório exportado (0435)", () => {
     expect(auditoria?.metadata).toEqual({ recebidos: 2, gravados: 1, passados: 1 });
     expect(JSON.stringify(vi.mocked(audit).mock.calls)).not.toContain(DRA);
     expect(JSON.stringify(vi.mocked(audit).mock.calls)).not.toContain("2030");
+  });
+
+  it("o que o webhook já trouxe sai da foto nova (0438), e a contagem desconta", async () => {
+    vi.mocked(db.cliente.rpc).mockImplementation((async () => ({ data: 1, error: null })) as never);
+    const res = await importar({ horarios: [futuro] });
+    expect(db.cliente.rpc).toHaveBeenLastCalledWith("fn_agenda_clinicorp_conciliar", { p_org: ORG });
+    expect((await res.json()).data).toEqual({ recebidos: 1, gravados: 0, passados: 0 });
   });
 
   it("campo a mais (um nome de paciente) recusa o pedido inteiro, sem gravar nada", async () => {

@@ -145,6 +145,21 @@ export function lerItemDaClinicorp(cru: unknown, fuso: string): OcupacaoDaClinic
   };
 }
 
+/**
+ * Um evento da "Gestão de Webhook" da Clinicorp como OCUPAÇÃO. Formato medido em
+ * 25/11/2026 pelo modo de captura (migration 0434): o agendamento CRIADO vem em
+ * `Payload.Data`; status, horário e desmarcação vêm direto em `Payload`. Dentro
+ * está o mesmo documento da API, com os mesmos campos, e ele passa pelo mesmo
+ * leitor: o paciente (nome, telefone, observação, motivo do desmarque) fica de
+ * fora pelo mesmo schema. `SubAppointmentsList` fica de fora como na cópia pela API.
+ */
+export function lerEventoDoWebhook(corpo: unknown, fuso: string): OcupacaoDaClinicorp | null {
+  const payload = (corpo as { Payload?: unknown } | null)?.Payload;
+  if (!payload || typeof payload !== "object") return null;
+  const dados = (payload as { Data?: unknown }).Data;
+  return lerItemDaClinicorp(dados && typeof dados === "object" ? dados : payload, fuso);
+}
+
 /** A lista inteira. Resposta que não é lista é erro de contrato, não agenda vazia. */
 export function lerAgendaDaClinicorp(
   resposta: unknown,

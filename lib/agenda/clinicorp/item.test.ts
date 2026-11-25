@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { jsonComIdsGrandes, lerAgendaDaClinicorp, lerItemDaClinicorp, lerProfissionaisDaClinicorp } from "./item";
+import {
+  jsonComIdsGrandes,
+  lerAgendaDaClinicorp,
+  lerEventoDoWebhook,
+  lerItemDaClinicorp,
+  lerProfissionaisDaClinicorp,
+} from "./item";
 
 /**
  * O leitor da resposta de `GET /appointment/list` (Swagger oficial da Clinicorp).
@@ -100,5 +106,94 @@ describe("jsonComIdsGrandes", () => {
     const r = jsonComIdsGrandes('[{"id": 9007199254740993, "Dentist_PersonId": 12}]') as Array<Record<string, unknown>>;
     expect(r[0]?.id).toBe("9007199254740993");
     expect(r[0]?.Dentist_PersonId).toBe(12);
+  });
+});
+
+describe("lerEventoDoWebhook", () => {
+  /**
+   * As quatro formas medidas em 25/11/2026 (criado, status, horário, desmarcado),
+   * com as chaves que a captura registrou e valores fictícios. O que a captura
+   * não mediu (o valor de `Canceled`) segue a régua do Swagger: "X" liga.
+   */
+  const PACIENTE = {
+    Name: "Paciente Ficticia Webhook",
+    PatientName: "Paciente Ficticia Webhook",
+    MobilePhone: "27900007777",
+    Email: "webhook@exemplo.test",
+    Notes: "observacao ficticia do webhook",
+    Patient_PersonId: 8800001,
+  };
+  const documento = {
+    ...PACIENTE,
+    AtomicDate: 20261202,
+    Clinic_BusinessId: 7001,
+    CreateDate: "2026-11-25T13:30:36.000Z",
+    CreateUserId: 501,
+    CreatedBy: "Recepcao Ficticia",
+    Deleted: "",
+    Dentist_PersonId: 9001,
+    ListTagsId: [],
+    ScheduleToId: 9101,
+    ScheduleToType: "Dentist",
+    date: "2026-12-02T03:00:00.000Z",
+    fromTime: "22:00",
+    id: 5700000000000001,
+    toTime: "22:30",
+  };
+  const sub = { AppointmentId: 5700000000000001, Dentist_PersonId: 9002, Name: PACIENTE.Name, PatientName: PACIENTE.Name, fromTime: "08:00", toTime: "09:00" };
+  const ocupacao = {
+    external_id: "5700000000000001",
+    professional_id: "9001",
+    clinic_id: "7001",
+    starts_at: "2026-12-03T01:00:00.000Z", // 22:00 de 02/12 em São Paulo
+    ends_at: "2026-12-03T01:30:00.000Z",
+    status: "confirmed",
+    external_updated_at: null,
+  };
+
+  it("criado: o agendamento vem em Payload.Data", () => {
+    expect(lerEventoDoWebhook({ Event: "Criado", Payload: { Data: documento, Kind: "Criado" } }, FUSO)).toEqual(ocupacao);
+  });
+
+  it("status mudou: direto em Payload; o subagendamento não vira ocupação", () => {
+    const corpo = { Event: "Status", Payload: { ...documento, StatusId: 1, newStatus: 1, currentStatusId: 0, SubAppointmentsList: [sub] } };
+    expect(lerEventoDoWebhook(corpo, FUSO)).toEqual(ocupacao);
+  });
+
+  it("horário alterado: vale o horário novo", () => {
+    const corpo = {
+      Event: "Alterado",
+      Payload: { ...documento, fromTime: "22:30", toTime: "23:00", OldfromTime: "22:00", OldtoTime: "22:30", Modified: "X" },
+    };
+    expect(lerEventoDoWebhook(corpo, FUSO)).toMatchObject({
+      starts_at: "2026-12-03T01:30:00.000Z",
+      ends_at: "2026-12-03T02:00:00.000Z",
+      status: "confirmed",
+    });
+  });
+
+  it("desmarcado: vira `cancelled`, e o motivo (texto livre) não sai", () => {
+    const corpo = {
+      Event: "Desmarcado",
+      Payload: { ...documento, Canceled: "X", CanceledDate: "2026-11-25T13:33:02.000Z", CancelBy: "Dra Ficticia", CancelReason: "motivo ficticio" },
+    };
+    const o = lerEventoDoWebhook(corpo, FUSO);
+    expect(o).toMatchObject({ external_id: "5700000000000001", status: "cancelled" });
+    expect(JSON.stringify(o)).not.toContain("motivo");
+  });
+
+  it("nada do paciente atravessa, em nenhuma das formas", () => {
+    const formas = [{ Payload: { Data: documento } }, { Payload: { ...documento, SubAppointmentsList: [sub] } }];
+    const texto = JSON.stringify(formas.map((f) => lerEventoDoWebhook(f, FUSO)));
+    for (const dado of ["Ficticia", "27900007777", "exemplo.test", "observacao", "8800001", "Recepcao"]) {
+      expect(texto).not.toContain(dado);
+    }
+  });
+
+  it("sem Payload, Payload que não é objeto ou documento ilegível: nada", () => {
+    expect(lerEventoDoWebhook(null, FUSO)).toBeNull();
+    expect(lerEventoDoWebhook({ Event: "x" }, FUSO)).toBeNull();
+    expect(lerEventoDoWebhook({ Payload: "texto" }, FUSO)).toBeNull();
+    expect(lerEventoDoWebhook({ Payload: { Data: { id: 1 } } }, FUSO)).toBeNull();
   });
 });

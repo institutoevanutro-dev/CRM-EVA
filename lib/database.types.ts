@@ -8516,6 +8516,7 @@ export type Database = {
       }
       fn_agenda_clinicorp_gravar: { Args: { p_org: string; p_itens: Json }; Returns: number }
       fn_agenda_clinicorp_importar: { Args: { p_org: string; p_itens: Json }; Returns: number }
+      fn_agenda_clinicorp_conciliar: { Args: { p_org: string }; Returns: number }
       fn_appointment_change_core: { Args: { p_org: string; p_id: string; p_revision: number; p_patch: Json; p_remote: boolean; p_base: Json }; Returns: Json }
 
       fn_followup_job_current: { Args: { p_org: string; p_job: string; p_enrollment: string; p_node: string }; Returns: boolean }

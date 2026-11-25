@@ -40501,6 +40501,42 @@ notify pgrst, 'reload schema';
 -- Quem mede a regra: `tests/invariants/negocio-ganho-e-perdido-alcancam-a-origem.test.ts`.
 -- ---- fim: negócio ganho e perdido alcançam a origem (migration 0437) ----
 
+-- ---- o webhook da Clinicorp concilia a foto importada (migration 0438) ----
+-- Derivado de supabase/migrations/20261125150000_0438_clinicorp_webhook_concilia_a_importacao.sql
+-- (o porquê inteiro está no cabeçalho de lá). O receptor do webhook (0434) passa
+-- a gravar a ocupação por `fn_agenda_clinicorp_gravar` (0433, sem mudança), e o
+-- horário que a cópia conhece sai da foto importada (0435): mesma pessoa, mesmo
+-- começo. Função nova e idempotente (`create or replace`); nenhuma existente
+-- muda, nenhuma tabela ou coluna. Cria função, então entra ANTES da VARREDURA anon.
+create or replace function public.fn_agenda_clinicorp_conciliar(p_org uuid)
+returns integer
+language sql
+volatile
+set search_path = public
+as $$
+  with apagados as (
+    delete from public.calendar_clinicorp_imported_events m
+     using public.calendar_clinicorp_events e
+      join public.calendar_clinicorp_professionals p
+        on p.organization_id = e.organization_id
+       and p.professional_id = e.professional_id
+     where m.organization_id = p_org
+       and e.organization_id = p_org
+       and p.user_id = m.user_id
+       -- ponytail: casa pelo começo; duas consultas da mesma pessoa no mesmo
+       -- começo viram uma linha na foto (a importação já junta as iguais).
+       and e.starts_at = m.starts_at
+    returning 1
+  )
+  select count(*)::integer from apagados;
+$$;
+
+revoke execute on function public.fn_agenda_clinicorp_conciliar(uuid) from public, anon, authenticated;
+grant execute on function public.fn_agenda_clinicorp_conciliar(uuid) to service_role;
+
+notify pgrst, 'reload schema';
+-- ---- fim: o webhook da Clinicorp concilia a foto importada (migration 0438) ----
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
