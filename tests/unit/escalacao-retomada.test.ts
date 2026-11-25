@@ -60,6 +60,13 @@ interface CenarioBanco {
   /** A linha do contato lida antes de qualquer escrita (marca "sempre atendimento humano"). */
   contato?: Record<string, unknown> | null;
   erroDoContato?: { message: string } | null;
+  /**
+   * Sinal humano DEPOIS do corte do cron, como está na hora da escrita (cron
+   * handoff-devolucao). Na conversa sem dono, o dublê só recusa o UPDATE se ele
+   * trouxer o filtro do relógio em `last_outbound_at`; na conversa com dono,
+   * `fn_conversation_release_if_idle` responde `false`.
+   */
+  respostaDepoisDoCorte?: boolean;
 }
 
 /**
@@ -70,12 +77,17 @@ interface CenarioBanco {
 function fazerSupabase(cenario: CenarioBanco, cap: Captura) {
   const from = (tabela: string) => {
     let ehUpdate = false;
+    const ous: string[] = [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const chain: any = {
       select: () => chain,
       eq: () => chain,
       is: () => chain,
       in: () => chain,
+      or: (expr: string) => {
+        ous.push(expr);
+        return chain;
+      },
       order: () => chain,
       limit: () => chain,
       update: (valores: Record<string, unknown>) => {
@@ -89,7 +101,8 @@ function fazerSupabase(cenario: CenarioBanco, cap: Captura) {
       },
       maybeSingle: () => {
         if (ehUpdate) {
-          const casa = cenario.updateDaConversaCasa ?? true;
+          const relogio = ous.some((v) => v.startsWith("last_outbound_at."));
+          const casa = (cenario.updateDaConversaCasa ?? true) && !(relogio && cenario.respostaDepoisDoCorte);
           return Promise.resolve({ data: casa ? { id: CONV } : null, error: null });
         }
         if (tabela === "conversations") {
@@ -125,6 +138,9 @@ function fazerSupabase(cenario: CenarioBanco, cap: Captura) {
       cap.rpc.push({ fn, args });
       if (fn === "emit_event") {
         return Promise.resolve({ data: null, error: cenario.erroDoEmitEvent ?? null });
+      }
+      if (fn === "fn_conversation_release_if_idle") {
+        return Promise.resolve({ data: cenario.respostaDepoisDoCorte !== true, error: null });
       }
       return Promise.resolve({ data: [{ id: CONV }], error: null });
     },
@@ -479,6 +495,88 @@ describe("devolver o atendimento ao agente", () => {
     expect(res).toMatchObject({ ok: false, erro: "assignment_conflict" });
     // E não chega a mexer no contato: devolver metade seria pior que não devolver.
     expect(cap.updates.filter((u) => u.tabela === "contacts")).toEqual([]);
+  });
+
+  /**
+   * O CRON DECIDE SOBRE UMA LEITURA ANTIGA (cron `handoff-devolucao`, porte do
+   * upstream #5183).
+   *
+   * Entre a varredura e a escrita o atendente pode assumir a conversa, ou
+   * responder sem trocar de dono — aí só `last_outbound_at` anda. A troca de dono
+   * é recusada antes de qualquer escrita; o corte vai para DENTRO da escrita: com
+   * dono, no release sob o lock (`fn_conversation_release_if_idle`, migration
+   * 0436); sem dono, no próprio UPDATE da devolução, que é a única escrita.
+   */
+  const CORTE = "2026-08-04T12:00:00.000Z";
+  async function retomarPeloCron(cenario: CenarioBanco, cap: Captura, expectedAssignee?: string | null) {
+    return devolverAtendimentoAoAgente(
+      {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        supabase: fazerSupabase(cenario, cap) as any,
+        organizationId: ORG,
+        actor: { type: "webhook_source", id: "cron:handoff-devolucao" } as Actor,
+        requestId: "req-1",
+      },
+      {
+        conversationId: CONV,
+        origem: { automatica: { minutos: 60 } },
+        expectedAssignee:
+          expectedAssignee !== undefined
+            ? expectedAssignee
+            : ((cenario.conversa?.assigned_to_user_id ?? null) as string | null),
+        semSinalHumanoDesde: CORTE,
+      },
+    );
+  }
+
+  it("cron, conversa com dono: solta pelo release que confere dono E relógio sob o lock", async () => {
+    const cap = novaCaptura();
+    const res = await retomarPeloCron(cenarioComAtendimentoHumano(), cap);
+    expect(res.ok).toBe(true);
+    expect(cap.rpc.filter((r) => r.fn.startsWith("fn_conversation_"))).toEqual([
+      {
+        fn: "fn_conversation_release_if_idle",
+        args: {
+          p_organization_id: ORG,
+          p_conversation_id: CONV,
+          p_expected_assignee: ATENDENTE,
+          p_sem_sinal_humano_desde: CORTE,
+        },
+      },
+    ]);
+  });
+
+  it("cron, conversa com dono: o atendente respondeu depois do corte → nada volta à IA, conflito SEM detalhe", async () => {
+    const cap = novaCaptura();
+    const res = await retomarPeloCron(cenarioComAtendimentoHumano({ respostaDepoisDoCorte: true }), cap);
+    expect(res).toMatchObject({ ok: false, erro: "assignment_conflict" });
+    if (!res.ok) expect(res.detalhe).toBeUndefined();
+    expect(cap.updates).toEqual([]);
+    expect(cap.rpc.some((r) => r.fn === "emit_event")).toBe(false);
+  });
+
+  it("cron, conversa sem dono: o relógio vai no UPDATE da devolução, e resposta depois do corte o recusa", async () => {
+    const semDono = conversaPassadaAHumano({ assigned_to_user_id: null, assignee_kind: null });
+    const cap = novaCaptura();
+    const res = await retomarPeloCron(cenarioComAtendimentoHumano({ conversa: semDono, respostaDepoisDoCorte: true }), cap);
+    expect(res).toMatchObject({ ok: false, erro: "assignment_conflict" });
+    if (!res.ok) expect(res.detalhe).toBeUndefined();
+    expect(cap.rpc.some((r) => r.fn === "emit_event")).toBe(false);
+    expect(cap.updates.filter((u) => u.tabela === "contacts")).toEqual([]);
+
+    // Controle: sem resposta depois do corte, a mesma conversa é devolvida.
+    const cap2 = novaCaptura();
+    expect((await retomarPeloCron(cenarioComAtendimentoHumano({ conversa: semDono }), cap2)).ok).toBe(true);
+  });
+
+  it("cron: alguém assumiu depois da varredura (dono diferente do lido) → recusa antes de qualquer escrita", async () => {
+    const cap = novaCaptura();
+    // A varredura leu a conversa sem dono; agora ela é do ATENDENTE.
+    const res = await retomarPeloCron(cenarioComAtendimentoHumano(), cap, null);
+    expect(res).toMatchObject({ ok: false, erro: "assignment_conflict" });
+    if (!res.ok) expect(res.detalhe).toBeUndefined();
+    expect(cap.updates).toEqual([]);
+    expect(cap.rpc).toEqual([]);
   });
 
   it("é idempotente: repetir com a conversa já no agente segue devolvendo ok", async () => {

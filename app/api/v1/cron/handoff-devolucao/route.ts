@@ -110,11 +110,12 @@ export interface RetomadaNaPausaResultado {
 }
 
 /**
- * Corrida benigna: alguém assumiu entre a leitura e a escrita (o UPDATE casou
- * 0 linhas e volta SEM `detalhe`) — a pessoa ganhou. Os outros pontos que
- * devolvem `assignment_conflict` carregam a mensagem do banco e são falha de
- * verdade. A marca "sempre humano" lida agora (corrida com a tela) também não
- * é falha: é a recusa certa.
+ * Corrida benigna: a conversa mudou de dono ou recebeu sinal humano depois da
+ * varredura (a precondição recusou, ou o UPDATE casou 0 linhas, e volta SEM
+ * `detalhe`) — a pessoa ganhou. Os outros pontos que devolvem
+ * `assignment_conflict` carregam a mensagem do banco e são falha de verdade. A
+ * marca "sempre humano" lida agora (corrida com a tela) também não é falha: é a
+ * recusa certa.
  */
 function recusaBenigna(r: Extract<RetomadaResultado, { ok: false }>): boolean {
   return (r.erro === "assignment_conflict" && r.detalhe === undefined) || r.erro === "contato_sempre_humano";
@@ -341,7 +342,14 @@ export async function devolverHandoffsVencidos(
     const conversa = vencida as (typeof conversas)[number];
     const r = await devolverAtendimentoAoAgente(
       { supabase: admin, organizationId: conversa.organization_id, actor: ATOR_DO_CRON, requestId },
-      { conversationId: conversa.id, origem: { automatica: { minutos } } },
+      {
+        conversationId: conversa.id,
+        origem: { automatica: { minutos } },
+        // A decisão foi tomada sobre a leitura da varredura. Quem assumiu ou
+        // respondeu desde então ganha: a função recusa sob o lock da linha.
+        expectedAssignee: conversa.assigned_to_user_id,
+        semSinalHumanoDesde: new Date(agora.getTime() - minutos * 60_000).toISOString(),
+      },
     );
     if (r.ok) {
       devolvidas++;
@@ -564,7 +572,15 @@ export async function retomarClientesSemRespostaNaPausa(
 
     const r = await devolverAtendimentoAoAgente(
       { supabase: admin, organizationId: conversa.organization_id, actor: ATOR_DO_CRON, requestId },
-      { conversationId: conversa.id, origem: { automatica: { minutos } } },
+      {
+        conversationId: conversa.id,
+        origem: { automatica: { minutos } },
+        // A mesma precondição da primeira passada; o corte é o instante da
+        // varredura. Quem assumiu ou respondeu depois dela ganha, e a IA não
+        // responde de novo a mensagem que a pessoa acabou de responder.
+        expectedAssignee: conversa.assigned_to_user_id,
+        semSinalHumanoDesde: agora.toISOString(),
+      },
     );
     if (!r.ok) {
       if (recusaBenigna(r)) continue;

@@ -8912,6 +8912,15 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      fn_conversation_release_if_idle: {
+        Args: {
+          p_conversation_id: string
+          p_expected_assignee: string
+          p_organization_id: string
+          p_sem_sinal_humano_desde: string
+        }
+        Returns: boolean
+      }
       fn_decrypt_oauth: { Args: { ciphertext: string }; Returns: string }
       fn_definir_logo_da_organizacao: {
         Args: { p_actor: string; p_org: string; p_path: string }

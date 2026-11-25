@@ -140,9 +140,48 @@ describe("cron handoff-devolucao", () => {
     expect(devolver.mock.calls[0]?.[1]).toEqual({
       conversationId: VENCIDA,
       origem: { automatica: { minutos: 60 } },
+      expectedAssignee: null,
+      semSinalHumanoDesde: expect.any(String),
     });
     expect(auditar).toHaveBeenCalledTimes(1);
     expect(auditar.mock.calls[0]?.[0]).toMatchObject({ action: "conversation.handoff_auto_return_run" });
+  });
+
+  /**
+   * A CONVERSA MUDA DE DONO ENTRE A VARREDURA E A ESCRITA (porte do upstream #5183).
+   *
+   * O cron decide sobre a leitura da varredura; um atendente que assume a
+   * conversa segundos depois tem de ganhar. Quem confere é
+   * `devolverAtendimentoAoAgente`, sob o lock da linha, e só confere o que o
+   * cron mandar: o dublê abaixo cumpre o contrato da função (precondição de
+   * dono → `assignment_conflict` sem detalhe), e o que se prova aqui é que o
+   * cron a manda, com o dono que leu e o corte do prazo.
+   *
+   * ─── SABOTAGEM ────────────────────────────────────────────────────────────
+   *   - tirar `expectedAssignee` da chamada: o dublê devolve, `devolvidas` vira 1
+   *     e a rodada audita.
+   */
+  it("atendente assumiu depois da varredura: a conversa NÃO volta à IA, e a rodada não é falha", async () => {
+    const LIDO = "99999999-9999-4999-8999-999999999999";
+    const QUEM_ASSUMIU = "88888888-8888-4888-8888-aaaaaaaaaaaa";
+    banco.conversations = [conversa(61, { assigned_to_user_id: LIDO })];
+    devolver.mockImplementation(async (_deps: unknown, input: { expectedAssignee?: string | null }) =>
+      input.expectedAssignee !== undefined && input.expectedAssignee !== QUEM_ASSUMIU
+        ? { ok: false, erro: "assignment_conflict" }
+        : { ok: true, conversationId: VENCIDA, jaEstavaComOAgente: false },
+    );
+
+    const antes = Date.now();
+    const corpo = (await (await chamar()).json()) as { data: Record<string, number> };
+
+    expect(devolver).toHaveBeenCalledTimes(1);
+    const input = devolver.mock.calls[0]?.[1] as { expectedAssignee?: unknown; semSinalHumanoDesde?: string };
+    expect(input.expectedAssignee).toBe(LIDO);
+    // O corte é "agora − prazo": sinal humano depois dele desfaz a devolução.
+    const corte = new Date(input.semSinalHumanoDesde ?? "").getTime();
+    expect(Math.abs(corte - (antes - 60 * 60_000))).toBeLessThan(5_000);
+    expect(corpo.data).toMatchObject({ devolvidas: 0, falhas: 0 });
+    expect(auditar).not.toHaveBeenCalled();
   });
 
   it("modo 'fim do dia seguinte': a fala da EQUIPE segura, não last_outbound_at (lembrete, campanha, eco nosso não seguram)", async () => {
@@ -309,10 +348,21 @@ describe("cron handoff-devolucao", () => {
 
     it("passou dos N minutos: devolve pela função do botão E pede a resposta da mensagem pendente", async () => {
       banco.conversations = [pausada(20)];
+      const antes = Date.now();
       const res = await chamar();
       expect(res.status).toBe(200);
       expect(devolver).toHaveBeenCalledTimes(1);
-      expect(devolver.mock.calls[0]?.[1]).toEqual({ conversationId: VENCIDA, origem: { automatica: { minutos: 15 } } });
+      expect(devolver.mock.calls[0]?.[1]).toEqual({
+        conversationId: VENCIDA,
+        origem: { automatica: { minutos: 15 } },
+        expectedAssignee: null,
+        semSinalHumanoDesde: expect.any(String),
+      });
+      // Aqui o corte é o instante da varredura: quem respondeu depois dela ganha
+      // (porte do upstream #5183, estendido a esta passada, que só o fork tem).
+      const corte = Date.parse((devolver.mock.calls[0]?.[1] as { semSinalHumanoDesde: string }).semSinalHumanoDesde);
+      expect(corte).toBeGreaterThanOrEqual(antes);
+      expect(corte).toBeLessThanOrEqual(Date.now());
       expect(despachar).toHaveBeenCalledTimes(1);
       expect(despachar.mock.calls[0]?.[1]).toMatchObject({
         organizationId: ORG,

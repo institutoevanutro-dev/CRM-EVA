@@ -33507,10 +33507,17 @@ comment on column public.meta_templates.saved_values is
 -- WhatsApp terminava em `service_boundary_stale`. As duas pontas passam a ler a MESMA tabela
 -- `(tipo, entidade) → contato` (`fn_service_event_contact`). Porte de melgarafael/DeskcommCRM
 -- #2330 (0551 lá). Cabeçalho da migration 0345 para o racional inteiro.
+-- A 0437 (porte do upstream #5163) acrescenta, NO LUGAR, `lead.won` e `lead.lost`: o gatilho
+-- de `crm_leads` os emite por `fn_log_event`, que deriva a entidade do prefixo (`lead`), e a
+-- ação de WhatsApp de uma regra "Quando um negócio for ganho" terminava no `PT409` de
+-- `fn_service_event_origin`. Cabeçalho da migration 0437 para o racional inteiro.
 create or replace function public.fn_service_event_contact(p_org uuid,p_event_type text,p_entity_kind text,p_entity_id uuid)
 returns table(contact_id uuid,suportado boolean) language plpgsql stable security definer set search_path=public as $$
 begin
  if p_event_type in ('lead.created','lead.stage_changed','lead.tag_added') and p_entity_kind='crm_lead' then
+   return query select (select l.contact_id from public.crm_leads l where l.organization_id=p_org and l.id=p_entity_id),true;
+ elsif p_event_type in ('lead.won','lead.lost') and p_entity_kind in ('crm_lead','lead') then
+   -- 0437: desfecho do negócio (o gatilho de crm_leads grava entity_kind='lead').
    return query select (select l.contact_id from public.crm_leads l where l.organization_id=p_org and l.id=p_entity_id),true;
  elsif p_event_type in ('contact.tag_added','contact.birthday','contact.phone_added') and p_entity_kind='contact' then
    return query select (select c.id from public.contacts c where c.organization_id=p_org and c.id=p_entity_id),true;
@@ -40430,6 +40437,69 @@ grant  execute on function public.fn_agenda_ocupacao_externa_do_dono(uuid, uuid,
 
 notify pgrst, 'reload schema';
 -- ---- fim: a importação do relatório da Clinicorp (migration 0435) ----
+
+-- ---- devolução automática confere o sinal humano sob o lock (migration 0436) ----
+-- Derivado de supabase/migrations/20261125010000_0436_devolucao_automatica_confere_o_sinal_humano.sql
+-- (o porquê inteiro está no cabeçalho de lá). Porte de melgarafael/DeskcommCRM
+-- #5183 (9472 lá). O cron `handoff-devolucao` solta o dono só se a conversa
+-- ainda estiver como a varredura a leu: mesmo dono e nenhum sinal humano depois
+-- do corte, conferidos sob o lock e no mesmo release. Função nova, só
+-- service_role; nenhuma tabela, coluna ou dado.
+create or replace function public.fn_conversation_release_if_idle(
+  p_organization_id uuid,
+  p_conversation_id uuid,
+  p_expected_assignee uuid,
+  p_sem_sinal_humano_desde timestamptz
+) returns boolean
+language plpgsql
+set search_path = public
+as $$
+begin
+  perform 1
+    from public.conversations
+   where id = p_conversation_id
+     and organization_id = p_organization_id
+     and assigned_to_user_id is not distinct from p_expected_assignee
+     and coalesce(last_handoff_at, '-infinity') <= p_sem_sinal_humano_desde
+     and coalesce(assigned_at, '-infinity') <= p_sem_sinal_humano_desde
+     and coalesce(last_outbound_at, '-infinity') <= p_sem_sinal_humano_desde
+   for no key update;
+  if not found then
+    return false;
+  end if;
+
+  return exists (
+    select 1
+      from public.fn_conversation_assign(
+        p_organization_id, p_conversation_id, null, 'release', p_expected_assignee, true)
+  );
+end;
+$$;
+
+revoke execute on function public.fn_conversation_release_if_idle(uuid, uuid, uuid, timestamptz)
+  from public, anon, authenticated;
+grant execute on function public.fn_conversation_release_if_idle(uuid, uuid, uuid, timestamptz)
+  to service_role;
+
+notify pgrst, 'reload schema';
+-- ---- fim: devolução automática confere o sinal humano sob o lock (migration 0436) ----
+
+-- ---- negócio ganho e perdido alcançam a origem (migration 0437) ----
+-- Derivado de supabase/migrations/20261125020000_0437_negocio_ganho_e_perdido_alcancam_a_origem.sql
+-- (o porquê inteiro está no cabeçalho de lá). Porte de melgarafael/DeskcommCRM
+-- #5163 (9470 lá). `fn_service_event_contact` resolve o contato de `lead.won` e
+-- `lead.lost`, com `entity_kind` `crm_lead` ou `lead` (o que o gatilho de
+-- `crm_leads` grava), e o `emit_event` passa a carimbar a origem deles.
+--
+-- NÃO HÁ CORPO DE FUNÇÃO AQUI, de propósito: a troca foi feita no lugar, na
+-- primeira e única definição de `fn_service_event_contact` (bloco da 0345).
+-- Assim a reaplicação não passa por versão antiga
+-- (`tests/invariants/reaplicar-o-baseline-nao-abre-janela.test.ts`), e a última
+-- definição é igual à da migration 0437
+-- (`tests/unit/apendice-do-baseline-nao-diverge-da-cadeia.test.ts`).
+-- Nenhuma função nova, tabela, coluna ou constraint.
+-- Quem mede a regra: `tests/invariants/negocio-ganho-e-perdido-alcancam-a-origem.test.ts`.
+-- ---- fim: negócio ganho e perdido alcançam a origem (migration 0437) ----
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

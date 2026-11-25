@@ -53,7 +53,7 @@ export interface RetomadaDeps {
 
 export type RetomadaFalha =
   | "conversation_not_found"
-  /** Alguém assumiu a conversa entre a leitura e a escrita. */
+  /** Alguém assumiu (ou, no cron, respondeu) a conversa entre a leitura e a escrita. */
   | "assignment_conflict"
   /** O sinal de retomada do follow-up não foi emitido — ver comentário abaixo. */
   | "resume_signal_failed"
@@ -105,7 +105,24 @@ interface ConversaRow {
 
 export async function devolverAtendimentoAoAgente(
   deps: RetomadaDeps,
-  input: { conversationId: string; origem?: OrigemDaRetomada },
+  input: {
+    conversationId: string;
+    origem?: OrigemDaRetomada;
+    /**
+     * Cron `handoff-devolucao`: o dono lido na varredura (`null` = sem dono). A
+     * conversa que mudou de dono desde então não é devolvida. Ausente = sem
+     * precondição (botão, tool, `#on` do celular).
+     */
+    expectedAssignee?: string | null;
+    /**
+     * Cron `handoff-devolucao`: o corte (ISO) depois do qual um sinal humano —
+     * passagem, "assumir" ou mensagem que saiu — desfaz a devolução. Conferido
+     * na MESMA escrita que solta o dono ou devolve o comando, porque o cron
+     * decidiu sobre uma leitura antiga e a pessoa pode ter respondido no meio.
+     * Porte de melgarafael/DeskcommCRM #5183.
+     */
+    semSinalHumanoDesde?: string;
+  },
 ): Promise<RetomadaResultado> {
   const { supabase, organizationId } = deps;
 
@@ -118,6 +135,12 @@ export async function devolverAtendimentoAoAgente(
   if (convErr) return { ok: false, erro: "conversation_not_found", detalhe: convErr.message };
   if (!convData) return { ok: false, erro: "conversation_not_found" };
   const conv = convData as unknown as ConversaRow;
+  // A decisão do cron vale para o dono que a varredura leu, não para quem
+  // assumiu (ou soltou) depois. Recusa antes de qualquer escrita, sem `detalhe`:
+  // é corrida, não erro.
+  if (input.expectedAssignee !== undefined && conv.assigned_to_user_id !== input.expectedAssignee) {
+    return { ok: false, erro: "assignment_conflict" };
+  }
 
   // A marca "sempre atendimento humano" é lida ANTES de qualquer escrita: os dois
   // caminhos que devolvem (o botão e a tool do agente) passam por aqui, então a
@@ -155,8 +178,20 @@ export async function devolverAtendimentoAoAgente(
   // (1) Solta o dono humano pela regra que já existe (UPDATE + evento de
   // atribuição na MESMA transação). `p_enforce_expected: false` porque soltar é
   // idempotente por natureza: se outro release ganhou a corrida, o estado final
-  // é o mesmo que queríamos.
-  if (conv.assigned_to_user_id !== null) {
+  // é o mesmo que queríamos. Com o corte do cron, dono E relógio são conferidos
+  // sob o lock da linha e o release sai na mesma transação (migration 0436);
+  // `false` = a conversa mudou depois da varredura.
+  const corte = input.semSinalHumanoDesde;
+  if (conv.assigned_to_user_id !== null && corte !== undefined) {
+    const { data: soltou, error: releaseErr } = await supabase.rpc("fn_conversation_release_if_idle", {
+      p_organization_id: organizationId,
+      p_conversation_id: input.conversationId,
+      p_expected_assignee: conv.assigned_to_user_id,
+      p_sem_sinal_humano_desde: corte,
+    });
+    if (releaseErr) return { ok: false, erro: "assignment_conflict", detalhe: releaseErr.message };
+    if (soltou !== true) return { ok: false, erro: "assignment_conflict" };
+  } else if (conv.assigned_to_user_id !== null) {
     const { error: releaseErr } = await supabase.rpc("fn_conversation_assign", {
       p_organization_id: organizationId,
       p_conversation_id: input.conversationId,
@@ -173,11 +208,12 @@ export async function devolverAtendimentoAoAgente(
   // (2) Devolve o comando. `assignee_kind='ai'` exige `assigned_to_user_id is
   // null` (CHECK conversations_assignee_kind_coherence) — o filtro `.is(...)` é o
   // guarda otimista: se alguém assumiu entre o release e aqui, 0 linhas e a gente
-  // reporta o conflito em vez de estourar a constraint.
+  // reporta o conflito em vez de estourar a constraint. Sem dono não houve
+  // release: esta é a única escrita, e o relógio do cron vai nela.
   const proximoStatus = STATUS_REATIVAVEIS.has(conv.status ?? "")
     ? "ai_handling"
     : (conv.status ?? "open");
-  const { data: atualizada, error: updErr } = await supabase
+  let devolucao = supabase
     .from("conversations")
     .update({
       bot_silenced_until: null,
@@ -205,9 +241,13 @@ export async function devolverAtendimentoAoAgente(
     })
     .eq("id", input.conversationId)
     .eq("organization_id", organizationId)
-    .is("assigned_to_user_id", null)
-    .select("id")
-    .maybeSingle();
+    .is("assigned_to_user_id", null);
+  if (corte !== undefined && conv.assigned_to_user_id === null) {
+    for (const coluna of ["last_handoff_at", "assigned_at", "last_outbound_at"]) {
+      devolucao = devolucao.or(`${coluna}.is.null,${coluna}.lte.${corte}`);
+    }
+  }
+  const { data: atualizada, error: updErr } = await devolucao.select("id").maybeSingle();
   if (updErr) return { ok: false, erro: "assignment_conflict", detalhe: updErr.message };
   if (!atualizada) return { ok: false, erro: "assignment_conflict" };
 
