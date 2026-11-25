@@ -90,15 +90,25 @@ export function instrucaoDeBolhas(ligado: boolean): string {
  * (clínica, 2026-10-12, teto 200): "…começar com o Dr. Otávio: a consulta de
  * R$490…" saiu em dois balões, "…com o Dr." e "Otávio: a consulta…". Duas
  * regras, as duas só para o "." sozinho:
- *   - palavra antes do ponto em `ABREVIACOES` (tratamento e endereço, pt + es);
+ *   - palavra antes do ponto em `ABREVIACOES` (tratamento, título e endereço, pt + es);
  *   - minúscula depois do ponto ("etc. no dia", "p. ex. o RG"): frase nova
  *     começa com maiúscula.
  * ponytail: lista curta de propósito. "etc." seguido de maiúscula ainda fecha
  * frase (é ambíguo de verdade), e abreviação fora da lista seguida de nome
  * próprio ainda parte; acrescente à lista quando uma aparecer medida.
+ *
+ * O plural ("os Drs. Paulo e André") e os títulos profissionais (Eng., Arq.,
+ * Adv.; Lic. e Ing. em espanhol) vieram da lista do original
+ * (melgarafael/DeskcommCRM#5186).
  */
-// tratamento · endereço · "p. ex." · espanhol (Dr./Dra./Sr./Sra. são as mesmas)
-const ABREVIACOES = new Set("dr dra sr sra srta prof profa av r n nº ex ud uds".split(" "));
+// tratamento (e plural) · título profissional · endereço · "p. ex." · espanhol
+// (Dr./Dra./Sr./Sra. são as mesmas)
+const ABREVIACOES = new Set(
+  (
+    "dr dra drs dras sr sra srs sras srta srtas prof profa profs eng enga arq adv " +
+    "av r n nº ex ud uds lic ing"
+  ).split(" "),
+);
 
 function splitSentences(text: string): string[] {
   const out: string[] = [];
