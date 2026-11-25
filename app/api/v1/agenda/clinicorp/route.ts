@@ -25,6 +25,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fusoUtilizavel } from "@/lib/tempo/fusos";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +63,7 @@ export async function GET(): Promise<Response> {
     { count: importados },
     { data: ultimaImportacao },
     { data: proximos },
+    { data: organizacao },
   ] = await Promise.all([
     admin
       .from("calendar_clinicorp_integrations")
@@ -102,6 +104,8 @@ export async function GET(): Promise<Response> {
       .gte("ends_at", agora)
       .order("starts_at", { ascending: true })
       .limit(1000),
+    // O próximo horário é de consulta: a tela o mostra no relógio da clínica, não no do navegador.
+    admin.from("organizations").select("timezone").eq("id", org).maybeSingle(),
   ]);
   if (error) return fail("internal_error", error.message, 500, { requestId });
   if (!integracao) return ok({ configurada: false }, { requestId });
@@ -122,6 +126,7 @@ export async function GET(): Promise<Response> {
       ultima_copia: integracao.last_sync_at,
       erro: integracao.last_sync_error,
       ocupacoes_futuras: count ?? 0,
+      fuso: fusoUtilizavel((organizacao as { timezone?: string | null } | null)?.timezone),
       importacao: { futuros: importados ?? 0, em: ultimaImportacao?.created_at ?? null },
       // O hash nunca sai: a tela sabe só que há endereço, e o que já chegou nele.
       webhook: {

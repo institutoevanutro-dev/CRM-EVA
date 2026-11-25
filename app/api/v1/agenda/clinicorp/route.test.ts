@@ -149,8 +149,11 @@ describe("quem é quem", () => {
       { organization_id: ORG, professional_id: "9001", status: "cancelled", starts_at: "2029-12-31T13:00:00.000Z", ends_at: "2029-12-31T14:00:00.000Z" },
       { organization_id: OUTRA, professional_id: "9001", status: "confirmed", starts_at: "2029-12-30T13:00:00.000Z", ends_at: "2029-12-30T14:00:00.000Z" },
     );
+    db.tabelas.organizations = [{ id: ORG, timezone: "America/Sao_Paulo" }];
     const { data } = await (await GET()).json();
     expect(data.profissionais).toEqual([{ professional_id: "9001", nome: "Dra. Fictícia", user_id: null, proximo: "2030-01-01T13:00:00.000Z" }]);
+    // O relógio da clínica, para a tela: 13:00 UTC é 10:00 em São Paulo.
+    expect(data.fuso).toBe("America/Sao_Paulo");
   });
 });
 

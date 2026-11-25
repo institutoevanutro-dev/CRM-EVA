@@ -53,6 +53,8 @@ type Situacao =
       ultima_copia: string | null;
       erro: string | null;
       ocupacoes_futuras: number;
+      /** O fuso da organização: o próximo horário sai no relógio da clínica. */
+      fuso: string;
       webhook: Webhook;
       importacao: Importacao;
       profissionais: Array<{ professional_id: string; nome: string | null; user_id: string | null; proximo: string | null }>;
@@ -505,7 +507,7 @@ function Conteudo({
                   {p.nome ?? `${t("Profissional")} ${p.professional_id}`}
                   {p.proximo ? (
                     <span className="block text-xs text-text-muted">
-                      {`${t("Próximo horário")}: ${new Date(p.proximo).toLocaleString()}`}
+                      {`${t("Próximo horário")}: ${new Date(p.proximo).toLocaleString(undefined, { timeZone: situacao.fuso })}`}
                     </span>
                   ) : null}
                 </span>
