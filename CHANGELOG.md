@@ -8,6 +8,20 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.40.0] — 2026-11-25
+
+### Adicionado
+
+- **O que já está marcado na Clinicorp entra pela importação do relatório exportado** Na seção **Agenda da Clinicorp** (Configurações › Agenda) há agora o bloco
+  **Importar o que já está marcado**. Na Clinicorp, em Relatórios › Agendamentos › Geral,
+  escolha o período, clique em Listar e depois em Exportar; no CRM, escolha o arquivo. Ele é
+  lido no próprio navegador e não é enviado: ao CRM vão só dia, horário e quem atende. A tela
+  mostra quantos horários leu, quantas faltas ou desmarcações deixou de fora, e pede para ligar
+  cada profissional da Clinicorp a uma pessoa da Agenda; quem fica sem pessoa fica de fora, e a
+  tela diz quantos horários são. A partir daí, a Agenda e a IA deixam de oferecer esses horários.
+  Cada importação substitui a anterior, e um horário importado que depois for desmarcado segue
+  ocupado até a próxima importação.
+
 ## [5.39.0] — 2026-11-24
 
 ### Adicionado
@@ -10071,7 +10085,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.39.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.40.0...HEAD
+[5.40.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.39.0...v5.40.0
 [5.39.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.38.0...v5.39.0
 [5.38.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.37.0...v5.38.0
 [5.37.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.36.0...v5.37.0
