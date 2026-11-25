@@ -1,7 +1,7 @@
 /**
  * /api/v1/agenda/clinicorp — a agenda da Clinicorp desta organização (migration 0433).
  *
- *   GET    situação da cópia, do webhook (0434) e os profissionais com a pessoa do CRM
+ *   GET    situação da cópia, do webhook (0434), da importação (0435) e os profissionais com a pessoa do CRM
  *   PUT    salva a credencial ("Usuário API" + "Token API" + assinante opcional)
  *   PATCH  mapeia profissional da Clinicorp -> pessoa da Agenda do CRM
  *   DELETE desliga: apaga credencial, endereço do webhook, mapeamento e a ocupação copiada
@@ -53,7 +53,8 @@ export async function GET(): Promise<Response> {
   const org = authz.org.orgId;
   const admin = createAdminClient();
 
-  const [{ data: integracao, error }, { data: profissionais }, { count }] = await Promise.all([
+  const agora = new Date().toISOString();
+  const [{ data: integracao, error }, { data: profissionais }, { count }, { count: importados }, { data: ultimaImportacao }] = await Promise.all([
     admin
       .from("calendar_clinicorp_integrations")
       .select("api_user, subscriber_id, last_sync_at, last_sync_error, webhook_token_hash, webhook_last_received_at, webhook_formatos")
@@ -69,7 +70,20 @@ export async function GET(): Promise<Response> {
       .select("id", { count: "exact", head: true })
       .eq("organization_id", org)
       .neq("status", "cancelled")
-      .gte("ends_at", new Date().toISOString()),
+      .gte("ends_at", agora),
+    // A foto importada do relatório (0435): quantos horários daqui para a frente, e quando.
+    admin
+      .from("calendar_clinicorp_imported_events")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", org)
+      .gte("ends_at", agora),
+    admin
+      .from("calendar_clinicorp_imported_events")
+      .select("created_at")
+      .eq("organization_id", org)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
   if (error) return fail("internal_error", error.message, 500, { requestId });
   if (!integracao) return ok({ configurada: false }, { requestId });
@@ -84,6 +98,7 @@ export async function GET(): Promise<Response> {
       ultima_copia: integracao.last_sync_at,
       erro: integracao.last_sync_error,
       ocupacoes_futuras: count ?? 0,
+      importacao: { futuros: importados ?? 0, em: ultimaImportacao?.created_at ?? null },
       // O hash nunca sai: a tela sabe só que há endereço, e o que já chegou nele.
       webhook: {
         ativo: Boolean(integracao.webhook_token_hash),

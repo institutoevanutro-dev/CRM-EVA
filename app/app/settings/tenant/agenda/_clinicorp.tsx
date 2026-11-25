@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
+import { ExportacaoIlegivel, lerExportacaoDaClinicorp, type ExportacaoLida } from "@/lib/agenda/clinicorp/exportacao";
 import { apiClient } from "@/lib/api/client";
 import { copyToClipboard } from "@/lib/clipboard";
 
@@ -37,6 +38,8 @@ type FormatoRecebido = {
   vezes: number;
   ultima_vez: string;
 };
+
+type Importacao = { futuros: number; em: string | null };
 
 type Webhook = { ativo: boolean; ultima_batida: string | null; formatos: FormatoRecebido[] };
 
@@ -51,6 +54,7 @@ type Situacao =
       erro: string | null;
       ocupacoes_futuras: number;
       webhook: Webhook;
+      importacao: Importacao;
       profissionais: Array<{ professional_id: string; nome: string | null; user_id: string | null }>;
     };
 
@@ -78,13 +82,138 @@ export function AgendaDaClinicorp({ pessoas }: { pessoas: Pessoas }) {
   // A `key` recria o formulário a cada leitura nova: o estado nasce do servidor,
   // sem efeito copiando dado para estado.
   return (
-    <Conteudo
-      key={query.dataUpdatedAt}
-      situacao={query.data}
-      pessoas={pessoas}
-      endereco={endereco}
-      setEndereco={setEndereco}
-    />
+    <>
+      <Conteudo
+        key={query.dataUpdatedAt}
+        situacao={query.data}
+        pessoas={pessoas}
+        endereco={endereco}
+        setEndereco={setEndereco}
+      />
+      {/* Fora da `key`: o arquivo lido e a ligação escolhida não podem sumir numa releitura. */}
+      {query.data.configurada ? <ImportarDaClinicorp pessoas={pessoas} importacao={query.data.importacao} /> : null}
+    </>
+  );
+}
+
+/**
+ * IMPORTAR O QUE JÁ ESTÁ MARCADO (migration 0435). O relatório exportado da
+ * Clinicorp é lido AQUI, no navegador, e nunca é enviado: ao servidor vão só dia,
+ * início, fim e a pessoa que o gestor ligou a cada nome de profissional. Nome sem
+ * pessoa fica de fora, e a tela diz quantos horários ficaram.
+ */
+function ImportarDaClinicorp({ pessoas, importacao }: { pessoas: Pessoas; importacao: Importacao }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const [lida, setLida] = React.useState<ExportacaoLida | null>(null);
+  const [ligacao, setLigacao] = React.useState<Record<string, string>>({});
+  const [campo, setCampo] = React.useState(0);
+
+  const nomes = lida ? [...new Set(lida.horarios.map((h) => h.profissional))].sort() : [];
+  const ligados = lida ? lida.horarios.filter((h) => ligacao[h.profissional]) : [];
+  const deFora = (lida?.horarios.length ?? 0) - ligados.length;
+
+  const ler = async (arquivo: File | undefined) => {
+    setLida(null);
+    setLigacao({});
+    if (!arquivo) return;
+    try {
+      setLida(lerExportacaoDaClinicorp(new Uint8Array(await arquivo.arrayBuffer())));
+    } catch (erro) {
+      toast.error(
+        erro instanceof ExportacaoIlegivel
+          ? t("Este arquivo não tem as colunas Data, Horário e Profissional. Exporte de novo em Relatórios › Agendamentos › Geral.")
+          : t("Não consegui ler este arquivo. Ele precisa ser o .xlsx exportado da Clinicorp."),
+      );
+    }
+  };
+
+  const importar = useMutation({
+    mutationFn: async () =>
+      (
+        await apiClient.post<{ data: { gravados: number; passados: number } }>("/api/v1/agenda/clinicorp/importar", {
+          horarios: ligados.map((h) => ({ dia: h.dia, de: h.de, ate: h.ate, user_id: ligacao[h.profissional] })),
+        })
+      ).data,
+    onSuccess: (r) => {
+      toast.success(`${r.gravados} ${t("horário(s) importado(s).")}`);
+      setLida(null);
+      setLigacao({});
+      setCampo((n) => n + 1);
+      void qc.invalidateQueries({ queryKey: ["agenda"] });
+    },
+    onError: showApiError,
+  });
+
+  return (
+    <section className="mt-4 space-y-3 rounded-xl border p-4" data-testid="importar-da-clinicorp">
+      <h3 className="text-sm font-semibold">{t("Importar o que já está marcado")}</h3>
+      <p className="text-sm text-text-muted">
+        {t(
+          "O webhook traz só o que muda daqui em diante. Para o que já está na agenda: na Clinicorp, abra Relatórios › Agendamentos › Geral, ponha De = hoje e Até = daqui a 90 dias, clique em Listar e depois em Exportar. Escolha o arquivo aqui: ele é lido neste navegador e não é enviado. Ao CRM vão só dia, horário e quem atende.",
+        )}
+      </p>
+      {importacao.em ? (
+        <p className="text-sm" role="status" data-testid="situacao-da-importacao">
+          {`${t("Última importação")}: ${new Date(importacao.em).toLocaleString()} · ${importacao.futuros} ${t("horário(s) daqui para a frente")}`}
+        </p>
+      ) : null}
+      <label className="block">
+        <span className="block text-sm">{t("Arquivo exportado da Clinicorp (.xlsx)")}</span>
+        <input
+          key={campo}
+          type="file"
+          accept=".xlsx"
+          aria-label={t("Arquivo exportado da Clinicorp (.xlsx)")}
+          className="mt-1 text-sm"
+          onChange={(e) => void ler(e.target.files?.[0])}
+        />
+      </label>
+
+      {lida ? (
+        <div className="space-y-2" data-testid="leitura-da-importacao">
+          <p className="text-sm" role="status">
+            {`${lida.horarios.length} ${t("horário(s) no arquivo")}`}
+            {lida.semOcupar ? ` · ${lida.semOcupar} ${t("falta(s) ou desmarcado(s), que não ocupam")}` : ""}
+            {lida.ilegiveis ? ` · ${lida.ilegiveis} ${t("linha(s) que não deu para ler")}` : ""}
+          </p>
+          <p className="text-sm text-text-muted">
+            {t("Diga quem é cada profissional na Agenda. Sem pessoa ligada, os horários dele ficam de fora.")}
+          </p>
+          <ul className="space-y-1">
+            {nomes.map((nome) => (
+              <li key={nome} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="min-w-48">{nome}</span>
+                <select
+                  aria-label={`${t("Pessoa da Agenda para")} ${nome}`}
+                  className="rounded-md border p-2"
+                  value={ligacao[nome] ?? ""}
+                  onChange={(e) => setLigacao((m) => ({ ...m, [nome]: e.target.value }))}
+                >
+                  <option value="">{t("Ninguém")}</option>
+                  {pessoas.map((pessoa) => (
+                    <option key={pessoa.id} value={pessoa.id}>
+                      {pessoa.nome}
+                    </option>
+                  ))}
+                </select>
+              </li>
+            ))}
+          </ul>
+          {deFora > 0 ? (
+            <p className="text-sm text-warning-fg" data-testid="de-fora-da-importacao">
+              {`${deFora} ${t("horário(s) ficam de fora, sem pessoa ligada.")}`}
+            </p>
+          ) : null}
+          <Button className="min-h-11" disabled={ligados.length === 0 || importar.isPending} onClick={() => importar.mutate()}>
+            {importar.isPending ? t("Importando…") : `${t("Importar")} ${ligados.length} ${t("horário(s)")}`}
+          </Button>
+          <p className="text-xs text-text-muted">
+            {t("A importação substitui a anterior. Um horário importado que depois for desmarcado segue ocupado até a próxima importação.")}
+          </p>
+        </div>
+      ) : null}
+    </section>
   );
 }
 

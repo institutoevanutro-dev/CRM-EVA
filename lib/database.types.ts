@@ -2635,6 +2635,41 @@ export type Database = {
           },
         ]
       }
+      calendar_clinicorp_imported_events: {
+        Row: {
+          created_at: string
+          ends_at: string
+          id: string
+          organization_id: string
+          starts_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          ends_at: string
+          id?: string
+          organization_id: string
+          starts_at: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          ends_at?: string
+          id?: string
+          organization_id?: string
+          starts_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_clinicorp_imported_events_integracao_fk"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_clinicorp_integrations"
+            referencedColumns: ["organization_id"]
+          },
+        ]
+      }
       calendar_clinicorp_integrations: {
         Row: {
           api_token_encrypted: string | null
@@ -8480,6 +8515,7 @@ export type Database = {
         Returns: { status: string; last_sync_at: string | null; fonte: string }[]
       }
       fn_agenda_clinicorp_gravar: { Args: { p_org: string; p_itens: Json }; Returns: number }
+      fn_agenda_clinicorp_importar: { Args: { p_org: string; p_itens: Json }; Returns: number }
       fn_appointment_change_core: { Args: { p_org: string; p_id: string; p_revision: number; p_patch: Json; p_remote: boolean; p_base: Json }; Returns: Json }
 
       fn_followup_job_current: { Args: { p_org: string; p_job: string; p_enrollment: string; p_node: string }; Returns: boolean }
