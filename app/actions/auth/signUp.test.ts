@@ -186,3 +186,37 @@ describe("signUp — instalação que só aceita convidados", () => {
     expect(signUpDoProvedor).toHaveBeenCalled();
   });
 });
+
+describe("signUp — instalação que só entra pelo EvaLink (EVALINK_SO_EVALINK)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    signUpDoProvedor.mockReset();
+    vi.mocked(headers).mockResolvedValue({
+      get: (k: string) => (k === "x-forwarded-for" ? `198.51.100.${n % 250}` : null),
+    } as never);
+    vi.mocked(createClient).mockResolvedValue({
+      auth: { signUp: signUpDoProvedor },
+    } as never);
+    vi.mocked(modoDeCadastro).mockResolvedValue("aberto");
+  });
+
+  it("recusa ANTES do provedor: o usuário solto que travou a entrada pelo EvaLink não nasce", async () => {
+    vi.doMock("@/lib/evalink/config", async (orig) => ({
+      ...(await orig<Record<string, unknown>>()),
+      loginSoEvalink: () => true,
+    }));
+    const { signUp } = await import("./signUp");
+    const res = await signUp(entrada());
+    expect(res).toEqual({ ok: false, error: "somente_evalink" });
+    expect(signUpDoProvedor).not.toHaveBeenCalled();
+    vi.doUnmock("@/lib/evalink/config");
+  });
+
+  it("CONTROLE — chave desligada: o cadastro segue chegando ao provedor", async () => {
+    signUpDoProvedor.mockResolvedValue({ data: { user: { id: "u-9" }, session: null }, error: null });
+    const { signUp } = await import("./signUp");
+    const res = await signUp(entrada());
+    expect(res.ok).toBe(true);
+    expect(signUpDoProvedor).toHaveBeenCalledTimes(1);
+  });
+});

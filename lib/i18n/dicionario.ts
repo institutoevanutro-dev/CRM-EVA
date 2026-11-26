@@ -11509,6 +11509,10 @@ export const DICIONARIO: Traducoes = {
   "Abrir fila de comentários": { es: "Abrir cola de comentarios" },
   // Tarefa 6: botão de login pela Conta EvaLink e mensagens de ?evalink=.
   "Entrar com o EvaLink": { es: "Entrar con EvaLink" },
+  "Entre pelo EvaLink": { es: "Entra con EvaLink" },
+  "Nesta clínica a conta é a mesma do EvaLink. Não é preciso criar outra aqui.": {
+    es: "En esta clínica la cuenta es la misma de EvaLink. No hace falta crear otra aquí.",
+  },
   "Não foi possível entrar pelo EvaLink.": { es: "No fue posible entrar con EvaLink." },
   "Seu e-mail já tem cadastro aqui. Peça ao administrador para ligar sua conta ao EvaLink.": {
     es: "Su correo ya tiene registro aquí. Pida al administrador que vincule su cuenta a EvaLink.",

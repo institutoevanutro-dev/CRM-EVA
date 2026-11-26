@@ -8,6 +8,7 @@
  *  - Authenticated, email match    → form posts to Server Action which inserts
  *                                    membership and redirects to /app/inbox
  */
+import { loginSoEvalink } from "@/lib/evalink/config";
 import Link from "next/link";
 
 import { verifyInviteToken } from "@/lib/auth/invite-token";
@@ -109,12 +110,14 @@ export default async function AcceptInvitePage({ params }: PageProps) {
             admin dela. O token viaja no link para que a conta nova já nasça
             amarrada a este convite.
           */}
-          <Link
-            href={`/signup?invite=${encodeURIComponent(token)}`}
-            className="text-sm underline underline-offset-4"
-          >
-            {t("Ainda não tenho conta")}
-          </Link>
+          {!loginSoEvalink() && (
+            <Link
+              href={`/signup?invite=${encodeURIComponent(token)}`}
+              className="text-sm underline underline-offset-4"
+            >
+              {t("Ainda não tenho conta")}
+            </Link>
+          )}
         </div>
       </Shell>
     );

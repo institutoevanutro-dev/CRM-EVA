@@ -6,7 +6,7 @@ import { marcaDaSaida } from "@/lib/branding/saida";
 import { createClient } from "@/lib/supabase/server";
 import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { configEvalink } from "@/lib/evalink/config";
+import { configEvalink, loginSoEvalink } from "@/lib/evalink/config";
 import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
 import { safeNext } from "@/lib/auth/safe-next";
 import { mensagemDoEvalink } from "@/lib/evalink/mensagens";
@@ -27,6 +27,7 @@ export default async function LoginPage({
 }) {
   const { next, reset, error, evalink, recovery_used, motivo } = await searchParams;
   const evalinkLigado = configEvalink() !== null;
+  const soEvalink = loginSoEvalink();
   const mensagemEvalink = mensagemDoEvalink(evalink);
   // Fora da árvore de `app/app/layout.tsx` — sem `IdiomaProvider` do lado do
   // servidor (o cliente já tem o seu, montado em `app/(public)/layout.tsx`).
@@ -170,11 +171,14 @@ export default async function LoginPage({
           )}
         </div>
       )}
-      <LoginForm
-        next={next}
-        evalink={evalinkLigado}
-        senhaAberta={process.env.EVALINK_SENHA_ABERTA === "1"}
-      />
+      {!soEvalink && (
+        <LoginForm
+          next={next}
+          evalink={evalinkLigado}
+          senhaAberta={process.env.EVALINK_SENHA_ABERTA === "1"}
+        />
+      )}
+      {!soEvalink && (
       <div className="space-y-2 text-center text-sm">
         <p>
           <Link
@@ -196,6 +200,7 @@ export default async function LoginPage({
           </p>
         )}
       </div>
+      )}
     </div>
   );
 }

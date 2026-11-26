@@ -80,3 +80,15 @@ export function configEvalink(
     voltaUrl: `${appUrl}/evalink/volta`,
   };
 }
+
+/**
+ * `EVALINK_SO_EVALINK=true`: a instalação só entra pela Conta. Somem da tela a
+ * senha, o "Esqueci minha senha" e o "Ainda não tenho conta"; o cadastro pelo
+ * CRM é recusado no servidor. Pedido do André em 26/11: nas clínicas, um
+ * cadastro pelo /signup criava usuário solto e travava a entrada pelo EvaLink.
+ * Só vale com o EvaLink LIGADO: com a configuração faltando, a chave sozinha
+ * trancaria todo mundo do lado de fora.
+ */
+export function loginSoEvalink(fonte: Record<string, string | undefined> = process.env): boolean {
+  return fonte.EVALINK_SO_EVALINK?.trim() === "true" && configEvalink(fonte) !== null;
+}

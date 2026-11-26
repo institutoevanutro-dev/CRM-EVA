@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { marcaDaSaida } from "@/lib/branding/saida";
 import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
+import { loginSoEvalink } from "@/lib/evalink/config";
 import { createClient } from "@/lib/supabase/server";
 import { idiomaDoVisitante } from "@/lib/i18n/idiomaAnonimo";
 import { traduzir } from "@/lib/i18n/dicionario";
@@ -51,6 +52,24 @@ export default async function SignupPage({
     (user?.user_metadata?.locale as string | undefined) ?? null,
   );
   const t = (texto: string) => traduzir(texto, idioma);
+
+  // Instalação que só entra pela Conta: nem convite cria conta aqui — quem é
+  // convidado entra pelo EvaLink, que já cria o usuário (EVALINK_SO_EVALINK).
+  if (loginSoEvalink()) {
+    return (
+      <div className="space-y-6 text-center">
+        <div className="space-y-1.5">
+          <h1 className="titulo-tela">{t("Entre pelo EvaLink")}</h1>
+          <p className="text-sm text-muted-foreground">
+            {t("Nesta clínica a conta é a mesma do EvaLink. Não é preciso criar outra aqui.")}
+          </p>
+        </div>
+        <Button asChild className="w-full">
+          <a href="/evalink/entrar">{t("Entrar com o EvaLink")}</a>
+        </Button>
+      </div>
+    );
+  }
 
   // Convite VÁLIDO passa em qualquer modo — é o ponto inteiro do convite.
   const soPorConvite = !convite && (await modoDeCadastro()) === "so_convite";

@@ -122,6 +122,8 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
             "Esta instalação aceita cadastro apenas por convite. Se você foi convidado, use o link que chegou no seu e-mail.",
           ),
         );
+      } else if (res.error === "somente_evalink") {
+        setServerError(t("Nesta clínica a conta é a mesma do EvaLink. Não é preciso criar outra aqui."));
       } else if (res.error === "email_indisponivel") {
         // Sem "Tente novamente": o e-mail de confirmação não sai enquanto a
         // instalação não tiver e-mail configurado, e só quem administra resolve.
