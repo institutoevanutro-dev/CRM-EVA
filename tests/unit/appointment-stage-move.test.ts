@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import {
+  leadParaEspelharNaAgenda,
   moverLeadParaEtapaDeAgendamento,
   SLUG_ETAPA_POR_TRANSICAO,
 } from "@/lib/leads/appointment-stage-move";
@@ -19,8 +20,8 @@ const LEAD = {
   contact_id: "contato-1",
   status: "open",
 };
-const ETAPA_AGENDADO = { id: "s-agendado", name: "Agendado" };
-const ETAPA_ORIGEM = { name: "Agendamento solicitado" };
+const ETAPA_AGENDADO = { id: "s-agendado", name: "Agendado", position: 2000, is_won: false };
+const ETAPA_ORIGEM = { name: "Agendamento solicitado", position: 1000 };
 
 interface Resposta {
   data: unknown;
@@ -32,6 +33,8 @@ interface Cenario {
   update: Resposta;
   rpcError?: { message: string } | null;
   etapaPorSlug?: (slug: string) => Resposta;
+  /** A etapa ATUAL do card (a leitura sem slug). Padrão: `ETAPA_ORIGEM`. */
+  origem?: Resposta;
 }
 
 function cenario(over: Partial<Cenario> = {}): Cenario {
@@ -80,7 +83,7 @@ function fakeAdmin(c: Cenario, rpcs: ChamadaRpc[] = []) {
             if (c.etapaPorSlug && b._slugVal) return Promise.resolve(c.etapaPorSlug(b._slugVal));
             return Promise.resolve(c.etapaDestino);
           }
-          return Promise.resolve({ data: ETAPA_ORIGEM, error: null });
+          return Promise.resolve(c.origem ?? { data: ETAPA_ORIGEM, error: null });
         },
         then(onF: (v: unknown) => unknown, onR?: (e: unknown) => unknown) {
           const r = b._update ? c.update : c.lead;
@@ -93,14 +96,14 @@ function fakeAdmin(c: Cenario, rpcs: ChamadaRpc[] = []) {
   } as any;
 }
 
-const mover = (c: Cenario, transicao: "pending" | "confirmed" = "confirmed") =>
+const mover = (c: Cenario, transicao: "pending" | "confirmed" | "completed" = "confirmed") =>
   moverLeadParaEtapaDeAgendamento(fakeAdmin(c), {
     organizationId: ORG,
     leadId: LEAD.id,
     transicao,
   });
 
-async function moverObservando(c: Cenario, transicao: "pending" | "confirmed" = "confirmed") {
+async function moverObservando(c: Cenario, transicao: "pending" | "confirmed" | "completed" = "confirmed") {
   const rpcs: ChamadaRpc[] = [];
   const r = await moverLeadParaEtapaDeAgendamento(fakeAdmin(c, rpcs), {
     organizationId: ORG,
@@ -181,6 +184,7 @@ describe("moverLeadParaEtapaDeAgendamento", () => {
     expect(SLUG_ETAPA_POR_TRANSICAO).toEqual({
       pending: "agendamento-solicitado",
       confirmed: "agendado",
+      completed: "compareceu",
     });
   });
 
@@ -207,5 +211,117 @@ describe("moverLeadParaEtapaDeAgendamento", () => {
     const r = await mover(c, "pending");
     expect(r).toEqual({ moveu: false, motivo: "indisponivel" });
     expect(vi.mocked(emitLeadActivity)).not.toHaveBeenCalled();
+  });
+  it("compareceu leva o card aberto para a etapa 'compareceu'", async () => {
+    const etapa = { id: "s-compareceu", name: "Compareceu", position: 7000, is_won: true };
+    const c = cenario({ etapaPorSlug: (slug) => (slug === "compareceu" ? { data: etapa, error: null } : { data: null, error: null }) });
+    const { r, eventos } = await moverObservando(c, "completed");
+    expect(r).toEqual({ moveu: true, motivo: "movido" });
+    expect(eventos[0]?.args).toMatchObject({ p_payload: expect.objectContaining({ to_stage_id: "s-compareceu" }) });
+  });
+
+  it("só para frente: confirmar não devolve um card que já passou da etapa 'agendado'", async () => {
+    const c = cenario({ origem: { data: { name: "Comprovante em conferência", position: 5500 }, error: null } });
+    const r = await mover(c, "confirmed");
+    expect(r).toEqual({ moveu: false, motivo: "etapa_anterior" });
+    expect(vi.mocked(emitLeadActivity)).not.toHaveBeenCalled();
+  });
+
+  it("etapa na MESMA posição também não move (empate não é avanço)", async () => {
+    const c = cenario({ origem: { data: { name: "Outra", position: 2000 }, error: null } });
+    expect(await mover(c, "confirmed")).toEqual({ moveu: false, motivo: "etapa_anterior" });
+  });
+
+  it("card ganho no sinal segue para 'compareceu' quando ela também é etapa de ganho", async () => {
+    const etapa = { id: "s-compareceu", name: "Compareceu", position: 7000, is_won: true };
+    const c = cenario({
+      lead: { data: { ...LEAD, status: "won", stage_id: "s-sinal" }, error: null },
+      origem: { data: { name: "Sinal pago", position: 6000 }, error: null },
+      etapaPorSlug: () => ({ data: etapa, error: null }),
+    });
+    expect(await mover(c, "completed")).toEqual({ moveu: true, motivo: "movido" });
+  });
+
+  it("card ganho NÃO é reaberto: destino aberto devolve lead_fechado sem escrever", async () => {
+    const c = cenario({ lead: { data: { ...LEAD, status: "won" }, error: null } });
+    expect(await mover(c, "confirmed")).toEqual({ moveu: false, motivo: "lead_fechado" });
+    expect(vi.mocked(emitLeadActivity)).not.toHaveBeenCalled();
+  });
+
+  it("card perdido não se mexe nem quando o paciente comparece", async () => {
+    const c = cenario({ lead: { data: { ...LEAD, status: "lost" }, error: null } });
+    expect(await mover(c, "completed")).toEqual({ moveu: false, motivo: "lead_fechado" });
+  });
+
+  it("erro ao ler a etapa de origem é indisponibilidade: sem ela não se sabe a direção", async () => {
+    const c = cenario({ origem: { data: null, error: { message: "fetch failed" } } });
+    expect(await mover(c, "confirmed")).toEqual({ moveu: false, motivo: "indisponivel" });
+    expect(vi.mocked(emitLeadActivity)).not.toHaveBeenCalled();
+  });
+
+  it("o evento leva o status DEPOIS do movimento (aberto que entra em etapa de ganho sai ganho)", async () => {
+    const etapa = { id: "s-compareceu", name: "Compareceu", position: 7000, is_won: true };
+    const c = cenario({
+      etapaPorSlug: () => ({ data: etapa, error: null }),
+      update: { data: [{ id: LEAD.id, status: "won" }], error: null },
+    });
+    const { eventos } = await moverObservando(c, "completed");
+    expect(eventos[0]?.args).toMatchObject({ p_payload: expect.objectContaining({ status: "won" }) });
+  });
+});
+
+/** Fake mínimo para a escolha do card: `in`/`eq` acumulam filtros e o `await` devolve a lista. */
+function fakeEscolha(etapas: Resposta, leads: Resposta) {
+  return {
+    from(tabela: string) {
+      const b = {
+        select: () => b,
+        eq: () => b,
+        in: () => b,
+        then(onF: (v: unknown) => unknown, onR?: (e: unknown) => unknown) {
+          return Promise.resolve(tabela === "crm_stages" ? etapas : leads).then(onF, onR);
+        },
+      };
+      return b;
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+}
+
+const escolher = (etapas: Resposta, leads: Resposta, transicao: "confirmed" | "completed", leadAtivo: string | null) =>
+  leadParaEspelharNaAgenda(fakeEscolha(etapas, leads), { organizationId: ORG, contactId: "contato-1", transicao, leadAtivo });
+
+describe("leadParaEspelharNaAgenda", () => {
+  const FUNIL = { data: [{ pipeline_id: "pipe-atendimento" }], error: null };
+
+  it("nenhum funil tem a etapa: devolve o card da timeline, como antes", async () => {
+    expect(await escolher({ data: [], error: null }, { data: [], error: null }, "confirmed", "lead-1")).toBe("lead-1");
+  });
+
+  it("o card da timeline está num funil com a etapa: é ele", async () => {
+    const leads = { data: [{ id: "lead-1", status: "open", last_activity_at: null, closed_at: null, created_at: "2026-11-01T00:00:00Z" }], error: null };
+    expect(await escolher(FUNIL, leads, "confirmed", "lead-1")).toBe("lead-1");
+  });
+
+  it("card de protocolo na timeline, card de atendimento ganho: o comparecimento vai ao do atendimento", async () => {
+    const leads = { data: [{ id: "lead-sinal", status: "won", last_activity_at: null, closed_at: "2026-11-20T00:00:00Z", created_at: "2026-11-01T00:00:00Z" }], error: null };
+    expect(await escolher(FUNIL, leads, "completed", "lead-protocolo")).toBe("lead-sinal");
+  });
+
+  it("aberto vence ganho, e o aberto mais recente vence o antigo", async () => {
+    const leads = {
+      data: [
+        { id: "ganho", status: "won", last_activity_at: null, closed_at: "2026-11-24T00:00:00Z", created_at: "2026-10-01T00:00:00Z" },
+        { id: "aberto-velho", status: "open", last_activity_at: "2026-11-01T00:00:00Z", closed_at: null, created_at: "2026-10-01T00:00:00Z" },
+        { id: "aberto-novo", status: "open", last_activity_at: "2026-11-22T00:00:00Z", closed_at: null, created_at: "2026-10-02T00:00:00Z" },
+      ],
+      error: null,
+    };
+    expect(await escolher(FUNIL, leads, "completed", null)).toBe("aberto-novo");
+  });
+
+  it("falha de leitura nunca troca o card: devolve o da timeline", async () => {
+    expect(await escolher({ data: null, error: { message: "fetch failed" } }, { data: [], error: null }, "completed", "lead-1")).toBe("lead-1");
+    expect(await escolher(FUNIL, { data: null, error: { message: "fetch failed" } }, "completed", "lead-1")).toBe("lead-1");
   });
 });

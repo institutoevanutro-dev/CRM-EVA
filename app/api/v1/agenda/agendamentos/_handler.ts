@@ -63,7 +63,7 @@ import { audit } from "@/lib/audit";
 import { resolveActiveLeadForContact, type LeadCandidate } from "@/lib/leads/active-lead";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
-import { moverLeadParaEtapaDeAgendamento } from "@/lib/leads/appointment-stage-move";
+import { leadParaEspelharNaAgenda, moverLeadParaEtapaDeAgendamento } from "@/lib/leads/appointment-stage-move";
 import { logger } from "@/lib/logger";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -1351,14 +1351,24 @@ async function fecharOLaco(
   // já contou "foi marcado" quando ele nasceu), mas é EXATAMENTE a transição que
   // move o card de "Agendamento solicitado" pra "Agendado". Um early-return
   // antes disto pularia o mirror no caso que mais importa para ele.
-  if (leadId) {
+  // O card espelhado pode não ser o da timeline: é o que está num funil que tem
+  // a etapa da transição (ver `leadParaEspelharNaAgenda`).
+  const leadDoEspelho = args.contactId
+    ? await leadParaEspelharNaAgenda(supabase, {
+        organizationId: ctx.organization_id,
+        contactId: args.contactId,
+        transicao: args.transicao,
+        leadAtivo: leadId,
+      }).catch(() => leadId)
+    : leadId;
+  if (leadDoEspelho) {
     await moverLeadParaEtapaDeAgendamento(supabase, {
       organizationId: ctx.organization_id,
-      leadId,
+      leadId: leadDoEspelho,
       transicao: args.transicao,
     }).catch((err) => {
       logger.error("[agenda] mirror de estágio falhou", {
-        lead_id: leadId,
+        lead_id: leadDoEspelho,
         organization_id: ctx.organization_id,
         transicao: args.transicao,
         error: err instanceof Error ? err.message : String(err),
