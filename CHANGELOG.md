@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.42.1] — 2026-11-26
+
+### Corrigido
+
+- **O aviso de reativação vencida de um só negócio leva direto a ele** Quando a sugestão de retomar contato vence em um único negócio, o aviso na Central agora tem o botão "Abrir negócio", que abre o card no funil. Com dois ou mais negócios, o aviso continua levando ao Radar, e um aviso aberto de um negócio só passa a apontar para o Radar quando outro negócio vence. O texto do aviso mostra apenas a contagem. Porte de melgarafael/DeskcommCRM#5243.
+
+- **O "Editar" do card não grava mais o Valor por cima da soma das vendas** Num negócio com venda registrada, o Valor é a soma das vendas. Antes, salvar pelo "Editar" do card, pelo MCP ou pela API gravava um número digitado por cima dessa soma, e o card passava a mostrar um valor diferente do painel de vendas. Agora o "Editar" mostra a soma só para leitura, e o servidor ignora o valor enviado enquanto o negócio tiver venda registrada. Os outros campos da edição seguem gravando normalmente. Porte de melgarafael/DeskcommCRM#5231.
+
 ## [5.42.0] — 2026-11-26
 
 ### Adicionado
@@ -10185,7 +10193,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.42.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.42.1...HEAD
+[5.42.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.42.0...v5.42.1
 [5.42.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.41.1...v5.42.0
 [5.41.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.41.0...v5.41.1
 [5.41.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.40.1...v5.41.0
