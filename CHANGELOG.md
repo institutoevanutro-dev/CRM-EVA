@@ -8,6 +8,15 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.43.0] — 2026-11-26
+
+### Adicionado
+
+- **Instalação que só entra pelo EvaLink (EVALINK_SO_EVALINK)** Nova chave opcional `EVALINK_SO_EVALINK=true`. Com o EvaLink ligado, a tela de entrar mostra só o
+  botão do EvaLink: somem a senha, o "Esqueci minha senha" e o "Ainda não tenho conta" do convite, e
+  o cadastro pelo CRM é recusado no servidor. Vazia (padrão), nada muda; sem o EvaLink configurado,
+  a chave não tem efeito.
+
 ## [5.42.1] — 2026-11-26
 
 ### Corrigido
@@ -10193,7 +10202,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.42.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.0...HEAD
+[5.43.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.42.1...v5.43.0
 [5.42.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.42.0...v5.42.1
 [5.42.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.41.1...v5.42.0
 [5.41.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.41.0...v5.41.1
