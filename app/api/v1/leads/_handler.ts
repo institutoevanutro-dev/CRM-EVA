@@ -524,7 +524,16 @@ export async function updateLeadHandler(
     await exigeContatoDaOrg(supabase, ctx, input.contact_id);
     patch.contact_id = input.contact_id;
   }
-  if (input.value_cents !== undefined) patch.value_cents = input.value_cents;
+  // Com venda registrada (`valor_pelas_vendas = true`), `value_cents` é derivado
+  // pelo gatilho das vendas (migration 0424) e não pode ser sobrescrito por
+  // PATCH/MCP/API. Ignorar preserva o restante da edição (ex.: ficha aberta
+  // antes da venda ser registrada).
+  if (
+    input.value_cents !== undefined &&
+    !(existing as { valor_pelas_vendas?: boolean }).valor_pelas_vendas
+  ) {
+    patch.value_cents = input.value_cents;
+  }
   if (input.currency !== undefined) patch.currency = input.currency;
   // Dono do negócio (0070): regra em lib/leads/owner-patch.ts, compartilhada
   // com create, bulk e MCP. owner_kind é DERIVADO — nunca lido do body.

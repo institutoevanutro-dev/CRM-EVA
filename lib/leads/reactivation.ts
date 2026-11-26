@@ -111,6 +111,19 @@ interface PropostaVencida {
   crm_leads: { title: string; contact_id: string | null } | null;
 }
 
+/** Só a contagem no texto: o título do negócio não vai para o corpo persistido do aviso. */
+function montaTextoDoAviso(total: number): { title: string; body: string } {
+  const um = total === 1;
+  return {
+    title: `Decida sobre ${total} ${um ? "negócio parado" : "negócios parados"} — a sugestão de retomar venceu`,
+    body:
+      `${um ? "Um negócio esfriou" : `${total} negócios esfriaram`} e a sugestão de ` +
+      `retomar contato ficou sem resposta até o prazo. Eles saíram do quadro para não ` +
+      `parecerem em andamento. Retomar ou encerrar — as duas são decisões; deixar como ` +
+      `está é a única que não é.`,
+  };
+}
+
 /**
  * Vence as propostas cujo prazo passou — o FALLBACK que impede a demanda de
  * morrer por silêncio.
@@ -141,6 +154,7 @@ export async function venceReativacoes(
   const r: ResultadoDoVencimento = { vencidas: 0, itensDeCaixa: 0, falhasDeAtividade: 0 };
   if (vencidas.length === 0) return r;
 
+  const expiradas: PropostaVencida[] = [];
   for (const p of vencidas) {
     // `decided_at` preenchido porque o CHECK exige: status não-pendente sem
     // data seria registro que não sabe dizer quando aconteceu. Vencer É uma
@@ -152,6 +166,7 @@ export async function venceReativacoes(
       .eq("status", "pending"); // não atropela quem decidiu no mesmo instante
     if (upErr) continue;
     r.vencidas += 1;
+    expiradas.push(p);
 
     const atividade = await emitLeadActivity(admin, {
       organizationId,
@@ -184,30 +199,42 @@ export async function venceReativacoes(
     // houver — item que se duplica ao reprocessar é a praga que ele evita.
     const { data: jaAberto } = await admin
       .from("agent_inbox_items")
-      .select("id")
+      .select("id, ref_kind, ref_id")
       .eq("organization_id", organizationId)
       .eq("kind", "reactivation_expired")
       .eq("status", "open")
       .maybeSingle();
     if (!jaAberto) {
+      const { title, body } = montaTextoDoAviso(r.vencidas);
+      const unico = expiradas.length === 1 ? expiradas[0] : undefined;
       const { data: item } = await admin
         .from("agent_inbox_items")
         .insert({
           organization_id: organizationId,
           kind: "reactivation_expired",
           severity: "warn",
-          title: `Decida sobre ${r.vencidas} ${r.vencidas === 1 ? "negócio parado" : "negócios parados"} — a sugestão de retomar venceu`,
-          body:
-            `${r.vencidas === 1 ? "Um negócio esfriou" : `${r.vencidas} negócios esfriaram`} e a sugestão de ` +
-            `retomar contato ficou sem resposta até o prazo. Eles saíram do quadro para não ` +
-            `parecerem em andamento. Retomar ou encerrar — as duas são decisões; deixar como ` +
-            `está é a única que não é.`,
-          ref_kind: "organization",
-          ref_id: organizationId,
+          title,
+          body,
+          // Um único negócio leva direto a ele ("Abrir negócio"); vários mantêm
+          // o link para o Radar.
+          ref_kind: unico ? "lead" : "organization",
+          ref_id: unico ? unico.lead_id : organizationId,
         })
         .select("id")
         .maybeSingle();
       if (item) r.itensDeCaixa = 1;
+    } else {
+      // O aviso aberto apontava para UM negócio e outro venceu: vira aviso da
+      // organização (Radar), senão o segundo negócio some atrás do link do primeiro.
+      const aberto = jaAberto as { id: string; ref_kind: string | null; ref_id: string | null };
+      const outroNegocio = expiradas.some((p) => p.lead_id !== aberto.ref_id);
+      if (aberto.ref_kind === "lead" && outroNegocio) {
+        const { title, body } = montaTextoDoAviso(1 + r.vencidas);
+        await admin
+          .from("agent_inbox_items")
+          .update({ ref_kind: "organization", ref_id: organizationId, title, body })
+          .eq("id", aberto.id);
+      }
     }
   }
 

@@ -44,6 +44,11 @@ export interface Lead {
   lost_reason: string | null;
   position_in_stage: number;
   value_cents: number | null;
+  /**
+   * 0424: `true` quando há ao menos uma venda registrada e `value_cents` é
+   * mantido pelo gatilho como a soma das vendas na moeda do negócio.
+   */
+  valor_pelas_vendas?: boolean;
   currency: string | null;
   owner_user_id: string | null;
   /** 0070: quem é dono do negócio — humano, agente de IA, ou ninguém. */

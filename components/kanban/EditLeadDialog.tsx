@@ -18,7 +18,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useEditLead } from "@/hooks/kanban/useUpdateLead";
 import type { Lead } from "@/lib/types/leads";
 import { updateLeadSchema, type UpdateLeadInput } from "@/lib/schemas/leads";
-import { parseReaisToCents } from "@/lib/money";
+import { MOEDA_PADRAO, formatCents, parseReaisToCents } from "@/lib/money";
+import { useVendasDoNegocio } from "@/hooks/vendas/useVendasRegistradas";
 import { EcoDoValor } from "./EcoDoValor";
 
 interface FormShape {
@@ -44,6 +45,19 @@ function centsToReais(cents: number | null | undefined): string {
 export function EditLeadDialog({ open, onOpenChange, lead, pipelineId }: Props) {
   const t = useT();
   const edit = useEditLead(pipelineId);
+  // Com venda registrada, o Valor é derivado da soma das vendas pelo banco
+  // (migration 0424); o diálogo mostra a soma em leitura e não reenvia `value_cents`.
+  const moedaDoValor = (lead.currency ?? MOEDA_PADRAO).toUpperCase();
+  const { data: vendas } = useVendasDoNegocio(lead.id);
+  const vendasDoNegocio = Array.isArray(vendas) ? vendas : [];
+  const valorPelasVendas = vendasDoNegocio.length > 0 || lead.valor_pelas_vendas === true;
+  const somaDasVendas =
+    vendasDoNegocio.length > 0
+      ? vendasDoNegocio.reduce(
+          (soma, v) => soma + (v.currency.toUpperCase() === moedaDoValor ? v.valor_cents : 0),
+          0,
+        )
+      : (lead.value_cents ?? 0);
 
   const form = useForm<FormShape>({
     defaultValues: {
@@ -74,20 +88,23 @@ export function EditLeadDialog({ open, onOpenChange, lead, pipelineId }: Props) 
       .map((s) => s.trim())
       .filter(Boolean);
 
-    const reais = values.valueReais.trim();
     let valueCents: number | null = null;
-    if (reais.length > 0) {
-      valueCents = parseReaisToCents(reais);
-      if (valueCents === null) {
-        form.setError("valueReais", { message: t("Valor inválido") });
-        return;
+    if (!valorPelasVendas) {
+      const reais = values.valueReais.trim();
+      if (reais.length > 0) {
+        valueCents = parseReaisToCents(reais);
+        if (valueCents === null) {
+          form.setError("valueReais", { message: t("Valor inválido") });
+          return;
+        }
       }
     }
 
     const patch: Record<string, unknown> = {
       title: values.title.trim(),
       description: values.description.trim() ? values.description.trim() : null,
-      value_cents: valueCents,
+      // Com venda registrada, o valor é do banco (a soma): o diálogo não o reescreve.
+      ...(valorPelasVendas ? {} : { value_cents: valueCents }),
       tags,
       expected_close_date: values.expected_close_date || null,
     };
@@ -137,17 +154,37 @@ export function EditLeadDialog({ open, onOpenChange, lead, pipelineId }: Props) 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="valueReais">{t("Valor (R$)")}</Label>
-              <Input
-                id="valueReais"
-                inputMode="decimal"
-                placeholder="0,00"
-                {...form.register("valueReais")}
-              />
-              <EcoDoValor control={form.control} />
-              {form.formState.errors.valueReais && (
-                <p className="text-xs text-error-fg">
-                  {form.formState.errors.valueReais.message}
-                </p>
+              {valorPelasVendas ? (
+                <>
+                  <Input
+                    id="valueReais"
+                    readOnly
+                    aria-readonly
+                    data-testid="valor-pelas-vendas"
+                    value={formatCents(somaDasVendas, moedaDoValor)}
+                    className="bg-surface-elevated"
+                  />
+                  <p className="text-xs text-text-muted" data-testid="valor-pelas-vendas-legenda">
+                    {vendasDoNegocio.length > 0
+                      ? `${t("Soma de")} ${vendasDoNegocio.length} ${t("venda(s) registrada(s)")}`
+                      : t("Soma das vendas registradas")}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Input
+                    id="valueReais"
+                    inputMode="decimal"
+                    placeholder="0,00"
+                    {...form.register("valueReais")}
+                  />
+                  <EcoDoValor control={form.control} />
+                  {form.formState.errors.valueReais && (
+                    <p className="text-xs text-error-fg">
+                      {form.formState.errors.valueReais.message}
+                    </p>
+                  )}
+                </>
               )}
             </div>
             <div className="space-y-2">

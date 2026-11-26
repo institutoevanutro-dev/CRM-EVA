@@ -12918,6 +12918,7 @@ export const DICIONARIO: Traducoes = {
   "total": { es: "total" },
   "Soma de": { es: "Suma de" },
   "venda(s) registrada(s)": { es: "venta(s) registrada(s)" },
+  "Soma das vendas registradas": { es: "Suma de las ventas registradas" },
   // ─── Comandos pelo celular (#on/#off) — porte do DeskcommCRM #1631 ───
   "Comandos pelo celular": { es: "Comandos desde el celular" },
   "Aceitar #on/#off enviados pelo celular": { es: "Aceptar #on/#off enviados desde el celular" },
