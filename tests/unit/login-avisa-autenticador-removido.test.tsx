@@ -24,7 +24,7 @@ vi.mock("@/lib/auth/politica-de-cadastro", () => ({ modoDeCadastro: async () => 
 // A página lê a marca resolvida (`marcaDaSaida`); sem banco nos testes.
 vi.mock("@/lib/branding/instalacao", () => ({ marcaDaInstalacao: async () => null }));
 const evalink = vi.hoisted(() => ({ ligado: false }));
-vi.mock("@/lib/evalink/config", () => ({ configEvalink: () => (evalink.ligado ? { url: "https://conta.exemplo" } : null) }));
+vi.mock("@/lib/evalink/config", () => ({ configEvalink: () => (evalink.ligado ? { url: "https://conta.exemplo" } : null), loginSoEvalink: () => false }));
 
 async function entrar(params: Record<string, string>): Promise<string> {
   const { default: LoginPage } = await import("@/app/(public)/login/page");

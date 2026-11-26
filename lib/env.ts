@@ -482,6 +482,12 @@ const schema = z.object({
   ESCONDER_ATUALIZAR_AGORA: z.string().optional().default(""),
 
   /**
+   * `true` com o EvaLink ligado: só se entra pela Conta (sem senha nem cadastro
+   * pelo CRM). Vazio (padrão) não muda nada. Quem lê é `loginSoEvalink()`.
+   */
+  EVALINK_SO_EVALINK: z.string().optional().default(""),
+
+  /**
    * Par VAPID do Web Push. Opcionais: sem elas a bandeja só funciona com a aba
    * viva (Notification API + SW local). Gerar: `npx web-push generate-vapid-keys`.
    */

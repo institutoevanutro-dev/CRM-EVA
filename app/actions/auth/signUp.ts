@@ -14,6 +14,7 @@ import { modoDeCadastro } from "@/lib/auth/politica-de-cadastro";
 import { audit, hashEmail } from "@/lib/audit";
 import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
 import { env } from "@/lib/env";
+import { loginSoEvalink } from "@/lib/evalink/config";
 
 export type SignUpResult =
   | {
@@ -54,6 +55,8 @@ export type SignUpResult =
         | "rate_limited"
         | "signup_failed"
         | "somente_convite"
+        /** `somente_evalink`: `EVALINK_SO_EVALINK` — a conta nasce na Conta, nunca aqui. */
+        | "somente_evalink"
         | "conta_ja_existe"
         /**
          * `email_indisponivel`: o provedor de auth não conseguiu mandar o
@@ -98,6 +101,18 @@ export async function signUp(
   }
 
   const hdrs = await headers();
+  // Antes de tudo, com ou sem convite: a tela também recusa, mas a action é
+  // chamável direto, e é ela que cria o usuário solto no provedor de auth.
+  if (loginSoEvalink()) {
+    await audit({
+      action: "auth.signup_failed",
+      metadata: { email_hash: hashEmail(parsed.data.email), reason: "somente_evalink" },
+      requestId: hdrs.get("x-request-id"),
+      ip: hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+      userAgent: hdrs.get("user-agent") ?? null,
+    });
+    return { ok: false, error: "somente_evalink" };
+  }
   const origin = hdrs.get("origin") ?? env.NEXT_PUBLIC_APP_URL;
   const requestId = hdrs.get("x-request-id");
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;

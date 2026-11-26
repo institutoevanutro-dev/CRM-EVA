@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { configEvalink } from "./config";
+import { configEvalink, loginSoEvalink } from "./config";
 
 const ok = {
   CONTA_URL: "https://conta.exemplo.test/",
@@ -40,5 +40,16 @@ describe("configEvalink: aviso no log", () => {
     expect(cfg({ ...ok, EVALINK_SEGREDO_AVISO: "curto" })).toBeNull();
     expect(warn).toHaveBeenCalledTimes(1);
     vi.doUnmock("@/lib/logger");
+  });
+});
+
+describe("loginSoEvalink", () => {
+  it("liga só com a chave E o EvaLink configurado", () => {
+    expect(loginSoEvalink({ ...ok, EVALINK_SO_EVALINK: "true" })).toBe(true);
+    expect(loginSoEvalink({ ...ok, EVALINK_SO_EVALINK: "" })).toBe(false);
+    expect(loginSoEvalink({ ...ok })).toBe(false);
+  });
+  it("chave sem EvaLink não tranca ninguém do lado de fora", () => {
+    expect(loginSoEvalink({ EVALINK_SO_EVALINK: "true" })).toBe(false);
   });
 });
