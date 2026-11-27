@@ -143,7 +143,9 @@ test("uma profissional, um clique no horário vazio, o compromisso na grade", as
   );
   await page.getByTestId(`botao-pessoa-${donoId}`).click();
   await expect(page.getByTestId(`botao-pessoa-${donoId}`)).toHaveAttribute("aria-pressed", "true");
-  // Uma pessoa POR VEZ: escolher alguém solta o "Todos".
+  // Escolher alguém solta o "Todos". Que é UMA pessoa por vez (A e depois B
+  // deixa só B) o seed não prova, porque só tem uma profissional: quem prova é
+  // `components/agenda/FiltroDePessoas.test.tsx`.
   await expect(page.getByTestId("botao-todos")).toHaveAttribute("aria-pressed", "false");
   await expect(filtro).toHaveAttribute("data-selecionadas", donoId);
   // A dica "Horários livres de" passou a perguntar pela agenda DELA.

@@ -30,7 +30,9 @@ import { esperarAgenda } from "./helpers/tela-agenda";
  * - o CAMPO COM RELÓGIO: o atalho preenche a hora, e remarcar DIGITA a hora no
  *   campo `type="time"` em vez de tocar no atalho.
  * A semana de segunda a sábado é medida em `agenda-kit-visual` (fixture sem
- * domingo); a fileira de uma pessoa por vez, em `agenda-clique-e-profissionais`.
+ * domingo). A fileira de UMA pessoa por vez é provada no unitário
+ * `components/agenda/FiltroDePessoas.test.tsx` (o seed só tem uma profissional);
+ * `agenda-clique-e-profissionais` cobre só quem atende, o F5 e o "Todos".
  */
 
 /**
@@ -183,17 +185,20 @@ test("cancelar pela tela: o motivo é exigido, e o compromisso sai da grade", as
   const painel = page.getByTestId("painel-do-compromisso");
   await expect(painel).toBeVisible({ timeout: 10_000 });
   // O tipo do seed não pede confirmação (`requires_confirmation` false): nasce
-  // confirmado, e "Confirmar" só existe para pendente.
-  await expect(painel.getByTestId("acao-confirmar")).toHaveCount(0);
-  const maisDetalhesAberto = await painel
-    .getByTestId("mais-detalhes-do-compromisso")
-    .evaluate((el) => (el as HTMLDetailsElement).open);
-  expect(maisDetalhesAberto, "'Mais detalhes' começa fechado").toBe(false);
+  // confirmado, que o painel chama "Agendado". Esperar a etiqueta é esperar o
+  // detalhe carregar — antes dela, "Confirmar ausente" passaria no vazio.
+  await expect(painel.getByTestId("estado-do-compromisso")).toHaveText("Agendado", { timeout: 15_000 });
 
   const cancelarBotao = painel.getByTestId("acao-cancelar");
   await expect(cancelarBotao, "o Cancelar do painel nasceu desabilitado — controle decorativo").toBeEnabled({
     timeout: 15_000,
   });
+  // Com as ações já à vista: "Confirmar" só existe para pendente.
+  await expect(painel.getByTestId("acao-confirmar")).toHaveCount(0);
+  const maisDetalhesAberto = await painel
+    .getByTestId("mais-detalhes-do-compromisso")
+    .evaluate((el) => (el as HTMLDetailsElement).open);
+  expect(maisDetalhesAberto, "'Mais detalhes' começa fechado").toBe(false);
   await cancelarBotao.click();
   await expect(painel.getByTestId("cancelar-no-painel")).toBeVisible();
 
