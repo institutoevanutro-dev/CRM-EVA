@@ -82,6 +82,7 @@ export function AgendaInterativa({
   onAbrirDia,
   janelaSobre,
   fileira,
+  aviso,
   className,
 }: {
   visao: VisaoDaAgenda;
@@ -154,6 +155,11 @@ export function AgendaInterativa({
    * grade mostra, e navegação mora em cima.
    */
   fileira?: React.ReactNode;
+  /**
+   * Os avisos da tela (o cartão do Google, o vazio), logo DEPOIS da fileira e
+   * antes da grade: navegação em cima, conteúdo embaixo.
+   */
+  aviso?: React.ReactNode;
   className?: string;
 }) {
   const localeDaData = useLocaleDeData();
@@ -475,7 +481,6 @@ export function AgendaInterativa({
 
   return (
     <div className={cn("flex min-h-0 flex-col gap-2", className)}>
-      {horarios?.google_cobertura_parcial && <p role="status" className="text-xs text-warning-fg">{t("Ocupação do Google ainda não verificada neste período.")}</p>}
       {(fileira || tipos.length > 1) && (
         // `empty:hidden`: sem ninguém na fileira e com um tipo só, a linha fica
         // vazia e não pode somar o `gap` da coluna acima da grade.
@@ -539,6 +544,8 @@ export function AgendaInterativa({
           )}
         </div>
       )}
+      {aviso}
+      {horarios?.google_cobertura_parcial && <p role="status" className="text-xs text-warning-fg">{t("Ocupação do Google ainda não verificada neste período.")}</p>}
 
       {/*
         O MOTIVO EM TEXTO, e não só no `title` de cada bloco.

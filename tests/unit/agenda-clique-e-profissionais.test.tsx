@@ -76,15 +76,25 @@ vi.mock("@/hooks/agenda/useHorariosLivres", () => ({
 }));
 
 const compromissos = vi.hoisted(() => [] as Array<Record<string, unknown>>);
-/** Ligado, todo período pedido está CARREGANDO: o hook devolve `data` vazio, como o React Query. */
-const periodo = vi.hoisted(() => ({ carregando: false }));
+/**
+ * O estado do período pedido, como o React Query o devolveria: `carregando`
+ * (sem `data`), `falhou` (sem `data`, com `isError`) ou `lista` (uma resposta
+ * NOVA, com outra referência — a de `compromissos` é a do primeiro período).
+ */
+const periodo = vi.hoisted(() => ({
+  carregando: false,
+  falhou: false,
+  lista: null as Array<Record<string, unknown>> | null,
+}));
 // O canal ao vivo tem teste próprio (`agenda-ao-vivo.test.tsx`); aqui não há Supabase.
 vi.mock("@/hooks/agenda/useAgendaAoVivo", () => ({ useAgendaAoVivo: () => ({}) }));
 vi.mock("@/hooks/agenda/useAgendamentos", () => ({
   useAgendamentos: () =>
     periodo.carregando
       ? { data: undefined, isError: false, isLoading: true }
-      : { data: compromissos, isError: false, isLoading: false },
+      : periodo.falhou
+        ? { data: undefined, isError: true, isLoading: false }
+        : { data: periodo.lista ?? compromissos, isError: false, isLoading: false },
 }));
 const marcar = vi.hoisted(() => vi.fn(async (_corpo: Record<string, unknown>) => ({})));
 vi.mock("@/hooks/agenda/useMarcarAgendamento", () => ({
@@ -186,7 +196,7 @@ const CHAVE = `agenda.pessoas.v1:${USUARIO}`;
 const HOJE = "2030-01-15";
 const QUARTA = "2030-01-16";
 
-function montar() {
+function montar(extra: { administra?: boolean } = {}) {
   const cliente = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={cliente}>
@@ -200,6 +210,7 @@ function montar() {
         agendamentosIniciais={[]}
         usuarioId={USUARIO}
         podeMarcar
+        administra={extra.administra}
       />
     </QueryClientProvider>,
   );
@@ -226,6 +237,8 @@ beforeEach(() => {
   pedidos.length = 0;
   compromissos.length = 0;
   periodo.carregando = false;
+  periodo.falhou = false;
+  periodo.lista = null;
   marcar.mockClear();
 });
 afterEach(cleanup);
@@ -445,6 +458,74 @@ describe("fileira: uma pessoa de cada vez (27/11/2026)", () => {
     expect(screen.getByTestId("botao-todos")).toHaveFocus();
   });
 
+  it("o período que FALHOU não segura a fileira antiga", () => {
+    compromissos.push(compromisso("c-ana", "p-ana", "09:00"));
+    montar();
+    expect(avatar("p-ana")).toBeInTheDocument();
+
+    periodo.falhou = true;
+    fireEvent.click(screen.getByTestId("periodo-seguinte"));
+    // Com erro não há o que esperar: a fileira diz a verdade do período (vazio).
+    expect(screen.queryByTestId("filtro-de-pessoas")).toBeNull();
+  });
+
+  it("desfeita durante o carregamento: sai na hora se não atendia no último período carregado", () => {
+    window.localStorage.setItem(CHAVE, JSON.stringify(["p-bia"]));
+    compromissos.push(compromisso("c-ana", "p-ana", "09:00"));
+    montar();
+    periodo.carregando = true;
+    fireEvent.click(screen.getByTestId("periodo-seguinte"));
+    avatar("p-bia").focus();
+    fireEvent.click(avatar("p-bia"));
+    expect(screen.queryByTestId("botao-pessoa-p-bia")).toBeNull();
+    expect(screen.getByTestId("botao-todos")).toHaveFocus();
+  });
+
+  it("desfeita que só sai quando o período chega: o foco vai ao Todos nessa hora", () => {
+    window.localStorage.setItem(CHAVE, JSON.stringify(["p-bia"]));
+    compromissos.push(compromisso("c-ana", "p-ana", "09:00"), compromisso("c-bia", "p-bia", "11:00"));
+    montar();
+    periodo.carregando = true;
+    fireEvent.click(screen.getByTestId("periodo-seguinte"));
+    avatar("p-bia").focus();
+    fireEvent.click(avatar("p-bia"));
+    // No último período carregado ela atendia: segue na fileira, com o foco.
+    expect(avatar("p-bia")).toHaveFocus();
+
+    // O período novo chega sem nada dela.
+    periodo.carregando = false;
+    periodo.lista = [compromisso("c-ana", "p-ana", "09:00")];
+    fireEvent.click(screen.getByRole("button", { name: "Hoje" }));
+    expect(screen.queryByTestId("botao-pessoa-p-bia")).toBeNull();
+    expect(screen.getByTestId("botao-todos")).toHaveFocus();
+  });
+
+  it("se o foco já foi para outro lugar quando ela sai, ele fica lá", () => {
+    window.localStorage.setItem(CHAVE, JSON.stringify(["p-bia"]));
+    compromissos.push(compromisso("c-ana", "p-ana", "09:00"), compromisso("c-bia", "p-bia", "11:00"));
+    montar();
+    periodo.carregando = true;
+    fireEvent.click(screen.getByTestId("periodo-seguinte"));
+    avatar("p-bia").focus();
+    fireEvent.click(avatar("p-bia"));
+    screen.getByTestId("periodo-anterior").focus();
+
+    periodo.carregando = false;
+    periodo.lista = [compromisso("c-ana", "p-ana", "09:00")];
+    fireEvent.click(screen.getByRole("button", { name: "Hoje" }));
+    expect(screen.queryByTestId("botao-pessoa-p-bia")).toBeNull();
+    expect(screen.getByTestId("periodo-anterior")).toHaveFocus();
+  });
+
+  it("a fileira inteira some com a desfeita (era a única): o foco vai ao Hoje", () => {
+    window.localStorage.setItem(CHAVE, JSON.stringify(["p-bia"]));
+    montar();
+    avatar("p-bia").focus();
+    fireEvent.click(avatar("p-bia"));
+    expect(screen.queryByTestId("filtro-de-pessoas")).toBeNull();
+    expect(screen.getByRole("button", { name: "Hoje" })).toHaveFocus();
+  });
+
   it("desfazer quem segue na fileira não rouba o foco", () => {
     compromissos.push(compromisso("c-ana", "p-ana", "09:00"));
     montar();
@@ -469,5 +550,27 @@ describe("topo numa linha só (decisão 7 do André, 27/11/2026)", () => {
     expect(topo.contains(fileira)).toBe(false);
     expect(screen.getByTestId("linha-de-filtros").contains(fileira)).toBe(true);
     expect(topo.compareDocumentPosition(fileira) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  const VAZIO = "Sua agenda está livre esta semana";
+  const depois = (antes: Element, depoisDele: Element) =>
+    Boolean(antes.compareDocumentPosition(depoisDele) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  it("o aviso de vazio não aparece enquanto o período carrega", () => {
+    compromissos.push(compromisso("c-ana", "p-ana", "09:00"));
+    montar();
+    expect(screen.queryByText(VAZIO)).toBeNull();
+    periodo.carregando = true;
+    fireEvent.click(screen.getByTestId("periodo-seguinte"));
+    expect(screen.queryByText(VAZIO)).toBeNull();
+  });
+
+  it("os avisos vêm DEPOIS da fileira: o vazio de quem está escolhido e o cartão do Google", () => {
+    window.localStorage.setItem(CHAVE, JSON.stringify(["p-bia"]));
+    compromissos.push(compromisso("c-ana", "p-ana", "09:00"));
+    montar({ administra: true });
+    const fileira = screen.getByTestId("filtro-de-pessoas");
+    expect(depois(fileira, screen.getByText(VAZIO))).toBe(true);
+    expect(depois(fileira, screen.getByTestId("google-nao-configurado"))).toBe(true);
   });
 });

@@ -29,24 +29,38 @@ export function FiltroDePessoas({
   pessoas,
   selecionadas,
   onMudar,
+  focoDeReserva,
   className,
 }: {
   pessoas: Pessoa[];
   /** Vazio = todos. Só a primeira conta: a escolha é de uma pessoa. */
   selecionadas: readonly string[];
   onMudar: (ids: string[]) => void;
+  /** Para onde vai o foco quando a fileira some INTEIRA (a desfeita era a única). */
+  focoDeReserva?: React.RefObject<HTMLElement | null>;
   className?: string;
 }) {
   const t = useT();
   const todosRef = React.useRef<HTMLButtonElement>(null);
-  // Quem acabou de ser DESFEITA pelo próprio botão. Sem atendimento no período,
-  // ela sai da fileira no render seguinte, o botão focado desmonta e o foco do
-  // teclado cai no <body>. Aí ele vai para "Todos", que é o que ficou marcado.
-  const desfeita = React.useRef<string | null>(null);
+  // Quem foi DESFEITA pelo próprio botão, com o foco nele. Sem atendimento no
+  // período, ela sai da fileira (na hora, ou quando o período que carrega
+  // chegar), o botão focado desmonta e o foco do teclado cai no <body>. Aí ele
+  // vai para "Todos", que é o que ficou marcado — ou para a reserva, se a
+  // fileira sumiu junto.
+  const desfeita = React.useRef<{ id: string; botao: HTMLElement } | null>(null);
   React.useLayoutEffect(() => {
-    const id = desfeita.current;
+    const d = desfeita.current;
+    if (!d) return;
+    if (pessoas.some((p) => p.id === d.id)) {
+      // Ainda na fileira: a guarda só vale enquanto o foco segue no botão dela.
+      if (document.activeElement !== d.botao) desfeita.current = null;
+      return;
+    }
     desfeita.current = null;
-    if (id !== null && !pessoas.some((p) => p.id === id)) todosRef.current?.focus();
+    // Só resgata foco PERDIDO: se ele já está noutro lugar, fica lá.
+    if (document.activeElement === document.body || document.activeElement === null) {
+      (todosRef.current ?? focoDeReserva?.current)?.focus();
+    }
   });
   const escolhida = selecionadas[0] ?? null;
   // Ninguém com atendimento e ninguém escolhido: não há o que filtrar.
@@ -73,7 +87,10 @@ export function FiltroDePessoas({
         type="button"
         data-testid="botao-todos"
         aria-pressed={todos}
-        onClick={() => onMudar([])}
+        onClick={() => {
+          desfeita.current = null;
+          onMudar([]);
+        }}
         className={classe(todos)}
       >
         {t("Todos")}
@@ -90,8 +107,8 @@ export function FiltroDePessoas({
             // O nome COMPLETO para o leitor de tela; "Ana P." fica só à vista.
             aria-label={p.nome}
             title={p.nome}
-            onClick={() => {
-              desfeita.current = marcada ? p.id : null;
+            onClick={(e) => {
+              desfeita.current = marcada ? { id: p.id, botao: e.currentTarget } : null;
               onMudar(marcada ? [] : [p.id]);
             }}
             className={classe(marcada)}

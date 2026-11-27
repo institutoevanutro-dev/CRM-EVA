@@ -146,6 +146,8 @@ export function AgendaClient({
   const t = useT();
   const router = useRouter();
   const telaRef = React.useRef<HTMLDivElement>(null);
+  // Para onde vai o foco quando a fileira de profissionais some inteira.
+  const hojeRef = React.useRef<HTMLButtonElement>(null);
   React.useEffect(() => {
     // O HTML pode aparecer antes de o React ligar os eventos. Este marcador
     // permite que jornadas automatizadas esperem o botão estar realmente ativo.
@@ -398,31 +400,36 @@ export function AgendaClient({
   const naJanelaDoServidor =
     recorteDaGrade.de === recorteDoServidor.de && recorteDaGrade.ate === recorteDoServidor.ate;
 
-  const { data: agendamentosVivos } = useAgendamentos(recorteDaGrade);
+  const { data: agendamentosVivos, isError: agendamentosFalharam } = useAgendamentos(recorteDaGrade);
   // Marcado pela IA ou por um colega aparece sem recarregar (achado 2, 16/11).
   useAgendaAoVivo(recorteDaGrade);
   const todos: Agendamento[] = React.useMemo(
     () => agendamentosVivos ?? (naJanelaDoServidor ? agendamentosIniciais : []),
     [agendamentosVivos, naJanelaDoServidor, agendamentosIniciais],
   );
+  // O PERÍODO NOVO AINDA NÃO CHEGOU: sem resposta e fora da janela que o
+  // servidor pintou. Com ERRO não há o que esperar, e a tela volta a dizer a
+  // verdade do que tem (nada).
+  const carregandoPeriodo = agendamentosVivos === undefined && !naJanelaDoServidor && !agendamentosFalharam;
+  // A ÚLTIMA LISTA QUE CHEGOU, para a fileira não piscar enquanto o período novo
+  // carrega: até a resposta, `todos` é vazio, e com "Todos" marcado a fileira
+  // sumia e o topo pulava (no celular, linhas de 44 px). Guarda-se o DADO, e não
+  // a fileira pronta: nome, cor e escolha seguem as de agora. Comparada item a
+  // item: uma lista nova com os mesmos itens não é mudança, e o ajuste durante
+  // o render não pode virar laço.
+  const [ultimosCarregados, setUltimosCarregados] = React.useState(todos);
+  if (
+    !carregandoPeriodo &&
+    (todos.length !== ultimosCarregados.length || todos.some((a, i) => a !== ultimosCarregados[i]))
+  ) {
+    setUltimosCarregados(todos);
+  }
   // A FILEIRA mostra só quem tem atendimento no período carregado — e quem está
   // escolhido, para a escolha nunca sumir sem um jeito de desfazê-la.
-  const fileiraDoPeriodo = React.useMemo(
-    () => pessoasComAtendimento(pessoas, todos, selecionadas),
-    [pessoas, todos, selecionadas],
+  const pessoasDaFileira = React.useMemo(
+    () => pessoasComAtendimento(pessoas, carregandoPeriodo ? ultimosCarregados : todos, selecionadas),
+    [pessoas, carregandoPeriodo, ultimosCarregados, todos, selecionadas],
   );
-  // E ELA NÃO PISCA ao trocar de período: até a resposta chegar, `todos` é
-  // vazio, e com "Todos" marcado a fileira sumia e o topo pulava (no celular,
-  // linhas de 44 px). Enquanto carrega, vale a última fileira vista. Comparada
-  // pelos ids, e não pela referência: `pessoas = []` nasce novo a cada render
-  // enquanto a equipe carrega, e o ajuste viraria laço.
-  const carregandoPeriodo = agendamentosVivos === undefined && !naJanelaDoServidor;
-  const [fileiraVista, setFileiraVista] = React.useState(fileiraDoPeriodo);
-  const idsDaFileira = (lista: readonly { id: string }[]) => lista.map((p) => p.id).join(",");
-  if (!carregandoPeriodo && idsDaFileira(fileiraDoPeriodo) !== idsDaFileira(fileiraVista)) {
-    setFileiraVista(fileiraDoPeriodo);
-  }
-  const pessoasDaFileira = carregandoPeriodo ? fileiraVista : fileiraDoPeriodo;
 
   // Uma pessoa só selecionada é o CONTEXTO da marcação: os horários livres da
   // grade, o "com quem" do painel e o dono do compromisso passam a ser dela.
@@ -723,6 +730,7 @@ export function AgendaClient({
             âncora do servidor e devolvia a semana do navegador — o defeito que
             a tela acabou de fechar, a um clique de distância. */}
         <Button
+          ref={hojeRef}
           variant="outline"
           size="sm"
           onClick={() => setAncora(ancoraLocalDoDia(hoje))}
@@ -816,19 +824,6 @@ export function AgendaClient({
           )}
         </div>
       </header>
-
-      {/* O cartão do Google vem DEPOIS do título: a tela começava por uma caixa
-          de integração, antes até de dizer que era a Agenda (print de 08/10). */}
-      {/* Sem as credenciais da instalação, o cartão só aparece a quem
-          administra (item 131): para a equipe ele era um aviso sobre algo que
-          ela não resolve, com nomes de chave e endereço do servidor. */}
-      {(googleConfigurado || administra) && <CartaoDaConexaoGoogle
-        configurado={googleConfigurado}
-        falta={faltaNoGoogle}
-        linkDeConfiguracao={linkDeConfiguracaoDoGoogle}
-        contaConectada={contaConectada}
-        enderecoDeRetorno={enderecoDeRetorno}
-      />}
 
       {/*
         O HISTÓRICO na tela do produto, e não só na vitrine. Ele aparece mesmo
@@ -932,26 +927,6 @@ export function AgendaClient({
         </DialogContent>
       </Dialog>
 
-      {/* ⚠️ O VAZIO NÃO ESCONDE MAIS A GRADE, e o achado veio do CI.
-          Isto era um ternário: com zero agendamentos, `EmptyAgenda` entrava NO
-          LUGAR de `GradeDaAgenda`. Numa instalação nova — que é o estado de
-          primeira impressão — a pessoa abria a Agenda e não via calendário
-          NENHUM: sem semana, sem horários, e com o alternador de visão ligado a
-          nada, que é controle decorativo.
-
-          A mensagem continua, porque ela é boa: diz de ONDE vem o próximo
-          agendamento em vez de constatar a ausência. Ela virou aviso ACIMA da
-          grade, e a grade fica.
-
-          Achado porque a cerca nova das três visões passou aqui (banco com
-          dados de execuções anteriores) e reprovou no CI, onde o banco nasce
-          limpo. O mesmo formato do defeito que `agenda-tela-do-produto` já
-          tinha pago: verde por banco sujo. */}
-      {agendamentos.length === 0 ? (
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <EmptyAgenda />
-        </div>
-      ) : null}
       {/* A GRADE INTERATIVA — clicar num bloco livre marca ali, arrastar um card
           remarca. Toda a fiação (a consulta de horários da janela desenhada, a
           proposta de remarcação, o otimismo com volta atrás) mora em
@@ -967,7 +942,57 @@ export function AgendaClient({
         // A janela de horas sai do período INTEIRO: com o filtro de pessoas ela
         // pulava a cada troca (item 136). Cancelado não alarga.
         janelaSobre={todos}
-        fileira={<FiltroDePessoas pessoas={pessoasDaFileira} selecionadas={selecionadas} onMudar={mudarPessoas} />}
+        fileira={
+          <FiltroDePessoas
+            pessoas={pessoasDaFileira}
+            selecionadas={selecionadas}
+            onMudar={mudarPessoas}
+            focoDeReserva={hojeRef}
+          />
+        }
+        // OS AVISOS vêm DEPOIS da fileira de profissionais e antes da grade
+        // (decisão 7 do André, 27/11/2026): navegação em cima, conteúdo embaixo.
+        // Com uma pessoa escolhida e o período vazio, o aviso de vazio aparecia
+        // ACIMA do filtro que o causou.
+        aviso={
+          <>
+            {/* O cartão do Google vem DEPOIS do topo e da fileira: a tela começava
+                por uma caixa de integração, antes até de dizer que era a Agenda
+                (print de 08/10). */}
+            {/* Sem as credenciais da instalação, o cartão só aparece a quem
+                administra (item 131): para a equipe ele era um aviso sobre algo que
+                ela não resolve, com nomes de chave e endereço do servidor. */}
+            {(googleConfigurado || administra) && <CartaoDaConexaoGoogle
+              configurado={googleConfigurado}
+              falta={faltaNoGoogle}
+              linkDeConfiguracao={linkDeConfiguracaoDoGoogle}
+              contaConectada={contaConectada}
+              enderecoDeRetorno={enderecoDeRetorno}
+            />}
+            {/* ⚠️ O VAZIO NÃO ESCONDE MAIS A GRADE, e o achado veio do CI.
+                Isto era um ternário: com zero agendamentos, `EmptyAgenda` entrava NO
+                LUGAR de `GradeDaAgenda`. Numa instalação nova — que é o estado de
+                primeira impressão — a pessoa abria a Agenda e não via calendário
+                NENHUM: sem semana, sem horários, e com o alternador de visão ligado a
+                nada, que é controle decorativo.
+
+                A mensagem continua, porque ela é boa: diz de ONDE vem o próximo
+                agendamento em vez de constatar a ausência. Ela virou aviso ACIMA da
+                grade, e a grade fica.
+
+                Achado porque a cerca nova das três visões passou aqui (banco com
+                dados de execuções anteriores) e reprovou no CI, onde o banco nasce
+                limpo. O mesmo formato do defeito que `agenda-tela-do-produto` já
+                tinha pago: verde por banco sujo. */}
+            {/* Só com o período CHEGADO: enquanto carrega, a lista é vazia por
+                falta de resposta, não por falta de agendamento. */}
+            {!carregandoPeriodo && agendamentos.length === 0 ? (
+              <div className="rounded-lg border border-border bg-surface p-4">
+                <EmptyAgenda />
+              </div>
+            ) : null}
+          </>
+        }
         recorte={recorteDaGrade}
         tipos={tiposIniciais.map((t) => ({ id: t.id, nome: t.nome, duracaoMin: t.duracaoMin }))}
         tipo={tipo ? { id: tipo.id, duracaoMin: tipo.duracaoMin, donoId: tipo.donoId } : null}
