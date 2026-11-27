@@ -192,8 +192,13 @@ async function evidence(
 async function detail(page: Page, id: string) {
   await page.goto(`/app/agenda?compromisso=${id}`);
   await expect(page.getByRole("dialog").getByText("Consulta sincronizada", { exact: true }).first()).toBeVisible();
-  // A sincronização do Google mora em "Mais detalhes", fechado por padrão (27/11/2026).
-  await page.getByTestId("abrir-mais-detalhes").click();
+  // A sincronização do Google mora em "Mais detalhes", fechado por padrão
+  // (27/11/2026) — e aberto sozinho quando há erro ou conflito com o Google.
+  // Clicar às cegas fecharia a seção que a falha abriu.
+  const secao = page.getByTestId("mais-detalhes-do-compromisso");
+  if (!(await secao.evaluate((el) => (el as HTMLDetailsElement).open)))
+    await page.getByTestId("abrir-mais-detalhes").click();
+  await expect(secao).toHaveAttribute("open", "");
 }
 async function row(f: Fixture, id: string) {
   const { data, error } = await db

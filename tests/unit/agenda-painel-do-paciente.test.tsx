@@ -278,6 +278,25 @@ describe("painel do paciente", () => {
     expect(within(mais).getByTestId("excluir-compromisso")).toBeInTheDocument();
   });
 
+  it("falha do Meet abre 'Mais detalhes' sozinha: o aviso que a Central aponta não fica escondido", async () => {
+    detalhe({
+      ...BASE,
+      meeting: {
+        state: "failed",
+        url: null,
+        request_id: "req-1",
+        error: "google_failure",
+        delivery_state: "none",
+        can_manage: true,
+        destinations: [],
+      },
+    });
+    abrir();
+    const mais = (await screen.findByTestId("mais-detalhes-do-compromisso")) as HTMLDetailsElement;
+    expect(mais.open).toBe(true);
+    expect(within(mais).getByRole("alert")).toHaveTextContent("O Google não conseguiu criar o link.");
+  });
+
   it("compromisso cancelado não oferece ação nenhuma", async () => {
     detalhe({ ...BASE, status: "cancelled" });
     abrir();

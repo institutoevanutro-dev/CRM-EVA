@@ -33,6 +33,11 @@ const MOTIVO_DA_CONEXAO: Record<string, string> = {
     "A conexão com o Google de quem lançou este compromisso está com erro. Quem o lançou precisa reconectar o Google em Configurar suas agendas.",
 };
 
+/** A seção tem um aviso de falha (`role="alert"`) que pede ação de alguém. */
+export function syncPedeAtencao(sync: SyncDetail): boolean {
+  return Boolean(sync.error || sync.conflict || MOTIVO_DA_CONEXAO[sync.connection_status ?? ""]);
+}
+
 export function SincronizacaoDoCompromisso({
   id,
   sync,

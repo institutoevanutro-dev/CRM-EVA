@@ -20,6 +20,13 @@ export interface MeetingDetail {
   can_manage: boolean;
   destinations: Array<{ id: string; label: string }>;
 }
+/** O link ou o envio falhou: a seção mostra um aviso que pede ação de alguém. */
+export function meetPedeAtencao(meeting: MeetingDetail): boolean {
+  return Boolean(
+    meeting.error || meeting.state === "failed" || meeting.delivery_error || meeting.delivery_state === "failed",
+  );
+}
+
 export function MeetDoCompromisso({
   id,
   revision,

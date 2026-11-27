@@ -1,6 +1,6 @@
 "use client";
-import { MeetDoCompromisso, type MeetingDetail } from "./MeetDoCompromisso";
-import { SincronizacaoDoCompromisso, type SyncDetail } from "./SincronizacaoDoCompromisso";
+import { MeetDoCompromisso, meetPedeAtencao, type MeetingDetail } from "./MeetDoCompromisso";
+import { SincronizacaoDoCompromisso, syncPedeAtencao, type SyncDetail } from "./SincronizacaoDoCompromisso";
 import { Fragment, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePessoasDaAgenda } from "@/hooks/agenda/usePessoasDaAgenda";
@@ -277,6 +277,16 @@ export function DetalheDoCompromisso({
   );
   const mostraRemarcar = podeAgir && Boolean(remarcacao?.aberta);
   const mostraCancelar = podeAgir && cancelando;
+  // "MAIS DETALHES" NASCE FECHADO (decisão 6), mas falha do Google ou do Meet
+  // não fica escondida: quem chega pelo "Abrir compromisso" da Central vem
+  // resolver justamente ela. Com falha, a seção abre sozinha. Depois do primeiro
+  // toggle (o automático ou o de quem lê) a escolha fica, e a seção não fecha
+  // embaixo de quem acabou de clicar em "Tentar novamente".
+  const googlePedeAtencao = Boolean(
+    (a?.google_sync && syncPedeAtencao(a.google_sync)) || (a?.meeting && meetPedeAtencao(a.meeting)),
+  );
+  const [maisDetalhes, setMaisDetalhes] = useState<{ id: string; aberto: boolean } | null>(null);
+  const maisDetalhesAberto = maisDetalhes && maisDetalhes.id === a?.id ? maisDetalhes.aberto : googlePedeAtencao;
   const paciente = a?.contato ? nomeDoContato(a.contato) : null;
   const nome = paciente ?? a?.title ?? t("Compromisso");
   const estado = a ? ESTADO[a.status] : undefined;
@@ -309,6 +319,7 @@ export function DetalheDoCompromisso({
           // a próxima abertura do mesmo compromisso (pela grade ou por um link
           // com `?compromisso=`).
           if (remarcacao?.aberta) remarcacao.onFechar();
+          setMaisDetalhes(null);
           onClose();
         }
       }}
@@ -647,7 +658,12 @@ export function DetalheDoCompromisso({
                 </div>
               ) : null}
 
-              <details data-testid="mais-detalhes-do-compromisso" className="group rounded-lg border border-border">
+              <details
+                data-testid="mais-detalhes-do-compromisso"
+                open={maisDetalhesAberto}
+                onToggle={(e) => setMaisDetalhes({ id: a.id, aberto: e.currentTarget.open })}
+                className="group rounded-lg border border-border"
+              >
                 <summary
                   data-testid="abrir-mais-detalhes"
                   className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2.5 text-sm font-medium text-text [&::-webkit-details-marker]:hidden"
