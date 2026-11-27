@@ -30,7 +30,7 @@ import { corpoDaMensagem, getLeadContext, type LeadContext } from '../edge/crm/g
 import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
 import { applySendOutcome, MidiaRecusadaError } from '../edge/crm/send-message';
 import { runBeforeSend } from '../guardrails/before-send';
-import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
+import { camadaLigada, lerCamadasDaOrg, padraoDoAmbiente } from '../guardrails/camadas-da-org';
 import { classifyPromise } from '../guardrails/promise/semantic';
 import { scheduleCronJob } from '../cron/scheduler';
 import {
@@ -1207,7 +1207,7 @@ async function sendFixedOutbound(
   const camadasDaOrg = comCamadaSemantica ? await lerCamadasDaOrg(pool, tenantId) : null;
   const camadaSemanticaLigada =
     camadasDaOrg !== null &&
-    camadaLigada(camadasDaOrg.promessa_semantica, deps.knobs.promiseSemantic?.enabled === true);
+    camadaLigada(camadasDaOrg.promessa_semantica, padraoDoAmbiente(deps.knobs).promessa_semantica);
 
   let chain: Awaited<ReturnType<typeof runBeforeSend>>;
   try {
