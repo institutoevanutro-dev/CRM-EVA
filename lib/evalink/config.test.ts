@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { configEvalink, loginSoEvalink } from "./config";
+import { configEvalink, loginSoEvalink, saidaPelaConta } from "./config";
 
 const ok = {
   CONTA_URL: "https://conta.exemplo.test/",
@@ -51,5 +51,16 @@ describe("loginSoEvalink", () => {
   });
   it("chave sem EvaLink não tranca ninguém do lado de fora", () => {
     expect(loginSoEvalink({ EVALINK_SO_EVALINK: "true" })).toBe(false);
+  });
+});
+
+describe("saidaPelaConta", () => {
+  it("manda para o /sair da Conta com volta ao login do CRM, na mesma origem do redirect_uri", () => {
+    const c = configEvalink(ok)!;
+    const u = new URL(saidaPelaConta(c, "/login?next=%2Fteam%2Faccept-invite%2Fx"));
+    expect(u.origin + u.pathname).toBe("https://conta.exemplo.test/sair");
+    const volta = new URL(u.searchParams.get("volta")!);
+    expect(volta.origin).toBe(new URL(c.voltaUrl).origin);
+    expect(volta.pathname + volta.search).toBe("/login?next=%2Fteam%2Faccept-invite%2Fx");
   });
 });

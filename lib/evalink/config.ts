@@ -92,3 +92,15 @@ export function configEvalink(
 export function loginSoEvalink(fonte: Record<string, string | undefined> = process.env): boolean {
   return fonte.EVALINK_SO_EVALINK?.trim() === "true" && configEvalink(fonte) !== null;
 }
+
+/**
+ * Para onde o "Sair" manda o navegador com o EvaLink ligado (decisão do André,
+ * 27/11): a Conta encerra a sessão dela NESTE navegador e devolve para o login
+ * do CRM. Sem isto, num computador compartilhado, o próximo "Entrar com
+ * EvaLink" entrava como a pessoa anterior, sem senha. A Conta só aceita a volta
+ * se a origem estiver nos redirect_uris do cliente OAuth — a do CRM é
+ * `appUrl/evalink/volta`, mesma origem de `appUrl/login`.
+ */
+export function saidaPelaConta(c: ConfigEvalink, loginPath: string): string {
+  return `${c.contaUrl}/sair?volta=${encodeURIComponent(`${c.appUrl}${loginPath}`)}`;
+}
