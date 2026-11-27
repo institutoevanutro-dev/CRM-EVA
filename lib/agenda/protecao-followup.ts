@@ -24,6 +24,14 @@ export type ProtecaoAgenda = {
   appointment_id: string | null;
   reavaliar_em: string | null;
 };
+/**
+ * Antes de uma consulta distante a agenda é relida de hora em hora, para
+ * perceber cancelamento e remarcação. Sem isto o follow-up dormia até o início
+ * original mesmo depois de o compromisso ser cancelado (porte do original,
+ * DeskcommCRM PR #5099, issue #5078).
+ */
+const INTERVALO_REAVALIACAO_AGENDADO_MS = 60 * 60_000;
+
 export function protecaoDaAgenda(
   compromissos: CompromissoProtetor[],
   settings: unknown,
@@ -41,14 +49,16 @@ export function protecaoDaAgenda(
       vencido ??= a;
       continue;
     }
+    const reavaliarEm =
+      agoraMs < inicio
+        ? Math.min(inicio, agoraMs + INTERVALO_REAVALIACAO_AGENDADO_MS)
+        : Math.min(horizonte, Math.max(agoraMs + 60_000, fim));
     return {
       adiar: true,
       motivo:
         agoraMs < inicio ? "agendado" : agoraMs < fim ? "em_atendimento" : "presenca_pendente",
       appointment_id: a.id,
-      reavaliar_em: new Date(
-        Math.min(horizonte, Math.max(agoraMs + 60_000, agoraMs < inicio ? inicio : fim)),
-      ).toISOString(),
+      reavaliar_em: new Date(reavaliarEm).toISOString(),
     };
   }
   return {
