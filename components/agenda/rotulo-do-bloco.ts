@@ -23,9 +23,9 @@ export function nomeCurto(nome: string): string {
  * 1; o procedimento desce para a linha de apoio, junto da hora. Sem paciente
  * (reunião, bloqueio, ocupação do Google) quem fala é o título.
  *
- * 45 min é o corte da segunda linha porque é o que a régua de 48 px por hora
- * comporta: um bloco de 30 min tem 22 px e só cabe uma linha — e aí a hora vai
- * NA FRENTE do nome, numa linha só, em vez de sumir.
+ * Até 30 min o bloco é curto (decisão 7 do André, 27/11/2026): uma linha só,
+ * com a hora NA FRENTE do nome. Acima disso, com 56 px por hora, cabem as duas
+ * linhas.
  */
 export function rotuloDoBloco(entrada: {
   titulo: string;
@@ -37,7 +37,7 @@ export function rotuloDoBloco(entrada: {
 }): { principal: string; apoio: string | null } {
   const { titulo, paciente, hora, duracaoMin, visao } = entrada;
   const quem = paciente ? (visao === "semana" ? nomeCurto(paciente) : paciente) : titulo;
-  if (duracaoMin < 45) return { principal: `${hora} ${quem}`, apoio: null };
+  if (duracaoMin <= 30) return { principal: `${hora} ${quem}`, apoio: null };
   return { principal: quem, apoio: paciente ? `${hora} · ${titulo}` : hora };
 }
 

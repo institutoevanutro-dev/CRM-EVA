@@ -10,13 +10,18 @@ describe("rótulo do bloco da agenda", () => {
     expect(nomeCurto("")).toBe("");
   });
 
-  it("a partir de 45 min: paciente em cima, hora e procedimento embaixo", () => {
+  it("acima de 30 min: paciente em cima, hora e procedimento embaixo", () => {
     const base = { titulo: "Consulta", paciente: "Marina Alves", hora: "09:30", duracaoMin: 45 };
     expect(rotuloDoBloco({ ...base, visao: "semana" })).toEqual({
       principal: "Marina A.",
       apoio: "09:30 · Consulta",
     });
     expect(rotuloDoBloco({ ...base, visao: "dia" })).toEqual({
+      principal: "Marina Alves",
+      apoio: "09:30 · Consulta",
+    });
+    // 40 min já tem duas linhas (decisão 7 do André, 27/11/2026: curto é ≤ 30).
+    expect(rotuloDoBloco({ ...base, duracaoMin: 40, visao: "dia" })).toEqual({
       principal: "Marina Alves",
       apoio: "09:30 · Consulta",
     });

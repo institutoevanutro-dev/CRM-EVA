@@ -505,9 +505,10 @@ test("a grade: só as horas das jornadas, meia hora marcada, cor por profissiona
     await irParaASemanaSeguinte(page);
 
     const grade = page.getByTestId("grade-da-agenda");
-    // Jornadas das 08:00 às 18:00: a primeira hora é 08:00, a última 17:30 — sem madrugada.
+    // Jornadas das 08:00 às 18:00: a primeira hora é 08:00, a última 17:00 — sem madrugada.
+    // (Desde 27/11/2026 a coluna de horas mostra só as horas cheias.)
     await expect(grade).toContainText("08:00");
-    await expect(grade).toContainText("17:30");
+    await expect(grade).toContainText("17:00");
     await expect(grade).not.toContainText("00:00");
     await expect(grade).not.toContainText("18:00");
 

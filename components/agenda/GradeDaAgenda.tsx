@@ -530,11 +530,18 @@ function rotuloDoTrecho(trecho: { de: number; ate: number }, t: (s: string) => s
 }
 
 /**
- * Fundo NEUTRO e liso, com borda tracejada: diz "aqui não tem atendimento" sem
+ * Fundo NEUTRO e liso: diz "aqui não tem atendimento" sem
  * parecer um compromisso (que tem fundo de trilha) nem a ocupação do Google
  * (hachura de bloco). Só tokens: o tema escuro troca as cores sem regra própria.
  */
 const FUNDO_DO_FECHAMENTO = "color-mix(in oklab, var(--color-surface-muted) 85%, var(--color-text-subtle))";
+
+/**
+ * Na semana, o bloqueio é LISTRADO e discreto (decisão 7 do André, 27/11/2026),
+ * em 45° — a ocupação do Google usa 135°, e os dois não se confundem. No mês
+ * fica o fundo liso de `FUNDO_DO_FECHAMENTO`.
+ */
+const LISTRAS_DO_BLOQUEIO = `repeating-linear-gradient(45deg, ${FUNDO_DO_FECHAMENTO} 0 4px, var(--color-surface-muted) 4px 10px)`;
 
 /**
  * Os fechamentos de um dia, prontos para desenhar: os de MESMO trecho viram uma
@@ -627,42 +634,38 @@ function FaixaFechada({
   const motivos = [...new Set(faixa.fechamentos.map((f) => f.motivo).filter(Boolean))];
   const primeiro = faixa.fechamentos[0];
   if (!primeiro) return null;
-  const alto = pixelsDe(fim - topo) >= 40;
+  const nomes = mostrarQuem ? quem.map((p) => p.nome).join(", ") : "";
+  const detalhe = [nomes, ...motivos].filter(Boolean).join(" · ");
 
   return (
     <div
       data-testid={`fechamento-${primeiro.id}`}
       data-responsavel={primeiro.responsavelId}
       data-fechamentos={faixa.fechamentos.length}
-      className="pointer-events-none absolute flex flex-col gap-0.5 overflow-hidden rounded-md border border-dashed border-border-strong px-2 py-1"
+      className="pointer-events-none absolute overflow-hidden rounded-md px-2 py-1"
       style={{
         top: pixelsDe(topo - janela.primeira * 60),
         height: pixelsDe(fim - topo),
         left: `calc(${(faixa.coluna / faixa.colunas) * 100}% + 2px)`,
         width: `calc(${(1 / faixa.colunas) * 100}% - 4px)`,
-        background: FUNDO_DO_FECHAMENTO,
+        background: LISTRAS_DO_BLOQUEIO,
       }}
     >
-      <span className="flex min-w-0 items-center gap-1 text-xs font-semibold leading-4 text-text-muted">
+      {/* UMA LINHA SÓ (decisão 7 do André, 27/11/2026). Quem e o motivo vão para
+          o `title` e para o leitor de tela. Só o rótulo recebe o ponteiro, para o
+          `title` aparecer; o resto da faixa segue deixando o clique passar. */}
+      <span
+        title={detalhe || undefined}
+        className="pointer-events-auto inline-flex min-w-0 max-w-full items-center gap-1 text-xs font-semibold leading-4 text-text-muted"
+      >
         <Lock aria-hidden size={12} weight="bold" className="shrink-0" />
         <span className="truncate">{t("Bloqueado")}</span>
-        <span className="sr-only"> · {rotuloDoTrecho(trecho, t)}</span>
       </span>
-      {mostrarQuem && quem.length > 0 && alto ? (
-        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] leading-3.5 text-text-muted">
-          {quem.map((p) => (
-            <span key={p.id} className="inline-flex min-w-0 items-center gap-1">
-              <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ backgroundColor: corDaTrilha(p.trilha) }} />
-              <span className="truncate">{nomeCurto(p.nome)}</span>
-            </span>
-          ))}
-        </span>
-      ) : mostrarQuem && quem.length > 0 ? (
-        <span className="sr-only">{quem.map((p) => p.nome).join(", ")}</span>
-      ) : null}
-      {motivos.length > 0 && alto ? (
-        <span className="truncate text-[11px] leading-3.5 text-text-subtle">{motivos.join(" · ")}</span>
-      ) : null}
+      <span className="sr-only">
+        {" · "}
+        {rotuloDoTrecho(trecho, t)}
+        {detalhe ? ` · ${detalhe}` : ""}
+      </span>
     </div>
   );
 }
@@ -769,6 +772,7 @@ function BlocoDeAgendamento({
   ].filter(Boolean);
 
   if (baseMin <= topoMin) return null;
+  const nosCantos = [faltaNome, conflito, Boolean(forma.icone), semLembrete].filter(Boolean).length;
 
   return (
     <button
@@ -829,7 +833,7 @@ function BlocoDeAgendamento({
         // Tracejado = "ainda não" (aguardando confirmação), como em toda a base.
         // Na cor do texto de apoio, e não na borda clara de sempre: tracejado
         // em border/60 some no tema escuro.
-        forma.tracejado ? "border-dashed border-text-muted" : "border-border/60",
+        forma.tracejado ? "border-dashed border-text-muted" : "border-transparent",
         conflito && "ring-2 ring-error",
         doGoogle ? "cursor-default" : "cursor-pointer hover:shadow-sm",
         // `grab` só quando remarcar é possível: o cursor é a única pista de que
@@ -874,11 +878,7 @@ function BlocoDeAgendamento({
             // é neutra de propósito — a agenda de fora não pertence a ninguém da
             // equipe, então não recebe trilha.
             "repeating-linear-gradient(135deg, var(--color-surface-elevated) 0 6px, var(--color-surface) 6px 12px)"
-          : fundoDaTrilha(trilha, 22),
-        // A cor diz DE QUEM é (pedido de 21/11/2026): a borda também vem da
-        // trilha, e não do cinza de toda a base. Tracejado (aguardando) mantém
-        // a cor do texto de apoio, que é o que diz "ainda não".
-        borderColor: doGoogle || forma.tracejado ? undefined : `color-mix(in oklab, ${corDaTrilha(trilha)} 45%, var(--color-surface))`,
+          : fundoDaTrilha(trilha),
         opacity: doGoogle ? 0.75 : undefined,
       }}
     >
@@ -888,38 +888,24 @@ function BlocoDeAgendamento({
         className="absolute inset-y-0 left-0 w-[3px] rounded-l-sm"
         style={{ backgroundColor: doGoogle ? "var(--color-border-strong)" : corDaTrilha(trilha) }}
       />
-      {faltaNome ? (
-        <Warning
-          aria-hidden
-          data-testid={`falta-nome-${agendamento.id}`}
-          size={12}
-          weight="fill"
-          className="absolute right-0.5 top-0.5 text-warning"
-        />
-      ) : null}
-      {/* Linha 1: quem vem (12/16 semibold). Com folga (1h30 ou mais) o nome
-          quebra em duas linhas em vez de cortar (print de 08/10/2026). Os
-          ícones de conflito e de situação vão na frente, só ícone: o nome da
-          situação está no title e no aria-label. */}
-      <span className={cn("ml-1 flex max-w-full items-start gap-0.5", faltaNome && "pr-3")}>
+      {/* O ESTADO E OS AVISOS NO CANTO (decisão 7 do André, 27/11/2026): a
+          linha 1 é só o nome. Os nomes destes ícones estão no title e no
+          aria-label do cartão. */}
+      <span data-testid={`cantos-${agendamento.id}`} className="absolute right-0.5 top-0.5 flex items-center gap-0.5">
+        {faltaNome ? (
+          <Warning aria-hidden data-testid={`falta-nome-${agendamento.id}`} size={12} weight="fill" className="text-warning" />
+        ) : null}
         {conflito ? (
-          <Warning
-            aria-hidden
-            data-testid={`conflito-${agendamento.id}`}
-            size={12}
-            weight="fill"
-            className="mt-0.5 shrink-0 text-error"
-          />
+          <Warning aria-hidden data-testid={`conflito-${agendamento.id}`} size={12} weight="fill" className="text-error" />
         ) : null}
         <IconeDeSituacao icone={forma.icone} id={agendamento.id} />
         {semLembrete ? (
-          <BellSlash
-            aria-hidden
-            data-testid={`sem-lembrete-${agendamento.id}`}
-            size={12}
-            className="mt-0.5 shrink-0 text-text-muted"
-          />
+          <BellSlash aria-hidden data-testid={`sem-lembrete-${agendamento.id}`} size={12} className="text-text-muted" />
         ) : null}
+      </span>
+      {/* Linha 1: quem vem. Com folga (1h30 ou mais) o nome quebra em duas
+          linhas em vez de cortar (print de 08/10/2026). */}
+      <span className="ml-1 flex max-w-full items-start" style={{ paddingRight: nosCantos * 14 }}>
         <span
           className={cn(
             "min-w-0 text-xs font-semibold leading-4",
@@ -971,7 +957,7 @@ function IconeDeSituacao({ icone, id }: { icone: IconeDaSituacao; id: string }) 
       data-icone={icone}
       size={12}
       weight={icone === "relogio" ? "regular" : "fill"}
-      className={cn("mt-0.5 shrink-0", icone === "falta" ? "text-error" : "text-text-muted")}
+      className={cn("shrink-0", icone === "falta" ? "text-error" : "text-text-muted")}
     />
   );
 }
@@ -985,24 +971,22 @@ function ReguaDoAgora({ agora, fuso }: { agora: Date; fuso: string }) {
     <div
       data-testid="regua-do-agora"
       aria-hidden
-      className="pointer-events-none absolute inset-x-0 z-10 flex items-center"
+      className="pointer-events-none absolute inset-x-0 z-10 flex -translate-y-1/2 items-center"
       style={{ top: pixelsDe(minutos) }}
     >
       {/* Vermelho, e não a accent: a accent é trocável pelo revendedor e além
           disso é a cor de "nosso", não de "agora". Vermelho para a linha do
           instante é convenção de calendário há vinte anos — aqui no tom terroso
           do produto (`--color-error`), não no vermelho puro que a doutrina bane. */}
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-error" />
-      <span className="h-px flex-1 bg-error" />
+      <span className="-ml-1 size-2.5 shrink-0 rounded-full bg-error" />
+      <span className="h-0.5 flex-1 bg-error" />
     </div>
   );
 }
 
 /**
- * As horas ao lado da grade, DENTRO do espaço de cada vaga: "09:00" no topo da
- * hora e "09:30" na meia hora, alinhados com as linhas dos dias. Antes o rótulo
- * ficava em cima da linha, meio fora da célula, e a meia hora não tinha rótulo
- * nem linha (pedido do dono da clínica em 21/11/2026).
+ * As horas ao lado da grade: só as CHEIAS (decisão 7 do André, 27/11/2026). A
+ * meia hora segue marcada pela linha pontilhada dos dias.
  */
 function ColunaDeHoras() {
   const janela = React.useContext(JanelaContexto);
@@ -1012,12 +996,9 @@ function ColunaDeHoras() {
       {horasDa(janela).map((h) => {
         const hh = String(h).padStart(2, "0");
         return (
-          <div key={h} className="relative border-b border-border/70 text-right" style={{ height: ALTURA_DA_HORA }}>
+          <div key={h} className="relative border-b border-border/50 text-right" style={{ height: ALTURA_DA_HORA }}>
             <span className="absolute right-2 top-1 text-[11px] font-medium leading-none tabular-nums text-text-muted">
               {hh}:00
-            </span>
-            <span className="absolute right-2 top-[calc(50%+4px)] text-[10px] leading-none tabular-nums text-text-subtle">
-              {hh}:30
             </span>
           </div>
         );
@@ -1233,12 +1214,13 @@ function ColunaDeDia({
         data-corpo-do-dia={chaveDoDia(dia)}
         style={{ height: horas.length * ALTURA_DA_HORA }}
       >
-        {/* Uma linha cheia por hora e uma tracejada na meia hora: cada vaga de
-            30 minutos vira um espaço visível, e o compromisso das 10:30 encosta
-            numa linha em vez de flutuar no meio da hora (21/11/2026). */}
+        {/* Uma linha cheia por hora e uma pontilhada e mais clara (27/11/2026)
+            na meia hora: cada vaga de 30 minutos vira um espaço visível, e o
+            compromisso das 10:30 encosta numa linha em vez de flutuar no meio
+            da hora (21/11/2026). */}
         {horas.map((h) => (
-          <div key={h} className="relative border-b border-border/70" style={{ height: ALTURA_DA_HORA }}>
-            <div aria-hidden className="absolute inset-x-0 top-1/2 border-t border-dashed border-border/45" />
+          <div key={h} className="relative border-b border-border/50" style={{ height: ALTURA_DA_HORA }}>
+            <div aria-hidden className="absolute inset-x-0 top-1/2 border-t border-dotted border-border/30" />
           </div>
         ))}
         {interacao && (

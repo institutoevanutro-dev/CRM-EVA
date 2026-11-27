@@ -144,6 +144,14 @@ describe("a faixa fechada na semana", () => {
     grade([PARCIAL]);
     expect(coluna("2026-11-03").getByTestId("fechamento-parcial")).not.toHaveTextContent("Ana");
   });
+
+  it("numa linha só; quem e o motivo vão para o title (decisão 7, 27/11/2026)", () => {
+    grade([PARCIAL], { pessoas: [ANA, BRUNO] });
+    const faixa = coluna("2026-11-03").getByTestId("fechamento-parcial");
+    const rotulo = faixa.querySelector("[title]");
+    expect(rotulo?.textContent).toBe("Bloqueado");
+    expect(rotulo?.getAttribute("title")).toBe("Ana · Banco");
+  });
 });
 
 describe("a faixa fechada no mês", () => {
