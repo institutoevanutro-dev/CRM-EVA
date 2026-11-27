@@ -111,13 +111,18 @@ function Painel({
   onFechar = vi.fn(),
   onClose = () => {},
   semLembrete,
+  podeEditar = true,
+  abertaDeInicio = false,
 }: {
   onAbrir?: (c: string) => void;
   onFechar?: () => void;
   onClose?: () => void;
   semLembrete?: string;
+  podeEditar?: boolean;
+  /** O Remarcar já pedido (o `abrirCompromisso(id, true)` da página). */
+  abertaDeInicio?: boolean;
 }) {
-  const [aberta, setAberta] = useState(false);
+  const [aberta, setAberta] = useState(abertaDeInicio);
   const remarcacao: RemarcacaoDoPainel = {
     aberta,
     onAbrir: (c) => {
@@ -146,7 +151,14 @@ function Painel({
     },
   };
   return (
-    <DetalheDoCompromisso id={ID} onClose={onClose} profissional="Dra. Ana Teste" remarcacao={remarcacao} podeExcluir />
+    <DetalheDoCompromisso
+      id={ID}
+      onClose={onClose}
+      profissional="Dra. Ana Teste"
+      remarcacao={remarcacao}
+      podeEditar={podeEditar}
+      podeExcluir
+    />
   );
 }
 
@@ -362,5 +374,44 @@ describe("painel do paciente", () => {
     fireEvent.click(remarcar);
     expect(screen.queryByTestId("remarcar-no-painel")).toBeNull();
     expect(remarcar).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("depois de cancelar, um Esc só fecha o painel", async () => {
+    detalhe(BASE);
+    // Depois do DELETE a rota devolve o compromisso cancelado.
+    api.delete.mockImplementation(async () => {
+      detalhe({ ...BASE, status: "cancelled", revision: 2 });
+      return {};
+    });
+    const onClose = vi.fn();
+    abrir(<Painel onClose={onClose} />);
+    fireEvent.click(await screen.findByTestId("acao-cancelar"));
+    fireEvent.change(screen.getByLabelText("Motivo do cancelamento"), { target: { value: "Pediu outro dia" } });
+    fireEvent.click(screen.getByTestId("confirmar-cancelamento"));
+    await waitFor(() => expect(screen.getByTestId("estado-do-compromisso")).toHaveTextContent("Cancelado"));
+    fireEvent.keyDown(screen.getByTestId("painel-do-compromisso"), { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("Remarcar 'aberto' com a seção escondida não segura o Esc: um só fecha o painel", async () => {
+    // Quem pode marcar mas não editar, chegando pelo Remarcar da página.
+    detalhe(BASE);
+    const onClose = vi.fn();
+    abrir(<Painel onClose={onClose} podeEditar={false} abertaDeInicio />);
+    await screen.findByTestId("estado-do-compromisso");
+    expect(screen.queryByTestId("remarcar-no-painel")).toBeNull();
+    fireEvent.keyDown(screen.getByTestId("painel-do-compromisso"), { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+    cleanup();
+    client.clear();
+
+    // Cancelado por outra pessoa com o Remarcar aberto.
+    detalhe({ ...BASE, status: "cancelled" });
+    const onClose2 = vi.fn();
+    abrir(<Painel onClose={onClose2} abertaDeInicio />);
+    expect(await screen.findByTestId("estado-do-compromisso")).toHaveTextContent("Cancelado");
+    expect(screen.queryByTestId("remarcar-no-painel")).toBeNull();
+    fireEvent.keyDown(screen.getByTestId("painel-do-compromisso"), { key: "Escape" });
+    expect(onClose2).toHaveBeenCalledOnce();
   });
 });

@@ -220,6 +220,7 @@ export function DetalheDoCompromisso({
       apiClient.delete("/api/v1/agenda/agendamentos", { id, ...decision }),
     onSuccess: () => {
       resetDraft();
+      setCancelando(false);
       void qc.invalidateQueries({ queryKey: ["agenda"] });
     },
     onError: mutationFailed,
@@ -259,6 +260,12 @@ export function DetalheDoCompromisso({
     setCancelando(false);
     gatilhoCancelar.current?.focus();
   }
+  // O QUE ESTÁ À VISTA, numa regra só para o desenho e para o Esc: uma seção
+  // "aberta" mas escondida (compromisso cancelado, quem não pode editar) não
+  // pode segurar o Esc — o toque morreria sem efeito nenhum na tela.
+  const podeAgir = Boolean(a && !query.isError && podeEditar && a.status !== "cancelled" && !a.excluded_at);
+  const mostraRemarcar = podeAgir && Boolean(remarcacao?.aberta);
+  const mostraCancelar = podeAgir && cancelando;
   const paciente = a?.contato ? nomeDoContato(a.contato) : null;
   const nome = paciente ?? a?.title ?? t("Compromisso");
   const estado = a ? ESTADO[a.status] : undefined;
@@ -297,13 +304,14 @@ export function DetalheDoCompromisso({
       <DialogContent
         data-testid="painel-do-compromisso"
         className="flex max-w-xl flex-col gap-0 overflow-hidden bg-surface p-0"
-        // Esc com Remarcar ou Cancelar aberto fecha só a seção, como o "Voltar",
-        // e o que foi digitado fica; o segundo Esc fecha o painel.
+        // Esc com Remarcar ou Cancelar À VISTA fecha só a seção, como o
+        // "Voltar": o motivo do cancelamento fica; o dia e a hora escolhidos
+        // para remarcar, não. O segundo Esc fecha o painel.
         onEscapeKeyDown={(e) => {
-          if (remarcacao?.aberta) {
+          if (mostraRemarcar) {
             e.preventDefault();
             voltarDaRemarcacao();
-          } else if (cancelando) {
+          } else if (mostraCancelar) {
             e.preventDefault();
             voltarDoCancelamento();
           }
@@ -409,7 +417,7 @@ export function DetalheDoCompromisso({
                 </div>
               ) : null}
 
-              {podeEditar && a.status !== "cancelled" && !a.excluded_at ? (
+              {podeAgir ? (
                 <div className="flex flex-wrap gap-2" data-testid="acoes-do-compromisso">
                   {a.status === "pending" ? (
                     <Button
@@ -462,7 +470,7 @@ export function DetalheDoCompromisso({
                 </div>
               ) : null}
 
-              {podeEditar && remarcacao?.aberta && a.status !== "cancelled" && !a.excluded_at ? (
+              {mostraRemarcar && remarcacao ? (
                 <section data-testid="remarcar-no-painel" className="space-y-3">
                   <p className="text-sm text-text-muted">{t("Escolha o novo dia e o horário.")}</p>
                   {remarcacao.semLembrete ? <AvisoSemLembrete nome={remarcacao.semLembrete} /> : null}
@@ -489,7 +497,7 @@ export function DetalheDoCompromisso({
                 </section>
               ) : null}
 
-              {podeEditar && cancelando && a.status !== "cancelled" && !a.excluded_at ? (
+              {mostraCancelar ? (
                 <section data-testid="cancelar-no-painel" className="space-y-3">
                   <label className="block text-sm font-medium text-text" htmlFor="motivo-do-cancelamento">
                     {t("Motivo do cancelamento")}
