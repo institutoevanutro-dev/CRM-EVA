@@ -17,7 +17,6 @@ import { AgendaInterativa } from "@/components/agenda/AgendaInterativa";
 import { diasDaSemanaDe } from "@/components/agenda/GradeDaAgenda";
 import { FiltroDePessoas } from "@/components/agenda/FiltroDePessoas";
 import { recorteDaVisao } from "@/lib/agenda/recorte-da-grade";
-import { HistoricoDaAgenda } from "@/components/agenda/HistoricoDaAgenda";
 import type { Agendamento, HorarioLivre, VisaoDaAgenda } from "@/components/agenda/tipos";
 import { EmptyAgenda } from "@/components/empty";
 import { ancoraAoFecharPainel } from "@/lib/agenda/ancora-depois-de-marcar";
@@ -32,14 +31,12 @@ import { gravarPessoasDaGrade, lerPessoasDaGrade, pessoasComAtendimento, selecao
 import { Button } from "@/components/ui/button";
 import { MarcacaoSimples } from "@/components/agenda/MarcacaoSimples";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useAgendamentos } from "@/hooks/agenda/useAgendamentos";
 import { useAgendaAoVivo } from "@/hooks/agenda/useAgendaAoVivo";
 import { useAgora } from "@/hooks/agenda/useAgora";
 import { useFechamentosDaGrade } from "@/hooks/agenda/useFechamentosDaGrade";
 import { useHorariosLivres } from "@/hooks/agenda/useHorariosLivres";
 import { useMarcarAgendamento } from "@/hooks/agenda/useMarcarAgendamento";
-import { useCancelarAgendamento, useRegistrarDesfecho } from "@/hooks/agenda/useRemarcarAgendamento";
 import { usePessoasDaAgenda } from "@/hooks/agenda/usePessoasDaAgenda";
 import { CalendarPlus, CaretLeft, CaretRight } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
@@ -206,10 +203,6 @@ export function AgendaClient({
   // compromisso pediu a remarcação; ela só vale enquanto o painel aberto
   // (`?compromisso=`) é o dele.
   const [remarcandoId, setRemarcandoId] = React.useState<string | null>(null);
-  // CANCELAR pede motivo, e o motivo é obrigatório na rota. Não é burocracia: é
-  // o que a equipe lê ao ver o horário vago.
-  const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
-  const [motivo, setMotivo] = React.useState("");
   const [unidades, setUnidades] = React.useState<UnidadeDaAgenda[]>([]);
   const [unidadeId, setUnidadeId] = React.useState("");
 
@@ -221,8 +214,6 @@ export function AgendaClient({
       .catch(() => setUnidades([]));
   }, [marcando]);
   const marcar = useMarcarAgendamento();
-  const cancelar = useCancelarAgendamento();
-  const desfecho = useRegistrarDesfecho();
   // ⚠️ ERA `tiposIniciais[0] ?? null` — uma constante, sem seletor em lugar
   // nenhum. `page.tsx` ordena os tipos por NOME, então a tela marcava sempre o
   // primeiro em ordem alfabética e não havia como marcar outro: numa org com
@@ -532,10 +523,8 @@ export function AgendaClient({
     return mapa;
   }, [horarios, fusoDaAgenda]);
 
-  // A GRADE não mostra cancelado — ele fica só na aba "Cancelados" do
-  // histórico, que lê `agendamentos` (cheio) e o separa sozinha em `separar()`.
-  // Mesma fonte, dois recortes: a grade responde "o que está de pé", o
-  // histórico responde "o que aconteceu", cancelado incluso.
+  // A GRADE não mostra cancelado: ela responde "o que está de pé". O que
+  // aconteceu com um cancelado se vê no painel dele e no contato.
   const agendamentosDaGrade = React.useMemo(
     () => agendamentos.filter((a) => a.situacao !== "cancelled"),
     [agendamentos],
@@ -551,22 +540,6 @@ export function AgendaClient({
         (f) => selecionadas.length === 0 || selecionadas.includes(f.responsavelId),
       ),
     [fechamentosVivos, selecionadas],
-  );
-
-  /**
-   * O que é ACIONÁVEL — o que a lista "Próximos" pode oferecer botão para fazer.
-   *
-   * Ocupação vinda do Google fica de fora: ela é bloco de terceiro, o id é de
-   * `calendar_external_events`, e as rotas de remarcar/cancelar procuram em
-   * `calendar_appointments`. Ver o comentário longo no `HistoricoDaAgenda`
-   * abaixo, com o 404 medido.
-   *
-   * A GRADE recebe `agendamentosDaGrade` (tudo menos cancelado) — é lá que a ocupação
-   * precisa aparecer, e é lá que ela já é desenhada inerte.
-   */
-  const agendamentosAcionaveis = React.useMemo(
-    () => agendamentos.filter((a) => a.origem !== "google_sync"),
-    [agendamentos],
   );
 
   const passo = visao === "mes" ? 30 : visao === "semana" ? 7 : 1;
@@ -962,110 +935,6 @@ export function AgendaClient({
         </DialogContent>
       </Dialog>
 
-      {/* CANCELAR pede motivo, e o motivo é OBRIGATÓRIO na rota (mínimo 3).
-          Não é burocracia: é o que a equipe lê ao ver o horário vago. "Cancelado"
-          sem motivo faz alguém ligar para o cliente perguntando o que houve — ou,
-          pior, não ligar. */}
-      <Sheet
-        open={cancelandoId !== null}
-        onOpenChange={(aberto) => {
-          if (!aberto) setCancelandoId(null);
-        }}
-      >
-        <SheetContent side="right" className="w-full sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>{t("Cancelar agendamento")}</SheetTitle>
-          </SheetHeader>
-          <div className="mt-4 space-y-3" data-testid="painel-de-cancelamento">
-            <p className="text-sm text-text-muted">
-              {(() => {
-                const alvo = todos.find((a) => a.id === cancelandoId);
-                if (!alvo) return t("Este agendamento não está mais na lista.");
-                const quem = alvo.quemSeraAtendido ? ` ${t("de")} ${alvo.quemSeraAtendido}` : "";
-                return `${alvo.titulo}${quem}, ${format(
-                  dataDeParede(new Date(alvo.comeca), fusoDaAgenda),
-                  t("d 'de' MMMM 'às' HH:mm"),
-                  { locale: localeDaData },
-                )}.`;
-              })()}
-            </p>
-            <label
-              className="block text-xs font-medium text-text-muted"
-              htmlFor="motivo-do-cancelamento"
-            >
-              {t("Por que está cancelando?")}
-            </label>
-            <textarea
-              id="motivo-do-cancelamento"
-              data-testid="motivo-do-cancelamento"
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              rows={3}
-              className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-hidden focus:border-border-strong"
-              placeholder={t("O paciente pediu para remarcar por telefone")}
-            />
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setCancelandoId(null)}>
-                {t("Voltar")}
-              </Button>
-              <Button
-                size="sm"
-                data-testid="confirmar-cancelamento"
-                // O mínimo de 3 é o da rota. Desabilitar aqui evita um 422 que a
-                // pessoa não tem como prever — o botão diz o que falta pelo estado.
-                disabled={motivo.trim().length < 3 || cancelar.isPending}
-                onClick={() => {
-                  const id = cancelandoId;
-                  if (!id) return;
-                  void cancelar
-                    .mutateAsync({
-                      id,
-                      revision: agendamentos.find((a) => a.id === id)?.revision,
-                      reason: motivo.trim(),
-                    })
-                    .then(
-                      () => setCancelandoId(null),
-                      () => undefined,
-                    );
-                }}
-              >
-                {cancelar.isPending ? t("Cancelando…") : t("Cancelar agendamento")}
-              </Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/*
-        ⚠️ A LISTA DAQUI NÃO É A MESMA DA GRADE, e a diferença é uma linha.
-
-        `GradeDaAgenda` conhece `origem` e desenha o bloco do Google inerte
-        (`disabled`, sem arraste, rótulo "Ocupado"). `HistoricoDaAgenda` NÃO
-        conhece origem: ela decide o botão por `disabled={!onRemarcar}`, que é
-        uma prop do componente inteiro e não da linha. Passar a mesma lista aos
-        dois faz a ocupação do Google chegar em "Próximos" com **Remarcar e
-        Cancelar habilitados** — e cancelar responde 404, porque o id é de
-        `calendar_external_events` e a rota procura em `calendar_appointments`.
-
-        Medido pela tela em 2026-09-03, na triagem do PR #474:
-
-          DELETE /api/v1/agenda/agendamentos
-          → 404 {"error":{"code":"not_found","message":"Agendamento não encontrado."}}
-          toast vermelho aos 1,5s, o painel continua aberto, a linha continua na
-          lista, e `calendar_external_events.status` segue `confirmed`.
-
-        É o "controle decorativo" que o comentário de `GradeDaAgenda` diz que
-        esta base já pagou uma vez, replantado no componente irmão — e o #474 o
-        tornou PERMANENTE: antes dele a linha só existia no primeiro frame da
-        semana corrente (a semente do servidor) e sumia no primeiro refetch.
-
-        Filtrar é o conserto certo, e não é escolha estética: bloco anônimo do
-        Google não é um compromisso NOSSO. Não há o que remarcar, não há o que
-        cancelar, e "Ocupado · 15:00–16:00" numa lista de próximos atendimentos
-        não informa nada que a grade — que O DESENHA no horário — já não diga
-        melhor. A ocupação continua inteira onde ela serve.
-      */}
-
       {/* ⚠️ O VAZIO NÃO ESCONDE MAIS A GRADE, e o achado veio do CI.
           Isto era um ternário: com zero agendamentos, `EmptyAgenda` entrava NO
           LUGAR de `GradeDaAgenda`. Numa instalação nova — que é o estado de
@@ -1136,9 +1005,9 @@ export function AgendaClient({
         }
         /* Tocar num card abre o detalhe. A prop já atravessava `AgendaInterativa`
            e `GradeDaAgenda` e chegava `undefined` aqui: o toque não fazia nada, e
-           o detalhe só abria por `?compromisso=`, que apenas o Histórico e o Radar
-           linkavam. Reusa o MESMO parâmetro que `EntradaDaAgenda` já lê — e `push`,
-           não `replace`, porque é o que o Histórico faz com `<Link>` e é o que faz
+           o detalhe só abria por `?compromisso=`, que apenas o Radar (e a lista de
+           baixo, removida em 27/11/2026) linkavam. Reusa o MESMO parâmetro que
+           `EntradaDaAgenda` já lê — e `push`, não `replace`, porque é o que faz
            o botão voltar do celular fechar o detalhe. E o `?tipo=` vai JUNTO:
            sem ele, abrir um card trocava a URL por só `?compromisso=`, o fecho
            não achava tipo nenhum para manter e o F5 seguinte voltava ao
@@ -1154,60 +1023,6 @@ export function AgendaClient({
           setVisao("dia");
         }}
         className="min-h-0 flex-1"
-      />
-
-      {/* O histórico vem DEPOIS da grade: com ele em cima, o calendário — que é
-          o que se abre a Agenda para ver — ficava abaixo da dobra. */}
-      <HistoricoDaAgenda
-        agendamentos={agendamentosAcionaveis}
-        pessoas={pessoas}
-        agora={agora}
-        // Mesma régua da grade ao lado (upstream #1831): sem isto a lista
-        // imprime o relógio do navegador.
-        fuso={fusoDaAgenda}
-        className="max-h-[320px]"
-        // ⚠️ ESTAS DUAS PROPS FALTAVAM, e a ausência tinha cara de permissão.
-        // `HistoricoDaAgenda` usa `disabled={!onRemarcar}`; sem elas os botões
-        // nasciam cinzas em toda linha, de toda organização — e o `title` dizia
-        // "Disponível quando a agenda estiver conectada", que é falso: PATCH e
-        // DELETE não tocam o Google. Só a IA conseguia remarcar ou cancelar.
-        onRemarcar={(id) => abrirCompromisso(id, true)}
-        onCancelar={(id) => {
-          setMotivo("");
-          setCancelandoId(id);
-        }}
-        // E ESTAS DUAS TAMBÉM FALTAVAM — o conserto acima alcançou 2 dos 4
-        // botões do MESMO componente, e "Realizado"/"Faltou" ficaram cinzas,
-        // com a mesma frase falsa, por mais tempo ainda. Conserto por instância
-        // custa a segunda passada; a varredura custaria um `grep`.
-        //
-        // Sem cerimônia de confirmação, ao contrário de cancelar: registrar
-        // desfecho não avisa ninguém e se desfaz voltando o status. Cancelar
-        // exige motivo porque é o que a equipe lê ao ver o horário vago.
-        // CONFIRMAR usa o mesmo `desfecho` que realizado/faltou: os três são o
-        // mesmo PATCH com outro `status`. Criar um hook próprio duplicaria a
-        // invalidação de cache e o tratamento de erro por nada.
-        onConfirmar={(id) =>
-          desfecho.mutate({
-            id,
-            revision: agendamentos.find((a) => a.id === id)?.revision,
-            status: "confirmed",
-          })
-        }
-        onRealizado={(id) =>
-          desfecho.mutate({
-            id,
-            revision: agendamentos.find((a) => a.id === id)?.revision,
-            status: "completed",
-          })
-        }
-        onFaltou={(id) =>
-          desfecho.mutate({
-            id,
-            revision: agendamentos.find((a) => a.id === id)?.revision,
-            status: "no_show",
-          })
-        }
       />
     </div>
   );

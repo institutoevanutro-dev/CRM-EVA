@@ -2,38 +2,25 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 import { escolherDiaDesenhado, irParaASemanaSeguinte } from "./helpers/agenda-semana-integra";
 import { escolherProfissionalEProcedimento } from "./helpers/marcacao-simples";
 import { esperarAgenda } from "./helpers/tela-agenda";
 
 /**
- * REMARCAR E CANCELAR PELA TELA — as duas ações que só a IA conseguia fazer.
+ * REMARCAR E CANCELAR PELA TELA — pelo painel do paciente.
  *
- * ─── O defeito que esta spec fecha ───────────────────────────────────────
- *
- * `HistoricoDaAgenda` aceita `onRemarcar`/`onCancelar` desde que nasceu, com
- * `disabled={!onRemarcar}` nos botões, e `_client.tsx` montava o componente com
- * QUATRO props e nenhuma callback. Os dois botões nasciam cinzas em toda linha,
- * de toda organização, para sempre.
- *
- * E o `title` do botão cinza dizia *"Disponível quando a agenda estiver
- * conectada"* — falso, e pior que o silêncio: `PATCH`/`DELETE
- * /api/v1/agenda/agendamentos" não tocam o Google. Quem lia acreditava que
- * faltava conectar a agenda, quando faltava a fiação.
- *
- * Medido antes de consertar: `grep -rn "cancelarAgendamentoHandler|
- * alterarAgendamentoHandler" app/ components/ hooks/` → zero em `components/`,
- * zero em `hooks/`, zero em qualquer `app/app/**`. Inbox, ficha de contato e de
- * lead incluídos.
+ * Até 27/11/2026 as duas ações moravam na lista de baixo (`HistoricoDaAgenda`),
+ * que saiu: o caminho agora é TOCAR NO CARTÃO da grade, e o painel do paciente
+ * (`DetalheDoCompromisso`) oferece Remarcar e Cancelar ali mesmo.
  *
  * ─── Por que a primeira asserção é sobre estar HABILITADO ────────────────
  *
- * Porque é exatamente o estado que existia. Uma spec que só testasse o fluxo
- * feliz passaria a existir DEPOIS do conserto e nunca provaria que o botão
- * deixou de ser decorativo — e controle decorativo é um defeito que esta base
- * já pagou uma vez (PR #295, cinco deles).
+ * A lista nasceu com `disabled={!onRemarcar}` e nenhuma callback passada: os
+ * botões ficaram cinzas em toda organização, e só a IA remarcava ou cancelava.
+ * Uma spec que só testasse o fluxo feliz não provaria que o botão do painel
+ * não é decorativo — e controle decorativo esta base já pagou (PR #295).
  */
 
 /**
@@ -73,7 +60,7 @@ function lerCreds(): Creds {
   return c;
 }
 
-async function entrar(page: import("@playwright/test").Page, creds: Creds): Promise<string[]> {
+async function entrar(page: Page, creds: Creds): Promise<string[]> {
   const usuario = creds.users.manager;
   if (!usuario) throw new Error(".e2e-creds.json sem o usuário `manager`");
   await page.goto("/login");
@@ -96,7 +83,7 @@ async function entrar(page: import("@playwright/test").Page, creds: Creds): Prom
 
 /** Marca um compromisso pela tela e devolve o rótulo do horário escolhido. */
 async function marcarUm(
-  page: import("@playwright/test").Page,
+  page: Page,
   tipoNome: string,
   dias: readonly string[],
 ): Promise<string> {
@@ -117,98 +104,113 @@ async function marcarUm(
   return rotulo;
 }
 
+/** Os ids dos cartões desenhados na grade agora. */
+const idsNaGrade = (page: Page) =>
+  page
+    .locator('[data-testid="grade-da-agenda"] [data-testid^="agendamento-"]')
+    .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")!.slice("agendamento-".length)));
+
+/** Marca um pela tela e devolve o id do cartão novo e o rótulo do horário. */
+async function marcarEAcharNaGrade(
+  page: Page,
+  tipoNome: string,
+  dias: readonly string[],
+): Promise<{ id: string; rotulo: string }> {
+  const antes = new Set(await idsNaGrade(page));
+  const rotulo = await marcarUm(page, tipoNome, dias);
+  let id = "";
+  await expect
+    .poll(async () => (id = (await idsNaGrade(page)).find((x) => !antes.has(x)) ?? ""), {
+      timeout: 20_000,
+      message: "o agendamento recém-marcado não apareceu na grade",
+    })
+    .not.toBe("");
+  return { id, rotulo };
+}
+
 // O teto padrão do Playwright é 30s, e estes dois casos fazem DUAS jornadas
 // completas cada um (login + marcar + a ação). Estourar o teto vira "timeout",
 // que é indistinguível de defeito — e foi o que aconteceu na primeira execução.
 test.describe.configure({ timeout: 120_000 });
 
-test("cancelar pela tela: o motivo é exigido, e o compromisso sai dos próximos", async ({ page }) => {
+test("cancelar pela tela: o motivo é exigido, e o compromisso sai da grade", async ({ page }) => {
   const creds = lerCreds();
   if (!creds.agenda) throw new Error("sem bloco agenda");
   const diasDaSemana = await entrar(page, creds);
-  await marcarUm(page, creds.agenda.tipo_nome, diasDaSemana);
+  const { id } = await marcarEAcharNaGrade(page, creds.agenda.tipo_nome, diasDaSemana);
 
-  const historico = page.getByTestId("historico-da-agenda");
-  const cancelarBotao = historico.getByRole("button", { name: /^Cancelar$/ }).first();
+  // Tocar no cartão abre o painel do paciente.
+  await page.getByTestId(`agendamento-${id}`).click();
+  const painel = page.getByTestId("painel-do-compromisso");
+  await expect(painel).toBeVisible({ timeout: 10_000 });
 
-  // ── A asserção que nomeia o defeito ────────────────────────────────────
-  await expect(
-    cancelarBotao,
-    "o botão nasceu DESABILITADO — é o estado que existia antes da fiação, com " +
-      "`disabled={!onCancelar}` e nenhuma callback passada",
-  ).toBeEnabled({ timeout: 15_000 });
-
-  // ⚠️ A CONTAGEM É LIDA ANTES DE ABRIR A FOLHA, e isso não é estilo.
-  //
-  // O Sheet do Radix marca o resto da página com `aria-hidden` enquanto está
-  // aberto, e `getByRole` IGNORA subárvore escondida — o locator do `tab` nunca
-  // resolve. A primeira versão lia o contador com o painel aberto e estourava o
-  // teto do teste em `locator.textContent`, o que aparece como "timeout" e é
-  // indistinguível de produto quebrado. Levei duas execuções (30s e 120s) para
-  // ver que o problema não era orçamento.
-  const antesCancelados = await historico.getByRole("tab", { name: /Cancelados/ }).textContent();
-
+  const cancelarBotao = painel.getByTestId("acao-cancelar");
+  await expect(cancelarBotao, "o Cancelar do painel nasceu desabilitado — controle decorativo").toBeEnabled({
+    timeout: 15_000,
+  });
   await cancelarBotao.click();
-  await expect(page.getByTestId("painel-de-cancelamento")).toBeVisible({ timeout: 10_000 });
+  await expect(painel.getByTestId("cancelar-no-painel")).toBeVisible();
 
-  const confirmar = page.getByTestId("confirmar-cancelamento");
+  const confirmar = painel.getByTestId("confirmar-cancelamento");
   // O mínimo de 3 é o da ROTA. A tela o respeita para não produzir um 422 que a
   // pessoa não tem como prever.
   await expect(confirmar, "aceitou confirmar sem motivo — a rota devolveria 422").toBeDisabled();
-  await page.getByTestId("motivo-do-cancelamento").fill("ab");
+  await painel.getByTestId("motivo-do-cancelamento").fill("ab");
   await expect(confirmar, "dois caracteres passam, e a rota exige três").toBeDisabled();
 
-  await page.getByTestId("motivo-do-cancelamento").fill("o paciente pediu por telefone");
+  await painel.getByTestId("motivo-do-cancelamento").fill("o paciente pediu por telefone");
   await expect(confirmar).toBeEnabled();
-
   await confirmar.click();
 
-  // Sem `reload()`: a mutação invalida `["agenda"]` e o histórico repinta.
-  await expect
-    .poll(async () => historico.getByRole("tab", { name: /Cancelados/ }).textContent(), {
-      timeout: 20_000,
-      message: "a aba Cancelados não mudou — a tela não repintou depois do DELETE",
-    })
-    .not.toBe(antesCancelados);
+  // Sem `reload()`: a mutação invalida `["agenda"]`, o painel relê o compromisso
+  // e a grade repinta sem ele (ela não desenha cancelado).
+  await expect(painel.getByTestId("estado-do-compromisso")).toHaveText("Cancelado", { timeout: 20_000 });
+  await expect(painel.getByTestId("acoes-do-compromisso"), "cancelado não oferece ação").toHaveCount(0);
+  await expect(
+    page.getByTestId(`agendamento-${id}`),
+    "o cartão continuou na grade depois do DELETE",
+  ).toHaveCount(0, { timeout: 20_000 });
 });
 
-test("remarcar pela tela: o painel abre em modo remarcar e o horário muda", async ({ page }) => {
+test("remarcar pela tela: o painel abre o \"quando\" e o horário muda", async ({ page }) => {
   const creds = lerCreds();
   if (!creds.agenda) throw new Error("sem bloco agenda");
   const diasDaSemana = await entrar(page, creds);
-  const rotuloOriginal = await marcarUm(page, creds.agenda.tipo_nome, diasDaSemana);
+  const { id, rotulo: rotuloOriginal } = await marcarEAcharNaGrade(page, creds.agenda.tipo_nome, diasDaSemana);
 
-  const historico = page.getByTestId("historico-da-agenda");
-  const remarcarBotao = historico.getByRole("button", { name: /^Remarcar$/ }).first();
-  await expect(
-    remarcarBotao,
-    "o botão nasceu DESABILITADO — mesmo defeito do Cancelar",
-  ).toBeEnabled({ timeout: 15_000 });
+  await page.getByTestId(`agendamento-${id}`).click();
+  const painel = page.getByTestId("painel-do-compromisso");
+  await expect(painel).toBeVisible({ timeout: 10_000 });
 
+  const remarcarBotao = painel.getByTestId("acao-remarcar");
+  await expect(remarcarBotao, "o Remarcar do painel nasceu desabilitado — mesmo defeito do Cancelar").toBeEnabled({
+    timeout: 15_000,
+  });
   await remarcarBotao.click();
 
-  // Desde 27/11/2026 o Remarcar abre o PAINEL DO PACIENTE já no "quando" da
-  // remarcação — o painel diz de quem é o compromisso, e o botão diz que é
-  // remarcar, não marcar um segundo.
-  await expect(page.getByTestId("remarcar-no-painel")).toBeVisible({ timeout: 10_000 });
+  // O "quando" da remarcação abre DENTRO do painel: o painel diz de quem é o
+  // compromisso, e o botão diz que é remarcar, não marcar um segundo.
+  await expect(painel.getByTestId("remarcar-no-painel")).toBeVisible({ timeout: 10_000 });
 
   await escolherDiaDesenhado(page, diasDaSemana);
 
   // Um horário DIFERENTE do original — senão "remarcou" e "não mudou nada" são
   // indistinguíveis, e a asserção passaria pelo motivo errado.
-  const outro = page.locator(`[data-testid^="horario-"]:not([data-testid="horario-${rotuloOriginal}"])`).first();
+  const outro = painel
+    .locator(`[data-testid^="horario-"]:not([data-testid="horario-${rotuloOriginal}"])`)
+    .first();
   await expect(outro, "só havia um horário livre — o cenário não distingue remarcar de repetir").toBeVisible({
     timeout: 15_000,
   });
   const rotuloNovo = (await outro.getAttribute("data-testid"))!.replace("horario-", "");
   expect(rotuloNovo).not.toBe(rotuloOriginal);
   await outro.click();
-  await page.getByTestId("confirmar-remarcacao").click();
+  await painel.getByTestId("confirmar-remarcacao").click();
 
-  await expect
-    .poll(async () => (await historico.textContent()) ?? "", {
-      timeout: 20_000,
-      message: "o histórico não passou a mostrar o horário novo",
-    })
-    .toContain(rotuloNovo);
+  // A seção fecha e a linha do painel passa a mostrar o horário novo.
+  await expect(painel.getByTestId("remarcar-no-painel")).toHaveCount(0, { timeout: 20_000 });
+  await expect(
+    painel.getByTestId("compromisso-horario"),
+    "o painel não passou a mostrar o horário novo",
+  ).toContainText(rotuloNovo, { timeout: 20_000 });
 });

@@ -13,10 +13,8 @@ import { esperarAgenda } from "./helpers/tela-agenda";
  *
  * A jornada de quem administra a clínica: marca um horário de teste, abre o
  * detalhe, exclui com motivo. O que tem de acontecer, medido na tela:
- *   - o card some da grade;
- *   - a linha some de TODAS as abas (Próximos, Aguardando confirmação,
- *     Passados e Cancelados), inclusive de Cancelados, que é a diferença entre
- *     excluir e cancelar;
+ *   - o card some da grade (a grade não desenha cancelado, então isto sozinho
+ *     não separa excluir de cancelar: quem separa é o detalhe pelo id, abaixo);
  *   - o mesmo horário volta a ser oferecido ao marcar;
  *   - e a linha continua no banco, com o motivo (o detalhe pelo id responde).
  *
@@ -74,7 +72,7 @@ const idsNaGrade = (page: Page) =>
 
 test.describe.configure({ timeout: 150_000 });
 
-test("excluir pela tela: some da grade e de todas as listas, o horário volta, e a linha fica com o motivo", async ({
+test("excluir pela tela: some da grade, o horário volta, e a linha fica com o motivo", async ({
   page,
 }) => {
   const creds = lerCreds();
@@ -99,9 +97,6 @@ test("excluir pela tela: some da grade e de todas as listas, o horário volta, e
       message: "o agendamento recém-marcado não apareceu na grade",
     })
     .not.toBe("");
-  const historico = page.getByTestId("historico-da-agenda");
-  await historico.getByTestId("aba-proximos").click();
-  await expect(historico.getByTestId(`linha-${id}`)).toBeVisible({ timeout: 15_000 });
 
   // ── 2. Abre o detalhe e exclui ─────────────────────────────────────────
   await page.getByTestId(`agendamento-${id}`).click();
@@ -124,14 +119,10 @@ test("excluir pela tela: some da grade e de todas as listas, o horário volta, e
   await confirmar.click();
   await expect(dialogo).toBeHidden({ timeout: 15_000 });
 
-  // ── 3. Some da grade e de TODAS as abas ────────────────────────────────
+  // ── 3. Some da grade ──
   await expect(page.getByTestId(`agendamento-${id}`), "o card continuou na grade").toHaveCount(0, {
     timeout: 20_000,
   });
-  for (const aba of ["proximos", "aguardando", "passados", "cancelados"]) {
-    await historico.getByTestId(`aba-${aba}`).click();
-    await expect(historico.getByTestId(`linha-${id}`), `ainda aparece na aba ${aba}`).toHaveCount(0);
-  }
   await page.screenshot({ path: path.join(EVIDENCIA, "2-sumiu-da-agenda.png"), fullPage: true });
 
   // ── 4. O horário volta a ser oferecido ─────────────────────────────────

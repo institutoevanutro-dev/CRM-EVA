@@ -796,7 +796,6 @@ jobs:
         agenda-nome-completo.spec.ts
         agenda-ocupacao-do-google-na-grade.spec.ts
         agenda-clinicorp.spec.ts
-        agenda-ocupacao-do-google-no-historico.spec.ts
         agenda-painel-cabe-na-tela.spec.ts
         agenda-procedimento-e-unidade-do-profissional.spec.ts
         agenda-remarcar-e-cancelar.spec.ts

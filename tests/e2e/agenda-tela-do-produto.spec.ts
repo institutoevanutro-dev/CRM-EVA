@@ -63,16 +63,6 @@ test.describe("a Agenda como o dono do produto a usa", () => {
     await expect(page.getByRole("heading", { name: "Agenda", exact: true })).toBeVisible();
   });
 
-  test("o histórico está NA TELA DO PRODUTO, com as quatro abas", async () => {
-    // Estava provado só na vitrine. Aqui ele aparece mesmo sem dado: as abas com
-    // contador zero respondem "não há nada" sem gastar um clique.
-    const hist = page.getByTestId("historico-da-agenda");
-    await expect(hist).toBeVisible({ timeout: ESPERA });
-    for (const aba of ["proximos", "aguardando", "passados", "cancelados"]) {
-      await expect(page.getByTestId(`aba-${aba}`)).toBeVisible();
-    }
-  });
-
   test("a tela declara de onde veio o que ela mostra — e nunca de mentira", async () => {
     // ESTE TESTE JÁ FOI UM DESLIGADOR. Ele cobrava `data-fonte="vazio-ate-a-api"`,
     // o marcador de quando a leitura não existia. A leitura passou a existir
