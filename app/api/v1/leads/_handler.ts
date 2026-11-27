@@ -315,6 +315,16 @@ export async function getLeadHandler(
 // create
 // ---------------------------------------------------------------------------
 
+/**
+ * Quem grava a linha já preparada pelo `createLeadHandler`. A troca de funil
+ * grava pela transação `fn_levar_negocio_para_funil` (migration 0439; porte de
+ * DeskcommCRM PR #5268) em vez do INSERT direto.
+ */
+export type PersistirCriacaoDeLead = (linha: Record<string, unknown>) => Promise<{
+  data: Record<string, unknown> | null;
+  error: { code?: string; message: string } | null;
+}>;
+
 export async function createLeadHandler(
   supabase: SB,
   ctx: HandlerCtx,
@@ -324,6 +334,7 @@ export async function createLeadHandler(
     /** Interno (webhook inbound) — idempotência via uniq_crm_leads_org_source_external. */
     external_id?: string;
   },
+  opcoes: { persistir?: PersistirCriacaoDeLead } = {},
 ): Promise<Record<string, unknown>> {
   // Validate stage belongs to pipeline within active org.
   const { data: stage, error: stageErr } = await supabase
@@ -379,32 +390,31 @@ export async function createLeadHandler(
   const serviceOrigin = ctx.serviceOrigin ?? await observeServiceOrigin(createAdminClient(), ctx.organization_id, input.contact_id ?? null);
   // Revalida o turno da IA DEPOIS das leituras e ANTES de gravar (#2541).
   await guardServiceEffect();
-  const { data: lead, error: insErr } = await supabase
-    .from("crm_leads")
-    .insert({
-      organization_id: ctx.organization_id,
-      pipeline_id: input.pipeline_id,
-      stage_id: input.stage_id,
-      title: input.title,
-      description: input.description ?? null,
-      contact_id: input.contact_id ?? null,
-      value_cents: input.value_cents ?? null,
-      currency: input.currency ?? "BRL",
-      ...ownerPatch,
-      assigned_at:
-        ownerPatch.owner_kind === null ? null : new Date().toISOString(),
-      expected_close_date: input.expected_close_date ?? null,
-      tags: input.tags ?? [],
-      source: input.source,
-      source_metadata: input.source_metadata ?? {},
-      external_id: input.external_id ?? null,
-      custom_fields: input.custom_fields ?? {},
-      status: "open",
-      position_in_stage: nextPos,
-      created_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
-    })
-    .select(LEAD_COLS)
-    .single();
+  const linha = {
+    organization_id: ctx.organization_id,
+    pipeline_id: input.pipeline_id,
+    stage_id: input.stage_id,
+    title: input.title,
+    description: input.description ?? null,
+    contact_id: input.contact_id ?? null,
+    value_cents: input.value_cents ?? null,
+    currency: input.currency ?? "BRL",
+    ...ownerPatch,
+    assigned_at:
+      ownerPatch.owner_kind === null ? null : new Date().toISOString(),
+    expected_close_date: input.expected_close_date ?? null,
+    tags: input.tags ?? [],
+    source: input.source,
+    source_metadata: input.source_metadata ?? {},
+    external_id: input.external_id ?? null,
+    custom_fields: input.custom_fields ?? {},
+    status: "open",
+    position_in_stage: nextPos,
+    created_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
+  };
+  const { data: lead, error: insErr } = opcoes.persistir
+    ? await opcoes.persistir(linha)
+    : await supabase.from("crm_leads").insert(linha).select(LEAD_COLS).single();
 
   // ── A PERDA SEM MOTIVO NA PRÓPRIA CRIAÇÃO ───────────────────────────────────
   // Portado do projeto original (DeskcommCRM PR 2762 de @webtecnica, issue 2743 lá).

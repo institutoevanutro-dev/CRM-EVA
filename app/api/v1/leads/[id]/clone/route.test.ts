@@ -141,7 +141,50 @@ function fakeDb(seed: Record<string, Row[]>) {
     return builder;
   }
 
-  return { client: { from } as never, tables };
+  return { client: { from, rpc: (fn: string, args: Row) => rpcFalso(fn, args) } as never, from, tables };
+}
+
+/**
+ * O lado JS de `fn_levar_negocio_para_funil` (migration 0439): o suficiente para
+ * a rota. A trava, a corrida e o rollback de verdade são medidos em
+ * `tests/invariants/clone-no-funil-sem-duplicata.test.ts`.
+ */
+let recusaNaGravacao: { message: string; code?: string } | null = null;
+
+async function rpcFalso(fn: string, args: Row) {
+  if (fn !== "fn_levar_negocio_para_funil") return { data: null, error: null };
+  const leads = db.tables.crm_leads!;
+  const origem = leads.find((lead) => lead.id === args.p_origem)!;
+  let clone = leads.find((lead) => lead.pipeline_id === args.p_destino && lead.status === "open"
+    && ((lead.source_metadata as Row | undefined)?.clonado_de as Row | undefined)?.lead_id === origem.id);
+  const linha = args.p_linha as Row | null;
+  const fechamento = args.p_fechamento as Row | null;
+
+  if (!clone && !linha) return { data: null, error: null };
+  if ((linha || fechamento) && recusaNaGravacao) return { data: null, error: recusaNaGravacao };
+  const criou = !clone && Boolean(linha);
+  const fechou = origem.status === "open" && Boolean(fechamento);
+  if (criou) {
+    clone = {
+      ...linha,
+      id: `novo-${leads.length + 1}`,
+      source_metadata: {
+        ...(linha?.source_metadata as Row),
+        clonado_de: { lead_id: origem.id, pipeline_id: origem.pipeline_id },
+      },
+    };
+    leads.push(clone);
+  }
+  if (fechou) {
+    await db.from("crm_leads").update(fechamento!).eq("id", origem.id);
+  }
+  if ((criou || fechou) && clone) {
+    origem.source_metadata = {
+      ...(origem.source_metadata as Row),
+      movido_para: { lead_id: clone.id, pipeline_id: clone.pipeline_id, stage_id: clone.stage_id },
+    };
+  }
+  return { data: { clone, origem, criou, fechou }, error: null };
 }
 
 function seed() {
@@ -191,6 +234,7 @@ let db: ReturnType<typeof fakeDb>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  recusaNaGravacao = null;
   db = fakeDb(seed());
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
@@ -279,6 +323,64 @@ describe("POST /api/v1/leads/[id]/clone", () => {
       stage_id: S2_A,
     });
     expect((origem.source_metadata as Row).canal).toBe("whatsapp");
+  });
+
+  // Porte de DeskcommCRM PR #5268 (de yunshu0909): a repetição não duplica.
+  it("devolve a mesma cópia da primeira transferência, mesmo com a origem já fechada", async () => {
+    const { POST } = await import("./route");
+
+    const primeira = await POST(cloneRequest({ pipeline_id: P2 }), params);
+    const segunda = await POST(cloneRequest({ pipeline_id: P2 }), params);
+    const criado = await primeira.json();
+    const reutilizado = await segunda.json();
+
+    expect(primeira.status).toBe(201);
+    expect(segunda.status).toBe(200);
+    expect(reutilizado.data.lead.id).toBe(criado.data.lead.id);
+    expect(db.tables.crm_leads?.filter((lead) => lead.pipeline_id === P2)).toHaveLength(1);
+  });
+
+  it("a cópia já existe e a origem ficou aberta: encerra a origem sobre ESSA cópia, sem criar outra", async () => {
+    // O pedido anterior caiu entre o clone e o encerramento (o caso do #5102 lá).
+    db.tables.crm_leads!.push({
+      id: "copia-antiga", organization_id: ORG_ID, pipeline_id: P2, stage_id: S2_A, status: "open",
+      title: "Orçamento da loja", source_metadata: { clonado_de: { lead_id: LEAD_ID, pipeline_id: P1 } },
+    });
+    const { POST } = await import("./route");
+
+    const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data.lead.id).toBe("copia-antiga");
+    expect(db.tables.crm_leads?.filter((lead) => lead.pipeline_id === P2)).toHaveLength(1);
+    const origem = (db.tables.crm_leads ?? []).find((row) => row.id === LEAD_ID) as Row;
+    expect(origem.status).toBe("lost");
+    expect((origem.source_metadata as Row).movido_para).toMatchObject({ lead_id: "copia-antiga" });
+    const linhas = vi.mocked(emitLeadActivity).mock.calls.map(([, entrada]) => entrada);
+    expect(linhas.map((l) => l.type)).toEqual(["demand_closed"]);
+  });
+
+  it("a recusa da policy é 403 e a origem segue aberta", async () => {
+    recusaNaGravacao = { code: "42501", message: 'new row violates row-level security policy for table "crm_leads"' };
+    const { POST } = await import("./route");
+    const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
+
+    expect(response.status).toBe(403);
+    expect((await response.json()).error.code).toBe("forbidden");
+    expect(db.tables.crm_leads).toHaveLength(1);
+    expect(db.tables.crm_leads?.[0]).toMatchObject({ status: "open", source_metadata: { canal: "whatsapp" } });
+  });
+
+  it("informa a falha da transação sem apontar um clone que não foi criado", async () => {
+    recusaNaGravacao = { message: "falha simulada no vínculo" };
+    const { POST } = await import("./route");
+    const response = await POST(cloneRequest({ pipeline_id: P2 }), params);
+
+    expect(response.status).toBe(500);
+    expect((await response.json()).error.details).toBeUndefined();
+    expect(db.tables.crm_leads).toHaveLength(1);
+    expect(db.tables.crm_leads?.[0]).toMatchObject({ status: "open", source_metadata: { canal: "whatsapp" } });
   });
 
   it("cada lado conta a troca na LINHA DO TEMPO — e a origem não diz 'Perdido — other'", async () => {
