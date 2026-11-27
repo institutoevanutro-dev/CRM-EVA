@@ -89,10 +89,11 @@ export type MarcacaoConfirmada = {
   /** Mensagem ou ligação: obrigatório na tela, é a base do bônus por comparecimento. */
   canal: CanalDaMarcacao;
   /**
-   * Quem converteu o lead (migration 0422). Só em PACIENTE NOVO: paciente antigo
-   * não leva o campo, e o POST sai sem `converted_by_*` (27/11/2026).
+   * Quem converteu o lead (migration 0422). `null` = PACIENTE ANTIGO, sem
+   * conversão: o POST manda `converted_by_kind: null` e a linha fica com as duas
+   * colunas nulas (27/11/2026). Ausente não serve: a rota gravaria quem marca.
    */
-  quemConverteu?: { kind: "user"; userId: string } | { kind: "ai" };
+  quemConverteu: { kind: "user"; userId: string } | { kind: "ai" } | null;
 };
 
 const ROTULO_DO_CANAL: Record<CanalDaMarcacao, string> = { mensagem: "Mensagem", ligacao: "Ligação" };
@@ -284,8 +285,9 @@ export function MarcacaoSimples({
 
   // PACIENTE NOVO OU ANTIGO (decisão do André, 27/11/2026). O padrão sai do
   // procedimento (`pacienteNovoPeloTipo`); a troca da recepção vale só para o
-  // procedimento em que foi feita — escolher outro volta ao padrão dele. Não é
-  // gravado em lugar nenhum: é modo da tela (DIRC: calcular, não duplicar).
+  // procedimento em que foi feita — escolher outro volta ao padrão dele. O modo
+  // em si não é gravado (DIRC: calcular, não duplicar); o que ele muda na linha
+  // é a conversão: em antigo, `converted_by_kind` e `converted_by_user_id` nulos.
   const [modoEscolhido, setModoEscolhido] = React.useState<{ tipoId: string; novo: boolean } | null>(null);
   const pacienteNovo =
     modoEscolhido !== null && modoEscolhido.tipoId === (tipo?.id ?? "")
@@ -396,9 +398,6 @@ export function MarcacaoSimples({
           ...(origemParaGravar ? { origem_informada: origemParaGravar } : {}),
         });
       }
-      const conversao: NonNullable<MarcacaoConfirmada["quemConverteu"]> = quemConverteu.startsWith("user:")
-        ? { kind: "user", userId: quemConverteu.slice("user:".length) }
-        : { kind: "ai" };
       await onConfirmar({
         instante: horario.instante,
         duracaoMin: duracao === null ? undefined : (duracaoMin ?? undefined),
@@ -406,8 +405,13 @@ export function MarcacaoSimples({
         endereco: endereco.trim(),
         observacao: observacao.trim(),
         canal,
-        // Paciente antigo NÃO leva quem converteu: a conversão foi na primeira consulta.
-        ...(pacienteNovo ? { quemConverteu: conversao } : {}),
+        // Paciente antigo grava SEM conversão (as duas colunas nulas): ela foi na
+        // primeira consulta, e não é de quem marca a aplicação.
+        quemConverteu: !pacienteNovo
+          ? null
+          : quemConverteu.startsWith("user:")
+            ? { kind: "user", userId: quemConverteu.slice("user:".length) }
+            : { kind: "ai" },
       });
       setRecusa(null);
       setMarcado(horario);

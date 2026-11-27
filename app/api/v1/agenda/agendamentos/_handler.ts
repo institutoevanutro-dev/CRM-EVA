@@ -119,10 +119,11 @@ export interface MarcarInput {
   booking_channel?: CanalDaMarcacao;
   /**
    * Quem converteu o lead (migration 0422): pessoa da equipe (`user`, com
-   * `converted_by_user_id`) ou a IA (`ai`). Ausente = quem está marcando. Da IA,
-   * é sempre `ai`.
+   * `converted_by_user_id`) ou a IA (`ai`). Ausente = quem está marcando.
+   * `null` = não houve conversão (paciente antigo, 27/11/2026): as duas colunas
+   * ficam nulas. Da IA, é sempre `ai`.
    */
-  converted_by_kind?: QuemConverteu;
+  converted_by_kind?: QuemConverteu | null;
   converted_by_user_id?: string;
 }
 
@@ -1217,12 +1218,14 @@ async function exigeSemSobreposicao(
  * o id vem do corpo do pedido, e gravar o de alguém de fora seria creditar a
  * conversão a quem não é da equipe (e vazar a existência do id).
  */
-async function quemConverteu(
+export async function quemConverteu(
   supabase: SB,
   ctx: HandlerCtx,
   input: MarcarInput,
-): Promise<{ kind: QuemConverteu; userId: string | null }> {
+): Promise<{ kind: QuemConverteu | null; userId: string | null }> {
   if (ctx.actor.type !== "user") return { kind: "ai", userId: null };
+  // Paciente antigo: a conversão foi na primeira consulta, não nesta marcação.
+  if (input.converted_by_kind === null) return { kind: null, userId: null };
   if (input.converted_by_kind === "ai") return { kind: "ai", userId: null };
   const userId = input.converted_by_user_id ?? ctx.actor.id;
   if (userId === ctx.actor.id) return { kind: "user", userId };

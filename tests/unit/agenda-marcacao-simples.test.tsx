@@ -630,7 +630,7 @@ describe("paciente novo ou antigo (decisão do André, 27/11/2026)", () => {
     expect(screen.getByTestId("origem-do-lead")).toBeInTheDocument();
   });
 
-  it("aplicação abre em Paciente antigo: os dois campos somem e o confirmar não leva quem converteu", async () => {
+  it("aplicação abre em Paciente antigo: os dois campos somem e o confirmar diz 'sem conversão'", async () => {
     const onConfirmar = vi.fn((_m: unknown) => Promise.resolve());
     montarMarcacao({ ...comHorario("t-aplicacao"), onConfirmar });
     expect(screen.getByTestId("paciente-antigo")).toHaveAttribute("aria-pressed", "true");
@@ -638,7 +638,19 @@ describe("paciente novo ou antigo (decisão do André, 27/11/2026)", () => {
     expect(screen.queryByTestId("origem-do-lead")).toBeNull();
     fireEvent.click(screen.getByTestId("confirmar-marcacao"));
     await waitFor(() => expect(onConfirmar).toHaveBeenCalled());
-    expect(onConfirmar.mock.calls[0]?.[0]).not.toHaveProperty("quemConverteu");
+    // `null` explícito, não ausente: ausente a rota grava quem marca como quem converteu.
+    expect(onConfirmar.mock.calls[0]?.[0]).toHaveProperty("quemConverteu", null);
+  });
+
+  it("antigo e de volta a novo no mesmo procedimento: quem converteu volta a ir", async () => {
+    const onConfirmar = vi.fn((_m: unknown) => Promise.resolve());
+    montarMarcacao({ ...comHorario("t-aplicacao"), onConfirmar });
+    expect(screen.getByTestId("paciente-antigo")).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByTestId("paciente-novo"));
+    expect(screen.getByTestId("quem-converteu")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("confirmar-marcacao"));
+    await waitFor(() => expect(onConfirmar).toHaveBeenCalled());
+    expect(onConfirmar.mock.calls[0]?.[0]).toMatchObject({ quemConverteu: { kind: "user", userId: ANA } });
   });
 
   it("mexer na Origem e trocar para antigo: nada é gravado na ficha", async () => {
@@ -654,7 +666,7 @@ describe("paciente novo ou antigo (decisão do André, 27/11/2026)", () => {
     fireEvent.click(screen.getByTestId("confirmar-marcacao"));
     await waitFor(() => expect(onConfirmar).toHaveBeenCalled());
     expect(patch).not.toHaveBeenCalled();
-    expect(onConfirmar.mock.calls[0]?.[0]).not.toHaveProperty("quemConverteu");
+    expect(onConfirmar.mock.calls[0]?.[0]).toHaveProperty("quemConverteu", null);
   });
 
   it("a troca vale só para o procedimento em que foi feita: outro procedimento volta ao padrão dele", () => {

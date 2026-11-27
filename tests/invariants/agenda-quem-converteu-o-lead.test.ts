@@ -145,6 +145,12 @@ describe("quem converteu o lead", () => {
     expect(await conversaoDe(r.ok ? r.r.id : "")).toEqual({ converted_by_kind: "ai", converted_by_user_id: null });
   });
 
+  it("paciente antigo: `null` explícito grava as duas nulas (27/11/2026)", async () => {
+    const r = await marcar(daRecepcao(), 15, { converted_by_kind: null, converted_by_user_id: COLEGA });
+    expect(r.ok, `recusado: ${JSON.stringify(!r.ok && r.e)}`).toBe(true);
+    expect(await conversaoDe(r.ok ? r.r.id : "")).toEqual({ converted_by_kind: null, converted_by_user_id: null });
+  });
+
   it("alguém de OUTRA organização é recusado, e nada entra", async () => {
     const r = await marcar(daRecepcao(), 12, { converted_by_kind: "user", converted_by_user_id: DE_FORA });
     expect(r.ok).toBe(false);
