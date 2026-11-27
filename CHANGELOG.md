@@ -8,6 +8,26 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.43.1] — 2026-11-27
+
+### Corrigido
+
+- **O follow-up volta mais cedo quando o compromisso que o segurava é cancelado** Quando um compromisso futuro adia um follow-up ou uma automação, a agenda agora é consultada de
+  novo em até uma hora, em vez de esperar até o horário original do compromisso. Se ele foi
+  cancelado e não há outro bloqueio, o envio volta a seguir as regras normais. Adiamentos já
+  gravados mantêm o horário que estava na fila.
+
+  Na Atividade das automações, as novas consultas da mesma regra para o mesmo evento atualizam a
+  linha de espera que já existia, que continua mostrando quando a espera começou.
+
+  Portado do projeto original (DeskcommCRM PR #5099, de @yunshu0909).
+
+- **Levar para outro funil reaproveita a cópia aberta em vez de duplicar o negócio** Confirmar o mesmo negócio em duas abas, clicar duas vezes ou repetir o pedido depois de uma falha devolve o mesmo card aberto no funil de destino, sem criar outro. A criação do card, o vínculo entre os dois e o encerramento do negócio de origem passam a ser gravados juntos: se algo falha, nada fica pela metade. Negócios já ganhos ou perdidos continuam no histórico. Porte de melgarafael/DeskcommCRM#5268, contribuição de @yunshu0909.
+
+- **Um negócio tem uma só cópia aberta em cada funil de destino** O banco passa a recusar um segundo card aberto do mesmo negócio no mesmo funil, venha de onde vier. O pós-venda automático usa o card que já existe, e reabrir ou mover um card que viraria a segunda cópia aberta mostra o aviso "Este negócio já tem uma cópia aberta neste funil", em vez de um erro do sistema.
+
+  Se a sua instalação já tinha cópias abertas repetidas de um mesmo negócio no mesmo funil, a atualização mantém a mais antiga e encerra as outras como perda, com o motivo "Outro". O histórico, as tarefas e os vínculos dessas cópias passam para o card que ficou. Nenhum card é apagado, e essa limpeza não dispara automações. Porte de melgarafael/DeskcommCRM#5294; achado de @webtecnica.
+
 ## [5.43.0] — 2026-11-26
 
 ### Adicionado
@@ -10202,7 +10222,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.1...HEAD
+[5.43.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.0...v5.43.1
 [5.43.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.42.1...v5.43.0
 [5.42.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.42.0...v5.42.1
 [5.42.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.41.1...v5.42.0
