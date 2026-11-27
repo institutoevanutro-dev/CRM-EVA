@@ -321,7 +321,12 @@ export async function POST(
           montaPayloadDoClone(origem, etapaDeEntrada),
           {
             persistir: async (linha) => {
-              const resultado = await gravar(linha, fechamento?.patch ?? null, origem.updated_at);
+              const tentar = () => gravar(linha, fechamento?.patch ?? null, origem.updated_at);
+              // A automação grava a cópia FORA desta transação. Se ela gravou
+              // entre a busca e o INSERT, o índice único (0440) recusa com
+              // 23505; a 2ª chamada acha essa cópia sob a trava e a reaproveita.
+              let resultado = await tentar();
+              if (resultado.error?.code === "23505") resultado = await tentar();
               if (resultado.gravacao && !resultado.gravacao.criou) {
                 throw new CloneReutilizado(resultado.gravacao);
               }

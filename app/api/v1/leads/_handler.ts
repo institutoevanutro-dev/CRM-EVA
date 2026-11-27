@@ -30,6 +30,7 @@ import { clienteDaEquipe, responsavelValido } from "@/lib/tarefas/responsavel";
 import { idsForaDaOrg } from "@/lib/tenancy/pertence-a-org";
 import { ID, INSTANTE, lerCursorJson } from "@/lib/api/filtro-postgrest";
 import { ehRecusaDaVisibilidadeDoFunil } from "@/lib/leads/recusa-da-visibilidade";
+import { recusaDeCopiaAbertaPeloBanco } from "@/lib/leads/copia-aberta-no-funil";
 
 type SB = SupabaseClient;
 
@@ -193,6 +194,13 @@ function recusaDaRlsDosLeads(
   erro: { code?: string; message?: string } | null,
   ctx: HandlerCtx,
 ): ApiError | null {
+  // Uma cópia aberta por negócio de origem e funil (migration 0440; porte de
+  // DeskcommCRM PR #5294): criar ou editar o card que viraria a segunda é
+  // recusa de negócio, não 500.
+  const copiaAberta = recusaDeCopiaAbertaPeloBanco(erro, ctx.idioma);
+  if (copiaAberta) {
+    return new ApiError(409, copiaAberta.codigo, undefined, ctx.requestId, copiaAberta.mensagem);
+  }
   if (!ehRecusaDaVisibilidadeDoFunil(erro)) return null;
   return new ApiError(
     403,
@@ -905,6 +913,11 @@ export async function moveLeadHandler(
     const recusa = recusaDeMotivoDaPerdaPeloBanco(updErr, ctx.idioma);
     if (recusa) {
       throw new ApiError(422, recusa.codigo, undefined, ctx.requestId, recusa.mensagem);
+    }
+    // Reabrir/mover a cópia quando o negócio já tem outra aberta no funil (0440).
+    const copiaAberta = recusaDeCopiaAbertaPeloBanco(updErr, ctx.idioma);
+    if (copiaAberta) {
+      throw new ApiError(409, copiaAberta.codigo, undefined, ctx.requestId, copiaAberta.mensagem);
     }
     throw new ApiError(500, "internal_error", undefined, ctx.requestId, updErr.message);
   }
