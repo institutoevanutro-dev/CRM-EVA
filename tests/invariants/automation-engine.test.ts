@@ -41,9 +41,10 @@ class FakeQuery implements PromiseLike<QResult> {
   private selectCols = "*";
   private selectAfterMutation = false;
   private mutationData: Record<string, unknown> | null = null;
-  private filters: Array<{ col: string; val: unknown }> = [];
+  private filters: Array<{ col: string; val: unknown; op?: "gte" }> = [];
   private orderCol?: string;
   private orderAsc = true;
+  private limitN?: number;
 
   constructor(private table: string) {}
 
@@ -74,6 +75,16 @@ class FakeQuery implements PromiseLike<QResult> {
     return this;
   }
 
+  gte(col: string, val: unknown): this {
+    this.filters.push({ col, val, op: "gte" });
+    return this;
+  }
+
+  limit(n: number): this {
+    this.limitN = n;
+    return this;
+  }
+
   order(col: string, opts: { ascending: boolean }): this {
     this.orderCol = col;
     this.orderAsc = opts.ascending;
@@ -88,15 +99,22 @@ class FakeQuery implements PromiseLike<QResult> {
   }
 
   private where(): string {
-    return this.filters.length
-      ? ` where ${this.filters.map((f) => `${f.col} = ${sqlLiteral(f.val)}`).join(" and ")}`
-      : "";
+    if (!this.filters.length) return "";
+    const clauses = this.filters.map(({ col, val, op }) => {
+      // O caminho jsonb do PostgREST (`a->0->b->>c`) vira SQL com as chaves entre aspas.
+      const coluna = col === "actions_result->0->detail->>reason"
+        ? "actions_result->0->'detail'->>'reason'"
+        : col;
+      return `${coluna} ${op === "gte" ? ">=" : "="} ${sqlLiteral(val)}`;
+    });
+    return ` where ${clauses.join(" and ")}`;
   }
 
   private toSql(): string {
     if (this.mode === "select") {
       let q = `select ${this.selectCols} from public.${this.table}${this.where()}`;
       if (this.orderCol) q += ` order by ${this.orderCol} ${this.orderAsc ? "asc" : "desc"}`;
+      if (this.limitN !== undefined) q += ` limit ${this.limitN}`;
       return q;
     }
     if (this.mode === "insert") {
@@ -333,6 +351,13 @@ describe("runAutomationForEvent — motor de regras (Task 8)", () => {
     const runs = runsForRule(R5);
     expect(runs.length).toBe(antes + 1);
     expect(runs[runs.length - 1]!.status).toBe("adiado");
+
+    // A volta do mesmo evento ainda adiada ATUALIZA a espera, não cria outra
+    // linha (porte do original, DeskcommCRM PR #5099): a agenda passou a ser
+    // relida de hora em hora, e uma linha por volta encheria a Atividade.
+    const segunda = await runAutomationForEvent(fakeAdminClient(), row);
+    expect(segunda.status).toBe("retry");
+    expect(runsForRule(R5).length).toBe(antes + 1);
   });
 
   it("ação de type desconhecido: run registrado com status='failed', demais ações seguiriam", async () => {

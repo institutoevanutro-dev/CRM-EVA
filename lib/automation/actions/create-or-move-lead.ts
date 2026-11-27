@@ -15,6 +15,8 @@ import type { ActionCtx, ActionResultDetail } from "@/lib/automation/types";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
 import { createLeadHandler, moveLeadHandler } from "@/app/api/v1/leads/_handler";
 import { audit } from "@/lib/audit";
+import { ApiError } from "@/lib/api/types";
+import { CODIGO_COPIA_ABERTA_NO_FUNIL, copiaAbertaNoFunil } from "@/lib/leads/copia-aberta-no-funil";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import { escolheEtapaDeDestino, montaPayloadDoClone, type EtapaDoFunil, type OrigemParaClonar } from "@/lib/leads/clonar-para-funil";
@@ -169,6 +171,12 @@ async function abrePosVenda(
     // Outro dreno gravou entre a leitura e o insert: o índice único recusou.
     const venceu = await posVendaDaVenda(ctx, venda.id);
     if (venceu.card) return jaExistia(ctx, venceu.card, venda.id);
+    // A venda já tem uma cópia ABERTA neste funil (índice único da 0440): o
+    // recibo é o mesmo "já existia", nunca uma segunda cópia (porte do PR #5294).
+    if (err instanceof ApiError && err.code === CODIGO_COPIA_ABERTA_NO_FUNIL) {
+      const copia = await copiaAbertaNoFunil(ctx.admin, ctx.organizationId, pipelineId, venda.id);
+      if (copia) return jaExistia(ctx, copia, venda.id);
+    }
     throw err;
   }
   publicaNoContexto(ctx, card, venda.contact_id ?? undefined);

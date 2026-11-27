@@ -25,6 +25,7 @@ import {
 } from "@/lib/leads/motivo-da-perda";
 import { RECUSA_DE_TROCA_DE_FUNIL } from "@/lib/leads/clonar-para-funil";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { recusaDeCopiaAbertaPeloBanco } from "@/lib/leads/copia-aberta-no-funil";
 
 export const dynamic = "force-dynamic";
 
@@ -132,6 +133,10 @@ export async function POST(
     // chegar aqui como 500 — que é o defeito, com outro nome.
     const recusa = recusaDeMotivoDaPerdaPeloBanco(updErr, user.idioma);
     if (recusa) return fail(recusa.codigo, recusa.mensagem, 422, { requestId });
+    // Reabrir a cópia encerrada quando o negócio já tem outra aberta neste funil
+    // (índice único da 0440): recusa de negócio, não 500.
+    const copiaAberta = recusaDeCopiaAbertaPeloBanco(updErr, user.idioma);
+    if (copiaAberta) return fail(copiaAberta.codigo, copiaAberta.mensagem, 409, { requestId });
     return fail("internal_error", updErr.message, 500, { requestId });
   }
 

@@ -80,6 +80,10 @@ export const ApiErrorCodes = {
   // sem `confirmar_ficha_do_prontuario: true`: as mensagens (e os exames) da
   // outra ficha passariam a ser deste paciente. A tela mostra o aviso e a caixa.
   prontuario_confirmar_juncao: "prontuario_confirmar_juncao",
+  // Mover ou reabrir um card bate no índice único `crm_leads_clone_aberto_no_funil_uidx`
+  // (migration 0440; porte de DeskcommCRM PR #5294): o mesmo negócio de origem já
+  // tem uma cópia ABERTA neste funil. Régua em `lib/leads/copia-aberta-no-funil.ts`.
+  copia_aberta_no_funil: "copia_aberta_no_funil",
   duplicate_external_id: "duplicate_external_id",
   event_gone: "event_gone", // resend de run cujo event_log original foi apagado (on delete set null)
   no_actions_to_resend: "no_actions_to_resend", // resend de regra que não tem mais nenhuma ação de webhook — reenviar nada não é sucesso

@@ -111,10 +111,13 @@ export async function buildContext(admin: SupabaseClient, row: EventRow): Promis
  * Grava a linha do adiamento — a única evidência de que a regra casou e está
  * esperando.
  *
- * Um run por adiamento, e não um por tique do drain: o evento só volta na hora
- * marcada por `retry_at`, então não há repetição a cada minuto. Se a janela
- * seguir fechada quando ele voltar, sai outra linha — e aí a repetição É a
- * informação (a automação está presa há três dias).
+ * Uma linha por regra e evento: o `created_at` da primeira diz desde quando a
+ * regra espera, e o `retry_at` acompanha a próxima volta. Antes saía uma linha
+ * nova a cada volta, e desde que a agenda passou a ser relida de hora em hora
+ * (porte do original, DeskcommCRM PR #5099) uma consulta a três dias encheria a
+ * Atividade com 72 linhas iguais. O claim do event_log serializa as passagens
+ * pelo mesmo evento; o motivo entra na busca porque um envio já posto na fila
+ * do canal também pode ter status `adiado`.
  *
  * Fire-and-forget quanto a erro: perder o registro não pode impedir o
  * adiamento, que é o que protege o número.
@@ -126,24 +129,48 @@ async function registrarAdiamento(
   actionType: string,
   retryAt: string,
 ): Promise<void> {
-  const { error } = await admin.from("automation_rule_runs").insert({
-    organization_id: row.organization_id,
-    rule_id: rule.id,
-    event_id: row.id,
-    status: "adiado",
-    actions_result: [
-      {
-        type: actionType,
-        status: "postponed",
-        detail: {
-          reason: "fora_da_janela_de_envio",
-          retry_at: retryAt,
-          explicacao:
-            "A regra casou e está esperando a janela de envio do número reabrir — nada foi tentado ainda.",
-        },
+  const motivo = "fora_da_janela_de_envio";
+  const actionsResult = [
+    {
+      type: actionType,
+      status: "postponed",
+      detail: {
+        reason: motivo,
+        retry_at: retryAt,
+        explicacao:
+          "A regra casou e está esperando a janela de envio do número reabrir — nada foi tentado ainda.",
       },
-    ],
-  });
+    },
+  ];
+  let busca = admin
+    .from("automation_rule_runs")
+    .select("id")
+    .eq("organization_id", row.organization_id)
+    .eq("rule_id", rule.id)
+    .eq("event_id", row.id)
+    .eq("status", "adiado")
+    .eq("actions_result->0->detail->>reason", motivo);
+  if (row.created_at) busca = busca.gte("created_at", row.created_at);
+  const { data: espera, error: erroDaBusca } = await busca
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+  const error =
+    erroDaBusca ??
+    (espera
+      ? await admin
+          .from("automation_rule_runs")
+          .update({ actions_result: actionsResult })
+          .eq("organization_id", row.organization_id)
+          .eq("id", espera.id)
+      : await admin.from("automation_rule_runs").insert({
+          organization_id: row.organization_id,
+          rule_id: rule.id,
+          event_id: row.id,
+          status: "adiado",
+          actions_result: actionsResult,
+        })
+    ).error;
   if (error) {
     logger.error("[automation.engine] não foi possível registrar o adiamento", {
       rule_id: rule.id,

@@ -30,6 +30,7 @@ import { observeServiceOrigin } from "@/lib/atendimento/origem";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { RECUSA_DE_TROCA_DE_FUNIL } from "@/lib/leads/clonar-para-funil";
+import { recusaDeCopiaAbertaPeloBanco } from "@/lib/leads/copia-aberta-no-funil";
 
 export const dynamic = "force-dynamic";
 
@@ -261,6 +262,10 @@ export async function POST(req: NextRequest): Promise<Response> {
         if (recusaDoBanco) {
           return fail(recusaDoBanco.codigo, recusaDoBanco.mensagem, 422, { requestId });
         }
+        // O lote reabriria uma cópia de um negócio que já tem outra aberta no
+        // funil (índice único da 0440): recusa de negócio, não 500.
+        const copiaAberta = recusaDeCopiaAbertaPeloBanco(error, user.idioma);
+        if (copiaAberta) return fail(copiaAberta.codigo, copiaAberta.mensagem, 409, { requestId });
         return fail("internal_error", error.message, 500, { requestId });
       }
       const movidosNoBanco = (data ?? []) as LeadMovidoEmLote[];

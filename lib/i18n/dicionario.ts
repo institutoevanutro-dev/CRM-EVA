@@ -12560,6 +12560,11 @@ export const DICIONARIO: Traducoes = {
   },
   "Não foi possível gerar os códigos. Tente de novo.": { es: "No se pudieron generar los códigos. Intente de nuevo." },
   // Portes 23/10, grupo D (PR #3197): CPF ou e-mail repetido responde 409 contact_exists.
+  // Mover/reabrir um card quando o mesmo negócio já tem cópia aberta no funil
+  // (porte de DeskcommCRM PR #5294). `409 copia_aberta_no_funil`.
+  "Este negócio já tem uma cópia aberta neste funil. Continue o atendimento por ela.": {
+    es: "Este negocio ya tiene una copia abierta en este embudo. Continúa la atención por ella.",
+  },
   "Já existe um contato com este CPF.": { es: "Ya existe un contacto con este CPF." },
   "Já existe um contato com este e-mail.": { es: "Ya existe un contacto con este correo electrónico." },
   // Portes 23/10, grupo D (PR #2834): o e-mail da automação para uma pessoa da equipe.

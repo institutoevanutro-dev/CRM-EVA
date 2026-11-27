@@ -82,11 +82,11 @@ function actorAuditPayload(actor: Actor): {
  * bypassa RLS. Uma função compartilhada que dependesse da RLS do chamador seria
  * segura numa porta e aberta na outra.
  */
-export async function encerraDemanda(
+export async function preparaEncerramentoDemanda(
   supabase: SupabaseClient,
   ctx: HandlerCtx,
   input: EncerraDemandaInput,
-): Promise<DemandaEncerrada> {
+): Promise<PreparacaoDoEncerramento> {
   if (input.desfecho === "lost" && !input.motivo?.trim()) {
     throw new ApiError(
       422,
@@ -176,6 +176,39 @@ export async function encerraDemanda(
   };
   if (input.desfecho === "lost") patch.lost_reason = input.motivo;
 
+  return {
+    lead: lead as Record<string, unknown>,
+    jaEstava: false,
+    etapa: stage as { id: string; name: string },
+    patch,
+  };
+}
+
+type PreparacaoDoEncerramento =
+  | { lead: Record<string, unknown>; jaEstava: true }
+  | EncerramentoPreparado;
+
+/**
+ * O encerramento decidido e ainda não gravado. A troca de funil grava o `patch`
+ * na MESMA transação do clone (`fn_levar_negocio_para_funil`, migration 0439) e
+ * depois chama `registraEncerramentoDemanda` (porte de DeskcommCRM PR #5268).
+ */
+export interface EncerramentoPreparado {
+  lead: Record<string, unknown>;
+  jaEstava: false;
+  etapa: { id: string; name: string };
+  patch: Record<string, unknown>;
+}
+
+export async function encerraDemanda(
+  supabase: SupabaseClient,
+  ctx: HandlerCtx,
+  input: EncerraDemandaInput,
+): Promise<DemandaEncerrada> {
+  const preparo = await preparaEncerramentoDemanda(supabase, ctx, input);
+  if (preparo.jaEstava) return preparo;
+  const { patch } = preparo;
+
   const { error: updErr } = await supabase
     .from("crm_leads")
     .update(patch)
@@ -201,7 +234,20 @@ export async function encerraDemanda(
     .eq("id", input.leadId)
     .eq("organization_id", ctx.organization_id)
     .maybeSingle();
-  const finalLead = (fresh ?? lead) as Record<string, unknown>;
+  const finalLead = (fresh ?? preparo.lead) as Record<string, unknown>;
+  await registraEncerramentoDemanda(supabase, ctx, input, preparo, finalLead);
+  return { lead: finalLead, jaEstava: false };
+}
+
+/** Registra a timeline e o audit de um encerramento que já foi persistido. */
+export async function registraEncerramentoDemanda(
+  supabase: SupabaseClient,
+  ctx: HandlerCtx,
+  input: EncerraDemandaInput,
+  preparo: EncerramentoPreparado,
+  finalLead: Record<string, unknown>,
+): Promise<void> {
+  const { lead, etapa: stage } = preparo;
 
   // `fn_crm_lead_close_on_stage` atualiza o status e o trigger de eventos grava
   // lead.won/lead.lost no event_log. Não emitir novamente via emit_event aqui:
@@ -262,6 +308,4 @@ export async function encerraDemanda(
       ...(input.desfecho === "lost" ? { lost_reason: input.motivo } : {}),
     },
   });
-
-  return { lead: finalLead, jaEstava: false };
 }
