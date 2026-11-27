@@ -8799,7 +8799,6 @@ export const DICIONARIO: Traducoes = {
   "Remarcar {titulo} de {de} para {para}?": { es: "¿Reprogramar {titulo} de {de} a {para}?" },
   "Avise {paciente} do novo horário: a mudança não manda mensagem sozinha, a não ser por uma automação de remarcação.": { es: "Avisa a {paciente} del nuevo horario: el cambio no envía un mensaje solo, salvo con una automatización de reprogramación." },
   "Manter horário": { es: "Mantener horario" },
-  "Remarcando": { es: "Reprogramando" },
   "Abrir o dia {dia} · {n} na agenda": { es: "Abrir el día {dia} · {n} en la agenda" },
   "+{n} mais": { es: "+{n} más" },
 
@@ -9583,7 +9582,6 @@ export const DICIONARIO: Traducoes = {
   // "Los agendamientos" — entrada que NÃO é deste bloco e por isso fica como
   // está; trocá-la é decisão de quem a escreveu, e vai anotada no PR.
   "Novo agendamento": { es: "Nueva cita" },
-  "Remarcar agendamento": { es: "Reagendar cita" },
   "Cancelar agendamento": { es: "Cancelar cita" },
   "Agendamento": { es: "Cita" },
   "EEEE, d 'de' MMMM 'às' HH:mm": { es: "EEEE, d 'de' MMMM 'a las' HH:mm" },
@@ -10124,8 +10122,6 @@ export const DICIONARIO: Traducoes = {
   "O que a equipe precisa lembrar neste horário": { es: "Lo que el equipo necesita recordar en este horario" },
   "Aparece na descrição do compromisso.": { es: "Aparece en la descripción de la cita." },
   "cliente@empresa.com": { es: "cliente@empresa.com" },
-  "Endereço inválido — confira antes de marcar.":
-    { es: "Dirección inválida — revísala antes de agendar." },
   "Preenchido, o Google envia o convite por e-mail para esta pessoa.":
     { es: "Si se completa, Google envía la invitación por correo a esta persona." },
 
@@ -11225,7 +11221,6 @@ export const DICIONARIO: Traducoes = {
   "Seus números de WhatsApp: por QR ou canal oficial da Meta, com saúde, reconexão e templates.": { es: "Tus números de WhatsApp: por QR o canal oficial de Meta, con salud, reconexión y plantillas." },
   "Agendamento criado.": { es: "Cita creada." },
   "Agendamento remarcado.": { es: "Cita reprogramada." },
-  "Confirmar horário": { es: "Confirmar horario" },
   "Mídia": { es: "Multimedia" },
   "Tenant suspenso com sucesso": { es: "Tenant suspendido con éxito" },
   "Erro ao suspender tenant": { es: "Error al suspender el tenant" },
@@ -13005,6 +13000,10 @@ export const DICIONARIO: Traducoes = {
   "Escolha o novo dia e o horário.": { es: "Elija el nuevo día y el horario." },
   "Confirmar remarcação": { es: "Confirmar reprogramación" },
   "Remarcando…": { es: "Reprogramando…" },
+  "Horário confirmado": { es: "Horario confirmado" },
+  "Consulta cancelada": { es: "Consulta cancelada" },
+  "Marcado como falta — o horário volta a ficar livre": { es: "Marcado como ausencia — el horario vuelve a quedar libre" },
+  "Presença registrada": { es: "Asistencia registrada" },
 };
 
 /**

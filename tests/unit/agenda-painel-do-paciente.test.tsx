@@ -17,6 +17,8 @@ import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), delete: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ apiClient: api }));
 vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: vi.fn() }));
+const avisos = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }));
+vi.mock("sonner", () => ({ toast: avisos }));
 /**
  * O dublê do Dialog faz com o Esc o que o Radix faz: chama `onEscapeKeyDown` e,
  * se ninguém impediu, fecha (`onOpenChange(false)`).
@@ -391,6 +393,73 @@ describe("painel do paciente", () => {
     await waitFor(() => expect(screen.getByTestId("estado-do-compromisso")).toHaveTextContent("Cancelado"));
     fireEvent.keyDown(screen.getByTestId("painel-do-compromisso"), { key: "Escape" });
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("Realizado e Faltou não oferecem Cancelar: o bônus conta a consulta realizada, e cancelada some da grade", async () => {
+    for (const [status, rotulo] of [
+      ["completed", "Realizado"],
+      ["no_show", "Faltou"],
+    ] as const) {
+      detalhe({ ...BASE, status, starts_at: "2020-01-01T12:00:00Z", ends_at: "2020-01-01T12:30:00Z" });
+      abrir();
+      expect(await screen.findByTestId("estado-do-compromisso")).toHaveTextContent(rotulo);
+      expect(screen.queryByTestId("acao-cancelar")).toBeNull();
+      expect(screen.queryByTestId("acoes-do-compromisso")).toBeNull();
+      // A presença segue corrigível: quem marcou Faltou por engano troca para Compareceu.
+      expect(screen.getByRole("button", { name: "Compareceu" })).toBeInTheDocument();
+      cleanup();
+      client.clear();
+    }
+  });
+
+  it("Cancelar aberto quando a presença é registrada: a seção some e um Esc só fecha o painel", async () => {
+    const passado = { ...BASE, starts_at: "2020-01-01T12:00:00Z", ends_at: "2020-01-01T12:30:00Z" };
+    detalhe(passado);
+    api.patch.mockImplementation(async () => {
+      detalhe({ ...passado, status: "completed", revision: 2, outcome_recorded_at: "2020-01-01T13:00:00Z" });
+      return { data: { id: ID } };
+    });
+    const onClose = vi.fn();
+    abrir(<Painel onClose={onClose} />);
+    fireEvent.click(await screen.findByTestId("acao-cancelar"));
+    expect(screen.getByTestId("cancelar-no-painel")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Compareceu" }));
+    await waitFor(() => expect(screen.getByTestId("estado-do-compromisso")).toHaveTextContent("Realizado"));
+    expect(screen.queryByTestId("cancelar-no-painel")).toBeNull();
+    fireEvent.keyDown(screen.getByTestId("painel-do-compromisso"), { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("cada decisão do painel avisa que valeu, num toast curto", async () => {
+    const passado = { ...BASE, starts_at: "2020-01-01T12:00:00Z", ends_at: "2020-01-01T12:30:00Z" };
+    api.patch.mockResolvedValue({ data: { id: ID } });
+    api.delete.mockResolvedValue({});
+
+    detalhe({ ...BASE, status: "pending" });
+    abrir();
+    fireEvent.click(await screen.findByTestId("acao-confirmar"));
+    await waitFor(() => expect(avisos.success).toHaveBeenCalledWith("Horário confirmado"));
+    cleanup();
+    client.clear();
+
+    detalhe(BASE);
+    abrir();
+    fireEvent.click(await screen.findByTestId("acao-cancelar"));
+    fireEvent.change(screen.getByLabelText("Motivo do cancelamento"), { target: { value: "Pediu outro dia" } });
+    fireEvent.click(screen.getByTestId("confirmar-cancelamento"));
+    await waitFor(() => expect(avisos.success).toHaveBeenCalledWith("Consulta cancelada"));
+    cleanup();
+    client.clear();
+
+    detalhe(passado);
+    abrir();
+    fireEvent.click(await screen.findByRole("button", { name: "Faltou" }));
+    await waitFor(() =>
+      expect(avisos.success).toHaveBeenCalledWith("Marcado como falta — o horário volta a ficar livre"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Compareceu" }));
+    await waitFor(() => expect(avisos.success).toHaveBeenCalledWith("Presença registrada"));
+    expect(avisos.success).toHaveBeenCalledTimes(4);
   });
 
   it("Remarcar 'aberto' com a seção escondida não segura o Esc: um só fecha o painel", async () => {

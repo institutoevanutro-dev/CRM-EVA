@@ -222,11 +222,17 @@ export function DetalheDoCompromisso({
       resetDraft();
       setCancelando(false);
       void qc.invalidateQueries({ queryKey: ["agenda"] });
+      toast.success(t("Consulta cancelada"));
     },
     onError: mutationFailed,
   });
-  function decide(patch: Record<string, unknown>) {
-    if (a && !staleDraft) mutation.mutate({ revision: draftRevision ?? a.revision, patch });
+  /** `aviso`: o toast de sucesso das decisões que a recepção precisa ver valer. */
+  function decide(patch: Record<string, unknown>, aviso?: string) {
+    if (a && !staleDraft)
+      mutation.mutate(
+        { revision: draftRevision ?? a.revision, patch },
+        aviso ? { onSuccess: () => toast.success(aviso) } : undefined,
+      );
   }
   function fecharRemarcacao() {
     setDiaNovo(null);
@@ -263,7 +269,12 @@ export function DetalheDoCompromisso({
   // O QUE ESTÁ À VISTA, numa regra só para o desenho e para o Esc: uma seção
   // "aberta" mas escondida (compromisso cancelado, quem não pode editar) não
   // pode segurar o Esc — o toque morreria sem efeito nenhum na tela.
-  const podeAgir = Boolean(a && !query.isError && podeEditar && a.status !== "cancelled" && !a.excluded_at);
+  // Só AGENDADO ou AGUARDANDO tem ação: Realizado e Faltou não se cancelam. O
+  // bônus conta só `completed`, e cancelado some da grade — um toque errado
+  // tirava a consulta realizada do bônus sem volta pela tela.
+  const podeAgir = Boolean(
+    a && !query.isError && podeEditar && (a.status === "pending" || a.status === "confirmed") && !a.excluded_at,
+  );
   const mostraRemarcar = podeAgir && Boolean(remarcacao?.aberta);
   const mostraCancelar = podeAgir && cancelando;
   const paciente = a?.contato ? nomeDoContato(a.contato) : null;
@@ -295,7 +306,8 @@ export function DetalheDoCompromisso({
       onOpenChange={(open) => {
         if (!open) {
           // Fechar no meio do Remarcar não deixa a remarcação "pendurada" para
-          // a próxima abertura do mesmo compromisso (o link do histórico).
+          // a próxima abertura do mesmo compromisso (pela grade ou por um link
+          // com `?compromisso=`).
           if (remarcacao?.aberta) remarcacao.onFechar();
           onClose();
         }
@@ -424,12 +436,12 @@ export function DetalheDoCompromisso({
                       data-testid="acao-confirmar"
                       className="h-12 min-w-[8rem] flex-1"
                       disabled={mutation.isPending || staleDraft}
-                      onClick={() => decide({ status: "confirmed" })}
+                      onClick={() => decide({ status: "confirmed" }, t("Horário confirmado"))}
                     >
                       {t("Confirmar")}
                     </Button>
                   ) : null}
-                  {remarcacao && (a.status === "pending" || a.status === "confirmed") ? (
+                  {remarcacao ? (
                     <Button
                       ref={gatilhoRemarcar}
                       data-testid="acao-remarcar"
@@ -565,17 +577,20 @@ export function DetalheDoCompromisso({
                   <div className="flex flex-wrap gap-2">
                     {(
                       [
-                        ["completed", "Compareceu"],
-                        ["no_show", "Faltou"],
+                        ["completed", "Compareceu", t("Presença registrada")],
+                        ["no_show", "Faltou", t("Marcado como falta — o horário volta a ficar livre")],
                       ] as const
-                    ).map(([status, label]) => (
+                    ).map(([status, label, aviso]) => (
                       <Button
                         key={status}
                         onClick={() =>
-                          decide({
-                            status,
-                            ...(evidence ? { outcome_message_id: evidence } : {}),
-                          })
+                          decide(
+                            {
+                              status,
+                              ...(evidence ? { outcome_message_id: evidence } : {}),
+                            },
+                            aviso,
+                          )
                         }
                         disabled={mutation.isPending || staleDraft || a.status === status}
                       >
