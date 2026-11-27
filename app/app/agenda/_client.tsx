@@ -290,6 +290,15 @@ export function AgendaClient({
     },
     [router, tipo],
   );
+  // Fechar pelo VOLTAR do navegador não passa pelo `onOpenChange` do painel: a
+  // remarcação pedida morre quando o painel aberto muda ou fecha, senão o mesmo
+  // compromisso reabriria já no Remarcar. Ajuste durante o render, o padrão do
+  // React para estado que segue a URL.
+  const [idVisto, setIdVisto] = React.useState(idAberto);
+  if (idVisto !== idAberto) {
+    setIdVisto(idAberto);
+    if (remarcandoId !== idAberto) setRemarcandoId(null);
+  }
   const [visao, setVisao] = React.useState<VisaoDaAgenda>("semana");
   /**
    * No CELULAR a agenda abre no DIA, não na semana.
@@ -657,6 +666,9 @@ export function AgendaClient({
                     if (!abertoNaGrade) setAncora(ancoraLocalDoDia(diaLocalISO(new Date(comecaEm), fusoDaAgenda)));
                   },
                   onFechar: () => setRemarcandoId(null),
+                  semLembrete: abertoNaGrade?.naoRecebeMensagens
+                    ? (abertoNaGrade.quemSeraAtendido ?? t("O paciente"))
+                    : undefined,
                   quando: {
                     ancora: ancoraLocalDoDia(hoje),
                     agora,

@@ -112,11 +112,12 @@ vi.mock("@/lib/api/client", () => ({
 
 /** O painel real busca o detalhe na rede; aqui só importa o Remarcar que ele recebe. */
 vi.mock("@/components/agenda/EntradaDaAgenda", () => ({
-  EntradaDaAgenda: (props: { remarcacao?: { onAbrir: (comecaEm: string) => void } }) =>
+  EntradaDaAgenda: (props: { remarcacao?: { aberta: boolean; onAbrir: (comecaEm: string) => void } }) =>
     props.remarcacao ? (
       <button
         type="button"
         data-testid="abrir-remarcacao-de-fora"
+        data-aberta={String(props.remarcacao.aberta)}
         onClick={() => props.remarcacao!.onAbrir("2030-02-20T10:00:00-03:00")}
       >
         remarcar
@@ -240,6 +241,23 @@ describe("remarcar compromisso aberto por link, fora da semana carregada", () =>
     fireEvent.click(screen.getByTestId("abrir-remarcacao-de-fora"));
     expect(screen.getByTestId("periodo").textContent).toContain("fev");
     expect(pedidos.filter((p) => p !== null && "duracao_minutos" in p)).toEqual([]);
+  });
+});
+
+describe("o voltar do navegador fecha o painel e esquece o Remarcar", () => {
+  it("reabrir o mesmo compromisso depois do voltar não abre já remarcando", () => {
+    window.history.replaceState(null, "", "/app/agenda?compromisso=c-fora");
+    montar();
+    fireEvent.click(screen.getByTestId("abrir-remarcacao-de-fora"));
+    expect(screen.getByTestId("abrir-remarcacao-de-fora")).toHaveAttribute("data-aberta", "true");
+    // O voltar troca a URL sem passar pelo `onOpenChange` do painel; qualquer
+    // renderização seguinte lê a URL nova (o dublê de `useSearchParams` a lê).
+    window.history.pushState(null, "", "/app/agenda");
+    fireEvent.click(screen.getByTestId("visao-dia"));
+    expect(screen.queryByTestId("abrir-remarcacao-de-fora")).toBeNull();
+    window.history.pushState(null, "", "/app/agenda?compromisso=c-fora");
+    fireEvent.click(screen.getByTestId("visao-semana"));
+    expect(screen.getByTestId("abrir-remarcacao-de-fora")).toHaveAttribute("data-aberta", "false");
   });
 });
 

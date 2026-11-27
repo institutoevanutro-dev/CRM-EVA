@@ -11,15 +11,48 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DetalheDoCompromisso, type RemarcacaoDoPainel } from "@/components/agenda/DetalheDoCompromisso";
 import type { HorarioLivre } from "@/components/agenda/tipos";
+import { ApiError } from "@/lib/api/types";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 
 const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), delete: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ apiClient: api }));
 vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: vi.fn() }));
+/**
+ * O dublê do Dialog faz com o Esc o que o Radix faz: chama `onEscapeKeyDown` e,
+ * se ninguém impediu, fecha (`onOpenChange(false)`).
+ */
+const dialogo = vi.hoisted(() => ({ onOpenChange: (_aberto: boolean) => {} }));
 vi.mock("@/components/ui/dialog", () => ({
-  Dialog: ({ children, open }: { children: React.ReactNode; open: boolean }) => (open ? <div>{children}</div> : null),
-  DialogContent: ({ children, "data-testid": id }: { children: React.ReactNode; "data-testid"?: string }) => (
-    <div role="dialog" data-testid={id}>
+  Dialog: ({
+    children,
+    open,
+    onOpenChange,
+  }: {
+    children: React.ReactNode;
+    open: boolean;
+    onOpenChange: (aberto: boolean) => void;
+  }) => {
+    dialogo.onOpenChange = onOpenChange;
+    return open ? <div>{children}</div> : null;
+  },
+  DialogContent: ({
+    children,
+    "data-testid": id,
+    onEscapeKeyDown,
+  }: {
+    children: React.ReactNode;
+    "data-testid"?: string;
+    onEscapeKeyDown?: (e: KeyboardEvent) => void;
+  }) => (
+    <div
+      role="dialog"
+      data-testid={id}
+      onKeyDown={(e) => {
+        if (e.key !== "Escape") return;
+        onEscapeKeyDown?.(e.nativeEvent);
+        if (!e.nativeEvent.defaultPrevented) dialogo.onOpenChange(false);
+      }}
+    >
       {children}
     </div>
   ),
@@ -73,7 +106,17 @@ function detalhe(dados: Record<string, unknown>) {
   );
 }
 
-function Painel({ onAbrir = vi.fn(), onFechar = vi.fn() }: { onAbrir?: (c: string) => void; onFechar?: () => void }) {
+function Painel({
+  onAbrir = vi.fn(),
+  onFechar = vi.fn(),
+  onClose = () => {},
+  semLembrete,
+}: {
+  onAbrir?: (c: string) => void;
+  onFechar?: () => void;
+  onClose?: () => void;
+  semLembrete?: string;
+}) {
   const [aberta, setAberta] = useState(false);
   const remarcacao: RemarcacaoDoPainel = {
     aberta,
@@ -85,6 +128,7 @@ function Painel({ onAbrir = vi.fn(), onFechar = vi.fn() }: { onAbrir?: (c: strin
       onFechar();
       setAberta(false);
     },
+    semLembrete,
     quando: {
       ancora: new Date(2030, 2, 6, 12),
       agora: new Date(2030, 2, 1, 9),
@@ -102,7 +146,7 @@ function Painel({ onAbrir = vi.fn(), onFechar = vi.fn() }: { onAbrir?: (c: strin
     },
   };
   return (
-    <DetalheDoCompromisso id={ID} onClose={() => {}} profissional="Dra. Ana Teste" remarcacao={remarcacao} podeExcluir />
+    <DetalheDoCompromisso id={ID} onClose={onClose} profissional="Dra. Ana Teste" remarcacao={remarcacao} podeExcluir />
   );
 }
 
@@ -153,6 +197,7 @@ describe("painel do paciente", () => {
     fireEvent.click(await screen.findByTestId("acao-remarcar"));
     expect(onAbrir).toHaveBeenCalledWith(BASE.starts_at);
     const quando = await screen.findByTestId("quando-da-marcacao");
+    expect(screen.queryByTestId("aviso-sem-lembrete")).toBeNull();
     expect(screen.getByTestId("confirmar-remarcacao")).toBeDisabled();
     fireEvent.click(within(quando).getByTestId("horario-14:00"));
     expect(within(quando).getByTestId("hora-da-marcacao")).toHaveValue("14:00");
@@ -225,5 +270,97 @@ describe("painel do paciente", () => {
     expect(await screen.findByTestId("estado-do-compromisso")).toHaveTextContent("Cancelado");
     expect(screen.queryByTestId("acao-remarcar")).toBeNull();
     expect(screen.queryByTestId("acao-cancelar")).toBeNull();
+  });
+
+  it("Remarcar avisa que o lembrete não sai para quem pediu para não receber mensagens", async () => {
+    detalhe(BASE);
+    abrir(<Painel semLembrete="Carla Fictícia Souza" />);
+    fireEvent.click(await screen.findByTestId("acao-remarcar"));
+    const aviso = within(screen.getByTestId("remarcar-no-painel")).getByTestId("aviso-sem-lembrete");
+    expect(aviso).toHaveTextContent("Carla Fictícia Souza pediu para não receber mensagens.");
+    expect(aviso).toHaveTextContent("combine por telefone");
+  });
+
+  it("Esc com Cancelar ou Remarcar aberto fecha só a seção e guarda o texto; o segundo Esc fecha o painel", async () => {
+    detalhe(BASE);
+    const onClose = vi.fn();
+    const onFechar = vi.fn();
+    abrir(<Painel onClose={onClose} onFechar={onFechar} />);
+    fireEvent.click(await screen.findByTestId("acao-cancelar"));
+    fireEvent.change(screen.getByLabelText("Motivo do cancelamento"), { target: { value: "Pediu outro dia" } });
+    fireEvent.keyDown(screen.getByTestId("painel-do-compromisso"), { key: "Escape" });
+    expect(screen.queryByTestId("cancelar-no-painel")).toBeNull();
+    expect(screen.getByTestId("acao-cancelar")).toHaveFocus();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("acao-cancelar"));
+    expect(screen.getByLabelText("Motivo do cancelamento")).toHaveValue("Pediu outro dia");
+
+    fireEvent.click(screen.getByTestId("acao-remarcar"));
+    await screen.findByTestId("remarcar-no-painel");
+    fireEvent.keyDown(screen.getByTestId("painel-do-compromisso"), { key: "Escape" });
+    expect(screen.queryByTestId("remarcar-no-painel")).toBeNull();
+    expect(onFechar).toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(screen.getByTestId("painel-do-compromisso"), { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("remarcar depois de digitar um motivo não acusa 'o compromisso mudou' pela própria remarcação", async () => {
+    detalhe(BASE);
+    // Depois do PATCH a rota devolve a revisão nova, com o horário novo.
+    api.patch.mockImplementation(async () => {
+      detalhe({ ...BASE, revision: 2, starts_at: H14.instante, ends_at: "2030-03-06T17:30:00.000Z" });
+      return { data: { id: ID } };
+    });
+    const onFechar = vi.fn();
+    abrir(<Painel onFechar={onFechar} />);
+    fireEvent.click(await screen.findByTestId("acao-cancelar"));
+    fireEvent.change(screen.getByLabelText("Motivo do cancelamento"), { target: { value: "Pediu outro dia" } });
+    fireEvent.click(screen.getByTestId("acao-remarcar"));
+    fireEvent.click(within(await screen.findByTestId("quando-da-marcacao")).getByTestId("horario-14:00"));
+    fireEvent.click(screen.getByTestId("confirmar-remarcacao"));
+    await waitFor(() => expect(onFechar).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByTestId("compromisso-horario")).toHaveTextContent("14:00"));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("rascunho defasado também trava o Confirmar remarcação", async () => {
+    detalhe({ ...BASE, status: "pending" });
+    api.patch.mockRejectedValue(new ApiError(409, "conflict", undefined, "req", "O compromisso mudou."));
+    abrir();
+    fireEvent.click(await screen.findByTestId("acao-remarcar"));
+    fireEvent.click(within(await screen.findByTestId("quando-da-marcacao")).getByTestId("horario-14:00"));
+    expect(screen.getByTestId("confirmar-remarcacao")).toBeEnabled();
+    fireEvent.click(screen.getByTestId("acao-confirmar"));
+    await screen.findByRole("alert");
+    expect(screen.getByTestId("confirmar-remarcacao")).toBeDisabled();
+  });
+
+  it("foco e estado: o motivo ganha o foco, o Voltar devolve ao botão, e os botões abrem e fecham", async () => {
+    detalhe(BASE);
+    abrir();
+    const cancelar = await screen.findByTestId("acao-cancelar");
+    fireEvent.click(cancelar);
+    expect(screen.getByLabelText("Motivo do cancelamento")).toHaveFocus();
+    expect(cancelar).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(within(screen.getByTestId("cancelar-no-painel")).getByRole("button", { name: "Voltar" }));
+    expect(cancelar).toHaveFocus();
+    expect(cancelar).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(cancelar);
+    fireEvent.click(cancelar);
+    expect(screen.queryByTestId("cancelar-no-painel")).toBeNull();
+    expect(cancelar).toHaveAttribute("aria-expanded", "false");
+
+    const remarcar = screen.getByTestId("acao-remarcar");
+    fireEvent.click(remarcar);
+    expect(remarcar).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(within(screen.getByTestId("remarcar-no-painel")).getByRole("button", { name: "Voltar" }));
+    expect(remarcar).toHaveFocus();
+    expect(remarcar).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(remarcar);
+    fireEvent.click(remarcar);
+    expect(screen.queryByTestId("remarcar-no-painel")).toBeNull();
+    expect(remarcar).toHaveAttribute("aria-expanded", "false");
   });
 });

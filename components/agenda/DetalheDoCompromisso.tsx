@@ -1,7 +1,7 @@
 "use client";
 import { MeetDoCompromisso, type MeetingDetail } from "./MeetDoCompromisso";
 import { SincronizacaoDoCompromisso, type SyncDetail } from "./SincronizacaoDoCompromisso";
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePessoasDaAgenda } from "@/hooks/agenda/usePessoasDaAgenda";
 import { useRemarcarAgendamento } from "@/hooks/agenda/useRemarcarAgendamento";
@@ -25,6 +25,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { ApiError } from "@/lib/api/types";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
 import { CaretRight } from "@/lib/ui/icons";
+import { AvisoSemLembrete } from "./AvisoSemLembrete";
 import { CAMPO } from "./CampoDaMarcacao";
 import { ExcluirCompromisso } from "./ExcluirCompromisso";
 import { NomeCompletoDoPaciente } from "./NomeCompletoDoPaciente";
@@ -104,6 +105,11 @@ export type RemarcacaoDoPainel = {
   onAbrir: (comecaEm: string) => void;
   onFechar: () => void;
   quando: Omit<QuandoDaMarcacaoProps, "dia" | "onDia" | "horario" | "onHorario">;
+  /**
+   * O nome de quem pediu para não receber mensagens: o lembrete do horário novo
+   * não sai, e o painel avisa para combinar por telefone (A10, como a marcação).
+   */
+  semLembrete?: string;
 };
 
 /**
@@ -152,6 +158,9 @@ export function DetalheDoCompromisso({
   const [cancelando, setCancelando] = useState(false);
   const [diaNovo, setDiaNovo] = useState<Date | null>(null);
   const [horarioNovo, setHorarioNovo] = useState<HorarioLivre | null>(null);
+  // Fechar uma seção devolve o foco a quem a abriu, e não ao topo do painel.
+  const gatilhoRemarcar = useRef<HTMLButtonElement>(null);
+  const gatilhoCancelar = useRef<HTMLButtonElement>(null);
   const query = useQuery({
     queryKey: ["agenda", "detalhe", id],
     enabled: !!id,
@@ -232,8 +241,23 @@ export function DetalheDoCompromisso({
     // o convidado do Google fica como estava.
     remarcar.mutate(
       { id: a.id, revision: a.revision, starts_at: horarioNovo.instante },
-      { onSuccess: fecharRemarcacao },
+      {
+        onSuccess: () => {
+          // A revisão nova é NOSSA: um motivo de cancelamento digitado antes
+          // não pode virar "o compromisso mudou" por causa dela.
+          resetDraft();
+          fecharRemarcacao();
+        },
+      },
     );
+  }
+  function voltarDaRemarcacao() {
+    fecharRemarcacao();
+    gatilhoRemarcar.current?.focus();
+  }
+  function voltarDoCancelamento() {
+    setCancelando(false);
+    gatilhoCancelar.current?.focus();
   }
   const paciente = a?.contato ? nomeDoContato(a.contato) : null;
   const nome = paciente ?? a?.title ?? t("Compromisso");
@@ -273,6 +297,17 @@ export function DetalheDoCompromisso({
       <DialogContent
         data-testid="painel-do-compromisso"
         className="flex max-w-xl flex-col gap-0 overflow-hidden bg-surface p-0"
+        // Esc com Remarcar ou Cancelar aberto fecha só a seção, como o "Voltar",
+        // e o que foi digitado fica; o segundo Esc fecha o painel.
+        onEscapeKeyDown={(e) => {
+          if (remarcacao?.aberta) {
+            e.preventDefault();
+            voltarDaRemarcacao();
+          } else if (cancelando) {
+            e.preventDefault();
+            voltarDoCancelamento();
+          }
+        }}
       >
         {/* A CARA DA JANELA DE MARCAÇÃO (decisão 6 do André, 27/11/2026):
             cabeçalho com quem vem, três botões grandes, e o resto embaixo — uma
@@ -388,12 +423,18 @@ export function DetalheDoCompromisso({
                   ) : null}
                   {remarcacao && (a.status === "pending" || a.status === "confirmed") ? (
                     <Button
+                      ref={gatilhoRemarcar}
                       data-testid="acao-remarcar"
                       variant="outline"
                       className="h-12 min-w-[8rem] flex-1"
                       aria-expanded={remarcacao.aberta}
                       disabled={staleDraft}
                       onClick={() => {
+                        // O botão abre e fecha: `aria-expanded` diz a verdade.
+                        if (remarcacao.aberta) {
+                          fecharRemarcacao();
+                          return;
+                        }
                         setCancelando(false);
                         remarcacao.onAbrir(a.starts_at);
                       }}
@@ -402,11 +443,16 @@ export function DetalheDoCompromisso({
                     </Button>
                   ) : null}
                   <Button
+                    ref={gatilhoCancelar}
                     data-testid="acao-cancelar"
                     variant="outline"
                     className="h-12 min-w-[8rem] flex-1"
                     aria-expanded={cancelando}
                     onClick={() => {
+                      if (cancelando) {
+                        setCancelando(false);
+                        return;
+                      }
                       if (remarcacao?.aberta) fecharRemarcacao();
                       setCancelando(true);
                     }}
@@ -419,6 +465,7 @@ export function DetalheDoCompromisso({
               {podeEditar && remarcacao?.aberta && a.status !== "cancelled" && !a.excluded_at ? (
                 <section data-testid="remarcar-no-painel" className="space-y-3">
                   <p className="text-sm text-text-muted">{t("Escolha o novo dia e o horário.")}</p>
+                  {remarcacao.semLembrete ? <AvisoSemLembrete nome={remarcacao.semLembrete} /> : null}
                   <QuandoDaMarcacao
                     {...remarcacao.quando}
                     dia={diaNovo ?? remarcacao.quando.ancora}
@@ -427,13 +474,13 @@ export function DetalheDoCompromisso({
                     onHorario={setHorarioNovo}
                   />
                   <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={fecharRemarcacao}>
+                    <Button variant="ghost" size="sm" onClick={voltarDaRemarcacao}>
                       {t("Voltar")}
                     </Button>
                     <Button
                       size="sm"
                       data-testid="confirmar-remarcacao"
-                      disabled={!horarioNovo || remarcar.isPending}
+                      disabled={!horarioNovo || remarcar.isPending || staleDraft}
                       onClick={confirmarRemarcacao}
                     >
                       {remarcar.isPending ? t("Remarcando…") : t("Confirmar remarcação")}
@@ -451,6 +498,7 @@ export function DetalheDoCompromisso({
                     id="motivo-do-cancelamento"
                     data-testid="motivo-do-cancelamento"
                     className={CAMPO}
+                    autoFocus
                     value={reason}
                     onChange={(e) => {
                       beginDraft();
@@ -458,7 +506,7 @@ export function DetalheDoCompromisso({
                     }}
                   />
                   <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setCancelando(false)}>
+                    <Button variant="ghost" size="sm" onClick={voltarDoCancelamento}>
                       {t("Voltar")}
                     </Button>
                     <Button
