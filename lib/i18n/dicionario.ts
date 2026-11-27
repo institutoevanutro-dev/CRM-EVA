@@ -13019,6 +13019,7 @@ export const DICIONARIO: Traducoes = {
   "Paciente antigo": { es: "Paciente recurrente" },
   "Tipo de paciente": { es: "Tipo de paciente" },
   "Quem e o quê": { es: "Quién y qué" },
+  "Fora dos horários livres": { es: "Fuera de los horarios libres" },
 };
 
 /**
