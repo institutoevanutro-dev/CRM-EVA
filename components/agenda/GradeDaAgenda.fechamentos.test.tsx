@@ -118,6 +118,10 @@ describe("a faixa fechada na semana", () => {
     const faixa = coluna("2026-11-03").getByTestId("fechamento-parcial");
     const bloco = coluna("2026-11-03").getByTestId("agendamento-c1");
     expect(faixa.className).toContain("pointer-events-none");
+    // Nem um pedaço dela volta a receber o ponteiro: um rótulo `pointer-events-auto`
+    // cobria horários que ainda se marcam (várias pessoas na grade, modo encaixe).
+    expect(faixa.querySelectorAll('[class*="pointer-events-auto"]')).toHaveLength(0);
+    expect(faixa.querySelector("[title]")).toBeNull();
     // Mesmo contexto, sem z-index: quem vem DEPOIS no DOM pinta por cima.
     expect(faixa.compareDocumentPosition(bloco) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -145,12 +149,12 @@ describe("a faixa fechada na semana", () => {
     expect(coluna("2026-11-03").getByTestId("fechamento-parcial")).not.toHaveTextContent("Ana");
   });
 
-  it("numa linha só; quem e o motivo vão para o title (decisão 7, 27/11/2026)", () => {
+  it("numa linha só; quem e o motivo vão só para o leitor de tela (decisão 7, 27/11/2026)", () => {
     grade([PARCIAL], { pessoas: [ANA, BRUNO] });
     const faixa = coluna("2026-11-03").getByTestId("fechamento-parcial");
-    const rotulo = faixa.querySelector("[title]");
-    expect(rotulo?.textContent).toBe("Bloqueado");
-    expect(rotulo?.getAttribute("title")).toBe("Ana · Banco");
+    const visiveis = [...faixa.children].filter((el) => !el.classList.contains("sr-only"));
+    expect(visiveis.map((el) => el.textContent)).toEqual(["Bloqueado"]);
+    expect(faixa.querySelector(".sr-only")?.textContent).toBe(" · 14:00–15:30 · Ana · Banco");
   });
 });
 

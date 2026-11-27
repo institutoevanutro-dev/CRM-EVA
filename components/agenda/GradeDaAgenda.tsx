@@ -651,13 +651,13 @@ function FaixaFechada({
         background: LISTRAS_DO_BLOQUEIO,
       }}
     >
-      {/* UMA LINHA SÓ (decisão 7 do André, 27/11/2026). Quem e o motivo vão para
-          o `title` e para o leitor de tela. Só o rótulo recebe o ponteiro, para o
-          `title` aparecer; o resto da faixa segue deixando o clique passar. */}
-      <span
-        title={detalhe || undefined}
-        className="pointer-events-auto inline-flex min-w-0 max-w-full items-center gap-1 text-xs font-semibold leading-4 text-text-muted"
-      >
+      {/* UMA LINHA SÓ (decisão 7 do André, 27/11/2026). Quem e o motivo vão só
+          para o leitor de tela. SEM `title`: ele exigiria `pointer-events-auto`
+          no rótulo, e o rótulo cobriria horários que ainda se marcam — com
+          várias pessoas na grade o fechamento é de quem está SELECIONADO e o
+          horário livre é do dono da consulta, e no modo encaixe o horário
+          fechado continua aberto. Nenhum pedaço da faixa recebe o ponteiro. */}
+      <span className="inline-flex min-w-0 max-w-full items-center gap-1 text-xs font-semibold leading-4 text-text-muted">
         <Lock aria-hidden size={12} weight="bold" className="shrink-0" />
         <span className="truncate">{t("Bloqueado")}</span>
       </span>
@@ -749,11 +749,14 @@ function BlocoDeAgendamento({
   // fica no bloco; o clique abre o painel, que tem o campo para completar.
   const faltaNome = agendamento.faltaNomeCompleto === true && !doGoogle && !cancelado;
   const paciente = agendamento.quemSeraAtendido;
+  // A ALTURA DESENHADA, e não a duração, decide quantas linhas cabem: um card
+  // recortado no topo da janela tem a duração inteira e só um pedaço na tela.
+  const altura = Math.max(pixelsDe(baseMin - topoMin) - 2, 18);
   const rotulo = rotuloDoBloco({
     titulo: agendamento.titulo,
     paciente,
     hora: rotuloHora(comeca, fuso),
-    duracaoMin: duracao,
+    alturaPx: altura,
     visao,
   });
   // A2: a forma diz a situação. Ocupação do Google e bloqueio não têm situação
@@ -826,8 +829,8 @@ function BlocoDeAgendamento({
       }`}
       className={cn(
         "group absolute flex flex-col items-start overflow-hidden rounded-sm px-1.5 text-left",
-        // Uma linha só (15 e 30 min): `py-px` para a linha de 16 px caber nos
-        // 18 px do bloco mínimo.
+        // Uma linha só (card curto, ver `rotuloDoBloco`): `py-px` para a linha
+        // de 16 px caber nos 18 px do bloco mínimo.
         rotulo.apoio === null ? "py-px" : "py-0.5",
         "border shadow-xs transition-[border-color,box-shadow] duration-fast ease-out",
         // Tracejado = "ainda não" (aguardando confirmação), como em toda a base.
@@ -868,7 +871,7 @@ function BlocoDeAgendamento({
       )}
       style={{
         top: pixelsDe(topoMin),
-        height: Math.max(pixelsDe(baseMin - topoMin) - 2, 18),
+        height: altura,
         // `calc` em vez de porcentagem crua para os 2px de respiro entre
         // colunas vizinhas não saírem da largura útil de cada bloco.
         left: `calc(${(coluna / colunas) * 100}% + 2px)`,
@@ -910,7 +913,7 @@ function BlocoDeAgendamento({
           className={cn(
             "min-w-0 text-xs font-semibold leading-4",
             forma.tituloDeApoio ? "text-text-muted" : "text-text",
-            duracao >= 90 ? "line-clamp-2 break-words" : "truncate",
+            baseMin - topoMin >= 90 ? "line-clamp-2 break-words" : "truncate",
             rotulo.apoio === null && "tabular-nums",
           )}
         >
