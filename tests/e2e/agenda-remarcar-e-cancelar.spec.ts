@@ -21,6 +21,16 @@ import { esperarAgenda } from "./helpers/tela-agenda";
  * botões ficaram cinzas em toda organização, e só a IA remarcava ou cancelava.
  * Uma spec que só testasse o fluxo feliz não provaria que o botão do painel
  * não é decorativo — e controle decorativo esta base já pagou (PR #295).
+ *
+ * ─── O que a Agenda redesenhada (27/11/2026) acrescenta aqui ─────────────
+ *
+ * - PACIENTE ANTIGO: o procedimento do seed não é "Primeira consulta", então a
+ *   marcação abre em "Paciente antigo", sem "Quem converteu" nem "Origem do
+ *   lead", e grava SEM conversão (`converted_by_kind: null`, conferido no banco);
+ * - o CAMPO COM RELÓGIO: o atalho preenche a hora, e remarcar DIGITA a hora no
+ *   campo `type="time"` em vez de tocar no atalho.
+ * A semana de segunda a sábado é medida em `agenda-kit-visual` (fixture sem
+ * domingo); a fileira de uma pessoa por vez, em `agenda-clique-e-profissionais`.
  */
 
 /**
@@ -98,11 +108,18 @@ async function marcarUm(
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId("tipos-de-agendamento")).toBeVisible({ timeout: 10_000 });
   await escolherProfissionalEProcedimento(page, new RegExp(`^${tipoNome}`));
+  // Procedimento que não é "Primeira consulta" abre em paciente antigo, e os dois
+  // campos da conversão nem existem na tela.
+  await expect(page.getByTestId("paciente-antigo")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("quem-converteu")).toHaveCount(0);
+  await expect(page.getByTestId("origem-do-lead")).toHaveCount(0);
   await escolherDiaDesenhado(page, dias);
   const horario = page.locator('[data-testid^="horario-"]').first();
   await expect(horario).toBeVisible({ timeout: 15_000 });
   const rotulo = (await horario.getAttribute("data-testid"))!.replace("horario-", "");
   await horario.click();
+  // O atalho escreve no campo com relógio: um "quando" só, não dois estados.
+  await expect(page.getByTestId("hora-da-marcacao")).toHaveValue(rotulo);
   // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
   if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
   const post = page.waitForResponse(
@@ -112,6 +129,10 @@ async function marcarUm(
   const resposta = await post;
   const corpo = await resposta.text();
   expect(resposta.status(), corpo).toBe(201);
+  // `null` explícito, e não ausente: ausente a rota gravaria quem marca.
+  expect(resposta.request().postDataJSON(), "paciente antigo vai sem conversão").toMatchObject({
+    converted_by_kind: null,
+  });
   const id = (JSON.parse(corpo) as { data: { id: string } }).data.id;
   expect(id, corpo).toBeTruthy();
   await expect(page.getByTestId("ver-na-agenda")).toBeVisible({ timeout: 15_000 });
@@ -123,10 +144,17 @@ async function marcarUm(
 }
 
 /** O compromisso como o BANCO o guarda — a fonte que a tela não pode fingir. */
-async function lerDoBanco(page: Page, id: string): Promise<{ starts_at: string; time_zone: string }> {
+interface NoBanco {
+  starts_at: string;
+  time_zone: string;
+  converted_by_kind: string | null;
+  converted_by_user_id: string | null;
+}
+
+async function lerDoBanco(page: Page, id: string): Promise<NoBanco> {
   const r = await page.request.get(`/api/v1/agenda/agendamentos/${id}`);
   expect(r.status(), await r.text()).toBe(200);
-  return ((await r.json()) as { data: { starts_at: string; time_zone: string } }).data;
+  return ((await r.json()) as { data: NoBanco }).data;
 }
 
 /** "HH:mm" de um instante no fuso dado — o formato do rótulo `horario-HH:mm`. */
@@ -154,6 +182,13 @@ test("cancelar pela tela: o motivo é exigido, e o compromisso sai da grade", as
   await page.getByTestId(`agendamento-${id}`).click();
   const painel = page.getByTestId("painel-do-compromisso");
   await expect(painel).toBeVisible({ timeout: 10_000 });
+  // O tipo do seed não pede confirmação (`requires_confirmation` false): nasce
+  // confirmado, e "Confirmar" só existe para pendente.
+  await expect(painel.getByTestId("acao-confirmar")).toHaveCount(0);
+  const maisDetalhesAberto = await painel
+    .getByTestId("mais-detalhes-do-compromisso")
+    .evaluate((el) => (el as HTMLDetailsElement).open);
+  expect(maisDetalhesAberto, "'Mais detalhes' começa fechado").toBe(false);
 
   const cancelarBotao = painel.getByTestId("acao-cancelar");
   await expect(cancelarBotao, "o Cancelar do painel nasceu desabilitado — controle decorativo").toBeEnabled({
@@ -183,12 +218,16 @@ test("cancelar pela tela: o motivo é exigido, e o compromisso sai da grade", as
   ).toHaveCount(0, { timeout: 20_000 });
 });
 
-test("remarcar pela tela: o painel abre o \"quando\" e o horário muda", async ({ page }) => {
+test("remarcar pela tela: o painel abre o \"quando\" e a hora digitada no relógio vale", async ({ page }) => {
   const creds = lerCreds();
   if (!creds.agenda) throw new Error("sem bloco agenda");
   const diasDaSemana = await entrar(page, creds);
   const { id, rotulo: rotuloOriginal } = await marcarUm(page, creds.agenda.tipo_nome, diasDaSemana);
   const antes = await lerDoBanco(page, id);
+  expect(antes, "paciente antigo: nenhuma conversão gravada").toMatchObject({
+    converted_by_kind: null,
+    converted_by_user_id: null,
+  });
 
   await page.getByTestId(`agendamento-${id}`).click();
   const painel = page.getByTestId("painel-do-compromisso");
@@ -216,7 +255,11 @@ test("remarcar pela tela: o painel abre o \"quando\" e o horário muda", async (
   });
   const rotuloNovo = (await outro.getAttribute("data-testid"))!.replace("horario-", "");
   expect(rotuloNovo).not.toBe(rotuloOriginal);
-  await outro.click();
+  // DIGITANDO no campo com relógio, e não tocando no atalho: a hora livre
+  // digitada acende o atalho dela e não avisa "Fora dos horários livres".
+  await painel.getByTestId("hora-da-marcacao").fill(rotuloNovo);
+  await expect(painel.getByTestId("fora-dos-horarios-livres")).toHaveCount(0);
+  await expect(painel.getByTestId(`horario-${rotuloNovo}`)).toHaveAttribute("aria-pressed", "true");
   await painel.getByTestId("confirmar-remarcacao").click();
 
   // A seção fecha quando o PATCH volta.

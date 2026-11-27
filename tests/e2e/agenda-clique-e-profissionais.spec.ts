@@ -143,6 +143,8 @@ test("uma profissional, um clique no horário vazio, o compromisso na grade", as
   );
   await page.getByTestId(`botao-pessoa-${donoId}`).click();
   await expect(page.getByTestId(`botao-pessoa-${donoId}`)).toHaveAttribute("aria-pressed", "true");
+  // Uma pessoa POR VEZ: escolher alguém solta o "Todos".
+  await expect(page.getByTestId("botao-todos")).toHaveAttribute("aria-pressed", "false");
   await expect(filtro).toHaveAttribute("data-selecionadas", donoId);
   // A dica "Horários livres de" passou a perguntar pela agenda DELA.
   await pedidoDela;
