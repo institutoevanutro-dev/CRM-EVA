@@ -48,15 +48,19 @@ const RAIZ = process.cwd();
  * consumidor (`followup-turn`) só foi ligado porque alguém foi procurar TODOS, e
  * não só o do caminho principal.
  */
+//
+// O knob é lido por `padraoDoAmbiente(deps.knobs)` (camadas-da-org.ts), a mesma
+// função que a rota da tela usa para dizer o padrão — regra duplicada na rota já
+// fez a tela dizer "desligada" de camada que o motor rodava.
 const PONTOS_DE_CONSUMO: Array<{ arquivo: string; knob: string }> = [
-  { arquivo: "lib/agent-engine/agent/inbound-turn.ts", knob: "deps.knobs.jailbreak !== undefined" },
+  { arquivo: "lib/agent-engine/agent/inbound-turn.ts", knob: "padraoDoAmbiente(deps.knobs).jailbreak" },
   {
     arquivo: "lib/agent-engine/agent/inbound-turn.ts",
-    knob: "deps.knobs.promiseSemantic?.enabled === true",
+    knob: "padraoDoAmbiente(deps.knobs).promessa_semantica",
   },
   {
     arquivo: "lib/agent-engine/agent/followup-turn.ts",
-    knob: "deps.knobs.promiseSemantic?.enabled === true",
+    knob: "padraoDoAmbiente(deps.knobs).promessa_semantica",
   },
 ];
 

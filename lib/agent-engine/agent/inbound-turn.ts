@@ -253,7 +253,7 @@ import {
   type JailbreakClassifierKnobs,
   type JailbreakLevel,
 } from '../guardrails/jailbreak/classifier';
-import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
+import { camadaLigada, lerCamadasDaOrg, padraoDoAmbiente } from '../guardrails/camadas-da-org';
 import { fusoDaOrganizacao } from './fuso-da-org';
 import { blocoDoFeriado, ehFeriadoNacionalNoFuso, feriadoNacionalNoTurno } from './feriado-nacional';
 import { renderAgora } from '@/lib/tempo/agora';
@@ -3408,7 +3408,7 @@ async function executarTurnoDoAgente(
   // camada off (gate no-op). CUSTO: uma chamada de modelo POR ENVIO quando ligada.
   const semanticClassifier = camadaLigada(
     camadas.promessa_semantica,
-    deps.knobs.promiseSemantic?.enabled === true,
+    padraoDoAmbiente(deps.knobs).promessa_semantica,
   )
     ? // Memo POR CORPO, por turno: os fail-safes de vocabulário e de promessa
       // re-rodam a cadeia com o MESMO texto.
@@ -5556,7 +5556,7 @@ async function executarTurnoDoAgente(
       jobKind: job?.kind ?? null,
       estagioLigado: deps.knobs.stageClassifier !== undefined,
       temQuemConfirmeOEstagio: rawTools.update_lead_state !== undefined,
-      manipulacaoLigada: camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined),
+      manipulacaoLigada: camadaLigada(camadas.jailbreak, padraoDoAmbiente(deps.knobs).jailbreak),
       ultimaMensagemDoCliente: skillSignal,
     });
     const [stageResultado, jailbreakVerdict] = await Promise.all([

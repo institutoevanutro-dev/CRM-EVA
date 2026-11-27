@@ -28,6 +28,8 @@
  */
 import type pg from 'pg';
 
+import type { InboundTurnKnobs } from '../agent/inbound-turn';
+
 /**
  * O vocabulário vive AQUI, não num CHECK do banco.
  *
@@ -62,6 +64,29 @@ export const SEM_ESCOLHA: EscolhaDeCamadas = {
  */
 export function camadaLigada(escolhaDaOrg: boolean | null, padraoDoAmbiente: boolean): boolean {
   return escolhaDaOrg ?? padraoDoAmbiente;
+}
+
+/**
+ * O padrão do AMBIENTE de cada camada (o que vale quando a organização não
+ * escolheu), lido dos knobs do turno. Uma leitura só: o motor arma por ela e a
+ * rota da tela (`GET /api/v1/ai/guardrail-layers`) responde por ela.
+ *
+ * Enquanto a rota relia o `.env` com regra própria, a tela mentia nas duas:
+ * `PROMISE_SEMANTIC_ENABLED === "true"` dava a promessa semântica desligada com
+ * a variável ausente, quando o `.default('true')` do env faz o motor rodá-la; e
+ * o jailbreak aparecia desligado sem `JAILBREAK_CLASSIFIER_MODEL`, que só
+ * escolhe o modelo, porque `turnKnobsFromEnv` sempre preenche o knob.
+ *
+ * `afirmacao_clinica` não tem variável: nasce desligada para todo mundo.
+ */
+export function padraoDoAmbiente(
+  knobs: Pick<InboundTurnKnobs, 'promiseSemantic' | 'jailbreak'>,
+): Record<CamadaSemantica, boolean> {
+  return {
+    promessa_semantica: knobs.promiseSemantic?.enabled === true,
+    jailbreak: knobs.jailbreak !== undefined,
+    afirmacao_clinica: false,
+  };
 }
 
 /**
