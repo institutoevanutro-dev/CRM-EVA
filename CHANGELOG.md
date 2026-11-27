@@ -8,6 +8,20 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.43.3] — 2026-11-27
+
+### Corrigido
+
+- **A tela de segurança do agente mostra ligadas as verificações que o agente já roda** Quando a organização nunca tinha escolhido, o painel de segurança do agente
+  mostrava a verificação de promessa e a de manipulação como desligadas, mas o
+  agente rodava as duas: a de promessa vem ligada por padrão
+  (`PROMISE_SEMANTIC_ENABLED` ausente = ligada, só `false` desliga) e a de
+  manipulação roda mesmo sem `JAILBREAK_CLASSIFIER_MODEL`, que só escolhe o modelo.
+  Quem testava o agente via a mensagem vetada por uma verificação que a tela dizia
+  estar desligada. Agora a tela lê o padrão pela mesma regra do agente e diz
+  "Ligada — vem da configuração do servidor". O comportamento do agente não muda.
+  Nada a fazer na atualização.
+
 ## [5.43.2] — 2026-11-27
 
 ### Corrigido
@@ -10231,7 +10245,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.2...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.3...HEAD
+[5.43.3]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.2...v5.43.3
 [5.43.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.1...v5.43.2
 [5.43.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.0...v5.43.1
 [5.43.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.42.1...v5.43.0
