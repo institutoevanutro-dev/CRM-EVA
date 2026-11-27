@@ -12,7 +12,7 @@
  * → POST. O painel vira um dublê que só mostra as props que recebeu.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -76,10 +76,15 @@ vi.mock("@/hooks/agenda/useHorariosLivres", () => ({
 }));
 
 const compromissos = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+/** Ligado, todo período pedido está CARREGANDO: o hook devolve `data` vazio, como o React Query. */
+const periodo = vi.hoisted(() => ({ carregando: false }));
 // O canal ao vivo tem teste próprio (`agenda-ao-vivo.test.tsx`); aqui não há Supabase.
 vi.mock("@/hooks/agenda/useAgendaAoVivo", () => ({ useAgendaAoVivo: () => ({}) }));
 vi.mock("@/hooks/agenda/useAgendamentos", () => ({
-  useAgendamentos: () => ({ data: compromissos, isError: false, isLoading: false }),
+  useAgendamentos: () =>
+    periodo.carregando
+      ? { data: undefined, isError: false, isLoading: true }
+      : { data: compromissos, isError: false, isLoading: false },
 }));
 const marcar = vi.hoisted(() => vi.fn(async (_corpo: Record<string, unknown>) => ({})));
 vi.mock("@/hooks/agenda/useMarcarAgendamento", () => ({
@@ -220,6 +225,7 @@ beforeEach(() => {
   window.localStorage.clear();
   pedidos.length = 0;
   compromissos.length = 0;
+  periodo.carregando = false;
   marcar.mockClear();
 });
 afterEach(cleanup);
@@ -412,5 +418,56 @@ describe("fileira: uma pessoa de cada vez (27/11/2026)", () => {
   it("ninguém com atendimento: a fileira some", () => {
     render(<FiltroDePessoas pessoas={[]} selecionadas={[]} onMudar={vi.fn()} />);
     expect(screen.queryByTestId("filtro-de-pessoas")).toBeNull();
+  });
+
+  it("a fileira não pisca enquanto o período novo carrega", () => {
+    // Com "Todos", o período novo chega vazio até a resposta: a fileira sumia
+    // e o topo inteiro pulava (no celular, linhas de 44 px).
+    compromissos.push(compromisso("c-ana", "p-ana", "09:00"));
+    montar();
+    expect(avatar("p-ana")).toBeInTheDocument();
+
+    periodo.carregando = true;
+    fireEvent.click(screen.getByTestId("periodo-seguinte"));
+    expect(screen.getByTestId("filtro-de-pessoas")).toHaveAttribute("data-selecionadas", "todos");
+    expect(avatar("p-ana")).toBeInTheDocument();
+  });
+
+  it("desfazer a escolhida que some da fileira leva o foco ao Todos, não ao <body>", () => {
+    // O caso da escolhida sem nada na semana: clicar nela de novo desfaz, ela
+    // sai da fileira, e o foco do teclado não pode cair no vazio.
+    window.localStorage.setItem(CHAVE, JSON.stringify(["p-bia"]));
+    compromissos.push(compromisso("c-ana", "p-ana", "09:00"));
+    montar();
+    avatar("p-bia").focus();
+    fireEvent.click(avatar("p-bia"));
+    expect(screen.queryByTestId("botao-pessoa-p-bia")).toBeNull();
+    expect(screen.getByTestId("botao-todos")).toHaveFocus();
+  });
+
+  it("desfazer quem segue na fileira não rouba o foco", () => {
+    compromissos.push(compromisso("c-ana", "p-ana", "09:00"));
+    montar();
+    fireEvent.click(avatar("p-ana"));
+    avatar("p-ana").focus();
+    fireEvent.click(avatar("p-ana"));
+    expect(screen.getByTestId("botao-todos")).toHaveAttribute("aria-pressed", "true");
+    expect(avatar("p-ana")).toHaveFocus();
+  });
+});
+
+describe("topo numa linha só (decisão 7 do André, 27/11/2026)", () => {
+  it("período, Hoje, visões e Novo agendamento no topo; a fileira de profissionais logo abaixo", () => {
+    compromissos.push(compromisso("c-ana", "p-ana", "09:00"));
+    montar();
+    const topo = screen.getByTestId("topo-da-agenda");
+    for (const id of ["periodo-anterior", "periodo-seguinte", "periodo", "alternador-de-visao", "novo-agendamento"]) {
+      expect(topo.contains(screen.getByTestId(id)), id).toBe(true);
+    }
+    expect(within(topo).getByRole("button", { name: "Hoje" })).toBeInTheDocument();
+    const fileira = screen.getByTestId("filtro-de-pessoas");
+    expect(topo.contains(fileira)).toBe(false);
+    expect(screen.getByTestId("linha-de-filtros").contains(fileira)).toBe(true);
+    expect(topo.compareDocumentPosition(fileira) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

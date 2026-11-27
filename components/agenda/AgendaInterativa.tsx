@@ -81,6 +81,7 @@ export function AgendaInterativa({
   onRemarcar,
   onAbrirDia,
   janelaSobre,
+  fileira,
   className,
 }: {
   visao: VisaoDaAgenda;
@@ -147,6 +148,12 @@ export function AgendaInterativa({
   onAbrirDia?: (dia: Date) => void;
   /** Repassado à grade: o período inteiro, antes do filtro de pessoas (item 136). */
   janelaSobre?: Agendamento[];
+  /**
+   * A fileira de profissionais, desenhada à ESQUERDA de "Horários livres de",
+   * na mesma linha (decisão 7 do André, 27/11/2026): os dois decidem o que a
+   * grade mostra, e navegação mora em cima.
+   */
+  fileira?: React.ReactNode;
   className?: string;
 }) {
   const localeDaData = useLocaleDeData();
@@ -469,56 +476,66 @@ export function AgendaInterativa({
   return (
     <div className={cn("flex min-h-0 flex-col gap-2", className)}>
       {horarios?.google_cobertura_parcial && <p role="status" className="text-xs text-warning-fg">{t("Ocupação do Google ainda não verificada neste período.")}</p>}
-      {tipos.length > 1 && (
+      {(fileira || tipos.length > 1) && (
+        // `empty:hidden`: sem ninguém na fileira e com um tipo só, a linha fica
+        // vazia e não pode somar o `gap` da coluna acima da grade.
         <div
-          data-testid="tipo-da-grade"
-          className="flex flex-wrap items-center gap-1.5 text-xs text-text-muted"
+          data-testid="linha-de-filtros"
+          className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 empty:hidden"
         >
-          <span className="shrink-0">{t("Horários livres de")}</span>
-          {/*
-            ACIMA DE UM PUNHADO DE TIPOS, A FILEIRA DE BOTÕES VIRA UMA PAREDE.
-
-            Medido numa clínica com 21 tipos de atendimento: a fileira ocupava
-            134px em quatro linhas e empurrava a GRADE — o conteúdo da tela — para
-            76% da altura. Quem abria a agenda não via a agenda.
-
-            Até `MUITOS_TIPOS` os botões continuam, porque ali eles são melhores:
-            todas as opções visíveis, um clique cada. Acima disso o que se ganha
-            em visibilidade já se perdeu em rolagem, e a lista fechada devolve a
-            tela para o que a pessoa veio ver.
-          */}
-          {tipos.length > MUITOS_TIPOS ? (
-            <select
-              data-testid="tipo-da-grade-lista"
-              aria-label={t("Tipo de atendimento dos horários livres")}
-              value={tipo?.id ?? ""}
-              onChange={(e) => onEscolherTipo(e.target.value)}
-              className="min-w-0 max-w-[260px] rounded-full border border-border bg-transparent px-2.5 py-0.5 text-xs max-lg:min-h-11 text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500"
+          {fileira}
+          {tipos.length > 1 && (
+            <div
+              data-testid="tipo-da-grade"
+              className="flex flex-wrap items-center gap-1.5 text-xs text-text-muted"
             >
-              {tipos.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.nome}
-                </option>
-              ))}
-            </select>
-          ) : (
-            tipos.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                data-testid={`tipo-da-grade-${t.id}`}
-                aria-pressed={t.id === tipo?.id}
-                onClick={() => onEscolherTipo(t.id)}
-                className={cn(
-                  "rounded-full border px-2.5 py-0.5 transition-colors duration-fast max-lg:min-h-11",
-                  t.id === tipo?.id
-                    ? "border-transparent bg-accent text-accent-foreground"
-                    : "border-border hover:border-border-strong hover:text-text",
-                )}
-              >
-                {t.nome}
-              </button>
-            ))
+              <span className="shrink-0">{t("Horários livres de")}</span>
+              {/*
+                ACIMA DE UM PUNHADO DE TIPOS, A FILEIRA DE BOTÕES VIRA UMA PAREDE.
+
+                Medido numa clínica com 21 tipos de atendimento: a fileira ocupava
+                134px em quatro linhas e empurrava a GRADE — o conteúdo da tela — para
+                76% da altura. Quem abria a agenda não via a agenda.
+
+                Até `MUITOS_TIPOS` os botões continuam, porque ali eles são melhores:
+                todas as opções visíveis, um clique cada. Acima disso o que se ganha
+                em visibilidade já se perdeu em rolagem, e a lista fechada devolve a
+                tela para o que a pessoa veio ver.
+              */}
+              {tipos.length > MUITOS_TIPOS ? (
+                <select
+                  data-testid="tipo-da-grade-lista"
+                  aria-label={t("Tipo de atendimento dos horários livres")}
+                  value={tipo?.id ?? ""}
+                  onChange={(e) => onEscolherTipo(e.target.value)}
+                  className="min-w-0 max-w-[260px] rounded-full border border-border bg-transparent px-2.5 py-0.5 text-xs max-lg:min-h-11 text-text focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent-500"
+                >
+                  {tipos.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nome}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                tipos.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    data-testid={`tipo-da-grade-${t.id}`}
+                    aria-pressed={t.id === tipo?.id}
+                    onClick={() => onEscolherTipo(t.id)}
+                    className={cn(
+                      "rounded-full border px-2.5 py-0.5 transition-colors duration-fast max-lg:min-h-11",
+                      t.id === tipo?.id
+                        ? "border-transparent bg-accent text-accent-foreground"
+                        : "border-border hover:border-border-strong hover:text-text",
+                    )}
+                  >
+                    {t.nome}
+                  </button>
+                ))
+              )}
+            </div>
           )}
         </div>
       )}

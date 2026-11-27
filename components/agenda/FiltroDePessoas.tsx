@@ -1,5 +1,7 @@
 "use client";
 
+import * as React from "react";
+
 import { useT } from "@/hooks/i18n/useT";
 
 import { cn } from "@/lib/utils";
@@ -36,6 +38,16 @@ export function FiltroDePessoas({
   className?: string;
 }) {
   const t = useT();
+  const todosRef = React.useRef<HTMLButtonElement>(null);
+  // Quem acabou de ser DESFEITA pelo próprio botão. Sem atendimento no período,
+  // ela sai da fileira no render seguinte, o botão focado desmonta e o foco do
+  // teclado cai no <body>. Aí ele vai para "Todos", que é o que ficou marcado.
+  const desfeita = React.useRef<string | null>(null);
+  React.useLayoutEffect(() => {
+    const id = desfeita.current;
+    desfeita.current = null;
+    if (id !== null && !pessoas.some((p) => p.id === id)) todosRef.current?.focus();
+  });
   const escolhida = selecionadas[0] ?? null;
   // Ninguém com atendimento e ninguém escolhido: não há o que filtrar.
   if (pessoas.length === 0 && escolhida === null) return null;
@@ -56,7 +68,14 @@ export function FiltroDePessoas({
       aria-label={t("Profissionais na agenda")}
       className={cn("flex flex-wrap items-center gap-1.5", className)}
     >
-      <button type="button" data-testid="botao-todos" aria-pressed={todos} onClick={() => onMudar([])} className={classe(todos)}>
+      <button
+        ref={todosRef}
+        type="button"
+        data-testid="botao-todos"
+        aria-pressed={todos}
+        onClick={() => onMudar([])}
+        className={classe(todos)}
+      >
         {t("Todos")}
       </button>
       {pessoas.map((p) => {
@@ -68,8 +87,13 @@ export function FiltroDePessoas({
             data-testid={`botao-pessoa-${p.id}`}
             data-trilha={p.trilha}
             aria-pressed={marcada}
+            // O nome COMPLETO para o leitor de tela; "Ana P." fica só à vista.
+            aria-label={p.nome}
             title={p.nome}
-            onClick={() => onMudar(marcada ? [] : [p.id])}
+            onClick={() => {
+              desfeita.current = marcada ? p.id : null;
+              onMudar(marcada ? [] : [p.id]);
+            }}
             className={classe(marcada)}
           >
             <span

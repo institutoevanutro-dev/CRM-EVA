@@ -407,10 +407,22 @@ export function AgendaClient({
   );
   // A FILEIRA mostra só quem tem atendimento no período carregado — e quem está
   // escolhido, para a escolha nunca sumir sem um jeito de desfazê-la.
-  const pessoasDaFileira = React.useMemo(
+  const fileiraDoPeriodo = React.useMemo(
     () => pessoasComAtendimento(pessoas, todos, selecionadas),
     [pessoas, todos, selecionadas],
   );
+  // E ELA NÃO PISCA ao trocar de período: até a resposta chegar, `todos` é
+  // vazio, e com "Todos" marcado a fileira sumia e o topo pulava (no celular,
+  // linhas de 44 px). Enquanto carrega, vale a última fileira vista. Comparada
+  // pelos ids, e não pela referência: `pessoas = []` nasce novo a cada render
+  // enquanto a equipe carrega, e o ajuste viraria laço.
+  const carregandoPeriodo = agendamentosVivos === undefined && !naJanelaDoServidor;
+  const [fileiraVista, setFileiraVista] = React.useState(fileiraDoPeriodo);
+  const idsDaFileira = (lista: readonly { id: string }[]) => lista.map((p) => p.id).join(",");
+  if (!carregandoPeriodo && idsDaFileira(fileiraDoPeriodo) !== idsDaFileira(fileiraVista)) {
+    setFileiraVista(fileiraDoPeriodo);
+  }
+  const pessoasDaFileira = carregandoPeriodo ? fileiraVista : fileiraDoPeriodo;
 
   // Uma pessoa só selecionada é o CONTEXTO da marcação: os horários livres da
   // grade, o "com quem" do painel e o dono do compromisso passam a ser dela.
@@ -669,24 +681,83 @@ export function AgendaClient({
       </React.Suspense>
 
 
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <div className="min-w-0">
-          <h1 className="titulo-tela">{t("Agenda")}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t("O que está marcado, com quem, e quem atende — seu e da equipe.")}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {/* "Hoje" é o hoje DA ORGANIZAÇÃO. Com `new Date()` o botão desfazia a
-              âncora do servidor e devolvia a semana do navegador — o defeito que
-              a tela acabou de fechar, a um clique de distância. */}
+      {/* O TOPO NUMA LINHA SÓ (decisão 7 do André, 27/11/2026): ‹ › período,
+          Hoje, Dia/Semana/Mês e Novo agendamento. A fileira de profissionais
+          vem logo abaixo, ao lado de "Horários livres de" (`AgendaInterativa`). */}
+      <header data-testid="topo-da-agenda" className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h1 className="titulo-tela mr-1">{t("Agenda")}</h1>
+        <div className="flex items-center gap-0.5">
           <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAncora(ancoraLocalDoDia(hoje))}
+            variant="ghost"
+            size="icon"
+            aria-label={t("Período anterior")}
+            data-testid="periodo-anterior"
+            onClick={() => setAncora((d) => addDays(d, -passo))}
           >
-            {t("Hoje")}
+            <CaretLeft size={16} weight="bold" aria-hidden />
           </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t("Próximo período")}
+            data-testid="periodo-seguinte"
+            onClick={() => setAncora((d) => addDays(d, passo))}
+          >
+            <CaretRight size={16} weight="bold" aria-hidden />
+          </Button>
+        </div>
+        {/*
+          `first-letter:uppercase` e NÃO `capitalize`: o `capitalize` do CSS
+          maiúscula toda palavra, e o date-fns em pt-br devolve "23 de ago" —
+          virava "23 De Ago". Preposição com maiúscula é o detalhe que faz o
+          produto parecer traduzido em vez de escrito, e fica no topo, ao
+          lado do título.
+        */}
+        <span
+          data-testid="periodo"
+          className="truncate text-sm font-semibold first-letter:uppercase"
+        >
+          {periodo}
+        </span>
+        {/* "Hoje" é o hoje DA ORGANIZAÇÃO. Com `new Date()` o botão desfazia a
+            âncora do servidor e devolvia a semana do navegador — o defeito que
+            a tela acabou de fechar, a um clique de distância. */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setAncora(ancoraLocalDoDia(hoje))}
+        >
+          {t("Hoje")}
+        </Button>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div
+            data-testid="alternador-de-visao"
+            className="flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5"
+          >
+            {VISOES.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                data-testid={`visao-${v.id}`}
+                aria-pressed={visao === v.id}
+                onClick={() => setVisao(v.id)}
+                className={cn(
+                  // 44 px no toque, como os botões (item 135).
+                  "rounded-sm px-2.5 py-1 text-xs transition-colors duration-fast ease-out max-lg:min-h-11",
+                  // No celular a grade da semana mostra UM dia: o botão
+                  // prometia a semana e as setas pulavam 7 dias (item 133). A
+                  // tela já abre no Dia abaixo de `md`.
+                  v.id === "semana" && "max-md:hidden",
+                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
+                  visao === v.id
+                    ? "bg-accent font-semibold text-accent-foreground"
+                    : "text-text-muted hover:bg-surface-elevated hover:text-text",
+                )}
+              >
+                {t(v.rotulo)}
+              </button>
+            ))}
+          </div>
           {/*
             DESABILITADO COM O MOTIVO À VISTA, e não ligado a um `onClick` vazio.
             Enquanto a frente 1 não expõe `/api/v1/agenda` não há o que marcar, e
@@ -758,81 +829,6 @@ export function AgendaClient({
         contaConectada={contaConectada}
         enderecoDeRetorno={enderecoDeRetorno}
       />}
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="flex items-center gap-0.5">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("Período anterior")}
-              data-testid="periodo-anterior"
-              onClick={() => setAncora((d) => addDays(d, -passo))}
-            >
-              <CaretLeft size={16} weight="bold" aria-hidden />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("Próximo período")}
-              data-testid="periodo-seguinte"
-              onClick={() => setAncora((d) => addDays(d, passo))}
-            >
-              <CaretRight size={16} weight="bold" aria-hidden />
-            </Button>
-          </div>
-          {/*
-            `first-letter:uppercase` e NÃO `capitalize`: o `capitalize` do CSS
-            maiúscula toda palavra, e o date-fns em pt-br devolve "23 de ago" —
-            virava "23 De Ago". Preposição com maiúscula é o detalhe que faz o
-            produto parecer traduzido em vez de escrito, e fica na primeira
-            linha abaixo do título.
-          */}
-          <span
-            data-testid="periodo"
-            className="truncate text-sm font-semibold first-letter:uppercase"
-          >
-            {periodo}
-          </span>
-        </div>
-
-        {/* `flex-wrap` pelo mesmo motivo da vitrine, e aqui é conserto de CLASSE e
-            não de instância: esta linha passou no gate por sorte de largura (a
-            organização de teste tem cinco pessoas), não por estar certa. Com mais
-            gente no filtro, ela estoura igual — e o `overflow-x: hidden` corta o
-            alternador de visão em silêncio. */}
-        <div className="flex flex-wrap items-center gap-3">
-          <FiltroDePessoas pessoas={pessoasDaFileira} selecionadas={selecionadas} onMudar={mudarPessoas} />
-          <div
-            data-testid="alternador-de-visao"
-            className="flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5"
-          >
-            {VISOES.map((v) => (
-              <button
-                key={v.id}
-                type="button"
-                data-testid={`visao-${v.id}`}
-                aria-pressed={visao === v.id}
-                onClick={() => setVisao(v.id)}
-                className={cn(
-                  // 44 px no toque, como os botões (item 135).
-                  "rounded-sm px-2.5 py-1 text-xs transition-colors duration-fast ease-out max-lg:min-h-11",
-                  // No celular a grade da semana mostra UM dia: o botão
-                  // prometia a semana e as setas pulavam 7 dias (item 133). A
-                  // tela já abre no Dia abaixo de `md`.
-                  v.id === "semana" && "max-md:hidden",
-                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
-                  visao === v.id
-                    ? "bg-accent font-semibold text-accent-foreground"
-                    : "text-text-muted hover:bg-surface-elevated hover:text-text",
-                )}
-              >
-                {t(v.rotulo)}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
 
       {/*
         O HISTÓRICO na tela do produto, e não só na vitrine. Ele aparece mesmo
@@ -971,6 +967,7 @@ export function AgendaClient({
         // A janela de horas sai do período INTEIRO: com o filtro de pessoas ela
         // pulava a cada troca (item 136). Cancelado não alarga.
         janelaSobre={todos}
+        fileira={<FiltroDePessoas pessoas={pessoasDaFileira} selecionadas={selecionadas} onMudar={mudarPessoas} />}
         recorte={recorteDaGrade}
         tipos={tiposIniciais.map((t) => ({ id: t.id, nome: t.nome, duracaoMin: t.duracaoMin }))}
         tipo={tipo ? { id: tipo.id, duracaoMin: tipo.duracaoMin, donoId: tipo.donoId } : null}
