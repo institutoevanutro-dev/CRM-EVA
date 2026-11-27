@@ -435,7 +435,7 @@ export function MarcacaoSimples({
 
   return (
     <Tabs value={aba} onValueChange={(v) => setAba(v === "bloquear" ? "bloquear" : "marcar")} className="flex min-h-0 flex-col">
-      <TabsList className="mx-5 mt-1 self-start bg-surface-muted" data-testid="abas-da-marcacao">
+      <TabsList className="mx-5 self-start bg-surface-muted" data-testid="abas-da-marcacao">
         <TabsTrigger value="marcar" data-testid="aba-novo-agendamento">
           {t("Novo agendamento")}
         </TabsTrigger>
@@ -448,10 +448,10 @@ export function MarcacaoSimples({
           foi escolhido para o paciente. */}
       <TabsContent value="marcar" forceMount className="mt-0 data-[state=inactive]:hidden">
         <div data-testid="painel-de-marcacao" data-tempo={tempo} className="flex flex-col">
-          <div className="grid gap-x-6 gap-y-5 px-5 pb-5 pt-4 md:grid-cols-2">
+          <div className="grid gap-x-6 gap-y-4 px-5 pb-4 pt-3 md:grid-cols-2">
             {/* ── esquerda: quem, o quê, onde e para quem ──────────────────── */}
-            <div className="flex min-w-0 flex-col gap-4">
-              <h3 className={cn(TITULO_DO_GRUPO, "-mb-2")}>{t("Quem e o quê")}</h3>
+            <div className="flex min-w-0 flex-col gap-3">
+              <h3 className={cn(TITULO_DO_GRUPO, "-mb-1")}>{t("Quem e o quê")}</h3>
               <div className="grid gap-x-3 gap-y-4 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
                 <div className="min-w-0">
                   <label htmlFor="profissional-da-marcacao" className={ROTULO}>
@@ -523,7 +523,7 @@ export function MarcacaoSimples({
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+              <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-1">
                 <div>
                   <label htmlFor="duracao-da-marcacao" className={ROTULO}>
                     {t("Duração (minutos)")}
@@ -607,7 +607,7 @@ export function MarcacaoSimples({
                 ) : null}
               </div>
 
-              <div className="-mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="-mb-1 flex flex-wrap items-center justify-between gap-2">
                 <h3 className={TITULO_DO_GRUPO}>{t("Paciente")}</h3>
                 <fieldset data-testid="tipo-de-paciente" className="flex items-center">
                   <legend className="sr-only">{t("Tipo de paciente")}</legend>
@@ -627,7 +627,7 @@ export function MarcacaoSimples({
                           aria-pressed={ativo}
                           onClick={() => setModoEscolhido({ tipoId: tipo?.id ?? "", novo: valor === "novo" })}
                           className={cn(
-                            "h-7 rounded-sm px-3 text-xs font-medium transition-colors duration-fast toque:h-10",
+                            "h-6 rounded-sm px-3 text-xs font-medium transition-colors duration-fast toque:h-10",
                             FOCO,
                             ativo ? "bg-accent text-accent-foreground shadow-xs" : "text-text-muted hover:text-text",
                           )}

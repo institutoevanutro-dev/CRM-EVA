@@ -222,11 +222,11 @@ export function QuandoDaMarcacao({
   return (
     <div
       data-testid="quando-da-marcacao"
-      className="flex min-w-0 flex-col gap-4 rounded-xl bg-surface-muted/60 p-4 md:self-start"
+      className="flex min-w-0 flex-col gap-3 rounded-xl bg-surface-muted/60 p-3 md:self-start"
     >
-      <h3 className={cn(TITULO_DO_GRUPO, "-mb-2")}>{t("Quando")}</h3>
+      <h3 className={cn(TITULO_DO_GRUPO, "-mb-1")}>{t("Quando")}</h3>
       <div>
-        <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="mb-1 flex items-center justify-between gap-2">
           <span className={cn(ROTULO, "mb-0")}>{t("Data")} *</span>
           <div className="flex items-center gap-0.5">
             <span className="mr-1.5 text-sm font-semibold tracking-tight first-letter:uppercase">
@@ -284,7 +284,7 @@ export function QuandoDaMarcacao({
                   onHorario(null);
                 }}
                 className={cn(
-                  "flex h-9 items-center justify-center rounded-md text-sm tabular-nums transition-colors duration-fast",
+                  "flex h-8 items-center justify-center rounded-md text-sm tabular-nums transition-colors duration-fast toque:h-9",
                   FOCO,
                   disponivel && !escolhido &&
                     "bg-accent-soft font-medium text-accent-strong hover:bg-accent hover:text-accent-foreground",
@@ -303,7 +303,7 @@ export function QuandoDaMarcacao({
       </div>
 
       <div>
-        <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <div className="mb-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <label htmlFor="hora-da-marcacao" className={cn(ROTULO, "mb-0")}>
             {t("Horário")} *
           </label>
@@ -334,7 +334,7 @@ export function QuandoDaMarcacao({
             {t("Fora dos horários livres")}
           </p>
         ) : null}
-        <div className="mt-2 flex flex-col gap-1.5">
+        <div className="mt-2 flex flex-col gap-1.5 empty:hidden">
           {avisoDosHorarios}
           {googleCoberturaParcial ? (
             <p role="status" className="text-xs text-warning-fg">

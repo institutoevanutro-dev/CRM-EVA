@@ -842,7 +842,7 @@ export function AgendaClient({
               e.preventDefault();
           }}
         >
-          <DialogHeader className="px-5 pb-2 pt-5 text-left">
+          <DialogHeader className="px-5 pb-2 pt-4 text-left">
             <DialogTitle>{t("Agenda")}</DialogTitle>
             <DialogDescription className="sr-only">
               {t("Marque um atendimento ou bloqueie um horário da agenda.")}
