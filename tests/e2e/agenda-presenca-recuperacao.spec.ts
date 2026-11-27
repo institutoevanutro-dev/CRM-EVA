@@ -160,9 +160,8 @@ async function login(page: Page, email: string) {
 }
 async function detail(page: Page, id: string, title: string) {
   await page.goto(`/app/agenda?compromisso=${id}`);
-  await expect(
-    page.getByRole("dialog").getByRole("heading", { name: title, exact: true }),
-  ).toBeVisible();
+  // Desde 27/11/2026 o título do painel é o PACIENTE; o compromisso vem na linha de baixo.
+  await expect(page.getByRole("dialog").getByText(title, { exact: true }).first()).toBeVisible();
 }
 async function evidence(page: Page, info: TestInfo, name: string) {
   const directory = info.outputPath(name);
@@ -336,7 +335,8 @@ test("Inbox marca cliente/conversa; detalhe antigo confirma presença com evidê
     .single();
   expect(bound.data).toMatchObject({ contact_id: p.contact, conversation_id: p.conversation });
   await detail(page, created.id, "Consulta de presença");
-  await expect(page.getByRole("button", { name: "Faltou", exact: true })).toBeDisabled();
+  // Antes do início não há presença a registrar: o par Compareceu/Faltou nem aparece.
+  await expect(page.getByRole("button", { name: "Faltou", exact: true })).toHaveCount(0);
   const past = await appointment(f, p, "Consulta da semana anterior", 24 * 8);
   await runCron(page, "followup-flow-worker");
   await page.goto("/app/ai/inbox");
@@ -344,6 +344,7 @@ test("Inbox marca cliente/conversa; detalhe antigo confirma presença com evidê
   await expect(notice).toBeVisible();
   await notice.getByRole("link", { name: "Abrir compromisso" }).click();
   await expect(page).toHaveURL(new RegExp(`compromisso=${past}`));
+  await page.getByTestId("abrir-mais-detalhes").click();
   await page.getByRole("button", { name: "Lembrar em uma hora" }).click();
   await expect
     .poll(
@@ -1169,6 +1170,7 @@ test("duas sessões: remarcação não reautoriza cancelamento em rascunho", asy
   const id = await appointment(f, p, "Consulta concorrente");
   await login(page, f.email);
   await detail(page, id, "Consulta concorrente");
+  await page.getByTestId("acao-cancelar").click();
   await page.getByLabel("Motivo do cancelamento").fill("Decisão antes da remarcação");
   const other = await browser.newContext();
   try {

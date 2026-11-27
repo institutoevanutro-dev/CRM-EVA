@@ -18,11 +18,12 @@ import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), delete: vi.fn(), post: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ apiClient: api }));
 vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: vi.fn() }));
-vi.mock("@/components/ui/sheet", () => ({
-  Sheet: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SheetContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SheetHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SheetTitle: ({ children }: { children: React.ReactNode }) => <h1>{children}</h1>,
+vi.mock("@/components/ui/dialog", () => ({
+  Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: React.ReactNode }) => <h1>{children}</h1>,
+  DialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
 }));
 
 const ID = "11111111-0000-4000-8000-000000000001";

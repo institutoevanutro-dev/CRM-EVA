@@ -1,9 +1,10 @@
 "use client";
 import { MeetDoCompromisso, type MeetingDetail } from "./MeetDoCompromisso";
 import { SincronizacaoDoCompromisso, type SyncDetail } from "./SincronizacaoDoCompromisso";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePessoasDaAgenda } from "@/hooks/agenda/usePessoasDaAgenda";
+import { useRemarcarAgendamento } from "@/hooks/agenda/useRemarcarAgendamento";
 import Link from "next/link";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api/client";
@@ -12,17 +13,24 @@ import {
   ehNomeCompleto,
   faltaNomeCompleto,
   nomeCompletoLimpo,
+  nomeDoContato,
   sugestaoDeNomeCompleto,
 } from "@/lib/contacts/rotulo-do-contato";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { ApiError } from "@/lib/api/types";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
+import { CaretRight } from "@/lib/ui/icons";
+import { CAMPO } from "./CampoDaMarcacao";
 import { ExcluirCompromisso } from "./ExcluirCompromisso";
 import { NomeCompletoDoPaciente } from "./NomeCompletoDoPaciente";
+import { iniciaisDe } from "./paleta";
+import { QuandoDaMarcacao, type QuandoDaMarcacaoProps } from "./QuandoDaMarcacao";
+import type { HorarioLivre } from "./tipos";
 
 /** O mesmo piso do motivo que a rota de cancelar exige. */
 const MINIMO_DO_MOTIVO = 3;
@@ -85,12 +93,39 @@ const RESULTS_POS_CONSULTA: Record<string, string> = {
   started: "Acompanhamento pós-consulta iniciado",
   ambiguous: "Não iniciado: mais de um fluxo pós-consulta foi configurado.",
 };
+/**
+ * O REMARCAR DENTRO DO PAINEL (decisão 6 do André, 27/11/2026). Quem manda é
+ * `_client.tsx`: ele sabe de que procedimento e de quem são os horários (a rota
+ * de detalhe não devolve nenhum dos dois) e liga a consulta enquanto `aberta`.
+ */
+export type RemarcacaoDoPainel = {
+  aberta: boolean;
+  /** `comecaEm`: com o compromisso fora da semana carregada, a grade vai até ele. */
+  onAbrir: (comecaEm: string) => void;
+  onFechar: () => void;
+  quando: Omit<QuandoDaMarcacaoProps, "dia" | "onDia" | "horario" | "onHorario">;
+};
+
+/**
+ * A etiqueta do cabeçalho. `confirmed` é o estado de quem foi marcado sem pedir
+ * aprovação (`requires_confirmation` falso, o padrão) — por isso "Agendado", e
+ * não "Confirmado": "Confirmar" só existe para o pedido `pending`.
+ */
+const ESTADO: Record<string, { rotulo: string; variante: "default" | "neutral" | "success" | "warning" | "error" }> = {
+  pending: { rotulo: "Aguardando confirmação", variante: "warning" },
+  confirmed: { rotulo: "Agendado", variante: "default" },
+  completed: { rotulo: "Realizado", variante: "success" },
+  no_show: { rotulo: "Faltou", variante: "error" },
+  cancelled: { rotulo: "Cancelado", variante: "neutral" },
+};
 export function DetalheDoCompromisso({
   id,
   onClose,
   podeEditar = true,
   podeExcluir = false,
   podeCompletarNome = false,
+  profissional,
+  remarcacao,
 }: {
   id: string | null;
   onClose: () => void;
@@ -99,6 +134,10 @@ export function DetalheDoCompromisso({
   podeExcluir?: boolean;
   /** `agent`+: o piso de `PATCH /api/v1/contacts/[id]`, que grava o nome completo. */
   podeCompletarNome?: boolean;
+  /** Quem atende, como a GRADE o conhece (a rota de detalhe não devolve o dono). */
+  profissional?: string;
+  /** Ausente: o painel não oferece Remarcar (quem só lê, ou a vitrine). */
+  remarcacao?: RemarcacaoDoPainel;
 }) {
   const t = useT();
   const tagDoIdioma = useTagDeIdioma();
@@ -109,6 +148,10 @@ export function DetalheDoCompromisso({
   const [draftRevision, setDraftRevision] = useState<number | null>(null);
   const [conflict, setConflict] = useState(false);
   const [nomeEditado, setNomeEditado] = useState<string | null>(null);
+  const remarcar = useRemarcarAgendamento();
+  const [cancelando, setCancelando] = useState(false);
+  const [diaNovo, setDiaNovo] = useState<Date | null>(null);
+  const [horarioNovo, setHorarioNovo] = useState<HorarioLivre | null>(null);
   const query = useQuery({
     queryKey: ["agenda", "detalhe", id],
     enabled: !!id,
@@ -175,318 +218,465 @@ export function DetalheDoCompromisso({
   function decide(patch: Record<string, unknown>) {
     if (a && !staleDraft) mutation.mutate({ revision: draftRevision ?? a.revision, patch });
   }
+  function fecharRemarcacao() {
+    setDiaNovo(null);
+    setHorarioNovo(null);
+    remarcacao?.onFechar();
+  }
+  function confirmarRemarcacao() {
+    if (!a || !horarioNovo) return;
+    // A MESMA chamada do Remarcar de antes (o `PainelDeMarcacao` montado em
+    // `_client.tsx` até 27/11/2026): `PATCH /api/v1/agenda/agendamentos` com
+    // `starts_at` e a `revision`. Lembrete, Google e a automação de remarcação
+    // são do servidor (`alterarAgendamentoHandler`). Sem `guest_email`: ausente,
+    // o convidado do Google fica como estava.
+    remarcar.mutate(
+      { id: a.id, revision: a.revision, starts_at: horarioNovo.instante },
+      { onSuccess: fecharRemarcacao },
+    );
+  }
+  const paciente = a?.contato ? nomeDoContato(a.contato) : null;
+  const nome = paciente ?? a?.title ?? t("Compromisso");
+  const estado = a ? ESTADO[a.status] : undefined;
+  const local = a ? rotuloDoLocal(a.location_kind, a.location_details) : null;
+  const linha =
+    a && formatoDeData
+      ? [
+          paciente ? (
+            <span key="procedimento" data-testid="compromisso-procedimento">
+              {a.title}
+            </span>
+          ) : null,
+          <span key="horario" data-testid="compromisso-horario">
+            {formatoDeData.formatRange(new Date(a.starts_at), new Date(a.ends_at))}
+          </span>,
+          profissional ? <span key="profissional">{profissional}</span> : null,
+          local ? (
+            <span key="local" data-testid="compromisso-local">
+              {local}
+            </span>
+          ) : null,
+        ].filter(Boolean)
+      : [];
   return (
-    <Sheet
+    <Dialog
       open={!!id}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) {
+          // Fechar no meio do Remarcar não deixa a remarcação "pendurada" para
+          // a próxima abertura do mesmo compromisso (o link do histórico).
+          if (remarcacao?.aberta) remarcacao.onFechar();
+          onClose();
+        }
       }}
     >
-      <SheetContent className="overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>{a?.title ?? t("Compromisso")}</SheetTitle>
-        </SheetHeader>
-        {a?.google_sync && (
-          <SincronizacaoDoCompromisso
-            key={a.id}
-            id={a.id}
-            sync={a.google_sync}
-            onSaved={() => void query.refetch()}
-          />
-        )}
-        {a?.meeting && (
-          <MeetDoCompromisso
-            id={a.id}
-            revision={a.google_sync?.revision ?? String(a.revision)}
-            meeting={a.meeting}
-            onSaved={() => void query.refetch()}
-          />
-        )}
-        {query.isPending ? (
-          <p>{t("Carregando…")}</p>
-        ) : query.isError ? (
-          <div role="alert">
-            <p>{t("Este compromisso está indisponível para você.")}</p>
-            <Button onClick={() => void query.refetch()}>{t("Tentar novamente")}</Button>
+      <DialogContent
+        data-testid="painel-do-compromisso"
+        className="flex max-w-xl flex-col gap-0 overflow-hidden bg-surface p-0"
+      >
+        {/* A CARA DA JANELA DE MARCAÇÃO (decisão 6 do André, 27/11/2026):
+            cabeçalho com quem vem, três botões grandes, e o resto embaixo — uma
+            coluna só, navegação em cima e conteúdo embaixo. */}
+        <DialogHeader className="border-b border-border px-5 pb-4 pt-5 text-left">
+          <div className="flex items-start gap-3 pr-8">
+            <span
+              aria-hidden
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface-muted text-sm font-semibold text-text"
+            >
+              {iniciaisDe(nome)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <DialogTitle className="min-w-0 truncate text-lg">{nome}</DialogTitle>
+                {estado ? (
+                  <Badge data-testid="estado-do-compromisso" variant={estado.variante}>
+                    {t(estado.rotulo)}
+                  </Badge>
+                ) : null}
+              </div>
+              <DialogDescription className="mt-1 text-sm text-text-muted">
+                {linha.length > 0
+                  ? linha.map((item, i) => (
+                      <Fragment key={i}>
+                        {i > 0 ? " · " : null}
+                        {item}
+                      </Fragment>
+                    ))
+                  : t("Carregando…")}
+              </DialogDescription>
+            </div>
           </div>
-        ) : a && formatoDeData ? (
-          <div className="mt-5 space-y-5">
-            <p data-testid="compromisso-horario">
-              {formatoDeData.formatRange(new Date(a.starts_at), new Date(a.ends_at))}
-            </p>
-            {rotuloDoLocal(a.location_kind, a.location_details) ? (
-              <p data-testid="compromisso-local">{rotuloDoLocal(a.location_kind, a.location_details)}</p>
-            ) : null}
-            {a.description?.trim() ? (
-              <p data-testid="compromisso-observacao" className="whitespace-pre-wrap">
-                {a.description}
-              </p>
-            ) : null}
-            {/* Com rótulo, e não o texto solto: sem rótulo ninguém sabe que é interna. */}
-            {a.notes?.trim() ? (
-              <div data-testid="compromisso-anotacao">
-                <p className="text-sm text-text-muted">{t("Anotação")}</p>
-                <p className="whitespace-pre-wrap">{a.notes}</p>
-              </div>
-            ) : null}
-            {a.excluded_at ? (
-              <div role="status" data-testid="compromisso-excluido">
-                <p>{t("Excluído (lançado por engano)")}</p>
-                {a.exclusion_reason ? <p className="text-sm text-text-muted">{a.exclusion_reason}</p> : null}
-              </div>
-            ) : null}
-            <p>
-              {t(
-                (
-                  {
-                    pending: "Aguardando confirmação",
-                    confirmed: "Agendado",
-                    completed: "Compareceu",
-                    no_show: "Faltou",
-                    cancelled: "Cancelado",
-                  } as Record<string, string>
-                )[a.status] ?? a.status,
-              )}
-            </p>
-            {a.created_by_kind === "user" ? (
-              <label className="block text-sm" data-testid="compromisso-canal">
-                <span className="text-text-muted">{t("Marcada por")}</span>
-                <select
-                  className="mt-1 w-full rounded-md border bg-surface p-2"
-                  value={a.booking_channel ?? ""}
-                  disabled={!podeEditar || a.status === "cancelled" || Boolean(a.excluded_at) || mutation.isPending || staleDraft}
-                  onChange={(e) => {
-                    if (e.target.value) decide({ booking_channel: e.target.value });
-                  }}
-                >
-                  {a.booking_channel ? null : <option value="">{t("Não informado (conta como mensagem)")}</option>}
-                  <option value="mensagem">{t("Mensagem")}</option>
-                  <option value="ligacao">{t("Ligação")}</option>
-                </select>
-              </label>
-            ) : null}
-            {a.converted_by_kind ? (
-              <p className="text-sm" data-testid="compromisso-quem-converteu">
-                <span className="text-text-muted">{t("Quem converteu")}: </span>
-                {a.converted_by_kind === "ai"
-                  ? t("IA do atendimento")
-                  : (pessoas.data?.find((p) => p.id === a.converted_by_user_id)?.nome ?? t("Alguém da equipe"))}
-              </p>
-            ) : null}
-            {faltaNome ? (
-              <div
-                role="status"
-                data-testid="falta-nome-completo"
-                className="space-y-3 rounded-lg border border-warning/40 bg-warning-bg p-3"
-              >
-                <div>
-                  <p className="text-sm font-semibold">{t("Falta o nome completo")}</p>
-                  <p className="text-sm text-text-muted">
-                    {t("Sem o nome completo no cadastro, o prontuário não abre o atendimento.")}
-                  </p>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+          {query.isPending ? (
+            <p>{t("Carregando…")}</p>
+          ) : query.isError ? (
+            <div role="alert">
+              <p>{t("Este compromisso está indisponível para você.")}</p>
+              <Button onClick={() => void query.refetch()}>{t("Tentar novamente")}</Button>
+            </div>
+          ) : a && formatoDeData ? (
+            <>
+              {a.excluded_at ? (
+                <div role="status" data-testid="compromisso-excluido">
+                  <p>{t("Excluído (lançado por engano)")}</p>
+                  {a.exclusion_reason ? <p className="text-sm text-text-muted">{a.exclusion_reason}</p> : null}
                 </div>
-                {podeCompletarNome ? (
-                  <>
-                    <NomeCompletoDoPaciente id="nome-completo-do-compromisso" valor={nomeCompleto} onValor={setNomeEditado} />
-                    <Button
-                      size="sm"
-                      data-testid="salvar-nome-completo"
-                      disabled={!ehNomeCompleto(nomeCompleto) || gravarNome.isPending}
-                      onClick={() =>
-                        gravarNome.mutate(
-                          { name: nomeCompletoLimpo(nomeCompleto) },
-                          {
-                            onSuccess: () => {
-                              setNomeEditado(null);
-                              toast.success(t("Nome completo salvo."));
+              ) : null}
+              {faltaNome ? (
+                <div
+                  role="status"
+                  data-testid="falta-nome-completo"
+                  className="space-y-3 rounded-lg border border-warning/40 bg-warning-bg p-3"
+                >
+                  <div>
+                    <p className="text-sm font-semibold">{t("Falta o nome completo")}</p>
+                    <p className="text-sm text-text-muted">
+                      {t("Sem o nome completo no cadastro, o prontuário não abre o atendimento.")}
+                    </p>
+                  </div>
+                  {podeCompletarNome ? (
+                    <>
+                      <NomeCompletoDoPaciente id="nome-completo-do-compromisso" valor={nomeCompleto} onValor={setNomeEditado} />
+                      <Button
+                        size="sm"
+                        data-testid="salvar-nome-completo"
+                        disabled={!ehNomeCompleto(nomeCompleto) || gravarNome.isPending}
+                        onClick={() =>
+                          gravarNome.mutate(
+                            { name: nomeCompletoLimpo(nomeCompleto) },
+                            {
+                              onSuccess: () => {
+                                setNomeEditado(null);
+                                toast.success(t("Nome completo salvo."));
+                              },
                             },
-                          },
-                        )
-                      }
+                          )
+                        }
+                      >
+                        {gravarNome.isPending ? t("Salvando…") : t("Salvar nome")}
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+              {staleDraft ? (
+                <div role="alert" className="space-y-2 rounded-lg border p-3">
+                  <p>
+                    {t(
+                      "O compromisso mudou ou a alteração não foi concluída. Revise os dados antes de decidir novamente.",
+                    )}
+                  </p>
+                  <Button variant="outline" onClick={resetDraft}>
+                    {t("Descartar rascunho e revisar")}
+                  </Button>
+                </div>
+              ) : null}
+
+              {podeEditar && a.status !== "cancelled" && !a.excluded_at ? (
+                <div className="flex flex-wrap gap-2" data-testid="acoes-do-compromisso">
+                  {a.status === "pending" ? (
+                    <Button
+                      data-testid="acao-confirmar"
+                      className="h-12 min-w-[8rem] flex-1"
+                      disabled={mutation.isPending || staleDraft}
+                      onClick={() => decide({ status: "confirmed" })}
                     >
-                      {gravarNome.isPending ? t("Salvando…") : t("Salvar nome")}
+                      {t("Confirmar")}
                     </Button>
-                  </>
-                ) : null}
-              </div>
-            ) : null}
-            {a.contact_id ? (
-              <Link href={`/app/contacts/${a.contact_id}`} className="underline">
-                {t("Ver contato")}
-              </Link>
-            ) : (
-              <p>{t("Compromisso pessoal, sem cliente vinculado.")}</p>
-            )}
-            {a.outcome_recorded_at ? (
-              <p>
-                {t("Presença registrada pela equipe")}:{" "}
-                {formatoDeData.format(new Date(a.outcome_recorded_at))}
-              </p>
-            ) : (
-              <p>
-                {t(
-                  "O horário sozinho não confirma falta. A equipe precisa registrar o que aconteceu.",
-                )}
-              </p>
-            )}
-            {a.recovery ? (
-              <div className="rounded-lg border p-3" role="status">
-                <p>
-                  {t(
-                    a.recovery.invalidated_at && a.recovery.result === "started"
-                      ? "Recuperação iniciada e interrompida porque o cliente respondeu."
-                      : a.recovery.enrollment_status &&
-                          ["cancelled", "completed", "dead"].includes(a.recovery.enrollment_status)
-                        ? a.status === "completed"
-                          ? "Acompanhamento pós-consulta encerrado."
-                          : "Recuperação encerrada. Revise o próximo passo."
-                        : ((a.status === "completed" ? RESULTS_POS_CONSULTA : RESULTS)[a.recovery.result] ??
-                          "Revise o próximo passo."),
-                  )}
-                </p>
-                {a.recovery.cancel_reason ? (
-                  <p className="mt-2 text-sm">{a.recovery.cancel_reason}</p>
-                ) : null}
-                {a.recovery.enrollment_id ? (
-                  <Link
-                    className="underline"
-                    href={`/app/ai/followups/enrollments/${a.recovery.enrollment_id}`}
-                  >
-                    {t("Abrir acompanhamento")}
-                  </Link>
-                ) : (
-                  <Link className="underline" href="/app/ai/followups">
-                    {t("Revisar acompanhamentos")}
-                  </Link>
-                )}
-              </div>
-            ) : a.status === "no_show" && a.contact_id && a.outcome_recorded_at ? (
-              <div role="status" className="rounded-lg border p-3">
-                <p>
-                  {t("Falta confirmada. O resultado da recuperação ainda não está disponível.")}
-                </p>
-                <Link className="underline" href="/app/ai/followups">
-                  {t("Revisar acompanhamentos")}
-                </Link>
-              </div>
-            ) : null}
-            {staleDraft ? (
-              <div role="alert" className="space-y-2 rounded-lg border p-3">
-                <p>
-                  {t(
-                    "O compromisso mudou ou a alteração não foi concluída. Revise os dados antes de decidir novamente.",
-                  )}
-                </p>
-                <Button variant="outline" onClick={resetDraft}>
-                  {t("Descartar rascunho e revisar")}
-                </Button>
-              </div>
-            ) : null}
-            {podeEditar && a.status !== "cancelled" && !a.excluded_at ? (
-              <div className="space-y-4">
-                <label className="block">
-                  {t("Mensagem do cliente usada como evidência (opcional)")}
-                  <select
-                    className="mt-2 w-full rounded-md border bg-surface p-2"
-                    aria-label={t("Mensagem de evidência")}
-                    value={evidence}
-                    onChange={(e) => {
-                      beginDraft();
-                      setEvidence(e.target.value);
+                  ) : null}
+                  {remarcacao && (a.status === "pending" || a.status === "confirmed") ? (
+                    <Button
+                      data-testid="acao-remarcar"
+                      variant="outline"
+                      className="h-12 min-w-[8rem] flex-1"
+                      aria-expanded={remarcacao.aberta}
+                      disabled={staleDraft}
+                      onClick={() => {
+                        setCancelando(false);
+                        remarcacao.onAbrir(a.starts_at);
+                      }}
+                    >
+                      {t("Remarcar")}
+                    </Button>
+                  ) : null}
+                  <Button
+                    data-testid="acao-cancelar"
+                    variant="outline"
+                    className="h-12 min-w-[8rem] flex-1"
+                    aria-expanded={cancelando}
+                    onClick={() => {
+                      if (remarcacao?.aberta) fecharRemarcacao();
+                      setCancelando(true);
                     }}
                   >
-                    <option value="">{t("Confirmação da equipe, sem mensagem")}</option>
-                    {a.evidence_messages.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.body?.slice(0, 140) ?? t("Mensagem sem texto")}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <p className="text-sm text-text-muted">
-                  {t("Ao confirmar, você valida o significado da mensagem para este compromisso.")}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {(
-                    [
-                      ["completed", "Compareceu"],
-                      ["no_show", "Faltou"],
-                    ] as const
-                  ).map(([status, label]) => (
-                    <Button
-                      key={status}
-                      onClick={() =>
-                        decide({
-                          status,
-                          ...(evidence ? { outcome_message_id: evidence } : {}),
-                        })
-                      }
-                      disabled={
-                        mutation.isPending ||
-                        staleDraft ||
-                        Date.parse(a.starts_at) > query.dataUpdatedAt ||
-                        a.status === status
-                      }
-                    >
-                      {t(label)}
-                    </Button>
-                  ))}
+                    {t("Cancelar")}
+                  </Button>
                 </div>
-                {/*
-                  O SIM que faltava. `pending` é pré-reserva: o horário já está
-                  segurado, e só vira compromisso quando alguém aprova. A rota
-                  aceita `confirmed` desde sempre, a IA escreve por
-                  `crm_confirm_appointment` — e a tela, não. Sem este botão, num
-                  negócio com `requires_confirmation` o pedido ou é confirmado
-                  pelo cliente via IA, ou expira em `agenda-expira-pendentes`.
-                */}
-                {a.status === "pending" ? (
-                  <Button
-                    data-testid="confirmar-compromisso"
-                    disabled={mutation.isPending || staleDraft}
-                    onClick={() => decide({ status: "confirmed" })}
-                  >
-                    {t("Confirmar horário")}
-                  </Button>
-                ) : null}
-                {["pending", "confirmed"].includes(a.status) ? (
-                  <Button
-                    variant="outline"
-                    disabled={mutation.isPending || staleDraft}
-                    onClick={() =>
-                      decide({
-                        confirmation_next_at: new Date(Date.now() + 60 * 60_000).toISOString(),
-                      })
-                    }
-                  >
-                    {t("Lembrar em uma hora")}
-                  </Button>
-                ) : null}
-                <label className="block">
-                  {t("Motivo do cancelamento")}
+              ) : null}
+
+              {podeEditar && remarcacao?.aberta && a.status !== "cancelled" && !a.excluded_at ? (
+                <section data-testid="remarcar-no-painel" className="space-y-3">
+                  <p className="text-sm text-text-muted">{t("Escolha o novo dia e o horário.")}</p>
+                  <QuandoDaMarcacao
+                    {...remarcacao.quando}
+                    dia={diaNovo ?? remarcacao.quando.ancora}
+                    onDia={setDiaNovo}
+                    horario={horarioNovo}
+                    onHorario={setHorarioNovo}
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={fecharRemarcacao}>
+                      {t("Voltar")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      data-testid="confirmar-remarcacao"
+                      disabled={!horarioNovo || remarcar.isPending}
+                      onClick={confirmarRemarcacao}
+                    >
+                      {remarcar.isPending ? t("Remarcando…") : t("Confirmar remarcação")}
+                    </Button>
+                  </div>
+                </section>
+              ) : null}
+
+              {podeEditar && cancelando && a.status !== "cancelled" && !a.excluded_at ? (
+                <section data-testid="cancelar-no-painel" className="space-y-3">
+                  <label className="block text-sm font-medium text-text" htmlFor="motivo-do-cancelamento">
+                    {t("Motivo do cancelamento")}
+                  </label>
                   <input
-                    className="mt-2 w-full rounded-md border bg-surface p-2"
+                    id="motivo-do-cancelamento"
+                    data-testid="motivo-do-cancelamento"
+                    className={CAMPO}
                     value={reason}
                     onChange={(e) => {
                       beginDraft();
                       setReason(e.target.value);
                     }}
                   />
-                </label>
-                <Button
-                  variant="outline"
-                  // O mínimo de 3 é o da rota (`DELETE /agenda/agendamentos`).
-                  disabled={reason.trim().length < MINIMO_DO_MOTIVO || cancel.isPending || staleDraft}
-                  onClick={() => cancel.mutate({ revision: draftRevision ?? a.revision, reason: reason.trim() })}
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setCancelando(false)}>
+                      {t("Voltar")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      data-testid="confirmar-cancelamento"
+                      // O mínimo de 3 é o da rota (`DELETE /agenda/agendamentos`).
+                      disabled={reason.trim().length < MINIMO_DO_MOTIVO || cancel.isPending || staleDraft}
+                      onClick={() => cancel.mutate({ revision: draftRevision ?? a.revision, reason: reason.trim() })}
+                    >
+                      {cancel.isPending ? t("Cancelando…") : t("Cancelar agendamento")}
+                    </Button>
+                  </div>
+                </section>
+              ) : null}
+
+              {/* DEPOIS DO HORÁRIO DE INÍCIO, e só com paciente: compromisso
+                  pessoal não tem presença a registrar. */}
+              {podeEditar && a.status !== "cancelled" && !a.excluded_at && a.contact_id &&
+              Date.parse(a.starts_at) <= query.dataUpdatedAt ? (
+                <div data-testid="presenca-do-compromisso" className="space-y-3 rounded-lg border border-border p-3">
+                  <label className="block">
+                    {t("Mensagem do cliente usada como evidência (opcional)")}
+                    <select
+                      className="mt-2 w-full rounded-md border bg-surface p-2"
+                      aria-label={t("Mensagem de evidência")}
+                      value={evidence}
+                      onChange={(e) => {
+                        beginDraft();
+                        setEvidence(e.target.value);
+                      }}
+                    >
+                      <option value="">{t("Confirmação da equipe, sem mensagem")}</option>
+                      {a.evidence_messages.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.body?.slice(0, 140) ?? t("Mensagem sem texto")}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="text-sm text-text-muted">
+                    {t("Ao confirmar, você valida o significado da mensagem para este compromisso.")}
+                  </p>
+                  {a.outcome_recorded_at ? null : (
+                    <p className="text-sm text-text-muted">
+                      {t("O horário sozinho não confirma falta. A equipe precisa registrar o que aconteceu.")}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {(
+                      [
+                        ["completed", "Compareceu"],
+                        ["no_show", "Faltou"],
+                      ] as const
+                    ).map(([status, label]) => (
+                      <Button
+                        key={status}
+                        onClick={() =>
+                          decide({
+                            status,
+                            ...(evidence ? { outcome_message_id: evidence } : {}),
+                          })
+                        }
+                        disabled={mutation.isPending || staleDraft || a.status === status}
+                      >
+                        {t(label)}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {a.outcome_recorded_at ? (
+                <p>
+                  {t("Presença registrada pela equipe")}: {formatoDeData.format(new Date(a.outcome_recorded_at))}
+                </p>
+              ) : null}
+              {a.recovery ? (
+                <div className="rounded-lg border p-3" role="status">
+                  <p>
+                    {t(
+                      a.recovery.invalidated_at && a.recovery.result === "started"
+                        ? "Recuperação iniciada e interrompida porque o cliente respondeu."
+                        : a.recovery.enrollment_status &&
+                            ["cancelled", "completed", "dead"].includes(a.recovery.enrollment_status)
+                          ? a.status === "completed"
+                            ? "Acompanhamento pós-consulta encerrado."
+                            : "Recuperação encerrada. Revise o próximo passo."
+                          : ((a.status === "completed" ? RESULTS_POS_CONSULTA : RESULTS)[a.recovery.result] ??
+                            "Revise o próximo passo."),
+                    )}
+                  </p>
+                  {a.recovery.cancel_reason ? (
+                    <p className="mt-2 text-sm">{a.recovery.cancel_reason}</p>
+                  ) : null}
+                  {a.recovery.enrollment_id ? (
+                    <Link
+                      className="underline"
+                      href={`/app/ai/followups/enrollments/${a.recovery.enrollment_id}`}
+                    >
+                      {t("Abrir acompanhamento")}
+                    </Link>
+                  ) : (
+                    <Link className="underline" href="/app/ai/followups">
+                      {t("Revisar acompanhamentos")}
+                    </Link>
+                  )}
+                </div>
+              ) : a.status === "no_show" && a.contact_id && a.outcome_recorded_at ? (
+                <div role="status" className="rounded-lg border p-3">
+                  <p>
+                    {t("Falta confirmada. O resultado da recuperação ainda não está disponível.")}
+                  </p>
+                  <Link className="underline" href="/app/ai/followups">
+                    {t("Revisar acompanhamentos")}
+                  </Link>
+                </div>
+              ) : null}
+
+              <details data-testid="mais-detalhes-do-compromisso" className="group rounded-lg border border-border">
+                <summary
+                  data-testid="abrir-mais-detalhes"
+                  className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2.5 text-sm font-medium text-text [&::-webkit-details-marker]:hidden"
                 >
-                  {t("Cancelar agendamento")}
-                </Button>
-              </div>
-            ) : null}
-            {podeExcluir && !a.excluded_at ? <ExcluirCompromisso id={a.id} onExcluido={onClose} /> : null}
-          </div>
-        ) : null}
-      </SheetContent>
-    </Sheet>
+                  <CaretRight
+                    size={14}
+                    weight="bold"
+                    aria-hidden
+                    className="transition-transform duration-fast ease-out group-open:rotate-90"
+                  />
+                  {t("Mais detalhes")}
+                </summary>
+                <div className="space-y-4 border-t border-border px-3 py-3">
+                  {a.contact_id ? (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                      <Link href={`/app/contacts/${a.contact_id}`} className="underline">
+                        {t("Ver contato")}
+                      </Link>
+                      {a.conversation_id ? (
+                        <Link href={`/app/inbox?id=${a.conversation_id}`} className="underline">
+                          {t("Ver conversa")}
+                        </Link>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-text-muted">{t("Compromisso pessoal, sem cliente vinculado.")}</p>
+                  )}
+                  {a.description?.trim() ? (
+                    <p data-testid="compromisso-observacao" className="whitespace-pre-wrap">
+                      {a.description}
+                    </p>
+                  ) : null}
+                  {/* Com rótulo, e não o texto solto: sem rótulo ninguém sabe que é interna. */}
+                  {a.notes?.trim() ? (
+                    <div data-testid="compromisso-anotacao">
+                      <p className="text-sm text-text-muted">{t("Anotação")}</p>
+                      <p className="whitespace-pre-wrap">{a.notes}</p>
+                    </div>
+                  ) : null}
+                  {a.created_by_kind === "user" ? (
+                    <label className="block text-sm" data-testid="compromisso-canal">
+                      <span className="text-text-muted">{t("Marcada por")}</span>
+                      <select
+                        className="mt-1 w-full rounded-md border bg-surface p-2"
+                        value={a.booking_channel ?? ""}
+                        disabled={!podeEditar || a.status === "cancelled" || Boolean(a.excluded_at) || mutation.isPending || staleDraft}
+                        onChange={(e) => {
+                          if (e.target.value) decide({ booking_channel: e.target.value });
+                        }}
+                      >
+                        {a.booking_channel ? null : <option value="">{t("Não informado (conta como mensagem)")}</option>}
+                        <option value="mensagem">{t("Mensagem")}</option>
+                        <option value="ligacao">{t("Ligação")}</option>
+                      </select>
+                    </label>
+                  ) : null}
+                  {a.converted_by_kind ? (
+                    <p className="text-sm" data-testid="compromisso-quem-converteu">
+                      <span className="text-text-muted">{t("Quem converteu")}: </span>
+                      {a.converted_by_kind === "ai"
+                        ? t("IA do atendimento")
+                        : (pessoas.data?.find((p) => p.id === a.converted_by_user_id)?.nome ?? t("Alguém da equipe"))}
+                    </p>
+                  ) : null}
+                  {a.google_sync ? (
+                    <SincronizacaoDoCompromisso
+                      key={a.id}
+                      id={a.id}
+                      sync={a.google_sync}
+                      onSaved={() => void query.refetch()}
+                    />
+                  ) : null}
+                  {a.meeting ? (
+                    <MeetDoCompromisso
+                      id={a.id}
+                      revision={a.google_sync?.revision ?? String(a.revision)}
+                      meeting={a.meeting}
+                      onSaved={() => void query.refetch()}
+                    />
+                  ) : null}
+                  {podeEditar && ["pending", "confirmed"].includes(a.status) && !a.excluded_at ? (
+                    <Button
+                      variant="outline"
+                      disabled={mutation.isPending || staleDraft}
+                      onClick={() =>
+                        decide({
+                          confirmation_next_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+                        })
+                      }
+                    >
+                      {t("Lembrar em uma hora")}
+                    </Button>
+                  ) : null}
+                  {podeExcluir && !a.excluded_at ? <ExcluirCompromisso id={a.id} onExcluido={onClose} /> : null}
+                </div>
+              </details>
+            </>
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

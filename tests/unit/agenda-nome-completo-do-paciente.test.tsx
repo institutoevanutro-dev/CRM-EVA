@@ -33,11 +33,12 @@ vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));
 vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: vi.fn() }));
 vi.mock("@/components/contacts/NewContactDialog", () => ({ NewContactDialog: () => null }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock("@/components/ui/sheet", () => ({
-  Sheet: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SheetContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SheetHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SheetTitle: ({ children }: { children: React.ReactNode }) => <h1>{children}</h1>,
+vi.mock("@/components/ui/dialog", () => ({
+  Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: React.ReactNode }) => <h1>{children}</h1>,
+  DialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
 }));
 
 import { DetalheDoCompromisso } from "@/components/agenda/DetalheDoCompromisso";

@@ -105,6 +105,7 @@ test("excluir pela tela: some da grade e de todas as listas, o horário volta, e
 
   // ── 2. Abre o detalhe e exclui ─────────────────────────────────────────
   await page.getByTestId(`agendamento-${id}`).click();
+  await page.getByTestId("abrir-mais-detalhes").click();
   await page.getByTestId("excluir-compromisso").click();
   const dialogo = page.getByRole("alertdialog");
   await expect(dialogo).toBeVisible({ timeout: 10_000 });

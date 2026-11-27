@@ -187,11 +187,10 @@ test("remarcar pela tela: o painel abre em modo remarcar e o horário muda", asy
 
   await remarcarBotao.click();
 
-  // O título prova que a tela sabe que é OUTRA operação — reusar o painel sem
-  // dizer qual é faria a pessoa achar que está criando um segundo compromisso.
-  await expect(page.getByRole("heading", { name: /Remarcar agendamento/ })).toBeVisible({
-    timeout: 10_000,
-  });
+  // Desde 27/11/2026 o Remarcar abre o PAINEL DO PACIENTE já no "quando" da
+  // remarcação — o painel diz de quem é o compromisso, e o botão diz que é
+  // remarcar, não marcar um segundo.
+  await expect(page.getByTestId("remarcar-no-painel")).toBeVisible({ timeout: 10_000 });
 
   await escolherDiaDesenhado(page, diasDaSemana);
 
@@ -204,9 +203,7 @@ test("remarcar pela tela: o painel abre em modo remarcar e o horário muda", asy
   const rotuloNovo = (await outro.getAttribute("data-testid"))!.replace("horario-", "");
   expect(rotuloNovo).not.toBe(rotuloOriginal);
   await outro.click();
-  // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
-  if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
-  await page.getByTestId("confirmar-marcacao").click();
+  await page.getByTestId("confirmar-remarcacao").click();
 
   await expect
     .poll(async () => (await historico.textContent()) ?? "", {

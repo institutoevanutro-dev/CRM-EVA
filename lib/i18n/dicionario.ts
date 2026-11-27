@@ -13018,6 +13018,11 @@ export const DICIONARIO: Traducoes = {
   "Tipo de paciente": { es: "Tipo de paciente" },
   "Quem e o quê": { es: "Quién y qué" },
   "Fora dos horários livres": { es: "Fuera de los horarios libres" },
+  "Agendado": { es: "Agendada" },
+  "Mais detalhes": { es: "Más detalles" },
+  "Escolha o novo dia e o horário.": { es: "Elija el nuevo día y el horario." },
+  "Confirmar remarcação": { es: "Confirmar reprogramación" },
+  "Remarcando…": { es: "Reprogramando…" },
 };
 
 /**

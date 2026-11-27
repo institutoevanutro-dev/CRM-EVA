@@ -61,8 +61,8 @@ import { type ContatoDaMarcacao, VinculoDaMarcacao } from "./VinculoDaMarcacao";
  * 1280×800): à esquerda quem, o quê e para quem; à direita quando. No celular
  * vira uma coluna só, na mesma ordem. Os horários vêm da MESMA rota que a IA usa
  * (`useHorariosLivres`, montada em `_client.tsx`), então tela e agente oferecem
- * as mesmas vagas. O painel antigo, em três colunas, continua existindo para
- * REMARCAR e na vitrine; aqui é só a marcação nova.
+ * as mesmas vagas. O painel antigo, em três colunas, ficou só na vitrine;
+ * remarcar usa o mesmo `QuandoDaMarcacao` no painel do paciente.
  */
 
 type Tipo = {

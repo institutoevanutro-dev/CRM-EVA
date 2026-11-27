@@ -1,0 +1,229 @@
+/**
+ * O painel do paciente (decisão 6 do André, 27/11/2026): a cara da janela de
+ * marcação, três botões grandes, Compareceu/Faltou depois do horário e "Mais
+ * detalhes" fechado. Remarcar usa o MESMO "quando" da marcação e manda
+ * `starts_at` pela rota de sempre. Nomes fictícios.
+ */
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { DetalheDoCompromisso, type RemarcacaoDoPainel } from "@/components/agenda/DetalheDoCompromisso";
+import type { HorarioLivre } from "@/components/agenda/tipos";
+import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
+
+const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), delete: vi.fn(), post: vi.fn() }));
+vi.mock("@/lib/api/client", () => ({ apiClient: api }));
+vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: vi.fn() }));
+vi.mock("@/components/ui/dialog", () => ({
+  Dialog: ({ children, open }: { children: React.ReactNode; open: boolean }) => (open ? <div>{children}</div> : null),
+  DialogContent: ({ children, "data-testid": id }: { children: React.ReactNode; "data-testid"?: string }) => (
+    <div role="dialog" data-testid={id}>
+      {children}
+    </div>
+  ),
+  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
+  DialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
+}));
+
+const ID = "11111111-0000-4000-8000-0000000000aa";
+const H14: HorarioLivre = { instante: "2030-03-06T17:00:00.000Z", rotulo: "14:00" };
+const BASE = {
+  id: ID,
+  title: "Aplicação de vitamina D",
+  notes: "Trazer os exames",
+  description: null,
+  location_kind: "in_person",
+  location_details: "Sala 2",
+  starts_at: "2030-03-06T13:00:00Z",
+  ends_at: "2030-03-06T13:30:00Z",
+  time_zone: "America/Sao_Paulo",
+  status: "confirmed",
+  revision: 1,
+  excluded_at: null,
+  exclusion_reason: null,
+  booking_channel: "mensagem",
+  created_by_kind: "user",
+  converted_by_kind: null,
+  converted_by_user_id: null,
+  contact_id: "c-1",
+  contato: { name: "Carla Fictícia Souza", display_name: null },
+  conversation_id: "conv-1",
+  outcome_source_kind: null,
+  outcome_recorded_at: null,
+  recovery: null,
+  evidence_messages: [],
+};
+
+let client: QueryClient;
+beforeEach(() => {
+  vi.resetAllMocks();
+  client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+});
+afterEach(() => {
+  cleanup();
+  client.clear();
+});
+
+function detalhe(dados: Record<string, unknown>) {
+  api.get.mockImplementation((url: string) =>
+    Promise.resolve(url.includes("/pessoas") ? { data: [] } : { data: dados }),
+  );
+}
+
+function Painel({ onAbrir = vi.fn(), onFechar = vi.fn() }: { onAbrir?: (c: string) => void; onFechar?: () => void }) {
+  const [aberta, setAberta] = useState(false);
+  const remarcacao: RemarcacaoDoPainel = {
+    aberta,
+    onAbrir: (c) => {
+      onAbrir(c);
+      setAberta(true);
+    },
+    onFechar: () => {
+      onFechar();
+      setAberta(false);
+    },
+    quando: {
+      ancora: new Date(2030, 2, 6, 12),
+      agora: new Date(2030, 2, 1, 9),
+      fuso: "America/Sao_Paulo",
+      horariosPorDia: { "2030-03-06": [H14] },
+      publicouHorarios: true,
+      erroAoCarregar: false,
+      fusoSuposto: false,
+      onMesVisivel: () => {},
+      mesCarregado: new Date(2030, 2, 1),
+      temTipo: true,
+      avisoSemTipo: "Carregando…",
+      permiteEncaixe: true,
+      abriuComHorario: false,
+    },
+  };
+  return (
+    <DetalheDoCompromisso id={ID} onClose={() => {}} profissional="Dra. Ana Teste" remarcacao={remarcacao} podeExcluir />
+  );
+}
+
+function abrir(ui: React.ReactNode = <Painel />) {
+  render(
+    <IdiomaProvider locale="pt-BR">
+      <QueryClientProvider client={client}>{ui}</QueryClientProvider>
+    </IdiomaProvider>,
+  );
+}
+
+describe("painel do paciente", () => {
+  it("cabeçalho: iniciais, nome do paciente, estado; embaixo procedimento, hora, profissional e local", async () => {
+    detalhe(BASE);
+    abrir();
+    expect(await screen.findByRole("heading", { name: "Carla Fictícia Souza" })).toBeInTheDocument();
+    expect(screen.getByText("CS")).toBeInTheDocument();
+    expect(screen.getByTestId("estado-do-compromisso")).toHaveTextContent("Agendado");
+    expect(screen.getByTestId("compromisso-procedimento")).toHaveTextContent("Aplicação de vitamina D");
+    expect(screen.getByText("Dra. Ana Teste")).toBeInTheDocument();
+    expect(screen.getByTestId("compromisso-local")).toHaveTextContent("Sala 2");
+  });
+
+  it("Confirmar só quando aguarda confirmação, e manda status confirmed com a revision", async () => {
+    detalhe({ ...BASE, status: "pending" });
+    api.patch.mockResolvedValue({ data: { id: ID } });
+    abrir();
+    fireEvent.click(await screen.findByTestId("acao-confirmar"));
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith("/api/v1/agenda/agendamentos", { id: ID, revision: 1, status: "confirmed" }),
+    );
+  });
+
+  it("já agendado: sem Confirmar, com Remarcar e Cancelar", async () => {
+    detalhe(BASE);
+    abrir();
+    await screen.findByTestId("acao-remarcar");
+    expect(screen.queryByTestId("acao-confirmar")).toBeNull();
+    expect(screen.getByTestId("acao-cancelar")).toBeInTheDocument();
+  });
+
+  it("Remarcar abre o 'quando' no painel e manda starts_at pela rota de sempre", async () => {
+    detalhe(BASE);
+    api.patch.mockResolvedValue({ data: { id: ID } });
+    const onAbrir = vi.fn();
+    const onFechar = vi.fn();
+    abrir(<Painel onAbrir={onAbrir} onFechar={onFechar} />);
+    fireEvent.click(await screen.findByTestId("acao-remarcar"));
+    expect(onAbrir).toHaveBeenCalledWith(BASE.starts_at);
+    const quando = await screen.findByTestId("quando-da-marcacao");
+    expect(screen.getByTestId("confirmar-remarcacao")).toBeDisabled();
+    fireEvent.click(within(quando).getByTestId("horario-14:00"));
+    expect(within(quando).getByTestId("hora-da-marcacao")).toHaveValue("14:00");
+    fireEvent.click(screen.getByTestId("confirmar-remarcacao"));
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith("/api/v1/agenda/agendamentos", {
+        id: ID,
+        revision: 1,
+        starts_at: H14.instante,
+      }),
+    );
+    await waitFor(() => expect(onFechar).toHaveBeenCalled());
+  });
+
+  it("Cancelar abre o motivo; o botão só libera com 3 letras e chama a rota atual", async () => {
+    detalhe(BASE);
+    api.delete.mockResolvedValue({});
+    abrir();
+    fireEvent.click(await screen.findByTestId("acao-cancelar"));
+    const confirmar = screen.getByTestId("confirmar-cancelamento");
+    fireEvent.change(screen.getByLabelText("Motivo do cancelamento"), { target: { value: "ok" } });
+    expect(confirmar).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Motivo do cancelamento"), { target: { value: "Pediu outro dia" } });
+    fireEvent.click(confirmar);
+    await waitFor(() =>
+      expect(api.delete).toHaveBeenCalledWith("/api/v1/agenda/agendamentos", {
+        id: ID,
+        revision: 1,
+        reason: "Pediu outro dia",
+      }),
+    );
+  });
+
+  it("Compareceu/Faltou só depois do início, e nunca em compromisso pessoal", async () => {
+    detalhe(BASE);
+    abrir();
+    await screen.findByTestId("acao-cancelar");
+    expect(screen.queryByRole("button", { name: "Compareceu" })).toBeNull();
+    // O cache do detalhe sobreviveria ao `cleanup` e mostraria o compromisso anterior.
+    cleanup();
+    client.clear();
+
+    detalhe({ ...BASE, starts_at: "2020-01-01T12:00:00Z", ends_at: "2020-01-01T12:30:00Z" });
+    abrir();
+    expect(await screen.findByRole("button", { name: "Compareceu" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Faltou" })).toBeInTheDocument();
+    cleanup();
+    client.clear();
+
+    detalhe({ ...BASE, starts_at: "2020-01-01T12:00:00Z", ends_at: "2020-01-01T12:30:00Z", contact_id: null, contato: null });
+    abrir();
+    await screen.findByTestId("acao-cancelar");
+    expect(screen.queryByRole("button", { name: "Compareceu" })).toBeNull();
+  });
+
+  it("'Mais detalhes' começa fechado e guarda contato, conversa, anotação e excluir", async () => {
+    detalhe(BASE);
+    abrir();
+    const mais = (await screen.findByTestId("mais-detalhes-do-compromisso")) as HTMLDetailsElement;
+    expect(mais.open).toBe(false);
+    expect(within(mais).getByText("Ver contato").closest("a")).toHaveAttribute("href", "/app/contacts/c-1");
+    expect(within(mais).getByText("Ver conversa").closest("a")).toHaveAttribute("href", "/app/inbox?id=conv-1");
+    expect(within(mais).getByTestId("compromisso-anotacao")).toHaveTextContent("Trazer os exames");
+    expect(within(mais).getByTestId("excluir-compromisso")).toBeInTheDocument();
+  });
+
+  it("compromisso cancelado não oferece ação nenhuma", async () => {
+    detalhe({ ...BASE, status: "cancelled" });
+    abrir();
+    expect(await screen.findByTestId("estado-do-compromisso")).toHaveTextContent("Cancelado");
+    expect(screen.queryByTestId("acao-remarcar")).toBeNull();
+    expect(screen.queryByTestId("acao-cancelar")).toBeNull();
+  });
+});

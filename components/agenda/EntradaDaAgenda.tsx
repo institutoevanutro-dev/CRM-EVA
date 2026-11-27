@@ -2,11 +2,17 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { usePermission } from "@/hooks/auth/AuthProvider";
 import { useEffect } from "react";
-import { DetalheDoCompromisso } from "./DetalheDoCompromisso";
+import { DetalheDoCompromisso, type RemarcacaoDoPainel } from "./DetalheDoCompromisso";
 export function EntradaDaAgenda({
   onContext,
+  profissional,
+  remarcacao,
 }: {
   onContext: (contact: string, conversation: string) => void;
+  /** Quem atende, como a grade o conhece. */
+  profissional?: string;
+  /** O Remarcar do painel; ausente para quem não pode marcar. */
+  remarcacao?: RemarcacaoDoPainel;
 }) {
   const podeEditar = usePermission("inbox.reply");
   const podeExcluir = usePermission("agenda.appointment.exclude");
@@ -33,6 +39,8 @@ export function EntradaDaAgenda({
       podeEditar={podeEditar}
       podeExcluir={podeExcluir}
       podeCompletarNome={podeCompletarNome}
+      profissional={profissional}
+      remarcacao={remarcacao}
       id={params.get("compromisso")}
       onClose={() => {
         // O `?tipo=` escolhido na grade ATRAVESSA o fecho do detalhe: sem

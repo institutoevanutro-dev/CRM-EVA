@@ -191,9 +191,9 @@ async function evidence(
 }
 async function detail(page: Page, id: string) {
   await page.goto(`/app/agenda?compromisso=${id}`);
-  await expect(
-    page.getByRole("dialog").getByRole("heading", { name: "Consulta sincronizada", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("dialog").getByText("Consulta sincronizada", { exact: true }).first()).toBeVisible();
+  // A sincronização do Google mora em "Mais detalhes", fechado por padrão (27/11/2026).
+  await page.getByTestId("abrir-mais-detalhes").click();
 }
 async function row(f: Fixture, id: string) {
   const { data, error } = await db
