@@ -63,69 +63,6 @@ test.describe("a Agenda como o dono do produto a usa", () => {
     await expect(page.getByRole("heading", { name: "Agenda", exact: true })).toBeVisible();
   });
 
-  test("as pessoas da equipe são REAIS — o filtro deixou de ser invisível", async () => {
-    // `FiltroDePessoas` devolve `null` com menos de duas pessoas. Enquanto a
-    // tela do produto passava lista vazia, o filtro existia, estava provado na
-    // vitrine, e NINGUÉM o via aqui. Componente provado e não montado é o mesmo
-    // que componente ausente, do ponto de vista de quem usa.
-    await page.goto("/app/agenda");
-    await esperarAgenda(page, ESPERA);
-
-    const filtro = page.getByTestId("filtro-de-pessoas");
-    const avatares = page.locator('[data-testid^="avatar-pessoa-"]');
-
-    // O seed do E2E tem admin, manager, agent, viewer e dono — mais de uma
-    // pessoa, então o filtro TEM de aparecer.
-    await expect(filtro).toBeVisible({ timeout: ESPERA });
-    const quantas = await avatares.count();
-    expect(quantas, "o filtro apareceu mas sem avatares").toBeGreaterThan(1);
-
-    // Cada pessoa tem trilha de cor, e trilhas diferentes entre si: a cor vem do
-    // `user_id` e não de um índice, então duas pessoas não colidem por estarem
-    // na mesma posição da lista.
-    const trilhas = await avatares.evaluateAll((els) =>
-      els.map((e) => (e as HTMLElement).dataset.trilha),
-    );
-    expect(trilhas.every((t) => t && Number(t) >= 1 && Number(t) <= 8)).toBe(true);
-
-    // ⚠️ O INTERVALO SOZINHO É PARCIALMENTE VÁCUO, e o comentário acima já
-    // AFIRMAVA o que ele não media: "trilhas diferentes entre si". Se
-    // `trilhaPadraoDoMembro` devolvesse 1 para todo mundo, o `every` acima
-    // passaria — e a agenda desenharia a equipe inteira na mesma cor, que é
-    // exatamente o que o sistema de cores existe para impedir.
-    // ⚠️ POR PESSOA, e não por ELEMENTO — minha primeira versão comparou
-    // `new Set(trilhas).size` com `trilhas.length` e reprovou dizendo "19 contra
-    // 4". Medido: a organização tem CINCO pessoas e o locator casa 19 avatares,
-    // porque a mesma pessoa aparece no filtro E em cada card da grade. Repetir a
-    // trilha ali é o comportamento CERTO — é a mesma pessoa.
-    //
-    // A propriedade que importa é: duas pessoas DIFERENTES não compartilham
-    // trilha. O `data-testid` carrega o id, então dá para parear.
-    const porPessoa = await avatares.evaluateAll((els) =>
-      els.map((e) => ({
-        pessoa: (e as HTMLElement).dataset.testid?.replace("avatar-pessoa-", "") ?? "",
-        trilha: (e as HTMLElement).dataset.trilha ?? "",
-      })),
-    );
-    const trilhaDe = new Map<string, string>();
-    const colisoes: string[] = [];
-    for (const { pessoa, trilha } of porPessoa) {
-      for (const [outra, t] of trilhaDe) {
-        if (outra !== pessoa && t === trilha) colisoes.push(`${outra} e ${pessoa} → trilha ${t}`);
-      }
-      trilhaDe.set(pessoa, trilha);
-    }
-    expect(
-      trilhaDe.size,
-      "o filtro tem menos de duas pessoas distintas — o teste de colisão mede o vazio",
-    ).toBeGreaterThan(1);
-    expect(
-      [...new Set(colisoes)],
-      "duas pessoas DIFERENTES ganharam a mesma trilha de cor — na grade elas viram " +
-        "uma só, e quem olha não distingue de quem é o compromisso",
-    ).toEqual([]);
-  });
-
   test("o histórico está NA TELA DO PRODUTO, com as quatro abas", async () => {
     // Estava provado só na vitrine. Aqui ele aparece mesmo sem dado: as abas com
     // contador zero respondem "não há nada" sem gastar um clique.
@@ -222,33 +159,6 @@ test.describe("a Agenda como o dono do produto a usa", () => {
     } else {
       await expect(regua, `fora da faixa (${horaLida}) e a régua apareceu mesmo assim`).toHaveCount(0);
     }
-  });
-
-  test("o filtro por pessoa ISOLA de verdade — clicando, no produto", async () => {
-    // O isolamento era assertado só na vitrine. Aqui o teste é sobre o efeito:
-    // clicar numa pessoa muda o que a grade mostra, e "Todos" desfaz.
-    const filtro = page.getByTestId("filtro-de-pessoas");
-    await expect(filtro).toBeVisible({ timeout: ESPERA });
-
-    const cartoes = () => page.getByTestId("grade-da-agenda").getByRole("button", { name: /\d{2}:\d{2} às \d{2}:\d{2}/ });
-    const todos = await cartoes().count();
-
-    const primeira = filtro.getByRole("button").first();
-    await primeira.click();
-    const isolado = await cartoes().count();
-    expect(
-      isolado,
-      "isolar uma pessoa não pode mostrar MAIS do que a agenda inteira",
-    ).toBeLessThanOrEqual(todos);
-    await expect(primeira, "cliquei na pessoa e ela não ficou marcada").toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-
-    await page.getByTestId("botao-todos").click();
-    await expect
-      .poll(() => cartoes().count(), { message: "\"Todos\" não desfez o isolamento" })
-      .toBe(todos);
   });
 
   test("evidência visual da tela do produto", async () => {

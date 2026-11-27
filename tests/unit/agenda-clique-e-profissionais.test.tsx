@@ -5,8 +5,7 @@
  *      vazio, mesmo sem horário publicado, abre o MESMO painel de "Novo
  *      agendamento", já no dia e na meia hora clicados e, com uma pessoa só no
  *      filtro, com ela.
- *   2. "Selecionar um ou vários profissionais" — os avatares viram seleção
- *      múltipla, "Todos" zera, e a escolha volta no próximo acesso.
+ *   2. A fileira de profissionais (27/11/2026): só quem tem atendimento na semana, uma pessoa por vez, "Todos" zera, e a escolha volta no próximo acesso.
  *
  * A tela inteira é montada (como em `agenda-tipo-da-grade-sobrevive-ao-reload`)
  * porque o que se mede é a LIGAÇÃO: filtro → horários pedidos → clique → painel
@@ -227,6 +226,8 @@ afterEach(cleanup);
 
 describe("clicar num horário vazio abre o Novo agendamento já preenchido", () => {
   it("dia e meia hora do bloco, e a pessoa selecionada no filtro vira a dona", async () => {
+    // A fileira só mostra quem TEM atendimento na semana (27/11/2026).
+    compromissos.push(compromisso("c-bia", "p-bia", "16:00"));
     montar();
     fireEvent.click(avatar("p-bia"));
     // A dica "Horários livres de" segue a seleção de UMA pessoa.
@@ -251,8 +252,6 @@ describe("clicar num horário vazio abre o Novo agendamento já preenchido", () 
 
   it("sem pessoa única no filtro, o profissional é o dono do tipo, e o POST o leva explícito", async () => {
     montar();
-    fireEvent.click(avatar("p-bia"));
-    fireEvent.click(avatar("p-caio"));
     expect(ultimoPedidoDaGrade()?.owner_user_id).toBeUndefined();
 
     fireEvent.click(screen.getByTestId(`bloco-${QUARTA}-09:00`));
@@ -318,50 +317,85 @@ describe("o bloco vazio pelo teclado", () => {
   });
 });
 
-describe("filtro de um ou vários profissionais", () => {
-  it("liga e desliga cada pessoa, e Todos zera", () => {
+describe("fileira: uma pessoa de cada vez (27/11/2026)", () => {
+  const tres = () =>
     compromissos.push(
       compromisso("c-ana", "p-ana", "09:00"),
       compromisso("c-bia", "p-bia", "11:00"),
       compromisso("c-caio", "p-caio", "13:00"),
     );
+  const visiveis = () =>
+    ["c-ana", "c-bia", "c-caio"].filter((id) => screen.queryByTestId(`agendamento-${id}`));
+
+  it("escolhe uma pessoa; clicar de novo ou em Todos volta a todos", () => {
+    tres();
     montar();
-    const visiveis = () =>
-      ["c-ana", "c-bia", "c-caio"].filter((id) => screen.queryByTestId(`agendamento-${id}`));
+    expect(visiveis()).toEqual(["c-ana", "c-bia", "c-caio"]);
+    expect(screen.getByTestId("botao-todos")).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(avatar("p-ana"));
+    expect(visiveis()).toEqual(["c-ana"]);
+    fireEvent.click(avatar("p-caio"));
+    expect(visiveis()).toEqual(["c-caio"]);
+    expect(avatar("p-ana")).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(avatar("p-caio"));
     expect(visiveis()).toEqual(["c-ana", "c-bia", "c-caio"]);
 
-    fireEvent.click(avatar("p-ana"));
-    fireEvent.click(avatar("p-caio"));
-    expect(visiveis()).toEqual(["c-ana", "c-caio"]);
-    expect(avatar("p-ana")).toHaveAttribute("aria-pressed", "true");
-    expect(avatar("p-bia")).toHaveAttribute("aria-pressed", "false");
-
-    fireEvent.click(avatar("p-ana"));
-    expect(visiveis()).toEqual(["c-caio"]);
-
+    fireEvent.click(avatar("p-bia"));
     fireEvent.click(screen.getByTestId("botao-todos"));
     expect(visiveis()).toEqual(["c-ana", "c-bia", "c-caio"]);
-    expect(screen.queryByTestId("botao-todos")).toBeNull();
+    expect(screen.getByTestId("botao-todos")).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("a escolha volta no próximo acesso, por usuário, e id que a pessoa não enxerga cai fora", () => {
+  it("só quem tem atendimento na semana entra na fileira", () => {
+    compromissos.push(compromisso("c-ana", "p-ana", "09:00"));
+    montar();
+    expect(avatar("p-ana")).toBeInTheDocument();
+    expect(screen.queryByTestId("botao-pessoa-p-bia")).toBeNull();
+  });
+
+  it("a escolhida sem nada na semana continua na fileira, marcada, e Todos desfaz", () => {
+    // Escolheu a Bia numa semana em que ela atendia; a semana carregada agora
+    // só tem a Ana. Se ela sumisse da fileira, a grade ficaria filtrada por
+    // alguém invisível, sem botão para desfazer.
+    window.localStorage.setItem(CHAVE, JSON.stringify(["p-bia"]));
+    compromissos.push(compromisso("c-ana", "p-ana", "09:00"));
+    montar();
+    expect(avatar("p-bia")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("filtro-de-pessoas")).toHaveAttribute("data-selecionadas", "p-bia");
+    expect(visiveis()).toEqual([]);
+
+    fireEvent.click(screen.getByTestId("botao-todos"));
+    expect(screen.getByTestId("filtro-de-pessoas")).toHaveAttribute("data-selecionadas", "todos");
+    expect(visiveis()).toEqual(["c-ana"]);
+    // Sem a escolha, ela sai da fileira: não tem atendimento na semana.
+    expect(screen.queryByTestId("botao-pessoa-p-bia")).toBeNull();
+  });
+
+  it("a escolha volta no próximo acesso; uma antiga de várias vale pela primeira; id invisível cai fora", () => {
+    tres();
     const primeira = montar();
     fireEvent.click(avatar("p-bia"));
-    fireEvent.click(avatar("p-caio"));
-    expect(JSON.parse(window.localStorage.getItem(CHAVE)!)).toEqual(["p-bia", "p-caio"]);
+    expect(JSON.parse(window.localStorage.getItem(CHAVE)!)).toEqual(["p-bia"]);
     primeira.unmount();
 
     montar();
-    expect(screen.getByTestId("filtro-de-pessoas")).toHaveAttribute("data-selecionadas", "p-bia,p-caio");
+    expect(screen.getByTestId("filtro-de-pessoas")).toHaveAttribute("data-selecionadas", "p-bia");
     cleanup();
 
-    // Gravado por outra versão ou de um colega que a pessoa não vê mais.
+    // Gravada quando o filtro era múltiplo.
+    window.localStorage.setItem(CHAVE, JSON.stringify(["p-caio", "p-bia"]));
+    montar();
+    expect(screen.getByTestId("filtro-de-pessoas")).toHaveAttribute("data-selecionadas", "p-caio");
+    cleanup();
+
     window.localStorage.setItem(CHAVE, JSON.stringify(["p-sumiu"]));
     montar();
     expect(screen.getByTestId("filtro-de-pessoas")).toHaveAttribute("data-selecionadas", "todos");
   });
 
   it("armazenamento bloqueado não derruba a tela", () => {
+    compromissos.push(compromisso("c-ana", "p-ana", "09:00"));
     const ler = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("bloqueado");
     });
@@ -375,8 +409,8 @@ describe("filtro de um ou vários profissionais", () => {
     gravar.mockRestore();
   });
 
-  it("uma pessoa só: o filtro não aparece", () => {
-    render(<FiltroDePessoas pessoas={[PESSOAS[0]!]} selecionadas={[]} onMudar={vi.fn()} />);
+  it("ninguém com atendimento: a fileira some", () => {
+    render(<FiltroDePessoas pessoas={[]} selecionadas={[]} onMudar={vi.fn()} />);
     expect(screen.queryByTestId("filtro-de-pessoas")).toBeNull();
   });
 });

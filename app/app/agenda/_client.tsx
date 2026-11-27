@@ -29,7 +29,7 @@ import { resolverResponsavelDoPainel } from "@/lib/agenda/responsavel-do-painel"
 import { tipoDaRemarcacao } from "@/lib/agenda/tipo-da-remarcacao";
 import { ancoraLocalDoDia } from "@/lib/agenda/semana-semente";
 import { useVinculoDaMarcacao } from "@/lib/agenda/vinculo-da-marcacao";
-import { gravarPessoasDaGrade, lerPessoasDaGrade, selecaoValida } from "@/lib/agenda/pessoas-da-grade";
+import { gravarPessoasDaGrade, lerPessoasDaGrade, pessoasComAtendimento, selecaoValida } from "@/lib/agenda/pessoas-da-grade";
 import { Button } from "@/components/ui/button";
 import { PainelDeMarcacao } from "@/components/agenda/PainelDeMarcacao";
 import { MarcacaoSimples } from "@/components/agenda/MarcacaoSimples";
@@ -353,15 +353,14 @@ export function AgendaClient({
   const [diaDaAbertura] = React.useState(diaDeAgora);
   const hoje = diaDeAgora === diaDaAbertura ? hojeNaOrganizacao : diaDeAgora;
 
-  // AS PESSOAS SÃO REAIS: vêm de `/api/v1/agenda/pessoas`, com a trilha de cor derivada do
-  // `user_id`. Até esta linha o filtro por pessoa era invisível na tela do
-  // produto — `FiltroDePessoas` devolve `null` com menos de duas pessoas, e a
-  // lista estava vazia. Ele existia, estava provado na vitrine, e ninguém o via
-  // aqui.
+  // AS PESSOAS SÃO REAIS: vêm de `/api/v1/agenda/pessoas`, com a trilha de cor
+  // derivada do `user_id`. Servem para nome e cor; quem entra na FILEIRA de
+  // profissionais é decidido abaixo (`pessoasDaFileira`).
   const { data: pessoas = [] } = usePessoasDaAgenda();
-  // Só vale quem o servidor devolveu a ESTA pessoa: um id guardado de alguém que
-  // ela não enxerga (ou que saiu da equipe) cai fora, e a grade volta a "todos".
-  const selecionadas = React.useMemo(() => selecaoValida(pedidas, pessoas), [pedidas, pessoas]);
+  // Só vale quem o servidor devolveu a ESTA pessoa, e só UMA (decisão 3 do
+  // André, 27/11/2026): uma escolha antiga de várias pessoas, guardada quando o
+  // filtro era múltiplo, vale pela primeira.
+  const selecionadas = React.useMemo(() => selecaoValida(pedidas, pessoas).slice(0, 1), [pedidas, pessoas]);
   // OS AGENDAMENTOS SÃO REAIS, e agora TAMBÉM se atualizam sem recarregar.
   //
   // ⚠️ O comentário que estava aqui dizia que `GET /api/v1/agenda/agendamentos`
@@ -406,6 +405,12 @@ export function AgendaClient({
   const todos: Agendamento[] = React.useMemo(
     () => agendamentosVivos ?? (naJanelaDoServidor ? agendamentosIniciais : []),
     [agendamentosVivos, naJanelaDoServidor, agendamentosIniciais],
+  );
+  // A FILEIRA mostra só quem tem atendimento no período carregado — e quem está
+  // escolhido, para a escolha nunca sumir sem um jeito de desfazê-la.
+  const pessoasDaFileira = React.useMemo(
+    () => pessoasComAtendimento(pessoas, todos, selecionadas),
+    [pessoas, todos, selecionadas],
   );
 
   // Uma pessoa só selecionada é o CONTEXTO da marcação: os horários livres da
@@ -771,7 +776,7 @@ export function AgendaClient({
             gente no filtro, ela estoura igual — e o `overflow-x: hidden` corta o
             alternador de visão em silêncio. */}
         <div className="flex flex-wrap items-center gap-3">
-          <FiltroDePessoas pessoas={pessoas} selecionadas={selecionadas} onMudar={mudarPessoas} />
+          <FiltroDePessoas pessoas={pessoasDaFileira} selecionadas={selecionadas} onMudar={mudarPessoas} />
           <div
             data-testid="alternador-de-visao"
             className="flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5"

@@ -4,27 +4,24 @@ import { useT } from "@/hooks/i18n/useT";
 
 import { cn } from "@/lib/utils";
 
-import { AvatarDaPessoa } from "./AvatarDaPessoa";
+import { corDaTrilha } from "./paleta";
+import { nomeCurto } from "./rotulo-do-bloco";
 import type { Pessoa } from "./tipos";
 
 /**
- * Quem aparece na grade.
+ * A fileira de profissionais da Agenda (decisão 3 do André, 27/11/2026).
  *
- * Avatares empilhados, e cada um LIGA ou DESLIGA a agenda daquela pessoa.
- * Era isolamento de uma pessoa só ("o que a Ana tem hoje?"); o dono da clínica
- * pediu em 15/10 para ver duas ou três agendas juntas na hora de marcar, e a
- * pergunta de uma pessoa continua custando um clique: com nada selecionado, o
- * primeiro clique mostra só ela. "Todos" zera a seleção.
+ * "Todos" primeiro, depois um botão por pessoa — o ponto na cor dela e "Ana P.".
+ * Clicar escolhe UMA: a grade mostra só a agenda dela; clicar de novo, ou em
+ * "Todos", volta a mostrar todos. Era multisseleção com avatares (pedido de
+ * 15/10); o André trocou por uma pessoa de cada vez, que é o uso da recepção.
  *
- * O filtro é só VISTA sobre o que o servidor já devolveu a quem olha: quem não
- * enxerga a agenda de um colega não recebe o colega na lista de pessoas nem os
- * compromissos dele, e selecionar não busca nada novo.
- *
- * O empilhamento com sobreposição (`-space-x-2`) é o que permite oito pessoas
- * caberem ao lado do título sem virar uma barra de rolagem horizontal — e o
- * anel na cor da superfície é o que mantém cada uma legível por cima da outra.
+ * Quem entra na fileira é decidido por quem chama (`pessoasComAtendimento`):
+ * só quem tem atendimento no período. O filtro é só VISTA sobre o que o
+ * servidor já devolveu a quem olha — selecionar não busca nada novo.
  */
-const COM_NOME_ATE = 5;
+const BOTAO =
+  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors duration-fast ease-out max-lg:min-h-11 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500";
 
 export function FiltroDePessoas({
   pessoas,
@@ -33,77 +30,57 @@ export function FiltroDePessoas({
   className,
 }: {
   pessoas: Pessoa[];
-  /** Vazio = todos. */
+  /** Vazio = todos. Só a primeira conta: a escolha é de uma pessoa. */
   selecionadas: readonly string[];
   onMudar: (ids: string[]) => void;
   className?: string;
 }) {
   const t = useT();
-  // Um filtro com uma opção só não é um filtro — é um enfeite que ocupa espaço
-  // e sugere uma escolha inexistente. O produto já faz isso no alternador do
-  // inbox ("só aparece com 2+"), e a regra vale igual aqui.
-  if (pessoas.length < 2) return null;
-
-  const todos = selecionadas.length === 0;
-  // Até `COM_NOME_ATE` pessoas, cada avatar leva o nome ao lado e nada se
-  // sobrepõe (item 134): o nome é a legenda das cores, desfaz iniciais iguais
-  // ("EA" e "EA") e aparece no toque, onde o `title` não existe. Acima disso o
-  // empilhamento volta, para a fileira caber ao lado do título.
-  const comNome = pessoas.length <= COM_NOME_ATE;
+  const escolhida = selecionadas[0] ?? null;
+  // Ninguém com atendimento e ninguém escolhido: não há o que filtrar.
+  if (pessoas.length === 0 && escolhida === null) return null;
+  const todos = escolhida === null;
+  const classe = (ativo: boolean) =>
+    cn(
+      BOTAO,
+      ativo
+        ? "border-transparent bg-accent font-semibold text-accent-foreground"
+        : "border-border text-text-muted hover:border-border-strong hover:text-text",
+    );
 
   return (
     <div
       data-testid="filtro-de-pessoas"
-      data-selecionadas={todos ? "todos" : selecionadas.join(",")}
+      data-selecionadas={todos ? "todos" : escolhida}
       role="group"
       aria-label={t("Profissionais na agenda")}
-      className={cn("flex items-center gap-2", className)}
+      className={cn("flex flex-wrap items-center gap-1.5", className)}
     >
-      <div className={comNome ? "flex flex-wrap items-center gap-1" : "flex -space-x-2"}>
-        {pessoas.map((p) => {
-          const marcada = selecionadas.includes(p.id);
-          return (
-            <button
-              key={p.id}
-              type="button"
-              data-testid={`botao-pessoa-${p.id}`}
-              aria-pressed={marcada}
-              aria-label={
-                marcada
-                  ? `${t("Tirar da agenda:")} ${p.nome}`
-                  : `${t("Mostrar a agenda de")} ${p.nome}`
-              }
-              onClick={() =>
-                onMudar(marcada ? selecionadas.filter((id) => id !== p.id) : [...selecionadas, p.id])
-              }
-              className={cn(
-                "rounded-full transition-transform duration-fast ease-out",
-                comNome &&
-                  "flex items-center gap-1.5 py-0.5 pl-0.5 pr-2.5 text-xs text-text-muted hover:bg-surface-elevated max-lg:min-h-11",
-                comNome && marcada && "bg-surface-elevated text-text",
-                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
-                // Sobe 2px em vez de crescer: escala mudaria a sobreposição e
-                // faria os vizinhos parecerem se mexer junto.
-                marcada ? "-translate-y-0.5" : "hover:-translate-y-0.5",
-              )}
-            >
-              <AvatarDaPessoa pessoa={p} ativo={todos || marcada} />
-              {comNome && <span className="max-w-[9rem] truncate">{p.nome}</span>}
-            </button>
-          );
-        })}
-      </div>
-
-      {!todos && (
-        <button
-          type="button"
-          data-testid="botao-todos"
-          onClick={() => onMudar([])}
-          className="rounded-sm px-2 py-1 text-xs text-text-muted transition-colors duration-fast hover:bg-surface-elevated hover:text-text focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500"
-        >
-          {t("Todos")}
-        </button>
-      )}
+      <button type="button" data-testid="botao-todos" aria-pressed={todos} onClick={() => onMudar([])} className={classe(todos)}>
+        {t("Todos")}
+      </button>
+      {pessoas.map((p) => {
+        const marcada = p.id === escolhida;
+        return (
+          <button
+            key={p.id}
+            type="button"
+            data-testid={`botao-pessoa-${p.id}`}
+            data-trilha={p.trilha}
+            aria-pressed={marcada}
+            title={p.nome}
+            onClick={() => onMudar(marcada ? [] : [p.id])}
+            className={classe(marcada)}
+          >
+            <span
+              aria-hidden
+              className="size-2.5 shrink-0 rounded-full ring-1 ring-surface"
+              style={{ backgroundColor: corDaTrilha(p.trilha) }}
+            />
+            <span className="max-w-[9rem] truncate">{nomeCurto(p.nome)}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

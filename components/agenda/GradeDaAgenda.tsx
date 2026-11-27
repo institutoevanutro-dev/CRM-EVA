@@ -1532,11 +1532,6 @@ export function GradeDaAgenda({
     () => (fechamentosRecebidos ? agendamentos.filter((a) => !a.bloqueio) : agendamentos),
     [agendamentos, fechamentosRecebidos],
   );
-  // Quem tem compromisso no período: a legenda de cores por profissional.
-  const pessoasNaGrade = React.useMemo(
-    () => pessoas.filter((p) => cartoes.some((a) => a.responsavelId === p.id && a.origem !== "google_sync")),
-    [pessoas, cartoes],
-  );
   // O primeiro do período, em ordem de horário: é para ele que o link leva.
   const primeiroConflito = React.useMemo(
     () =>
@@ -2123,7 +2118,7 @@ export function GradeDaAgenda({
         </div>
         </JanelaContexto.Provider>
       )}
-      {visao !== "mes" ? <LegendaDaGrade pessoas={pessoasNaGrade} /> : null}
+      {visao !== "mes" ? <LegendaDaGrade /> : null}
     </div>
   );
 }
@@ -2133,7 +2128,7 @@ export function GradeDaAgenda({
  * eles querem dizer. Sem ela, o ícone só se explica passando o mouse — e o
  * toque não passa o mouse.
  */
-function LegendaDaGrade({ pessoas }: { pessoas: Pessoa[] }) {
+function LegendaDaGrade() {
   const t = useT();
   const item = "inline-flex items-center gap-1 whitespace-nowrap";
   return (
@@ -2141,21 +2136,6 @@ function LegendaDaGrade({ pessoas }: { pessoas: Pessoa[] }) {
       data-testid="legenda-da-grade"
       className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border px-3 py-1.5 text-xs text-text-muted"
     >
-      {/* De quem é cada cor: só quem tem compromisso no período (21/11/2026). */}
-      {pessoas.map((p) => (
-        <span key={p.id} data-testid={`legenda-pessoa-${p.id}`} className={cn(item, "font-medium text-text")}>
-          <span
-            aria-hidden
-            className="inline-block size-3 rounded-sm border"
-            style={{
-              background: fundoDaTrilha(p.trilha, 22),
-              borderColor: `color-mix(in oklab, ${corDaTrilha(p.trilha)} 45%, var(--color-surface))`,
-            }}
-          />
-          {nomeCurto(p.nome)}
-        </span>
-      ))}
-      {pessoas.length > 0 ? <span aria-hidden className="h-3 w-px bg-border" /> : null}
       <span className={item}>
         <span aria-hidden className="inline-block h-3 w-4 rounded-sm border border-dashed border-text-muted" />
         <Clock aria-hidden size={12} />

@@ -516,9 +516,9 @@ test("a grade: só as horas das jornadas, meia hora marcada, cor por profissiona
     // E não há cartão "Horário bloqueado" desenhado por cima dela.
     await expect(colunaDaQuarta.locator('[data-testid^="agendamento-bloqueio:"]')).toHaveCount(0);
 
-    // A legenda diz de quem é cada cor, e as duas cores são diferentes.
-    await expect(page.getByTestId(`legenda-pessoa-${f.ana.id}`)).toBeVisible();
-    await expect(page.getByTestId(`legenda-pessoa-${f.bruno.id}`)).toBeVisible();
+    // A fileira em cima diz de quem é cada cor (a legenda de pessoas do rodapé saiu em 27/11/2026).
+    await expect(page.getByTestId(`botao-pessoa-${f.ana.id}`)).toBeVisible();
+    await expect(page.getByTestId(`botao-pessoa-${f.bruno.id}`)).toBeVisible();
     const fundos = await page.evaluate(() =>
       [...document.querySelectorAll<HTMLElement>('[data-testid^="agendamento-"][data-trilha]')].map(
         (el) => getComputedStyle(el).backgroundColor,

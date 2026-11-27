@@ -9635,8 +9635,6 @@ export const DICIONARIO: Traducoes = {
   "Presencial": { es: "Presencial" },
   "Link de vídeo": { es: "Enlace de video" },
   "Profissionais na agenda": { es: "Profesionales en la agenda" },
-  "Tirar da agenda:": { es: "Quitar de la agenda:" },
-  "Mostrar a agenda de": { es: "Mostrar la agenda de" },
   "Marcar": { es: "Agendar" },
   "com": { es: "con" },
   "ocupado na agenda do Google": { es: "ocupado en la agenda de Google" },
