@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { audit } from "@/lib/audit";
 import { safeNext } from "@/lib/auth/safe-next";
+import { configEvalink, saidaPelaConta } from "@/lib/evalink/config";
 
 /**
  * `formData.next` (campo oculto do `<form action={signOut}>`): volta ao login
@@ -39,5 +40,10 @@ export async function signOut(formData?: FormData): Promise<void> {
 
   const bruto = formData?.get("next");
   const next = typeof bruto === "string" ? safeNext(bruto, "") : "";
-  redirect(next ? `/login?next=${encodeURIComponent(next)}` : "/login");
+  const login = next ? `/login?next=${encodeURIComponent(next)}` : "/login";
+  // Com o EvaLink ligado, sai também da Conta (senão o próximo "Entrar com
+  // EvaLink" neste navegador entra como a pessoa anterior). A Conta devolve
+  // para o login do CRM.
+  const evalink = configEvalink();
+  redirect(evalink ? saidaPelaConta(evalink, login) : login);
 }

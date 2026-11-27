@@ -60,6 +60,14 @@ export async function sobeContaFalsa(porta = 0) {
       if (!bytes) { res.writeHead(404).end(); return; }
       res.writeHead(200, { "content-type": "image/png" }).end(bytes); return;
     }
+    // GET /sair?volta=: a Conta real encerra a sessão dela e devolve 303 para a volta
+    // se a origem estiver nos redirect_uris; aqui só o CRM local é cliente.
+    if (u.pathname === "/sair") {
+      let volta: URL | null = null;
+      try { volta = new URL(u.searchParams.get("volta") ?? ""); } catch { volta = null; }
+      const local = volta && /^https?:$/.test(volta.protocol) && ["127.0.0.1", "localhost"].includes(volta.hostname);
+      res.writeHead(303, { location: local ? volta!.toString() : `${url}/entrar` }).end(); return;
+    }
     if (u.pathname === "/auth/v1/.well-known/jwks.json") {
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ keys: [jwk] })); return;
     }
