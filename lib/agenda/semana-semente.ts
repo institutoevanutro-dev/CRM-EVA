@@ -19,20 +19,21 @@ import { partesNoFuso, instanteDe } from "./fuso";
  *
  * Porque a prova não pode depender do relógio de quem roda o teste. Com o
  * instante e o fuso como PARÂMETROS, a borda que quebrava — sábado 21:00 em São
- * Paulo — é um caso de teste de uma linha, verde em qualquer dia, em qualquer
+ * Paulo; domingo 21:00 desde que a semana começa na segunda — é um caso de
+ * teste de uma linha, verde em qualquer dia, em qualquer
  * máquina. Enquanto a conta morava dentro do render, a única forma de exercitá-la
  * era esperar a janela chegar.
  *
  * Portado do projeto original (DeskcommCRM, issue #1350, PRs #1353 e #1386).
  */
 
-/** Domingo, como a grade desenha (`weekStartsOn: 0`). */
+/** Sete dias a partir da SEGUNDA, como a grade busca (`weekStartsOn: 1`, 27/11/2026). */
 const DIAS_NA_SEMANA = 7;
 
 export interface SemanaSemente {
-  /** O instante em que começa o domingo local. */
+  /** O instante em que começa a segunda local. */
   de: Date;
-  /** O instante em que começa o domingo SEGUINTE — fim exclusivo. */
+  /** O instante em que começa a segunda SEGUINTE — fim exclusivo. */
   ate: Date;
 }
 
@@ -46,11 +47,11 @@ export interface SemanaSemente {
  */
 export function semanaSemente(agora: Date, fuso: string): SemanaSemente {
   const hoje = partesNoFuso(agora, fuso);
-  const domingo = new Date(Date.UTC(hoje.ano, hoje.mes - 1, hoje.dia));
-  domingo.setUTCDate(domingo.getUTCDate() - domingo.getUTCDay());
+  const segunda = new Date(Date.UTC(hoje.ano, hoje.mes - 1, hoje.dia));
+  segunda.setUTCDate(segunda.getUTCDate() - ((segunda.getUTCDay() + 6) % 7));
 
-  const proximo = new Date(domingo);
-  proximo.setUTCDate(proximo.getUTCDate() + DIAS_NA_SEMANA);
+  const proxima = new Date(segunda);
+  proxima.setUTCDate(proxima.getUTCDate() + DIAS_NA_SEMANA);
 
   const meiaNoiteLocal = (d: Date) =>
     instanteDe(
@@ -58,15 +59,15 @@ export function semanaSemente(agora: Date, fuso: string): SemanaSemente {
       fuso,
     );
 
-  return { de: meiaNoiteLocal(domingo), ate: meiaNoiteLocal(proximo) };
+  return { de: meiaNoiteLocal(segunda), ate: meiaNoiteLocal(proxima) };
 }
 
 /**
  * O DIA DE HOJE no fuso pedido, como a grade o desenha: `yyyy-MM-dd`.
  *
  * Existe para o CLIENTE poder ancorar no MESMO dia que o servidor, sem receber
- * um instante. Receber instante seria a armadilha: `domingo 00:00` em São Paulo
- * é `sábado 22:00` em UTC-5, e um `startOfWeek` sobre ele, em hora local do
+ * um instante. Receber instante seria a armadilha: `segunda 00:00` em São Paulo
+ * é `domingo 22:00` em UTC-5, e um `startOfWeek` sobre ele, em hora local do
  * navegador, cairia na semana ANTERIOR. O que atravessa a fronteira é a DATA;
  * quem a transforma em `Date` local é `ancoraLocalDoDia`, logo abaixo.
  */

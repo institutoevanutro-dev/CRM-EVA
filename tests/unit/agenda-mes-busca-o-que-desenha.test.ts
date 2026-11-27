@@ -18,19 +18,19 @@ describe("recorte da grade da Agenda", () => {
     const ancora = new Date(2026, 8, 27, 10); // domingo, 27/09/2026
     const { de, ate } = recorteDaVisao("mes", ancora);
 
-    expect(dia(de)).toBe("2026-08-30");
+    expect(dia(de)).toBe("2026-08-31"); // a segunda da semana do dia 1º
     expect(de).toEqual(inicioDaGradeDoMes(ancora));
-    expect(dia(ate)).toBe("2026-10-11"); // exclusivo: a última célula é 10/10
-    expect(dia(addDays(de, SEMANAS_DA_GRADE_DO_MES * 7 - 1))).toBe("2026-10-10");
+    expect(dia(ate)).toBe("2026-10-12"); // exclusivo: a última célula é 11/10
+    expect(dia(addDays(de, SEMANAS_DA_GRADE_DO_MES * 7 - 1))).toBe("2026-10-11");
 
     const primeiroDeOutubro = new Date(2026, 9, 1, 15);
     expect(primeiroDeOutubro >= de && primeiroDeOutubro < ate).toBe(true);
   });
 
-  it("Semana e Dia seguem como eram", () => {
+  it("Semana vai de segunda a segunda; Dia segue como era", () => {
     const ancora = new Date(2026, 8, 30, 10); // quarta
-    expect(dia(recorteDaVisao("semana", ancora).de)).toBe("2026-09-27");
-    expect(dia(recorteDaVisao("semana", ancora).ate)).toBe("2026-10-04");
+    expect(dia(recorteDaVisao("semana", ancora).de)).toBe("2026-09-28");
+    expect(dia(recorteDaVisao("semana", ancora).ate)).toBe("2026-10-05");
     expect(dia(recorteDaVisao("dia", ancora).de)).toBe("2026-09-30");
     expect(dia(recorteDaVisao("dia", ancora).ate)).toBe("2026-10-01");
   });

@@ -317,9 +317,36 @@ function celulasDa(j: JanelaDaGrade): number[] {
   );
 }
 
-function diasDaSemanaDe(ancora: Date): Date[] {
-  const inicio = startOfWeek(ancora, { weekStartsOn: 0 });
-  return Array.from({ length: 7 }, (_, i) => addDays(inicio, i));
+/** Algum compromisso NOSSO (não ocupação externa, não cancelado) cai neste dia da grade? */
+function temCompromissoNoDia(
+  agendamentos: ReadonlyArray<Pick<Agendamento, "comeca" | "origem" | "situacao">>,
+  dia: Date,
+  fuso: string,
+): boolean {
+  const chave = chaveDoDia(dia);
+  return agendamentos.some(
+    (a) =>
+      a.origem !== "google_sync" &&
+      a.situacao !== "cancelled" &&
+      chaveDoDiaDoInstante(new Date(a.comeca), fuso) === chave,
+  );
+}
+
+/**
+ * Os dias que a semana desenha: segunda a sábado (decisão 4 do André,
+ * 27/11/2026). O domingo entra no FIM só quando tem compromisso nosso nele — ou
+ * quando é o próprio dia aberto: abrir a agenda num domingo mostraria uma
+ * semana sem o dia de hoje e, no celular, sem coluna nenhuma.
+ */
+export function diasDaSemanaDe(
+  ancora: Date,
+  agendamentos: ReadonlyArray<Pick<Agendamento, "comeca" | "origem" | "situacao">>,
+  fuso: string,
+): Date[] {
+  const inicio = startOfWeek(ancora, { weekStartsOn: 1 });
+  const seis = Array.from({ length: 6 }, (_, i) => addDays(inicio, i));
+  const domingo = addDays(inicio, 6);
+  return isSameDay(domingo, ancora) || temCompromissoNoDia(agendamentos, domingo, fuso) ? [...seis, domingo] : seis;
 }
 
 /**
@@ -1299,11 +1326,16 @@ function VisaoDeMes({
   const semanas: Date[][] = Array.from({ length: SEMANAS_DA_GRADE_DO_MES }, (_, s) =>
     Array.from({ length: 7 }, (_, d) => addDays(primeiro, s * 7 + d)),
   );
+  // Segunda a sábado; a 7ª coluna (domingo) volta quando ALGUM domingo da grade
+  // tem compromisso — no mês inteiro, para as colunas seguirem alinhadas.
+  const comDomingo = semanas.some((s) => s[6] !== undefined && temCompromissoNoDia(agendamentos, s[6], fuso));
+  const colunas = comDomingo ? 7 : 6;
+  const celulas = semanas.flatMap((s) => s.slice(0, colunas));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="grid grid-cols-7 border-b border-border">
-        {semanas[0]?.map((d) => (
+      <div className={cn("grid border-b border-border", comDomingo ? "grid-cols-7" : "grid-cols-6")}>
+        {semanas[0]?.slice(0, colunas).map((d) => (
           <div
             key={`cab-${d.toISOString()}`}
             className="px-2 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-text-muted"
@@ -1312,8 +1344,8 @@ function VisaoDeMes({
           </div>
         ))}
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-[repeat(auto-fit,minmax(0,1fr))]">
-        {semanas.flat().map((d) => {
+      <div className={cn("grid min-h-0 flex-1 grid-rows-[repeat(auto-fit,minmax(0,1fr))]", comDomingo ? "grid-cols-7" : "grid-cols-6")}>
+        {celulas.map((d) => {
           const doDia = agendamentos.filter(
             (c) => chaveDoDiaDoInstante(new Date(c.comeca), fuso) === chaveDoDia(d),
           );
@@ -1519,7 +1551,6 @@ export function GradeDaAgenda({
 }) {
   const t = useT();
   const fechamentos = fechamentosRecebidos ?? [];
-  const dias = visao === "dia" ? [ancora] : diasDaSemanaDe(ancora);
   const conflitos = React.useMemo(() => conflitosDaGrade(agendamentos), [agendamentos]);
   // O BLOQUEIO É DESENHADO UMA VEZ SÓ. Ele chega duas vezes — como cartão inerte
   // (`lerBloqueiosDaGrade`, que também alimenta o conflito) e como faixa fechada
@@ -1532,6 +1563,7 @@ export function GradeDaAgenda({
     () => (fechamentosRecebidos ? agendamentos.filter((a) => !a.bloqueio) : agendamentos),
     [agendamentos, fechamentosRecebidos],
   );
+  const dias = visao === "dia" ? [ancora] : diasDaSemanaDe(ancora, cartoes, fuso);
   // O primeiro do período, em ordem de horário: é para ele que o link leva.
   const primeiroConflito = React.useMemo(
     () =>

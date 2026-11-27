@@ -160,8 +160,8 @@ test.describe("kit visual da Agenda", () => {
     const grade = page.getByTestId("grade-da-agenda");
     await expect(grade).toHaveAttribute("data-visao", "semana");
 
-    // SEMANA: sete colunas de dia, uma por dia da semana.
-    await expect(page.locator('[data-testid^="coluna-dia-"]')).toHaveCount(7, { timeout: ESPERA });
+    // SEMANA: seis colunas, de segunda a sábado (a fixture não marca nada no domingo).
+    await expect(page.locator('[data-testid^="coluna-dia-"]')).toHaveCount(6, { timeout: ESPERA });
 
     await page.getByTestId("visao-dia").click();
     await expect(grade).toHaveAttribute("data-visao", "dia", { timeout: ESPERA });
@@ -169,9 +169,8 @@ test.describe("kit visual da Agenda", () => {
 
     await page.getByTestId("visao-mes").click();
     await expect(grade).toHaveAttribute("data-visao", "mes", { timeout: ESPERA });
-    // 6 semanas × 7 dias — a grade do mês é sempre retangular, senão as células
-    // mudam de tamanho de um mês para o outro.
-    await expect(page.locator('[data-testid^="celula-mes-"]')).toHaveCount(42);
+    // 6 semanas × 6 dias (sem domingo marcado) — retangular, senão as células mudam de tamanho de um mês para o outro.
+    await expect(page.locator('[data-testid^="celula-mes-"]')).toHaveCount(36);
 
     await page.getByTestId("visao-semana").click();
     await expect(grade).toHaveAttribute("data-visao", "semana", { timeout: ESPERA });

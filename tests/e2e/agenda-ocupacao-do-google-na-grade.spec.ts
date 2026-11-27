@@ -155,7 +155,7 @@ test.describe("a ocupação do Google na grade da agenda", () => {
 
     // 1ª passada: descobrir QUE dias a semana seguinte desenha.
     const dias = await irParaASemanaSeguinte(page);
-    const alvo = dias[3]!; // quarta-feira da semana desenhada
+    const alvo = dias[2]!; // quarta-feira da semana desenhada
     const comeca = await instanteNoDia(page, alvo, 15);
     const termina = await instanteNoDia(page, alvo, 16);
 
@@ -236,7 +236,7 @@ test.describe("a ocupação do Google na grade da agenda", () => {
     await entrar(page, creds);
 
     const dias = await irParaASemanaSeguinte(page);
-    const alvo = dias[3]!;
+    const alvo = dias[2]!;
     const comeca = await instanteNoDia(page, alvo, 15);
     const termina = await instanteNoDia(page, alvo, 16);
     const conexaoId = await conexaoDoGoogle(creds.org_id, dono.id);
@@ -305,7 +305,7 @@ test.describe("a ocupação do Google na grade da agenda", () => {
     await entrar(page, creds);
 
     const dias = await irParaASemanaSeguinte(page);
-    const alvo = dias[3]!;
+    const alvo = dias[2]!;
     const db = admin();
     const conexaoId = await conexaoDoGoogle(creds.org_id, dono.id);
 

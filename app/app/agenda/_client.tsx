@@ -7,13 +7,14 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import { useT } from "@/hooks/i18n/useT";
 
-import { addDays, format, startOfDay, startOfMonth, startOfWeek } from "date-fns";
+import { addDays, format, startOfDay, startOfMonth } from "date-fns";
 import * as React from "react";
 
 import { AvisoDaConexaoGoogle } from "./_components/AvisoDaConexaoGoogle";
 import { CartaoDaConexaoGoogle } from "./_components/CartaoDaConexaoGoogle";
 
 import { AgendaInterativa } from "@/components/agenda/AgendaInterativa";
+import { diasDaSemanaDe } from "@/components/agenda/GradeDaAgenda";
 import { FiltroDePessoas } from "@/components/agenda/FiltroDePessoas";
 import { recorteDaVisao } from "@/lib/agenda/recorte-da-grade";
 import { HistoricoDaAgenda } from "@/components/agenda/HistoricoDaAgenda";
@@ -338,7 +339,7 @@ export function AgendaClient({
    * discordava sempre.
    *
    * O que atravessa a fronteira é a DATA (`hojeNaOrganizacao`), nunca o
-   * instante: `domingo 00:00` em São Paulo é `sábado 22:00` em UTC-5, e
+   * instante: `segunda 00:00` em São Paulo é `domingo 22:00` em UTC-5, e
    * `startOfWeek` sobre esse instante, em hora local, cairia na semana anterior.
    * `ancoraLocalDoDia` transforma a data numa `Date` local ao meio-dia — a doze
    * horas de qualquer borda de horário de verão.
@@ -569,7 +570,14 @@ export function AgendaClient({
     visao === "mes"
       ? format(ancora, t("MMMM 'de' yyyy"), { locale: localeDaData })
       : visao === "semana"
-        ? `${format(startOfWeek(ancora, { weekStartsOn: 0 }), t("d 'de' MMM"), { locale: localeDaData })} — ${format(addDays(startOfWeek(ancora, { weekStartsOn: 0 }), 6), t("d 'de' MMM"), { locale: localeDaData })}`
+        ? (() => {
+            // Os MESMOS dias que a grade desenha: segunda a sábado, domingo só
+            // quando tem compromisso.
+            const dias = diasDaSemanaDe(ancora, agendamentosDaGrade, fusoDaAgenda);
+            const primeiro = dias[0] ?? ancora;
+            const ultimo = dias[dias.length - 1] ?? ancora;
+            return `${format(primeiro, t("d 'de' MMM"), { locale: localeDaData })} — ${format(ultimo, t("d 'de' MMM"), { locale: localeDaData })}`;
+          })()
         : format(ancora, t("EEEE, d 'de' MMMM"), { locale: localeDaData });
 
   // Fechar o modal de marcar OU o painel de remarcar: os dois limpam o mesmo

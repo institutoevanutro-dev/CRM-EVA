@@ -54,8 +54,8 @@ import { esperarAgenda, telaAgenda } from "./tela-agenda";
  * procurava o cartão na semana de sexta — e a falha lia "a grade não repinta".
  */
 
-/** O passo da visão "semana" — o botão avança sete dias por clique. */
-const DIAS_POR_SEMANA = 7;
+/** A semana desenha segunda a sábado; o domingo só entra quando tem compromisso (27/11/2026). */
+const DIAS_DA_SEMANA_DESENHADA = [6, 7];
 
 /**
  * Leva a agenda para a semana seguinte e devolve os dias que ela passou a
@@ -91,9 +91,9 @@ export async function irParaASemanaSeguinte(page: Page): Promise<string[]> {
 
   const depois = await diasDesenhados(page);
   expect(
-    depois.length,
-    "a semana desenhada não tem sete dias — o recorte da grade mudou de forma",
-  ).toBe(DIAS_POR_SEMANA);
+    DIAS_DA_SEMANA_DESENHADA,
+    "a semana desenhada não tem seis nem sete dias — o recorte da grade mudou de forma",
+  ).toContain(depois.length);
   return depois;
 }
 

@@ -457,9 +457,13 @@ test("a grade: só as horas das jornadas, meia hora marcada, cor por profissiona
   // inteiro para os dois na quarta (feriado). Antes, o feriado desenhava a grade
   // da meia-noite às 23h, em colunas estreitas e por cima de outra faixa.
   // A segunda da semana SEGUINTE à de hoje, no calendário de São Paulo (UTC-3):
-  // é a semana que `irParaASemanaSeguinte` desenha (domingo a sábado).
+  // é a semana que `irParaASemanaSeguinte` desenha (segunda a sábado).
   const agoraSP = new Date(Date.now() - 3 * 3_600_000);
-  const segunda = Date.UTC(agoraSP.getUTCFullYear(), agoraSP.getUTCMonth(), agoraSP.getUTCDate() - agoraSP.getUTCDay() + 8);
+  const segunda = Date.UTC(
+    agoraSP.getUTCFullYear(),
+    agoraSP.getUTCMonth(),
+    agoraSP.getUTCDate() - ((agoraSP.getUTCDay() + 6) % 7) + 7,
+  );
   const dia = (n: number, hora: number) => new Date(segunda + n * 86_400_000 + (hora + 3) * 3_600_000);
   for (const [dono, tipo, d] of [
     [f.ana.id, f.avaliacao, dia(0, 9)],
