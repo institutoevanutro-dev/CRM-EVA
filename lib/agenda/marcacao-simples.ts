@@ -184,3 +184,19 @@ export function ultimaEProximaConsulta<C extends { starts_at: string }>(
   const porInicio = (a: C, b: C) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime();
   return { ultima: passadas.sort(porInicio).at(-1) ?? null, proxima: futuras.sort(porInicio)[0] ?? null };
 }
+
+/**
+ * O tipo de paciente que a marcação supõe pelo procedimento (decisão do André,
+ * 27/11/2026): só a PRIMEIRA consulta é de paciente novo — categoria
+ * `consulta` e nome começando por "Primeira". Acompanhamento, teleconsulta,
+ * retorno e aplicação são de quem já é paciente. A recepção troca com um
+ * clique, e a escolha não é gravada: é modo da tela, não dado.
+ *
+ * ponytail: lê o nome. "1ª consulta" cai em antigo; se aparecer, a recepção troca.
+ */
+export function pacienteNovoPeloTipo(
+  tipo: { categoria?: string | null; nome: string } | null | undefined,
+): boolean {
+  if (!tipo || tipo.categoria !== "consulta") return false;
+  return tipo.nome.trim().toLowerCase().startsWith("primeira");
+}

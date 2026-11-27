@@ -19,6 +19,9 @@ export const CAMPO =
 
 export const ROTULO = "mb-1.5 block text-xs font-medium text-text-muted";
 
+/** Título de grupo do modal ("Quem e o quê", "Paciente", "Quando"): menor e mais calado que o rótulo. */
+export const TITULO_DO_GRUPO = "text-[11px] font-semibold uppercase tracking-wide text-text-subtle";
+
 /** `select` nativo com a seta do sistema de design no lugar da do navegador. */
 export function Seletor({ className, children, ...props }: ComponentProps<"select">) {
   return (

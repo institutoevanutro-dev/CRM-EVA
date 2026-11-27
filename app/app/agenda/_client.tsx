@@ -132,6 +132,8 @@ export function AgendaClient({
     localKind: string | null;
     localDetalhes: string | null;
     exigePaciente: boolean;
+    /** `calendar_event_types.category` — decide o "Paciente novo / antigo" padrão. */
+    categoria?: string | null;
   }>;
   /** A semana corrente, resolvida no servidor: `GET /agendamentos` não existe. */
   agendamentosIniciais: Agendamento[];
@@ -882,8 +884,8 @@ export function AgendaClient({
                   location_details: m.endereco,
                   description: m.observacao || undefined,
                   booking_channel: m.canal,
-                  converted_by_kind: m.quemConverteu.kind,
-                  converted_by_user_id: m.quemConverteu.kind === "user" ? m.quemConverteu.userId : undefined,
+                  converted_by_kind: m.quemConverteu?.kind,
+                  converted_by_user_id: m.quemConverteu?.kind === "user" ? m.quemConverteu.userId : undefined,
                 })
                 .then((r) => {
                   // Guardado para o fechamento saber para onde levar a grade.

@@ -287,6 +287,9 @@ test("procedimento, unidade e paciente: a tela oferece só o que é do profissio
   // Quem converteu vem com quem marca (a Ana); aqui foi o Bruno. A origem sai da
   // ficha pela regra do funil (cadastro manual, sem etiqueta: Orgânico), e a
   // recepção corrige para Indicação.
+  // "Avaliação facial" não é "Primeira…": a marcação abre em Paciente antigo, e
+  // "Quem converteu"/"Origem" só existem em Paciente novo (27/11/2026).
+  await page.getByTestId("paciente-novo").click();
   await expect(page.getByTestId("quem-converteu")).toHaveValue(`user:${f.ana.id}`);
   await page.getByTestId("quem-converteu").selectOption(`user:${f.bruno.id}`);
   await expect(page.getByTestId("origem-do-lead")).toHaveValue("organico", { timeout: 15_000 });

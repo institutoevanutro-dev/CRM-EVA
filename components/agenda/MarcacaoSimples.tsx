@@ -15,6 +15,7 @@ import { dataDeParede, instanteDe } from "@/lib/agenda/fuso";
 import {
   fimDoHorario,
   ofertaDeUnidades,
+  pacienteNovoPeloTipo,
   procedimentosDoProfissional,
   profissionaisComProcedimento,
   unidadeDaMarcacao,
@@ -40,7 +41,7 @@ import { cn } from "@/lib/utils";
 
 import { AvisoSemLembrete } from "./AvisoSemLembrete";
 import { BloqueioDeHorario } from "./BloqueioDeHorario";
-import { CAMPO, ROTULO, Seletor } from "./CampoDaMarcacao";
+import { CAMPO, ROTULO, Seletor, TITULO_DO_GRUPO } from "./CampoDaMarcacao";
 import { NomeCompletoDoPaciente } from "./NomeCompletoDoPaciente";
 import type { HorarioLivre, Pessoa } from "./tipos";
 import { type ContatoDaMarcacao, VinculoDaMarcacao } from "./VinculoDaMarcacao";
@@ -71,6 +72,8 @@ type Tipo = {
   localDetalhes: string | null;
   /** `requires_patient` (0411): sem paciente, a tela nem envia. */
   exigePaciente: boolean;
+  /** `calendar_event_types.category`: decide o "Paciente novo / antigo" padrão. */
+  categoria?: string | null;
 };
 
 type Unidade = { id: string; name: string; active: boolean };
@@ -85,8 +88,11 @@ export type MarcacaoConfirmada = {
   observacao: string;
   /** Mensagem ou ligação: obrigatório na tela, é a base do bônus por comparecimento. */
   canal: CanalDaMarcacao;
-  /** Quem converteu o lead (migration 0422): alguém da equipe ou a IA do atendimento. */
-  quemConverteu: { kind: "user"; userId: string } | { kind: "ai" };
+  /**
+   * Quem converteu o lead (migration 0422). Só em PACIENTE NOVO: paciente antigo
+   * não leva o campo, e o POST sai sem `converted_by_*` (27/11/2026).
+   */
+  quemConverteu?: { kind: "user"; userId: string } | { kind: "ai" };
 };
 
 const ROTULO_DO_CANAL: Record<CanalDaMarcacao, string> = { mensagem: "Mensagem", ligacao: "Ligação" };
@@ -276,6 +282,16 @@ export function MarcacaoSimples({
   const origem = origemEditada && origemEditada.contactId === contactId ? origemEditada.valor : origemDaFicha;
   const origemMudou = origem !== null && origemDaFicha !== null && origem !== origemDaFicha;
 
+  // PACIENTE NOVO OU ANTIGO (decisão do André, 27/11/2026). O padrão sai do
+  // procedimento (`pacienteNovoPeloTipo`); a troca da recepção vale só para o
+  // procedimento em que foi feita — escolher outro volta ao padrão dele. Não é
+  // gravado em lugar nenhum: é modo da tela (DIRC: calcular, não duplicar).
+  const [modoEscolhido, setModoEscolhido] = React.useState<{ tipoId: string; novo: boolean } | null>(null);
+  const pacienteNovo =
+    modoEscolhido !== null && modoEscolhido.tipoId === (tipo?.id ?? "")
+      ? modoEscolhido.novo
+      : pacienteNovoPeloTipo(tipo);
+
   const parede = (iso: string): Date => (fuso ? dataDeParede(new Date(iso), fuso) : new Date(iso));
 
   // Trocar profissional ou procedimento muda as vagas: o horário escolhido
@@ -372,12 +388,17 @@ export function MarcacaoSimples({
       // (`PATCH /api/v1/contacts/[id]`, auditado como `contact.updated`). Se a
       // gravação for recusada, nada é marcado: a recusa aparece no rodapé.
       // Nome e origem vão juntos, num PATCH só, e só o que mudou.
-      if (pedeNome || origemMudou) {
+      // Paciente antigo não mexe na origem: os campos nem estão na tela.
+      const origemParaGravar = pacienteNovo && origemMudou ? origem : null;
+      if (pedeNome || origemParaGravar) {
         await gravarContato.mutateAsync({
           ...(pedeNome ? { name: nomeCompletoLimpo(nomeCompleto) } : {}),
-          ...(origemMudou && origem ? { origem_informada: origem } : {}),
+          ...(origemParaGravar ? { origem_informada: origemParaGravar } : {}),
         });
       }
+      const conversao: NonNullable<MarcacaoConfirmada["quemConverteu"]> = quemConverteu.startsWith("user:")
+        ? { kind: "user", userId: quemConverteu.slice("user:".length) }
+        : { kind: "ai" };
       await onConfirmar({
         instante: horario.instante,
         duracaoMin: duracao === null ? undefined : (duracaoMin ?? undefined),
@@ -385,9 +406,8 @@ export function MarcacaoSimples({
         endereco: endereco.trim(),
         observacao: observacao.trim(),
         canal,
-        quemConverteu: quemConverteu.startsWith("user:")
-          ? { kind: "user", userId: quemConverteu.slice("user:".length) }
-          : { kind: "ai" },
+        // Paciente antigo NÃO leva quem converteu: a conversão foi na primeira consulta.
+        ...(pacienteNovo ? { quemConverteu: conversao } : {}),
       });
       setRecusa(null);
       setMarcado(horario);
@@ -494,6 +514,7 @@ export function MarcacaoSimples({
           <div className="grid gap-x-6 gap-y-5 px-5 pb-5 pt-4 md:grid-cols-2">
             {/* ── esquerda: quem, o quê, onde e para quem ──────────────────── */}
             <div className="flex min-w-0 flex-col gap-4">
+              <h3 className={cn(TITULO_DO_GRUPO, "-mb-2")}>{t("Quem e o quê")}</h3>
               <div className="grid gap-x-3 gap-y-4 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
                 <div className="min-w-0">
                   <label htmlFor="profissional-da-marcacao" className={ROTULO}>
@@ -649,6 +670,38 @@ export function MarcacaoSimples({
                 ) : null}
               </div>
 
+              <div className="-mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h3 className={TITULO_DO_GRUPO}>{t("Paciente")}</h3>
+                <fieldset data-testid="tipo-de-paciente" className="flex items-center">
+                  <legend className="sr-only">{t("Tipo de paciente")}</legend>
+                  <span className="inline-flex rounded-md border border-border-input bg-surface p-0.5">
+                    {(
+                      [
+                        ["novo", "Paciente novo"],
+                        ["antigo", "Paciente antigo"],
+                      ] as const
+                    ).map(([valor, rotulo]) => {
+                      const ativo = (valor === "novo") === pacienteNovo;
+                      return (
+                        <button
+                          key={valor}
+                          type="button"
+                          data-testid={`paciente-${valor}`}
+                          aria-pressed={ativo}
+                          onClick={() => setModoEscolhido({ tipoId: tipo?.id ?? "", novo: valor === "novo" })}
+                          className={cn(
+                            "h-7 rounded-sm px-3 text-xs font-medium transition-colors duration-fast toque:h-10",
+                            FOCO,
+                            ativo ? "bg-accent text-accent-foreground shadow-xs" : "text-text-muted hover:text-text",
+                          )}
+                        >
+                          {t(rotulo)}
+                        </button>
+                      );
+                    })}
+                  </span>
+                </fieldset>
+              </div>
               <div>
                 <VinculoDaMarcacao
                   compacto
@@ -672,6 +725,7 @@ export function MarcacaoSimples({
                 />
               ) : null}
 
+              {pacienteNovo ? (
               <div className="grid gap-x-3 gap-y-4 sm:grid-cols-2">
                 <div className="min-w-0">
                   <label htmlFor="quem-converteu" className={ROTULO}>
@@ -726,6 +780,7 @@ export function MarcacaoSimples({
                   ) : null}
                 </div>
               </div>
+              ) : null}
 
               <div>
                 <label htmlFor="observacao-do-compromisso" className={ROTULO}>

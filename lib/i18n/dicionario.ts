@@ -13015,6 +13015,10 @@ export const DICIONARIO: Traducoes = {
   "Não consegui gravar a cópia no banco.": { es: "No pude guardar la copia en la base de datos." },
   "A unidade só vale para o dia aberto.": { es: "La unidad solo vale para el día abierto." },
   "Essa unidade não existe nesta organização.": { es: "Esa unidad no existe en esta organización." },
+  "Paciente novo": { es: "Paciente nuevo" },
+  "Paciente antigo": { es: "Paciente recurrente" },
+  "Tipo de paciente": { es: "Tipo de paciente" },
+  "Quem e o quê": { es: "Quién y qué" },
 };
 
 /**
