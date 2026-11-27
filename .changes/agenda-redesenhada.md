@@ -14,6 +14,7 @@ de segunda a sábado; o domingo aparece só quando tem algo marcado ou quando é
 listrados, com o nome de quem bloqueou quando a grade mostra mais de uma pessoa. Clicar numa consulta abre o painel do paciente, com Remarcar e Cancelar enquanto ela está
 agendada (consulta realizada ou com falta não se cancela); "Confirmar" só aparece enquanto a
 consulta espera confirmação, e cada decisão confirma num aviso curto. "Compareceu" e "Faltou" também ficam nesse
-painel, depois do horário de início. A lista de baixo da Agenda, que tinha o "Faltou", saiu.
+painel, depois do horário de início. Google, Meet, contato e anotações ficam em "Mais detalhes", que
+abre sozinho quando a sincronização com o Google ou o link do Meet falham. A lista de baixo da Agenda, que tinha o "Faltou", saiu.
 Para integrações: o `POST /api/v1/agenda/agendamentos` agora aceita `converted_by_kind: null`
 (sem conversão); ausente continua gravando quem marca. Nada muda no banco nem na instalação.
