@@ -273,6 +273,29 @@ describe("Novo agendamento: profissional antes do procedimento", () => {
     expect(hora().value).toBe("");
   });
 
+  it("o encaixe clicado na grade fica quando os horários livres chegam: não vira o primeiro livre", () => {
+    // 07:00 em São Paulo = 10:00 UTC, fora dos horários; o primeiro livre do dia é 09:00.
+    const encaixe = { instante: "2026-10-23T10:00:00.000Z", rotulo: "07:00" };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tela = (sobre: Partial<ComponentProps<typeof MarcacaoSimples>>) => (
+      <QueryClientProvider client={qc}>
+        <MarcacaoSimples {...propsBase()} profissionalId={BETO} tipoId="t-beto" horarioInicial={encaixe} {...sobre} />
+      </QueryClientProvider>
+    );
+    // O modal abre ANTES de a consulta de horários responder: sem fuso e sem mês carregado.
+    const { rerender } = render(tela({ fuso: undefined, mesCarregado: null }));
+    expect(screen.getByTestId("faixa-do-horario").textContent).toMatch(/^07:00 às /);
+    rerender(
+      tela({
+        horariosPorDia: { "2026-10-23": [{ instante: "2026-10-23T12:00:00.000Z", rotulo: "09:00" }] },
+        mesCarregado: new Date(2026, 9, 1),
+      }),
+    );
+    expect(screen.getByTestId("faixa-do-horario").textContent).toBe("07:00 às 07:30");
+    expect((screen.getByTestId("hora-da-marcacao") as HTMLInputElement).value).toBe("07:00");
+    expect(screen.getByTestId("painel-de-marcacao").getAttribute("data-tempo")).toBe("confirmando");
+  });
+
   it("o horário escolhido mostra o fim calculado pela duração e confirma com o instante", async () => {
     const onConfirmar = vi.fn(() => Promise.resolve());
     // 13:00 em São Paulo = 16:00 UTC; 45 min de "Avaliação facial".

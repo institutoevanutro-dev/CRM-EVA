@@ -51,7 +51,12 @@ async function entrar(page: Page, creds: Creds) {
   await page.getByLabel(/senha/i).fill(creds.password);
   await page.getByRole("button", { name: /entrar/i }).click();
   await page.waitForURL(/\/app(\/|$)/, { timeout: 20_000 });
+  // A janela de horas da grade sai da jornada da equipe: até `/agenda/pessoas`
+  // responder, a grade desenha o padrão 07–21, e as linhas de antes da jornada
+  // somem quando ela chega.
+  const pessoas = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/v1/agenda/pessoas");
   await page.goto("/app/agenda");
+  await pessoas;
   await esperarAgenda(page, 20_000);
 }
 
@@ -90,9 +95,19 @@ test("uma profissional, um clique no horário vazio, o compromisso na grade", as
   await irParaASemanaSeguinte(page);
 
   // ── 2. o horário vazio ──────────────────────────────────────────────────
-  const bloco = page.locator('[data-testid^="bloco-"][data-encaixe="true"]').first();
-  await expect(bloco, "nenhum horário vazio clicável na semana").toBeAttached({ timeout: 25_000 });
-  const testid = (await bloco.getAttribute("data-testid"))!;
+  // Só com a grade ASSENTADA, e o bloco preso pelo testid. Até os horários da
+  // semana chegarem, todo bloco vazio é encaixe; e um `.first()` é relido a
+  // cada ação — o CI de 27/11/2026 leu o das 07:00 e deu Enter no das 09:00,
+  // e a falha acusava o painel de trocar a hora. Com um bloco livre à vista,
+  // encaixe é só onde não há vaga publicada.
+  await expect(
+    page.locator('[data-testid^="bloco-"][data-livre="true"]').first(),
+    "os horários livres da semana não chegaram à grade",
+  ).toBeAttached({ timeout: 25_000 });
+  const primeiroEncaixe = page.locator('[data-testid^="bloco-"][data-encaixe="true"]').first();
+  await expect(primeiroEncaixe, "nenhum horário vazio clicável na semana").toBeAttached({ timeout: 25_000 });
+  const testid = (await primeiroEncaixe.getAttribute("data-testid"))!;
+  const bloco = page.getByTestId(testid);
   const [, dia, hora] = /^bloco-(\d{4}-\d{2}-\d{2})-(\d{2}:\d{2})$/.exec(testid)!;
   const [, mes, d] = dia!.split("-");
   await expect(bloco).toHaveAttribute("aria-label", `Marcar ${d}/${mes} às ${hora}`);
