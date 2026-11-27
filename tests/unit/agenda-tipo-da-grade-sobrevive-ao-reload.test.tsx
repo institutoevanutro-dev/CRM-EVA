@@ -128,8 +128,6 @@ vi.mock("@/hooks/agenda/useMarcarAgendamento", () => ({
 }));
 vi.mock("@/hooks/agenda/useRemarcarAgendamento", () => ({
   useRemarcarAgendamento: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useCancelarAgendamento: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useRegistrarDesfecho: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock("@/hooks/agenda/usePessoasDaAgenda", () => ({
   usePessoasDaAgenda: () => ({ data: [], isError: false, isLoading: false }),

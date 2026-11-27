@@ -112,8 +112,9 @@ export function QuandoDaMarcacao({
     onMesVisivel(mes);
   }, [mes, onMesVisivel]);
 
+  // Segunda primeiro, como a grade da agenda (decisão 4 do André, 27/11/2026).
   const semanas = React.useMemo(() => {
-    const primeiro = startOfWeek(startOfMonth(mes), { weekStartsOn: 0 });
+    const primeiro = startOfWeek(startOfMonth(mes), { weekStartsOn: 1 });
     return Array.from({ length: 6 }, (_, s) =>
       Array.from({ length: 7 }, (_, d) => addDays(primeiro, s * 7 + d)),
     );

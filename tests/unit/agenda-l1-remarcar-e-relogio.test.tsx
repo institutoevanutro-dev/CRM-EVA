@@ -86,8 +86,6 @@ vi.mock("@/hooks/agenda/useMarcarAgendamento", () => ({
 }));
 vi.mock("@/hooks/agenda/useRemarcarAgendamento", () => ({
   useRemarcarAgendamento: () => ({ mutateAsync: remarcarSpy, isPending: false }),
-  useCancelarAgendamento: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useRegistrarDesfecho: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 const PESSOAS = vi.hoisted(() => [
   { id: "p-ana", nome: "Ana", trilha: 1 as const },

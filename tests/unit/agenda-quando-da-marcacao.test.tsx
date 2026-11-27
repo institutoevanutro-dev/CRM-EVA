@@ -71,6 +71,17 @@ function Montar({
 const campo = () => screen.getByTestId("hora-da-marcacao") as HTMLInputElement;
 
 describe("o quando da marcação", () => {
+  it("o mês começa na SEGUNDA, como a grade; os dias de antes do dia 1 são do mês anterior", () => {
+    render(<Montar />);
+    const quando = screen.getByTestId("quando-da-marcacao");
+    const cabecalho = [...quando.querySelectorAll(".grid > span")].map((el) => el.textContent);
+    expect(cabecalho).toEqual(["seg", "ter", "qua", "qui", "sex", "sab", "dom"]);
+    // Outubro de 2026 começa numa quinta: segunda 28/09 a quarta 30/09 vêm antes.
+    const dias = [...quando.querySelectorAll<HTMLElement>("[data-testid^='dia-']")].map((el) => el.dataset.testid);
+    expect(dias.slice(0, 4)).toEqual(["dia-2026-09-28", "dia-2026-09-29", "dia-2026-09-30", "dia-2026-10-01"]);
+    expect(dias.at(-1)).toBe("dia-2026-11-08");
+  });
+
   it("clicar num horário livre preenche o campo de hora, sem aviso", () => {
     const aoEscolher = vi.fn();
     render(<Montar aoEscolher={aoEscolher} />);

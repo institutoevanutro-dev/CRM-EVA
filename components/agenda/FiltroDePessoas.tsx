@@ -104,8 +104,8 @@ export function FiltroDePessoas({
             data-testid={`botao-pessoa-${p.id}`}
             data-trilha={p.trilha}
             aria-pressed={marcada}
-            // O nome COMPLETO para o leitor de tela; "Ana P." fica só à vista.
-            aria-label={p.nome}
+            // O nome acessível é o que está à vista ("Ana P.", WCAG 2.5.3); o
+            // nome inteiro vai no `title`, que vira a descrição.
             title={p.nome}
             onClick={(e) => {
               desfeita.current = marcada ? { id: p.id, botao: e.currentTarget } : null;

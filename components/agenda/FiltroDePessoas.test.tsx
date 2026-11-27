@@ -49,8 +49,11 @@ describe("fileira de profissionais", () => {
     expect(botoes[0]).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByTestId("botao-pessoa-ana")).toHaveTextContent("Ana P.");
     expect(screen.getByTestId("botao-pessoa-ana")).toHaveAttribute("title", "Ana Prado");
-    // O nome acessível é o COMPLETO: o leitor de tela não lê "Ana P." nem o `title`.
-    expect(screen.getByRole("button", { name: "Ana Prado" })).toBe(screen.getByTestId("botao-pessoa-ana"));
+    // WCAG 2.5.3: o nome acessível é o que está À VISTA ("Ana P."), para quem
+    // fala com o leitor de voz o que lê na tela; o nome inteiro vem do `title`.
+    expect(screen.getByRole("button", { name: "Ana P." })).toBe(screen.getByTestId("botao-pessoa-ana"));
+    expect(screen.getByTestId("botao-pessoa-ana")).not.toHaveAttribute("aria-label");
+    expect(screen.getByTestId("botao-pessoa-ana")).toHaveAccessibleDescription("Ana Prado");
     expect(screen.getByTestId("botao-pessoa-ana")).toHaveAttribute("aria-pressed", "false");
   });
 
