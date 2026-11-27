@@ -261,8 +261,13 @@ test.describe("o agente marca consulta", () => {
     await irParaASemanaDoCompromisso(page, livres.horarios[0]!.inicio);
 
     // O nome do CONTATO é o que prova que é o compromisso certo: o título do tipo
-    // apareceria mesmo num card de outro cliente.
-    await expect(page.getByText(creds.agenda.contato_nome).first()).toBeVisible({ timeout: 15_000 });
+    // apareceria mesmo num card de outro cliente. Ele é lido no nome ACESSÍVEL do
+    // card, que começa pelo paciente inteiro ("Nome, Tipo, 09:00 às 09:30…"): na
+    // semana o card escreve "Paciente E." (`nomeCurto`), e a lista de baixo, que
+    // escrevia o nome inteiro, saiu (decisão 5 do redesenho, 27/11/2026).
+    await expect(
+      page.getByRole("button", { name: `${creds.agenda.contato_nome},` }).first(),
+    ).toBeVisible({ timeout: 15_000 });
 
     await page.screenshot({ path: path.join(EVIDENCIA, "agente-marca-consulta.png"), fullPage: true });
   });
