@@ -146,8 +146,9 @@ export interface InteracaoDaGrade {
   duracaoMin: number;
   /**
    * O ENCAIXE pelo clique: bloco vazio SEM horário publicado também abre a
-   * marcação, no começo da meia hora clicada. É o mesmo "Outro horário" do
-   * painel de marcação, e vale nas mesmas condições: jornada publicada, consulta
+   * marcação, no começo da meia hora clicada. É o mesmo encaixe da hora
+   * digitada fora da lista na marcação ("Fora dos horários livres", em
+   * `QuandoDaMarcacao`), e vale nas mesmas condições: jornada publicada, consulta
    * sem erro, horário que não passou e sem compromisso por cima. A rota cobra de
    * novo (`podeMarcarForaDaGrade`) e recusa sobreposição real.
    *
@@ -335,18 +336,21 @@ function temCompromissoNoDia(
 /**
  * Os dias que a semana desenha: segunda a sábado (decisão 4 do André,
  * 27/11/2026). O domingo entra no FIM só quando tem compromisso nosso nele — ou
- * quando é o próprio dia aberto: abrir a agenda num domingo mostraria uma
- * semana sem o dia de hoje e, no celular, sem coluna nenhuma.
+ * quando ele é HOJE no fuso da organização (`hoje`, `yyyy-MM-dd`): abrir a
+ * agenda num domingo mostraria uma semana sem o dia de hoje. A regra era "a
+ * âncora é domingo", e as setas andam de 7 em 7 dias: o domingo grudava em
+ * toda semana dali em diante.
  */
 export function diasDaSemanaDe(
   ancora: Date,
   agendamentos: ReadonlyArray<Pick<Agendamento, "comeca" | "origem" | "situacao">>,
   fuso: string,
+  hoje: string,
 ): Date[] {
   const inicio = startOfWeek(ancora, { weekStartsOn: 1 });
   const seis = Array.from({ length: 6 }, (_, i) => addDays(inicio, i));
   const domingo = addDays(inicio, 6);
-  return isSameDay(domingo, ancora) || temCompromissoNoDia(agendamentos, domingo, fuso) ? [...seis, domingo] : seis;
+  return chaveDoDia(domingo) === hoje || temCompromissoNoDia(agendamentos, domingo, fuso) ? [...seis, domingo] : seis;
 }
 
 /**
@@ -636,6 +640,9 @@ function FaixaFechada({
   if (!primeiro) return null;
   const nomes = mostrarQuem ? quem.map((p) => p.nome).join(", ") : "";
   const detalhe = [nomes, ...motivos].filter(Boolean).join(" · ");
+  // DE QUEM vai À VISTA, com o nome curto: com "Todos" na grade, o fechamento
+  // de um profissional sem dono escrito parecia a clínica inteira fechada.
+  const curtos = mostrarQuem ? quem.map((p) => nomeCurto(p.nome)).join(", ") : "";
 
   return (
     <div
@@ -651,15 +658,17 @@ function FaixaFechada({
         background: LISTRAS_DO_BLOQUEIO,
       }}
     >
-      {/* UMA LINHA SÓ (decisão 7 do André, 27/11/2026). Quem e o motivo vão só
-          para o leitor de tela. SEM `title`: ele exigiria `pointer-events-auto`
-          no rótulo, e o rótulo cobriria horários que ainda se marcam — com
+      {/* UMA LINHA SÓ (decisão 7 do André, 27/11/2026): "Bloqueado", e o nome
+          curto de quem fechou quando há mais de uma pessoa na grade. O motivo
+          (e o nome inteiro) vão só para o leitor de tela. SEM `title`: ele
+          exigiria `pointer-events-auto` no rótulo, e o rótulo cobriria
+          horários que ainda se marcam — com
           várias pessoas na grade o fechamento é de quem está SELECIONADO e o
           horário livre é do dono da consulta, e no modo encaixe o horário
           fechado continua aberto. Nenhum pedaço da faixa recebe o ponteiro. */}
       <span className="inline-flex min-w-0 max-w-full items-center gap-1 text-xs font-semibold leading-4 text-text-muted">
         <Lock aria-hidden size={12} weight="bold" className="shrink-0" />
-        <span className="truncate">{t("Bloqueado")}</span>
+        <span className="truncate">{curtos ? `${t("Bloqueado")} · ${curtos}` : t("Bloqueado")}</span>
       </span>
       <span className="sr-only">
         {" · "}
@@ -1547,7 +1556,11 @@ export function GradeDaAgenda({
     () => (fechamentosRecebidos ? agendamentos.filter((a) => !a.bloqueio) : agendamentos),
     [agendamentos, fechamentosRecebidos],
   );
-  const dias = visao === "dia" ? [ancora] : diasDaSemanaDe(ancora, cartoes, fuso);
+  const dias = visao === "dia" ? [ancora] : diasDaSemanaDe(ancora, cartoes, fuso, chaveDoDiaDoInstante(agora, fuso));
+  // No celular a semana mostra UMA coluna: a da âncora. Âncora num domingo que
+  // não entrou (vazio e não é hoje) deixaria a tela sem coluna nenhuma — fica o
+  // sábado, o dia desenhado mais perto dela.
+  const diaDoCelular = dias.find((d) => isSameDay(d, ancora)) ?? dias[dias.length - 1];
   // O primeiro do período, em ordem de horário: é para ele que o link leva.
   const primeiroConflito = React.useMemo(
     () =>
@@ -2120,7 +2133,7 @@ export function GradeDaAgenda({
                 pessoas={pessoas}
                 onAbrir={onAbrirAgendamento}
                 destacado={visao === "semana" && chaveDoDia(d) === chaveDoDiaDoInstante(agora, fuso)}
-                soNoDesktop={visao === "semana" && !isSameDay(d, ancora)}
+                soNoDesktop={visao === "semana" && d !== diaDoCelular}
                 interacao={interacao}
                 proposta={proposta}
                 arrasteDoCard={arrasteDoCard}

@@ -133,7 +133,8 @@ export function AgendaClient({
    *
    * É a MESMA porta, com o MESMO piso, em todos os gestos de escrita desta tela:
    * o botão "Novo agendamento", o clique num bloco livre da grade, o encaixe
-   * ("Outro horário") do painel e o "Marcar compromisso" que chega por
+   * (a hora digitada fora dos horários livres, em `QuandoDaMarcacao`) e o
+   * "Marcar compromisso" que chega por
    * `?contato=`. Oferecer qualquer uma delas a quem só lê é oferecer um 403 —
    * com a recusa chegando DEPOIS do gesto, que é o defeito que este nome veio
    * fechar. Esconder aqui é cortesia: quem decide segue sendo a rota.
@@ -574,8 +575,8 @@ export function AgendaClient({
       : visao === "semana"
         ? (() => {
             // Os MESMOS dias que a grade desenha: segunda a sábado, domingo só
-            // quando tem compromisso.
-            const dias = diasDaSemanaDe(ancora, agendamentosDaGrade, fusoDaAgenda);
+            // quando tem compromisso ou quando é hoje (o hoje DA ORGANIZAÇÃO).
+            const dias = diasDaSemanaDe(ancora, agendamentosDaGrade, fusoDaAgenda, hoje);
             const primeiro = dias[0] ?? ancora;
             const ultimo = dias[dias.length - 1] ?? ancora;
             return `${format(primeiro, t("d 'de' MMM"), { locale: localeDaData })} — ${format(ultimo, t("d 'de' MMM"), { locale: localeDaData })}`;
@@ -825,11 +826,6 @@ export function AgendaClient({
         </div>
       </header>
 
-      {/*
-        O HISTÓRICO na tela do produto, e não só na vitrine. Ele aparece mesmo
-        sem dado: as quatro abas com contador zero respondem "não há nada" sem
-        gastar um clique, e some-lo faria a tela parecer menor do que é.
-      */}
       {/*
         A MARCAÇÃO NOVA é um modal no centro, em duas abas ("Novo agendamento" e
         "Bloquear horário"), no molde do sistema que a clínica já usava: o painel

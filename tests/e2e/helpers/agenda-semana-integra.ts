@@ -30,7 +30,8 @@ import { esperarAgenda, telaAgenda } from "./tela-agenda";
  *     semana +1     90   90   90   90   90   90   90
  *
  * Duas leituras, e a segunda é a que assusta: **no sábado é zero o dia
- * inteiro**, porque a semana desenhada (dom→sáb) só tem dias úteis já passados.
+ * inteiro**, porque a semana desenhada (dom→sáb na época da medição; hoje
+ * seg→sáb) só tem dias úteis já passados.
  * Não é "o teste fica frágil à tarde"; é "o teste não pode passar no fim de
  * semana". E entre 15h e 17h o bolso ainda tem 2 a 4 vagas — que as specs
  * ANTERIORES do mesmo job consomem marcando —, o que explica o corte ter caído
@@ -54,7 +55,7 @@ import { esperarAgenda, telaAgenda } from "./tela-agenda";
  * procurava o cartão na semana de sexta — e a falha lia "a grade não repinta".
  */
 
-/** A semana desenha segunda a sábado; o domingo só entra quando tem compromisso (27/11/2026). */
+/** A semana desenha segunda a sábado; o domingo só entra quando tem compromisso ou é hoje (27/11/2026). */
 const DIAS_DA_SEMANA_DESENHADA = [6, 7];
 
 /**
