@@ -8,6 +8,15 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.43.2] — 2026-11-27
+
+### Corrigido
+
+- **Com o EvaLink ligado, Sair encerra também a sessão da Conta neste navegador** Antes, o "Sair" do CRM apagava só a sessão do CRM. Num computador compartilhado, a próxima pessoa
+  que clicasse em "Entrar com EvaLink" entrava como a anterior, sem senha. Agora o CRM manda o
+  navegador ao `/sair` da Conta, que encerra a sessão dela só neste navegador e devolve para o login
+  do CRM. Sem o EvaLink configurado, nada muda. Requer a Conta com a rota `/sair` (evalink-conta 2996743).
+
 ## [5.43.1] — 2026-11-27
 
 ### Corrigido
@@ -10222,7 +10231,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.2...HEAD
+[5.43.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.1...v5.43.2
 [5.43.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.0...v5.43.1
 [5.43.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.42.1...v5.43.0
 [5.42.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.42.0...v5.42.1
