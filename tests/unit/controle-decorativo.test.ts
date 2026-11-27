@@ -173,6 +173,10 @@ describe("nenhum botão fica cinza por falta de fiação", () => {
     // amostra, já que o conjunto real hoje é vazio de propósito.
     const amostra = [..."<Button disabled={!onRemarcar}>".matchAll(PADRAO_DO_CONTROLE)].map((m) => m[1]);
     expect(amostra).toEqual(["onRemarcar"]);
+    // Com o conjunto vazio, só isto prova que o percurso ainda LÊ `components/`:
+    // mover a pasta ou quebrar `arquivos()` deixaria a varredura verde no vazio.
+    const lidos = arquivos(path.join(RAIZ, "components"), /\.tsx$/).length;
+    expect(lidos, "a varredura não achou os .tsx de components/").toBeGreaterThan(100);
     expect(LIGADAS.size, "nenhuma callback encontrada em app/app").toBeGreaterThanOrEqual(20);
   });
 

@@ -861,8 +861,7 @@ function BlocoDeAgendamento({
         //
         // O card continua VISÍVEL — ele é a memória do que houve ali, e some-lo
         // faria o horário parecer que nunca teve nada. O que ele perde é o
-        // clique, que já existe na aba "Cancelados" do histórico logo acima. A
-        // ação viva naquele espaço é marcar; o cancelado é registro.
+        // clique: a ação viva naquele espaço é marcar; o cancelado é registro.
         cancelado && "pointer-events-none opacity-55",
         // Enquanto a proposta está aberta o card original esmaece e o fantasma
         // mostra onde ele cairia. Sumir com o original faria perder a

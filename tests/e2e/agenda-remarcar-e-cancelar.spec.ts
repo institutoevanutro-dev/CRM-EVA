@@ -81,12 +81,19 @@ async function entrar(page: Page, creds: Creds): Promise<string[]> {
   return irParaASemanaSeguinte(page);
 }
 
-/** Marca um compromisso pela tela e devolve o rótulo do horário escolhido. */
+/**
+ * Marca um compromisso pela tela e devolve o id (da RESPOSTA do POST) e o
+ * rótulo do horário escolhido.
+ *
+ * O id vem da resposta, e não de um "cartão novo" na grade: a lista da semana
+ * chega depois da pintura, e um cartão de outra spec que ainda não tinha
+ * aparecido passaria por recém-marcado.
+ */
 async function marcarUm(
   page: Page,
   tipoNome: string,
   dias: readonly string[],
-): Promise<string> {
+): Promise<{ id: string; rotulo: string }> {
   await page.getByRole("button", { name: /novo agendamento/i }).click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId("tipos-de-agendamento")).toBeVisible({ timeout: 10_000 });
@@ -98,34 +105,38 @@ async function marcarUm(
   await horario.click();
   // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
   if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
+  const post = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === "/api/v1/agenda/agendamentos" && r.request().method() === "POST",
+  );
   await page.getByTestId("confirmar-marcacao").click();
+  const resposta = await post;
+  const corpo = await resposta.text();
+  expect(resposta.status(), corpo).toBe(201);
+  const id = (JSON.parse(corpo) as { data: { id: string } }).data.id;
+  expect(id, corpo).toBeTruthy();
   await expect(page.getByTestId("ver-na-agenda")).toBeVisible({ timeout: 15_000 });
   await page.keyboard.press("Escape");
-  return rotulo;
+  await expect(page.getByTestId(`agendamento-${id}`), "o recém-marcado não apareceu na grade").toBeVisible({
+    timeout: 20_000,
+  });
+  return { id, rotulo };
 }
 
-/** Os ids dos cartões desenhados na grade agora. */
-const idsNaGrade = (page: Page) =>
-  page
-    .locator('[data-testid="grade-da-agenda"] [data-testid^="agendamento-"]')
-    .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")!.slice("agendamento-".length)));
+/** O compromisso como o BANCO o guarda — a fonte que a tela não pode fingir. */
+async function lerDoBanco(page: Page, id: string): Promise<{ starts_at: string; time_zone: string }> {
+  const r = await page.request.get(`/api/v1/agenda/agendamentos/${id}`);
+  expect(r.status(), await r.text()).toBe(200);
+  return ((await r.json()) as { data: { starts_at: string; time_zone: string } }).data;
+}
 
-/** Marca um pela tela e devolve o id do cartão novo e o rótulo do horário. */
-async function marcarEAcharNaGrade(
-  page: Page,
-  tipoNome: string,
-  dias: readonly string[],
-): Promise<{ id: string; rotulo: string }> {
-  const antes = new Set(await idsNaGrade(page));
-  const rotulo = await marcarUm(page, tipoNome, dias);
-  let id = "";
-  await expect
-    .poll(async () => (id = (await idsNaGrade(page)).find((x) => !antes.has(x)) ?? ""), {
-      timeout: 20_000,
-      message: "o agendamento recém-marcado não apareceu na grade",
-    })
-    .not.toBe("");
-  return { id, rotulo };
+/** "HH:mm" de um instante no fuso dado — o formato do rótulo `horario-HH:mm`. */
+function horaNoFuso(instante: string, fuso: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: fuso,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(instante));
 }
 
 // O teto padrão do Playwright é 30s, e estes dois casos fazem DUAS jornadas
@@ -137,7 +148,7 @@ test("cancelar pela tela: o motivo é exigido, e o compromisso sai da grade", as
   const creds = lerCreds();
   if (!creds.agenda) throw new Error("sem bloco agenda");
   const diasDaSemana = await entrar(page, creds);
-  const { id } = await marcarEAcharNaGrade(page, creds.agenda.tipo_nome, diasDaSemana);
+  const { id } = await marcarUm(page, creds.agenda.tipo_nome, diasDaSemana);
 
   // Tocar no cartão abre o painel do paciente.
   await page.getByTestId(`agendamento-${id}`).click();
@@ -176,7 +187,8 @@ test("remarcar pela tela: o painel abre o \"quando\" e o horário muda", async (
   const creds = lerCreds();
   if (!creds.agenda) throw new Error("sem bloco agenda");
   const diasDaSemana = await entrar(page, creds);
-  const { id, rotulo: rotuloOriginal } = await marcarEAcharNaGrade(page, creds.agenda.tipo_nome, diasDaSemana);
+  const { id, rotulo: rotuloOriginal } = await marcarUm(page, creds.agenda.tipo_nome, diasDaSemana);
+  const antes = await lerDoBanco(page, id);
 
   await page.getByTestId(`agendamento-${id}`).click();
   const painel = page.getByTestId("painel-do-compromisso");
@@ -207,10 +219,21 @@ test("remarcar pela tela: o painel abre o \"quando\" e o horário muda", async (
   await outro.click();
   await painel.getByTestId("confirmar-remarcacao").click();
 
-  // A seção fecha e a linha do painel passa a mostrar o horário novo.
+  // A seção fecha quando o PATCH volta.
   await expect(painel.getByTestId("remarcar-no-painel")).toHaveCount(0, { timeout: 20_000 });
+
+  // ⚠️ O BANCO primeiro, e não a linha do painel sozinha: ela mostra
+  // "HH:mm – HH:mm", e com horários de 30 min o INÍCIO do horário novo é o FIM
+  // do original — `toContainText(rotuloNovo)` passava antes de remarcar.
+  const depois = await lerDoBanco(page, id);
+  expect(Date.parse(depois.starts_at), "o starts_at não mudou — nada foi remarcado").not.toBe(
+    Date.parse(antes.starts_at),
+  );
+  expect(horaNoFuso(depois.starts_at, depois.time_zone), "o starts_at não é o horário escolhido").toBe(rotuloNovo);
+
+  // E a tela, ancorada no INÍCIO do intervalo ("15:00 – 15:30"), não no fim.
   await expect(
     painel.getByTestId("compromisso-horario"),
-    "o painel não passou a mostrar o horário novo",
-  ).toContainText(rotuloNovo, { timeout: 20_000 });
+    "o painel não passou a mostrar o horário novo como início",
+  ).toHaveText(new RegExp(`${rotuloNovo}\\s*[–-]`), { timeout: 20_000 });
 });

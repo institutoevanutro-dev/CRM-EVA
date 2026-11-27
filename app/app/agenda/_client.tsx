@@ -524,7 +524,8 @@ export function AgendaClient({
   }, [horarios, fusoDaAgenda]);
 
   // A GRADE não mostra cancelado: ela responde "o que está de pé". O que
-  // aconteceu com um cancelado se vê no painel dele e no contato.
+  // aconteceu com um cancelado fica na linha do tempo do lead e se abre pelos
+  // links da Central (`?compromisso=`), no painel dele.
   const agendamentosDaGrade = React.useMemo(
     () => agendamentos.filter((a) => a.situacao !== "cancelled"),
     [agendamentos],
