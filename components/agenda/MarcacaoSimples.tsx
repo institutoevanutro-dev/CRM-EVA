@@ -292,23 +292,31 @@ export function MarcacaoSimples({
   const parede = (iso: string): Date => (fuso ? dataDeParede(new Date(iso), fuso) : new Date(iso));
 
   // Trocar profissional ou procedimento muda as vagas: o horário escolhido
-  // deixa de valer. O DIA fica, que é o que a recepção combinou com o paciente.
+  // deixa de valer e o campo de hora esvazia (regra do dono da clínica), até a
+  // hora digitada que não virou horário — essa o `QuandoDaMarcacao` só solta
+  // remontando, então a troca muda a `key` dele. O DIA fica, que é o que a
+  // recepção combinou com o paciente.
+  const [geracaoDoQuando, setGeracaoDoQuando] = React.useState(0);
+  const esvaziarHora = () => {
+    setHorario(null);
+    setGeracaoDoQuando((g) => g + 1);
+  };
   const trocarProfissional = (id: string) => {
     onProfissional(id);
     if (!id) onTipo("");
     onDuracao?.(null);
-    setHorario(null);
+    esvaziarHora();
   };
   const trocarProcedimento = (id: string) => {
     onTipo(id);
     onDuracao?.(null);
     setEnderecoEditado(null);
-    setHorario(null);
+    esvaziarHora();
   };
   // A lista de horários era de outra duração: o horário escolhido deixa de valer.
   const trocarDuracao = (texto: string) => {
     onDuracao?.(texto);
-    setHorario(null);
+    esvaziarHora();
   };
 
   const pronto = Boolean(
@@ -792,6 +800,7 @@ export function MarcacaoSimples({
 
             {/* ── direita: quando (o mesmo componente do Remarcar do painel) ── */}
             <QuandoDaMarcacao
+              key={geracaoDoQuando}
               ancora={ancora}
               agora={agora}
               fuso={fuso}

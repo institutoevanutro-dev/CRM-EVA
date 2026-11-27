@@ -257,6 +257,22 @@ describe("Novo agendamento: profissional antes do procedimento", () => {
     expect(onTipo).toHaveBeenCalledWith("");
   });
 
+  it("trocar profissional ou procedimento esvazia a hora, até a digitada que não virou horário", () => {
+    // Sem encaixe, 10:30 fica no campo com o aviso, sem virar horário.
+    const horariosPorDia = { "2026-10-22": [{ instante: "2026-10-22T16:00:00.000Z", rotulo: "13:00" }] };
+    montarMarcacao({ profissionalId: ANA, tipoId: "t-livre", permiteEncaixe: false, horariosPorDia });
+    const hora = () => screen.getByTestId("hora-da-marcacao") as HTMLInputElement;
+    fireEvent.change(hora(), { target: { value: "10:30" } });
+    expect(screen.getByTestId("fora-dos-horarios-livres")).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("profissional-da-marcacao"), { target: { value: BETO } });
+    expect(hora().value).toBe("");
+    expect(screen.queryByTestId("fora-dos-horarios-livres")).toBeNull();
+
+    fireEvent.change(hora(), { target: { value: "10:30" } });
+    fireEvent.change(screen.getByTestId("procedimento-da-marcacao"), { target: { value: "t-ana" } });
+    expect(hora().value).toBe("");
+  });
+
   it("o horário escolhido mostra o fim calculado pela duração e confirma com o instante", async () => {
     const onConfirmar = vi.fn(() => Promise.resolve());
     // 13:00 em São Paulo = 16:00 UTC; 45 min de "Avaliação facial".

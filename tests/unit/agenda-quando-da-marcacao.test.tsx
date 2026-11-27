@@ -24,8 +24,12 @@ const H14: HorarioLivre = { instante: "2026-10-22T17:00:00.000Z", rotulo: "14:00
 
 function Montar({
   aoEscolher,
+  aoMudarMes,
   ...props
-}: Partial<ComponentProps<typeof QuandoDaMarcacao>> & { aoEscolher?: (h: HorarioLivre | null) => void }) {
+}: Partial<ComponentProps<typeof QuandoDaMarcacao>> & {
+  aoEscolher?: (h: HorarioLivre | null) => void;
+  aoMudarMes?: (mes: Date) => void;
+}) {
   const [dia, setDia] = useState(DIA);
   const [horario, setHorario] = useState<HorarioLivre | null>(null);
   return (
@@ -38,7 +42,8 @@ function Montar({
         publicouHorarios
         erroAoCarregar={false}
         fusoSuposto={false}
-        onMesVisivel={vi.fn()}
+        // Uma função nova a cada render, de propósito: o aviso não pode repetir.
+        onMesVisivel={(m) => aoMudarMes?.(m)}
         mesCarregado={new Date(2026, 9, 1)}
         temTipo
         avisoSemTipo="Escolha o profissional e o procedimento para ver os horários livres."
@@ -55,6 +60,9 @@ function Montar({
       />
       <button type="button" onClick={() => setHorario(null)}>
         limpar por fora
+      </button>
+      <button type="button" onClick={() => setDia(new Date(2026, 11, 3, 12))}>
+        outro dia por fora
       </button>
     </>
   );
@@ -113,6 +121,39 @@ describe("o quando da marcação", () => {
     fireEvent.click(screen.getByTestId("dia-2026-10-23"));
     expect(campo().value).toBe("");
     expect(screen.queryByTestId("fora-dos-horarios-livres")).toBeNull();
+  });
+
+  it("sem jornada publicada o campo fica desligado e a tela manda configurar", () => {
+    render(<Montar publicouHorarios={false} horariosPorDia={{}} />);
+    expect(campo()).toBeDisabled();
+    expect(screen.getByTestId("sem-jornada-publicada")).toBeInTheDocument();
+    expect(screen.getByTestId("ir-configurar-horarios")).toHaveAttribute("href", "/app/team?aba=atendimento");
+  });
+
+  it("sem conseguir carregar os horários o campo fica desligado e diz por quê", () => {
+    render(<Montar erroAoCarregar horariosPorDia={{}} />);
+    expect(campo()).toBeDisabled();
+    expect(screen.getByTestId("motivo-do-bloqueio")).toHaveTextContent("Não consegui carregar os horários");
+  });
+
+  it("o dia que muda por fora leva o mês junto e esvazia a hora digitada", () => {
+    render(<Montar permiteEncaixe={false} />);
+    fireEvent.change(campo(), { target: { value: "10:30" } });
+    fireEvent.click(screen.getByText("outro dia por fora"));
+    expect(screen.getByTestId("dia-2026-12-03")).toHaveAttribute("aria-pressed", "true");
+    expect(campo().value).toBe("");
+  });
+
+  it("onMesVisivel com referência nova a cada render avisa só quando o mês muda", () => {
+    const aoMudarMes = vi.fn();
+    render(<Montar aoMudarMes={aoMudarMes} />);
+    fireEvent.click(screen.getByTestId("horario-13:00"));
+    fireEvent.click(screen.getByTestId("horario-14:00"));
+    expect(aoMudarMes).toHaveBeenCalledTimes(1);
+    expect(aoMudarMes).toHaveBeenLastCalledWith(new Date(2026, 9, 1));
+    fireEvent.click(screen.getByTestId("mes-seguinte"));
+    expect(aoMudarMes).toHaveBeenCalledTimes(2);
+    expect(aoMudarMes).toHaveBeenLastCalledWith(new Date(2026, 10, 1));
   });
 
   it("sem procedimento o campo fica desligado e a tela diz por quê", () => {

@@ -20,8 +20,18 @@ import type { HorarioLivre } from "./tipos";
  *
  * É o MESMO componente no "Novo agendamento" (`MarcacaoSimples`) e no Remarcar
  * do painel do paciente (`DetalheDoCompromisso`): escolher o horário novo é o
- * mesmo gesto de escolher o primeiro. Quem usa guarda o dia e o horário; o mês
- * visível mora aqui.
+ * mesmo gesto de escolher o primeiro.
+ *
+ * O CONTRATO com quem usa:
+ *   - quem usa guarda o dia e o horário; o mês visível mora aqui e segue o
+ *     `dia` quando ele muda por fora;
+ *   - limpar `horario` esvazia o campo do que tinha virado horário. A hora
+ *     digitada que NÃO virou horário (encaixe proibido) só some trocando o dia
+ *     ou remontando com `key` — é o que `MarcacaoSimples` faz ao trocar o
+ *     profissional, o procedimento ou a duração;
+ *   - sem jornada publicada, ou sem conseguir carregar os horários, o campo
+ *     fica desligado: não há o que escolher, e marcar às cegas acabaria num
+ *     422 `agenda_fora_da_jornada` ou num encaixe que ninguém conferiu.
  *
  * A hora digitada fora da lista vale (é o encaixe que a rota já aceita de quem
  * é da equipe) e só avisa "Fora dos horários livres". Quem decide o conflito
@@ -34,7 +44,11 @@ const FOCO =
 const HORA = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 export type QuandoDaMarcacaoProps = {
-  /** O dia de hoje NA ORGANIZAÇÃO: é onde o calendário abre. */
+  /**
+   * O dia de hoje NA ORGANIZAÇÃO. Só decide o pulo de abertura: se o mês dele
+   * não tem vaga nenhuma, o calendário passa sozinho ao seguinte, uma vez.
+   * Onde o calendário abre é o mês de `dia`.
+   */
   ancora: Date;
   agora: Date;
   /** O fuso da regra (`fuso_da_regra`): sem ele não há como montar o instante digitado. */
@@ -45,6 +59,11 @@ export type QuandoDaMarcacaoProps = {
   fusoSuposto: boolean;
   fontesDefasadas?: Array<{ nome?: string; desde?: string }>;
   googleCoberturaParcial?: boolean;
+  /**
+   * Avisado com o 1º dia do mês visível, na montagem e a cada troca de mês. A
+   * referência pode mudar a cada render: só a troca de mês chama de novo.
+   * Remontar avisa outra vez o mesmo mês, então quem recebe deduplica.
+   */
   onMesVisivel: (mes: Date) => void;
   mesCarregado: Date | null;
   /** Já se sabe de que procedimento e de quem são os horários. */
@@ -86,7 +105,10 @@ export function QuandoDaMarcacao({
   const locale = useLocaleDeData();
 
   const [mes, setMes] = React.useState(() => startOfMonth(dia));
+  const mesAvisado = React.useRef<number | null>(null);
   React.useEffect(() => {
+    if (mesAvisado.current === mes.getTime()) return;
+    mesAvisado.current = mes.getTime();
     onMesVisivel(mes);
   }, [mes, onMesVisivel]);
 
@@ -106,7 +128,9 @@ export function QuandoDaMarcacao({
 
   // O mês de abertura sem vaga nenhuma passa sozinho ao seguinte, uma vez (a
   // mesma regra do painel antigo: no fim do mês a próxima vaga é no outro).
-  const aberturaDecidida = React.useRef(false);
+  // Montado já fora do mês de `ancora` (remontou com o dia noutro mês), não há
+  // abertura a decidir: voltar ao mês de hoje à mão não pode quicar.
+  const aberturaDecidida = React.useRef(!isSameMonth(dia, ancora));
   const aberturaCarregada = temTipo && dadosDoMes && isSameMonth(mes, ancora);
   const aberturaSemVaga = aberturaCarregada && !semanas.flat().some(temHorario);
   React.useEffect(() => {
@@ -128,6 +152,16 @@ export function QuandoDaMarcacao({
     valor: "",
     instante: null,
   });
+
+  // O `dia` que muda POR FORA (o Remarcar abre noutro compromisso) leva o mês
+  // junto e esvazia a hora digitada, como o clique num dia. Ajuste durante o
+  // render, o padrão do React para estado que segue uma prop.
+  const [diaVisto, setDiaVisto] = React.useState(dia);
+  if (diaVisto.getTime() !== dia.getTime()) {
+    setDiaVisto(dia);
+    setTexto({ valor: "", instante: null });
+    if (!isSameMonth(dia, mes)) setMes(startOfMonth(dia));
+  }
   const exibido = horario
     ? texto.instante === horario.instante
       ? texto.valor
@@ -156,7 +190,7 @@ export function QuandoDaMarcacao({
       fuso,
     );
     const livre = doDia.find((h) => Date.parse(h.instante) === instante.getTime());
-    const escolhido = livre ?? (permiteEncaixe ? { instante: instante.toISOString(), rotulo: valor } : null);
+    const escolhido = livre ?? (encaixeLigado ? { instante: instante.toISOString(), rotulo: valor } : null);
     setTexto({ valor, instante: escolhido?.instante ?? null });
     onHorario(escolhido);
   };
@@ -288,7 +322,7 @@ export function QuandoDaMarcacao({
             type="time"
             step={300}
             value={exibido}
-            disabled={!temTipo || !fuso}
+            disabled={!temTipo || !fuso || !publicouHorarios || erroAoCarregar}
             aria-describedby={foraDaLista ? "fora-dos-horarios" : undefined}
             onChange={(e) => escolherHora(e.target.value)}
             className={cn(CAMPO, "pl-9 tabular-nums")}
