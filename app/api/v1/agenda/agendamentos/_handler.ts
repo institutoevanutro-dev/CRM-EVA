@@ -40,6 +40,8 @@ import { colide, type Slot } from "@/lib/agenda/horarios-livres";
 import { lerJornadaDoBanco } from "@/lib/agenda/jornada";
 import { atendeOProcedimento, unidadesDaJornada } from "@/lib/agenda/marcacao-simples";
 import { diaLocalISO } from "@/lib/agenda/fuso";
+import { leadAtivoDoContato } from "@/lib/agenda/lead-ativo-do-contato";
+import { registrarPresencaConfirmada } from "@/lib/agenda/confirmacao-do-lembrete";
 import { idsForaDaOrg } from "@/lib/tenancy/pertence-a-org";
 import {
   atividadeDaTransicao,
@@ -54,17 +56,18 @@ import {
   ENTIDADE_DO_AGENDAMENTO,
   type QuemConverteu,
   NOME_GENERICO_DO_TIPO,
+  type OrigemDaConfirmacaoDoPaciente,
   VINCULO_DE_AGENDAMENTO,
 } from "@/lib/agenda/tipos";
 import { ApiError } from "@/lib/api/types";
 import { comIdempotencia, hashDoCorpo } from "@/lib/api/idempotency";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
-import { resolveActiveLeadForContact, type LeadCandidate } from "@/lib/leads/active-lead";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import { leadParaEspelharNaAgenda, moverLeadParaEtapaDeAgendamento } from "@/lib/leads/appointment-stage-move";
 import { logger } from "@/lib/logger";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type SB = SupabaseClient;
@@ -146,6 +149,12 @@ export interface AlterarInput {
   guest_email?: string;
   /** Correção do canal da marcação (só pessoa). Não é remarcação nem muda a revisão. */
   booking_channel?: CanalDaMarcacao;
+  /**
+   * "Paciente confirmou" (migration 0441): a recepção marca que o paciente
+   * confirmou a presença, por exemplo por telefone. Ação própria: vem só com
+   * `id` e `revision` (a rota recusa misturar), e não muda status nem horário.
+   */
+  patient_confirmed?: true;
 }
 
 export interface CancelarInput {
@@ -457,6 +466,8 @@ export async function alterarAgendamentoHandler(
   ctx: HandlerCtx,
   input: AlterarInput,
 ): Promise<Record<string, unknown>> {
+  if (input.patient_confirmed) return pacienteConfirmouPelaEquipe(supabase, ctx, input.id, input.revision);
+
   const atual = await exigeAgendamento(supabase, ctx, input.id, [
     "id",
     "revision",
@@ -662,6 +673,77 @@ export async function alterarAgendamentoHandler(
     organizationId:ctx.organization_id,resourceType:"calendar_appointment",resourceId:input.id,requestId:ctx.requestId,
     metadata:{revision:salvo.revision,confirmation_next_at:salvo.confirmation_next_at}});
   return salvo as Record<string, unknown>;
+}
+
+/** Os campos da presença confirmada que a resposta devolve (o id da pessoa fica no detalhe). */
+const CAMPOS_DA_PRESENCA = ["id", "revision", "patient_confirmed_at", "patient_confirmed_source"];
+
+/**
+ * "Paciente confirmou", marcado pela equipe (migration 0441, decisão 8 da spec).
+ *
+ * O RPC `fn_appointment_patient_confirm` NÃO recebe a organização e só
+ * `service_role` o executa. Por isso a ordem importa: primeiro o compromisso é
+ * lido pela SESSÃO com a organização do contexto (cookie validado, nunca o
+ * corpo) — outra organização é 404 aqui e o RPC nem é chamado —, e só então o
+ * RPC roda pelo client de serviço.
+ *
+ * Quem decide se ainda dá para confirmar (status `confirmed`, antes do início,
+ * revisão do pedido, já confirmado) é o banco. A revisão vem do pedido: se o
+ * compromisso foi remarcado depois que a recepção abriu o painel, a marca não
+ * cai no horário novo, que o paciente não confirmou. A chave "Pedir confirmação
+ * no lembrete" do tipo não é consultada: o botão vale com ela desligada.
+ */
+async function pacienteConfirmouPelaEquipe(
+  supabase: SB,
+  ctx: HandlerCtx,
+  id: string,
+  revision: number | undefined,
+): Promise<Record<string, unknown>> {
+  if (ctx.actor.type !== "user") {
+    throw new ApiError(403, "forbidden", undefined, ctx.requestId, "Só alguém da equipe marca que o paciente confirmou.");
+  }
+  if (revision === undefined) {
+    throw new ApiError(422, "validation_failed", undefined, ctx.requestId, "Informe a revisão do compromisso.");
+  }
+  const naoSeAplica = () =>
+    new ApiError(
+      409,
+      "appointment_patient_confirmation_not_applicable",
+      undefined,
+      ctx.requestId,
+      "Não dá para marcar a presença: o compromisso precisa ter paciente, estar Agendado, ainda não ter começado " +
+        "e não ter mudado desde que você o abriu. Recarregue e confira.",
+    );
+
+  const atual = await exigeAgendamento(supabase, ctx, id, ["id", "contact_id"]);
+  if (!atual.contact_id) throw naoSeAplica();
+
+  await guardServiceEffect();
+  const { data, error } = await createAdminClient().rpc("fn_appointment_patient_confirm", {
+    p_appointment_id: id,
+    p_expected_revision: revision,
+    p_source: "equipe" satisfies OrigemDaConfirmacaoDoPaciente,
+    p_message_id: null,
+    p_user_id: ctx.actor.id,
+  });
+  if (error) throw new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
+  const desfecho = data as "confirmado" | "ja_confirmado" | "nao_se_aplica";
+  if (desfecho === "nao_se_aplica") throw naoSeAplica();
+
+  // Os efeitos ANTES da releitura: se ela falhar, a confirmação já gravada não
+  // fica sem auditoria nem timeline (o retry cairia em `ja_confirmado`, que não grava).
+  if (desfecho === "confirmado") {
+    await registrarPresencaConfirmada(supabase, {
+      organizationId: ctx.organization_id,
+      appointmentId: id,
+      contactId: atual.contact_id as string,
+      source: "equipe",
+      actor: ctx.actor,
+      requestId: ctx.requestId,
+    });
+  }
+  const salvo = await exigeAgendamento(supabase, ctx, id, CAMPOS_DA_PRESENCA);
+  return desfecho === "ja_confirmado" ? { ...salvo, ja_estava: true } : salvo;
 }
 
 /**
@@ -1307,7 +1389,7 @@ async function fecharOLaco(
   // abaixo já emite assim. A organização vem do contexto autenticado.
   // O negócio do contato, lido ANTES do emit: é o mesmo que a timeline ancora
   // logo abaixo, e `lead_ids` no corpo do aviso quer exatamente ele.
-  const leadId = args.contactId ? await leadAtivoDoContato(supabase, ctx, args.contactId) : null;
+  const leadId = args.contactId ? await leadAtivoDoContato(supabase, ctx.organization_id, args.contactId) : null;
 
   if (args.gatilho) {
     // O corpo do aviso carrega horário, situação, tipo e negócios (porte de
@@ -1421,14 +1503,6 @@ async function fecharOLaco(
 }
 
 /**
- * O negócio ativo do contato — pela MESMA régua do resto do produto.
- *
- * `resolveActiveLeadForContact` distingue três desfechos que um `limit(2)` não
- * distingue: roteou, `no_open_lead` e `ambiguous_open_leads`. Os dois últimos
- * NÃO são erro: o agendamento existe e a atividade não nasce, porque não há
- * negócio a que ancorar.
- */
-/**
  * O recorte da linha que o corpo do aviso carrega — lido DEPOIS da gravação.
  * Falha não é erro: os campos novos saem `null` e o evento sai mesmo assim.
  */
@@ -1484,32 +1558,6 @@ async function leadIdsDoCompromisso(
     .filter((id): id is string => typeof id === "string" && !!id);
   const todos = leadAtivo ? [...vinculados, leadAtivo] : vinculados;
   return todos.filter((id, i) => todos.indexOf(id) === i);
-}
-
-async function leadAtivoDoContato(
-  supabase: SB,
-  ctx: HandlerCtx,
-  contactId: string,
-): Promise<string | null> {
-  const [{ data: candidatos }, { data: padrao }] = await Promise.all([
-    supabase
-      .from("crm_leads")
-      .select("id, organization_id, pipeline_id, status, last_activity_at, created_at")
-      .eq("organization_id", ctx.organization_id)
-      .eq("contact_id", contactId),
-    supabase
-      .from("crm_pipelines")
-      .select("id")
-      .eq("organization_id", ctx.organization_id)
-      .eq("is_default", true)
-      .eq("is_archived", false)
-      .maybeSingle(),
-  ]);
-
-  const rota = resolveActiveLeadForContact((candidatos ?? []) as LeadCandidate[], {
-    defaultPipelineId: (padrao as { id: string } | null)?.id ?? null,
-  });
-  return rota.routed ? rota.leadId : null;
 }
 
 async function alteraComRevisao(supabase:SB,ctx:HandlerCtx,id:string,revision:number,patch:Record<string,unknown>):Promise<Record<string,unknown>> {

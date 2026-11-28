@@ -81,7 +81,7 @@ import {
   type LinhaDeEventoExterno,
   type OQueOcupa,
 } from "./ocupados";
-import type { SituacaoDaConexao, SituacaoDoAgendamento } from "./tipos";
+import type { OrigemDaConfirmacaoDoPaciente, SituacaoDaConexao, SituacaoDoAgendamento } from "./tipos";
 
 /** Teto de dias por consulta: uma varredura de ano inteiro é erro de chamada, não pedido. */
 export const MAXIMO_DE_DIAS = 62;
@@ -608,6 +608,25 @@ export interface AgendamentoListado {
    */
   tipoId?: string | null;
   tipoNome?: string | null;
+  /**
+   * Presença confirmada pelo paciente (migration 0441): quando e por onde
+   * (`mensagem` ou `equipe`). Marca separada da situação. Quem da equipe marcou
+   * NÃO vem aqui: é dado do painel (o GET de detalhe). Da TELA; a ferramenta da
+   * IA não o repassa (o bloco de compromissos do agente lê o banco).
+   */
+  presencaConfirmadaEm?: string | null;
+  presencaConfirmadaOrigem?: OrigemDaConfirmacaoDoPaciente | null;
+  /**
+   * Quando o lembrete DO HORÁRIO ATUAL saiu (`reminder_sent_at`), ou `null`.
+   * Lembrete anterior à última remarcação (`starts_at_marked_at`, migration 0323)
+   * era do horário antigo e chega `null` (`lembreteDoHorarioAtual`).
+   */
+  lembreteEnviadoEm?: string | null;
+  /**
+   * O tipo pede SIM no lembrete (`reminder_asks_confirmation`). Sem isso o
+   * paciente não foi convidado a responder, e "Sem confirmação" não se aplica.
+   */
+  lembretePedeConfirmacao?: boolean;
 }
 
 export interface ParametrosDaLista {
@@ -678,6 +697,28 @@ function bloqueadoNoEmbed(c: { is_blocked?: boolean | null } | Array<{ is_blocke
 function nomeDoTipoNoEmbed(t: { name?: string | null } | Array<{ name?: string | null }> | null | undefined): string | null {
   const nome = (Array.isArray(t) ? t[0] : t)?.name;
   return nome ? String(nome) : null;
+}
+
+/** O mesmo embed, para a pergunta da 0441: o tipo pede SIM no lembrete? */
+export function tipoPedeConfirmacaoNoEmbed(
+  t: { reminder_asks_confirmation?: boolean | null } | Array<{ reminder_asks_confirmation?: boolean | null }> | null | undefined,
+): boolean {
+  return (Array.isArray(t) ? t[0] : t)?.reminder_asks_confirmation === true;
+}
+
+/**
+ * O lembrete que vale para o horário ATUAL: `reminder_sent_at` sobrevive à
+ * remarcação, e o lembrete de antes dela era do horário antigo. A régua é
+ * `starts_at_marked_at` (migration 0323), gravada a cada mudança real de
+ * `starts_at`; nula = nunca remarcado, e o lembrete vale.
+ */
+export function lembreteDoHorarioAtual(
+  reminderSentAt: string | null | undefined,
+  startsAtMarkedAt: string | null | undefined,
+): string | null {
+  if (!reminderSentAt) return null;
+  if (startsAtMarkedAt && new Date(reminderSentAt).getTime() < new Date(startsAtMarkedAt).getTime()) return null;
+  return String(reminderSentAt);
 }
 
 /** O mesmo embed, para a pergunta do prontuário: o cadastro tem nome completo? */
@@ -768,7 +809,7 @@ export async function listaAgendamentos(
   let q = supabase
     .from("calendar_appointments")
     .select(
-      "id, title, starts_at, ends_at, time_zone, status, revision, meeting_state, meeting_url, owner_user_id, contact_id, event_type_id, calendar_event_types(name), contacts(name, display_name, is_blocked)",
+      "id, title, starts_at, ends_at, time_zone, status, revision, meeting_state, meeting_url, owner_user_id, contact_id, event_type_id, patient_confirmed_at, patient_confirmed_source, reminder_sent_at, starts_at_marked_at, calendar_event_types(name, reminder_asks_confirmation), contacts(name, display_name, is_blocked)",
     )
     .eq("organization_id", organizationId)
     // Lançado por engano ou de teste (migration 0364): não é compromisso de
@@ -843,6 +884,10 @@ export async function listaAgendamentos(
       contatoNaoRecebeMensagens: l.contact_id ? bloqueadoNoEmbed(l.contacts) : false,
       tipoId: l.event_type_id ? String(l.event_type_id) : null,
       tipoNome: nomeDoTipoNoEmbed(l.calendar_event_types),
+      presencaConfirmadaEm: l.patient_confirmed_at ? String(l.patient_confirmed_at) : null,
+      presencaConfirmadaOrigem: (l.patient_confirmed_source as OrigemDaConfirmacaoDoPaciente | null) ?? null,
+      lembreteEnviadoEm: lembreteDoHorarioAtual(l.reminder_sent_at, l.starts_at_marked_at),
+      lembretePedeConfirmacao: tipoPedeConfirmacaoNoEmbed(l.calendar_event_types),
     })),
   };
 }
@@ -939,6 +984,8 @@ export interface TipoDeAtendimento {
   lembreteDegrausExtras: number[];
   /** Texto próprio do lembrete. null = a frase padrão do cron. */
   lembreteMensagem: string | null;
+  /** "Pedir confirmação no lembrete" (0441): o lembrete termina pedindo SIM. */
+  lembretePedeConfirmacao: boolean;
 }
 
 export type ResultadoDosTipos =
@@ -968,7 +1015,7 @@ export async function listaTiposDeAtendimento(
   let q = supabase
     .from("calendar_event_types")
     .select(
-      "id, name, slug, description, category, duration_minutes, catalog_product_id, required_room_kind, concurrency_key, location_kind, location_details, requires_confirmation, requires_patient, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, slot_interval_minutes, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body",
+      "id, name, slug, description, category, duration_minutes, catalog_product_id, required_room_kind, concurrency_key, location_kind, location_details, requires_confirmation, requires_patient, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, slot_interval_minutes, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body, reminder_asks_confirmation",
     )
     // Service role bypassa a RLS: este filtro é a única proteção no caminho da
     // ferramenta MCP (ver o cabeçalho do arquivo).
@@ -1016,6 +1063,7 @@ export async function listaTiposDeAtendimento(
         : [],
       lembreteMensagem:
         t.reminder_body === null || t.reminder_body === undefined ? null : String(t.reminder_body),
+      lembretePedeConfirmacao: Boolean(t.reminder_asks_confirmation),
     })),
   };
 }

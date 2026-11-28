@@ -8,7 +8,13 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { montarLembrete, variaveisDesconhecidas } from "./texto-do-lembrete";
+import { FRASE_PEDIDO_DE_CONFIRMACAO as FRASE_DO_LEITOR } from "./confirmacao-do-lembrete";
+import {
+  comPedidoDeConfirmacao,
+  FRASE_PEDIDO_DE_CONFIRMACAO,
+  montarLembrete,
+  variaveisDesconhecidas,
+} from "./texto-do-lembrete";
 
 const AGORA = new Date("2026-10-12T11:00:00Z"); // seg 12/10 08:00 em São Paulo
 const SP = "America/Sao_Paulo";
@@ -147,5 +153,38 @@ describe("variaveisDesconhecidas", () => {
     ["Oi\n{{quando}}", []],
   ])("%s → %j", (texto, esperado) => {
     expect(variaveisDesconhecidas(texto)).toEqual(esperado);
+  });
+});
+
+describe("o pedido de confirmação (chave `reminder_asks_confirmation`)", () => {
+  const FIM = `\n\n${FRASE_PEDIDO_DE_CONFIRMACAO}`;
+
+  it("a frase é a MESMA que o leitor conhece — uma constante só", () => {
+    expect(FRASE_PEDIDO_DE_CONFIRMACAO).toBe(FRASE_DO_LEITOR);
+  });
+
+  it("chave ligada: o texto próprio ganha a frase num parágrafo só dela", () => {
+    expect(lembrete("Oi {{primeiro_nome}}, {{quando}} às {{hora}}.", { pedirConfirmacao: true })).toBe(
+      `Oi Maria, hoje às 14:30.${FIM}`,
+    );
+  });
+
+  it("chave ligada: a frase padrão também ganha", () => {
+    expect(lembrete(null, { pedirConfirmacao: true })).toBe(`${lembrete(null)}${FIM}`);
+  });
+
+  it("chave desligada ou ausente: nada muda, byte a byte", () => {
+    expect(lembrete(null, { pedirConfirmacao: false })).toBe(lembrete(null));
+    expect(lembrete("Oi {{nome}}", { pedirConfirmacao: false })).toBe("Oi Maria Silva");
+  });
+
+  it("o texto da clínica que JÁ termina com a frase não a repete", () => {
+    const molde = `Oi {{primeiro_nome}}!\n${FRASE_PEDIDO_DE_CONFIRMACAO}`;
+    expect(lembrete(molde, { pedirConfirmacao: true })).toBe(`Oi Maria!\n${FRASE_PEDIDO_DE_CONFIRMACAO}`);
+  });
+
+  it("comPedidoDeConfirmacao: o modelo legado cru ganha a frase, e só uma vez", () => {
+    expect(comPedidoDeConfirmacao("Modelo {{nome}} cru\n")).toBe(`Modelo {{nome}} cru${FIM}`);
+    expect(comPedidoDeConfirmacao(comPedidoDeConfirmacao("Modelo"))).toBe(`Modelo${FIM}`);
   });
 });

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { enderecoDeRetorno, faltaParaConectarOGoogle, googleEstaConfigurado } from "@/lib/agenda/google/config";
+import { lembreteDoHorarioAtual, tipoPedeConfirmacaoNoEmbed } from "@/lib/agenda/consulta";
 import { donosDaAgenda } from "@/lib/agenda/donos-da-agenda";
 import { lerBloqueiosDaGrade } from "@/lib/agenda/bloqueios-da-grade";
 import { lerOcupacaoExterna } from "@/lib/agenda/ocupacao-externa";
@@ -133,7 +134,7 @@ export default async function AgendaPage() {
     supabase
       .from("calendar_appointments")
       .select(
-        "id, revision, title, starts_at, ends_at, status, owner_user_id, contact_id, event_type_id, location_kind, calendar_event_types(name), contacts(name, display_name, is_blocked)",
+        "id, revision, title, starts_at, ends_at, status, owner_user_id, contact_id, event_type_id, location_kind, patient_confirmed_at, patient_confirmed_source, reminder_sent_at, starts_at_marked_at, calendar_event_types(name, reminder_asks_confirmation), contacts(name, display_name, is_blocked)",
       )
       .eq("organization_id", activeOrg.orgId)
       // A MESMA régua de `listaAgendamentos`: o excluído (migration 0364) não
@@ -337,6 +338,12 @@ export default async function AgendaPage() {
         naoRecebeMensagens:
           a.contact_id !== null &&
           (Array.isArray(a.contacts) ? a.contacts[0] : a.contacts)?.is_blocked === true,
+        // 0441: a mesma forma de `listaAgendamentos`, para a primeira pintura e o
+        // refetch mostrarem a mesma marca de presença e de lembrete.
+        presencaConfirmadaEm: a.patient_confirmed_at ?? undefined,
+        presencaConfirmadaOrigem: a.patient_confirmed_source ?? undefined,
+        lembreteEnviadoEm: lembreteDoHorarioAtual(a.reminder_sent_at, a.starts_at_marked_at) ?? undefined,
+        lembretePedeConfirmacao: tipoPedeConfirmacaoNoEmbed(a.calendar_event_types),
       })) as AgendamentoDaTela[]).concat(
         /**
          * A ocupação do Google entra na MESMA lista, com `origem: "google_sync"`.

@@ -96,6 +96,28 @@ describe("o bloco em texto", () => {
     expect(t).toContain("Consulta 4");
   });
 
+  it("⭐ presença confirmada pelo paciente (0441): a linha diz quando, no fuso do compromisso", () => {
+    // Decisão 6 da spec: o CRM só lê o "SIM"; quem responde é o agente, e ele
+    // precisa saber que a presença já está confirmada para não pedir de novo.
+    // 17:32Z é 14:32 em São Paulo — nunca a hora do processo (UTC).
+    const t = renderCompromissos([
+      { ...linha(4), time_zone: "America/Sao_Paulo", patient_confirmed_at: new Date("2026-09-03T17:32:00Z") },
+    ]);
+    expect(t).toContain("presença confirmada pelo paciente em 03/09 14:32");
+    expect(t).toContain("Consulta 4");
+  });
+
+  it("...e o PAR: sem confirmação, a linha não fala de presença", () => {
+    expect(renderCompromissos([{ ...linha(4), patient_confirmed_at: null }])).not.toMatch(/presença/i);
+    expect(renderCompromissos([linha(4)])).not.toMatch(/presença/i);
+  });
+
+  it("a consulta lê a confirmação do paciente", async () => {
+    const { q, chamadas } = db();
+    await compromissosDoContato(q, ORG, CONTATO, AGORA);
+    expect(chamadas[0]!.sql).toContain("patient_confirmed_at");
+  });
+
   it("sem compromisso, o bloco é VAZIO — não custa tokens para dizer 'nenhum'", () => {
     expect(renderCompromissos([])).toBe("");
   });

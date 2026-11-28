@@ -52,7 +52,7 @@ describe("a listagem traz o procedimento", () => {
       );
       if (!r.ok) throw new Error(r.codigo);
       expect(colunas[0]).toContain("event_type_id");
-      expect(colunas[0]).toContain("calendar_event_types(name)");
+      expect(colunas[0]).toMatch(/calendar_event_types\(name\b/);
       expect(r.agendamentos[0]).toMatchObject({ tipoId: "tipo-retorno", tipoNome: "Retorno" });
     }
   });

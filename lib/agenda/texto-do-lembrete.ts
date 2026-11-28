@@ -91,6 +91,28 @@ function limparEspacos(texto: string): string {
     .trim();
 }
 
+/**
+ * Acrescentada pelo sistema ao lembrete do tipo com a chave "Pedir confirmação
+ * no lembrete" (`reminder_asks_confirmation`), para nunca faltar a palavra que
+ * o leitor (`lib/agenda/confirmacao-do-lembrete.ts`) sabe ler.
+ *
+ * Mora AQUI, e o leitor a reexporta, porque este arquivo é o puro: a prévia da
+ * tela a mostra, e o leitor puxa servidor (auditoria, timeline).
+ *
+ * Não passa pelo dicionário de propósito: o leitor só lê "sim".
+ */
+export const FRASE_PEDIDO_DE_CONFIRMACAO = "Para confirmar sua presença, responda SIM.";
+
+/**
+ * O texto com o pedido de confirmação num parágrafo só dele. Texto que já
+ * termina com a frase (a clínica a escreveu) sai como está: o paciente não lê
+ * o mesmo pedido duas vezes.
+ */
+export function comPedidoDeConfirmacao(texto: string): string {
+  const limpo = texto.trimEnd();
+  return limpo.endsWith(FRASE_PEDIDO_DE_CONFIRMACAO) ? limpo : `${limpo}\n\n${FRASE_PEDIDO_DE_CONFIRMACAO}`;
+}
+
 /** O dia civil seguinte a `YYYY-MM-DD`, somado na data e não em 24h de relógio. */
 function diaSeguinte(iso: string): string {
   const [ano, mes, dia] = iso.split("-").map(Number);
@@ -138,7 +160,14 @@ export function montarLembrete(input: {
   profissional?: string | null;
   /** O relógio de "hoje"/"amanhã". Padrão: agora. */
   agora?: Date;
+  /** A chave do tipo (`reminder_asks_confirmation`): acrescenta `FRASE_PEDIDO_DE_CONFIRMACAO`. */
+  pedirConfirmacao?: boolean;
 }): string {
+  const texto = textoDoLembrete(input);
+  return input.pedirConfirmacao ? comPedidoDeConfirmacao(texto) : texto;
+}
+
+function textoDoLembrete(input: Parameters<typeof montarLembrete>[0]): string {
   const idioma = input.idioma ?? IDIOMA_PADRAO;
   const t = (texto: string) => traduzir(texto, idioma);
   const etiqueta = tagDeIdioma(idioma);

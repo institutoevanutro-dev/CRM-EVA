@@ -63,7 +63,12 @@ export type Pessoa = {
  */
 export type { OrigemDoAgendamento, SituacaoDoAgendamento } from "@/lib/agenda/tipos";
 
-import type { OrigemDoAgendamento, SituacaoDoAgendamento, TrilhaDaAgenda } from "@/lib/agenda/tipos";
+import type {
+  OrigemDaConfirmacaoDoPaciente,
+  OrigemDoAgendamento,
+  SituacaoDoAgendamento,
+  TrilhaDaAgenda,
+} from "@/lib/agenda/tipos";
 
 export type Agendamento = {
   revision?:number;
@@ -109,6 +114,13 @@ export type Agendamento = {
    * "ocupado na agenda do Google", que ali seria mentira.
    */
   fonteExterna?: "clinicorp";
+  /** Presença confirmada pelo paciente (migration 0441): quando e por onde. Marca separada da situação. */
+  presencaConfirmadaEm?: string;
+  presencaConfirmadaOrigem?: OrigemDaConfirmacaoDoPaciente;
+  /** Quando o lembrete do horário ATUAL saiu (o de antes de uma remarcação não conta). */
+  lembreteEnviadoEm?: string;
+  /** O tipo pede SIM no lembrete. Sem isso, "Sem confirmação" não se aplica. */
+  lembretePedeConfirmacao?: boolean;
 };
 
 /** Um horário oferecido pelo painel de marcação. */

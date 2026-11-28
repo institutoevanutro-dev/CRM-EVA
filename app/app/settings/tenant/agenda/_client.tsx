@@ -38,6 +38,8 @@ export interface TipoRow {
   reminder_minutes_before: number;
   reminder_extra_offsets_minutes: number[] | null;
   reminder_body: string | null;
+  /** "Pedir confirmação no lembrete" (0441). */
+  reminder_asks_confirmation: boolean;
 }
 
 /**
@@ -215,6 +217,10 @@ const VAZIO: Rascunho = {
  * e um compromisso amanhã às 14:30 no fuso do navegador: o que aparece aqui é
  * o que o paciente recebe. Variável que não existe vira aviso antes de salvar
  * — a rota a recusa de qualquer jeito, mas descobrir no toast é descobrir tarde.
+ *
+ * "Pedir confirmação no lembrete" (0441) segue o desenho dos minutos: só vale
+ * com o aviso ligado, e desabilitada não entra no `FormData` (o valor guardado
+ * fica). A prévia acrescenta a frase pela mesma `montarLembrete` do cron.
  */
 // `titulo` e `dia` seguem aceitas (compatibilidade com o original), mas a ajuda
 // mostra só as do pedido: `{{tipo}}` e `{{quando}}` dizem o mesmo com menos ruído.
@@ -225,6 +231,7 @@ export function LembreteDoCompromisso({ tipo, profissional }: { tipo: TipoRow; p
   const idioma = useIdioma();
   const [ligado, setLigado] = React.useState(tipo.reminder_enabled);
   const [texto, setTexto] = React.useState(tipo.reminder_body ?? "");
+  const [pedirConfirmacao, setPedirConfirmacao] = React.useState(tipo.reminder_asks_confirmation);
   const desconhecidas = variaveisDesconhecidas(texto);
   const previa = React.useMemo(() => {
     const amanha = new Date();
@@ -240,8 +247,9 @@ export function LembreteDoCompromisso({ tipo, profissional }: { tipo: TipoRow; p
       molde: texto,
       tipoNome: tipo.name,
       profissional: profissional ?? null,
+      pedirConfirmacao,
     });
-  }, [texto, tipo.name, tipo.location_details, idioma, profissional]);
+  }, [texto, tipo.name, tipo.location_details, idioma, profissional, pedirConfirmacao]);
 
   return (
     <>
@@ -312,6 +320,21 @@ export function LembreteDoCompromisso({ tipo, profissional }: { tipo: TipoRow; p
             {t("Variável que não existe: use só as da lista.")} {desconhecidas.join(" ")}
           </span>
         ) : null}
+      </label>
+      <label className="flex items-center gap-2 text-xs text-text-muted sm:col-span-3">
+        <input
+          type="checkbox"
+          name="reminder_asks_confirmation"
+          checked={pedirConfirmacao}
+          disabled={!ligado}
+          data-testid={`editar-lembrete-confirmacao-${tipo.id}`}
+          onChange={(e) => setPedirConfirmacao(e.target.checked)}
+          className="size-4 rounded-sm border-border accent-accent disabled:opacity-50"
+        />
+        {t("Pedir confirmação no lembrete")}
+        <span className="text-text-subtle">
+          {t("A mensagem termina pedindo SIM, e a resposta marca a presença confirmada.")}
+        </span>
       </label>
       <div className="flex flex-col gap-1 text-xs text-text-muted sm:col-span-3">
         {t("Prévia")}
@@ -689,6 +712,7 @@ export function TiposDeAgendamentoClient({
                     .join(", ")}{" "}
                   min {t("antes")}
                   {tipo.reminder_body ? ` · ${t("texto próprio")}` : ""}
+                  {tipo.reminder_asks_confirmation ? ` · ${t("pede confirmação")}` : ""}
                 </span>
               ) : null}
               {!tipo.requires_patient ? (
@@ -803,6 +827,7 @@ export function TiposDeAgendamentoClient({
                               ),
                               // Em branco = volta à frase padrão (a rota grava `null`).
                               reminder_body: String(dados.get("reminder_body") ?? ""),
+                              reminder_asks_confirmation: dados.get("reminder_asks_confirmation") === "on",
                             }
                           : {}),
                         ...(dados.get("reminder_minutes_before")

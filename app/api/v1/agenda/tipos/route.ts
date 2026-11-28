@@ -109,6 +109,13 @@ const camposDoTipo = {
    */
   reminder_enabled: z.boolean().optional(),
   /**
+   * "Pedir confirmação no lembrete" (0441): o lembrete termina com
+   * `FRASE_PEDIDO_DE_CONFIRMACAO` e o SIM do paciente marca a presença
+   * confirmada. Sem `.default()`, pelo mesmo motivo do `reminder_enabled`: a
+   * coluna nasce `false` e quem não manda o campo não liga nada.
+   */
+  reminder_asks_confirmation: z.boolean().optional(),
+  /**
    * ⚠️ ESTA FAIXA É MAIS ESTREITA QUE O CHECK DO BANCO, E ISSO CONTRARIA O
    * PARÁGRAFO ACIMA DE PROPÓSITO.
    *
@@ -262,6 +269,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       reminder_minutes_before: t.lembreteAntecedenciaMin,
       reminder_extra_offsets_minutes: t.lembreteDegrausExtras,
       reminder_body: t.lembreteMensagem,
+      reminder_asks_confirmation: t.lembretePedeConfirmacao,
     })),
     { requestId },
   );

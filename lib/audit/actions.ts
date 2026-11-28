@@ -927,6 +927,9 @@ export const AUDIT_ACTIONS = [
   // Importação do relatório exportado (migration 0435): só contagens (recebidos,
   // gravados, passados), nunca horário, pessoa ou nada do arquivo.
   "agenda.clinicorp_importada",
+  // O paciente confirmou a presença respondendo ao lembrete (migration 0441).
+  // Ator sistema; metadata com appointment_id e source, nunca o texto dele.
+  "agenda.paciente_confirmou",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

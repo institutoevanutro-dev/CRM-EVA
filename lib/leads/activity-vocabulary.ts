@@ -51,6 +51,8 @@ export type ActivityType =
   | "appointment_no_show"
   /** Lançado por engano ou de teste (migration 0364): sai da Agenda, a linha fica. */
   | "appointment_excluded"
+  /** O paciente respondeu SIM ao lembrete (migration 0441). O status não muda: é marca à parte. */
+  | "appointment_patient_confirmed"
   | "followup_cancelled"
   /**
    * As quatro formas de INTERVIR num follow-up em andamento, sem matá-lo.
@@ -298,6 +300,7 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   // Neutro de propósito: "cancelado" diria que o cliente desmarcou, e aqui
   // ninguém desmarcou nada, alguém da equipe lançou errado.
   appointment_excluded: "Agendamento excluído (lançado por engano)",
+  appointment_patient_confirmed: "Paciente confirmou presença",
   followup_cancelled: "Retorno cancelado",
   // PAUSAR NÃO É CANCELAR, e a diferença importa para quem pega o atendimento
   // depois: cancelado é decisão fechada, pausado é o fluxo parado esperando uma
