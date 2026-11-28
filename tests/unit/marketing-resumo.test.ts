@@ -73,8 +73,9 @@ function clienteFalso(falhar = false) {
     const q = { tabela, filtros: [] as string[] };
     consultas.push(q);
     const b: Record<string, unknown> = {};
-    for (const m of ["select", "or", "gte", "lt", "order", "is", "neq", "in"]) b[m] = () => b;
+    for (const m of ["select", "or", "gte", "lt", "order", "is", "in"]) b[m] = () => b;
     b.eq = (col: string, v: unknown) => { q.filtros.push(`${col}=${String(v)}`); return b; };
+    b.neq = (col: string, v: unknown) => { q.filtros.push(`${col}!=${String(v)}`); return b; };
     b.range = async () => (falhar ? { data: null, error: { message: "x" } } : { data: linhas[tabela] ?? [], error: null });
     b.maybeSingle = async () => ({ data: linhas[tabela]?.[0] ?? null, error: null });
     b.then = (ok: (v: unknown) => unknown) => Promise.resolve({ data: linhas[tabela] ?? [], error: null }).then(ok);
@@ -104,6 +105,16 @@ it("o resumo lê comparecimentos (status completed)", async () => {
   const { cliente, consultas } = clienteFalso();
   await consultaResumo(cliente as never, "10000000-0000-4000-8000-000000000001", "2026-11-01", "2026-11-07");
   expect(consultas.some((q) => q.tabela === "calendar_appointments" && q.filtros.includes("status=completed"))).toBe(true);
+});
+
+it("datas do tratamento marcadas pela integração (Prontuário) não contam como agendamento nem comparecimento", async () => {
+  for (const ler of [consultaResumo, consultaFunilPorOrigem]) {
+    const { cliente, consultas } = clienteFalso();
+    await ler(cliente as never, "10000000-0000-4000-8000-000000000001", "2026-11-01", "2026-11-07");
+    const agenda = consultas.filter((q) => q.tabela === "calendar_appointments");
+    expect(agenda.length).toBeGreaterThan(0);
+    for (const q of agenda) expect(q.filtros).toContain("created_by_kind!=system");
+  }
 });
 
 it("erro de leitura diz de onde veio", async () => {

@@ -48,7 +48,8 @@ export async function lerEventosDoPeriodo(admin: SupabaseClient, org: string, de
 
   const agendamentos = await todas<{ contact_id: string | null }>((a, b) =>
     admin.from("calendar_appointments").select("contact_id").eq("organization_id", org).is("rescheduled_from_id", null)
-      .is("excluded_at", null).neq("source", "historical_import")
+      // Datas de tratamento já pago que o Prontuário marca (created_by_kind 'system', CRM-EVA#604) não são agendamento novo.
+      .is("excluded_at", null).neq("source", "historical_import").neq("created_by_kind", "system")
       .gte("created_at", inicio).lt("created_at", fim).order("id").range(a, b));
 
   const ganhos = await todas<{ contact_id: string | null; value_cents: number | null }>((a, b) =>
@@ -81,7 +82,8 @@ export async function lerComparecimentos(admin: SupabaseClient, org: string, de:
   const { inicio, fim } = janela(de, ate);
   const linhas = await todas<{ contact_id: string | null }>((a, b) =>
     admin.from("calendar_appointments").select("contact_id").eq("organization_id", org).eq("status", "completed")
-      .is("excluded_at", null).neq("source", "historical_import")
+      // Sessão do tratamento marcada pelo Prontuário não é o comparecimento que o funil mede.
+      .is("excluded_at", null).neq("source", "historical_import").neq("created_by_kind", "system")
       .gte("starts_at", inicio).lt("starts_at", fim).order("id").range(a, b));
   return linhas.map((x) => ({ contactId: x.contact_id }));
 }
