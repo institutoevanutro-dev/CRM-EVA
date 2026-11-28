@@ -56,7 +56,7 @@ import { useT } from "@/hooks/i18n/useT";
  * escondia.
  */
 /** Escopos de agenda cuja tool exige o papel ai_operator; sem ele a chave nasce inútil. */
-const PEDEM_OPERADOR = ["agenda:reschedule", "agenda:outcome"];
+const PEDEM_OPERADOR = ["agenda:reschedule", "agenda:outcome", "agenda:book"];
 
 const SCOPES: { id: string; label: string }[] = [
   { id: "prontuario:contacts:read", label: "Prontuário: pesquisar cadastro de contatos" },
@@ -66,10 +66,12 @@ const SCOPES: { id: string; label: string }[] = [
   { id: "prontuario:media:read", label: "Prontuário: baixar PDF e fotos que o paciente mandou pelo WhatsApp" },
   { id: "agenda:read", label: "Prontuário: ler compromissos da agenda" },
   { id: "agenda:reschedule", label: "Prontuário: remarcar compromissos da agenda" },
+  // Marca e lê tipos de atendimento e equipe; não lista a agenda, não remarca nem cancela.
+  { id: "agenda:book", label: "Prontuário: marcar as datas do tratamento depois do pagamento (requer operador de agenda)" },
   // Só "Realizado": não registra falta, não remarca, não cancela (migration 0401).
   { id: "prontuario:funil", label: "Prontuário: alimentar o funil (funis, etapas e leads)" },
   { id: "agenda:outcome", label: "Prontuário: marcar compromisso como realizado (requer operador de agenda)" },
-  { id: "role:ai_operator", label: "Operador de agenda (necessário para remarcar ou marcar como realizado)" },
+  { id: "role:ai_operator", label: "Operador de agenda (necessário para remarcar, marcar datas ou marcar como realizado)" },
   // Só a rota do Financeiro aceita: não abre MCP nem conversas.
   { id: "financeiro:contatos", label: "Financeiro: ler nome, telefone e e-mail de um contato" },
   { id: "mcp:read", label: "Agentes de IA podem LER o CRM (MCP)" },
@@ -228,7 +230,7 @@ export function ApiTokensClient() {
               </div>
               {faltaOperador && (
                 <p className="text-xs text-warning-fg" role="alert">
-                  {t("Remarcar e marcar como realizado só funcionam com a permissão Operador de agenda (role:ai_operator). Marque-a também.")}
+                  {t("Remarcar, marcar as datas do tratamento e marcar como realizado só funcionam com a permissão Operador de agenda (role:ai_operator). Marque-a também.")}
                 </p>
               )}
             </div>

@@ -59,6 +59,7 @@ interface Compromisso {
   contact_id: string | null;
   created_at: string;
   source: string | null;
+  created_by_kind?: string | null;
   history_import_key: string | null;
   excluded_at: string | null;
 }
@@ -74,7 +75,7 @@ async function handle(row: EventRow): Promise<HandlerResult> {
   // ⚠️ Organização junto do id em toda leitura: o client é service-role.
   const { data: dataCompromisso, error: erroCompromisso } = await admin
     .from("calendar_appointments")
-    .select("id, status, contact_id, created_at, source, history_import_key, excluded_at")
+    .select("id, status, contact_id, created_at, source, created_by_kind, history_import_key, excluded_at")
     .eq("id", row.entity_id)
     .eq("organization_id", org)
     .maybeSingle();
@@ -93,6 +94,9 @@ async function handle(row: EventRow): Promise<HandlerResult> {
   if (ORIGENS_IMPORTADAS.has(compromisso.source ?? "") || compromisso.history_import_key) {
     return resultado("skipped", "importado");
   }
+  // Marcado pela integração (o Prontuário, com as datas de um tratamento já pago): o paciente já converteu antes.
+  // Contar aqui inflaria a conversão que as campanhas otimizam (revisão do CRM-EVA#604, 28/11/2026).
+  if (compromisso.created_by_kind === "system") return resultado("skipped", "pela_integracao");
   if (!compromisso.contact_id) return resultado("skipped", "sem_contato");
 
   const [{ data: dataOrg }, { data: dataContato, error: erroContato }] = await Promise.all([

@@ -34,7 +34,7 @@ vi.mock("@/app/api/v1/agenda/agendamentos/_handler", async (original) => ({
 }));
 
 const { requireRole } = await import("@/lib/auth/require-role");
-const { marcarAgendamentoHandler, quemConverteu } = await import("@/app/api/v1/agenda/agendamentos/_handler");
+const { marcarAgendamentoHandler, quemConverteu, autorParaCriacao } = await import("@/app/api/v1/agenda/agendamentos/_handler");
 const { POST } = await import("@/app/api/v1/agenda/agendamentos/route");
 
 const ORG = "22222222-2222-4222-8222-222222222222";
@@ -122,5 +122,14 @@ describe("quemConverteu: null é nenhuma conversão", () => {
         converted_by_kind: null,
       }),
     ).resolves.toEqual({ kind: "ai", userId: null });
+  });
+
+  it("chave de integração (o Prontuário marcando as datas do tratamento) não converte nem vira IA", async () => {
+    await expect(
+      quemConverteu(semBanco, ctx({ type: "api_token", id: "tok-1", role: "ai_operator" }), { event_type_id: TIPO, starts_at: "" }),
+    ).resolves.toEqual({ kind: null, userId: null });
+    expect(autorParaCriacao({ type: "api_token", id: "tok-1" })).toBe("system");
+    expect(autorParaCriacao({ type: "ai_agent", id: "run-1", role: "agent" })).toBe("ai");
+    expect(autorParaCriacao({ type: "user", id: RECEPCAO })).toBe("user");
   });
 });

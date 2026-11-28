@@ -68,3 +68,10 @@ it("avisa quando um escopo de agenda é marcado sem o Operador de agenda, e o av
   fireEvent.click(screen.getByRole("button", { name: /^role:ai_operator —/ }));
   expect(screen.queryByText(/só funcionam com a permissão Operador de agenda/)).toBeNull();
 });
+
+it("agenda:book também pede o Operador de agenda", () => {
+  render(<ApiTokensClient />);
+  fireEvent.click(screen.getByRole("button", { name: "Criar chave" }));
+  fireEvent.click(screen.getByRole("button", { name: /^agenda:book —/ }));
+  expect(screen.getByRole("alert")).toHaveTextContent(/role:ai_operator/);
+});
