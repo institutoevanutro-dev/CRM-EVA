@@ -59,6 +59,30 @@ describe("token exclusivo da agenda", () => {
     expect(hasMcpToolScope(["agenda:read"], "crm_create_lead", "mcp:write")).toBe(false);
   });
 
+  it("agenda:book abre só marcar e as duas listas da configuração (tipos e equipe)", () => {
+    const marcar = ["agenda:book", "role:ai_operator"];
+    for (const [name, scope] of [
+      ["crm_book_appointment", "mcp:write"],
+      ["crm_list_event_types", "mcp:read"],
+      ["crm_list_team_members", "mcp:read"],
+    ] as const) {
+      expect(hasMcpToolScope(marcar, name, scope)).toBe(true);
+    }
+    for (const [name, scope] of [
+      ["crm_list_appointments", "mcp:read"],
+      ["crm_find_and_book_appointment", "mcp:write"],
+      ["crm_cancel_appointment", "mcp:write"],
+      ["crm_reschedule_appointment", "mcp:write"],
+      ["crm_list_contacts", "mcp:read"],
+      // Leitura não vira escrita, nem o contrário.
+      ["crm_list_event_types", "mcp:write"],
+      ["crm_book_appointment", "mcp:read"],
+    ] as const) {
+      expect(hasMcpToolScope(marcar, name, scope)).toBe(false);
+    }
+    expect(hasMcpToolScope(["agenda:read", "agenda:reschedule"], "crm_book_appointment", "mcp:write")).toBe(false);
+  });
+
   it("mantém o comportamento dos tokens MCP existentes", () => {
     expect(hasMcpToolScope(["mcp:read"], "crm_list_appointments", "mcp:read")).toBe(true);
     expect(hasMcpToolScope(["mcp:write"], "crm_reschedule_appointment", "mcp:write")).toBe(true);
