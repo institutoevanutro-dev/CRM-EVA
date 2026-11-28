@@ -14,9 +14,13 @@
 --   lib/agenda/tipos.ts (ORIGENS_DA_CONFIRMACAO_DO_PACIENTE).
 -- * calendar_event_types.reminder_asks_confirmation, DESLIGADA por padrão: nada
 --   muda em clínica nenhuma até alguém ligar a chave no tipo.
--- * fn_appointment_stamp: a confirmação vale para o horário confirmado. Quando
---   starts_at muda, as 4 colunas voltam a null (no mesmo UPDATE da remarcação).
---   Só isso foi acrescentado ao corpo da 0401.
+-- * fn_appointment_stamp (corpo da 0401 com dois acréscimos):
+--   - a confirmação vale para o horário confirmado: quando starts_at muda, as 4
+--     colunas voltam a null, no mesmo UPDATE da remarcação;
+--   - só o RPC grava as colunas. INSERT que as traga e UPDATE que as mude são
+--     recusados com 42501 `patient_confirmation_rpc_only`, salvo com a marca
+--     local `crm.confirmacao_do_paciente` ligada e sem sessão (mesmo mecanismo da
+--     0401), e salvo o SET NULL da FK quando a mensagem ou a pessoa é apagada.
 -- * fn_appointment_patient_confirm: o único caminho de gravação. Trava a linha,
 --   só grava em compromisso `confirmed`, futuro e na revisão esperada, e devolve
 --   'confirmado' | 'ja_confirmado' | 'nao_se_aplica'. Não incrementa a revisão:
@@ -59,12 +63,29 @@ begin
   -- Legado importado sem autoria não vira fato certificado.
   new.outcome_source_kind:=null; new.outcome_user_id:=null; new.outcome_message_id:=null;
   new.outcome_recorded_at:=null;
+  -- 0441: compromisso não nasce com a presença confirmada; só fn_appointment_patient_confirm a grava.
+  if num_nonnulls(new.patient_confirmed_at,new.patient_confirmed_source,new.patient_confirmed_message_id,new.patient_confirmed_user_id)>0 then
+   raise exception 'patient_confirmation_rpc_only' using errcode='42501',
+    detail='A presença confirmada pelo paciente só é gravada por fn_appointment_patient_confirm.'; end if;
   return new;
  end if;
  changed:=row(new.starts_at,new.ends_at,new.status,new.contact_id,new.conversation_id) is distinct from row(old.starts_at,old.ends_at,old.status,old.contact_id,old.conversation_id);
  new.revision:=old.revision+case when changed then 1 else 0 end;
  new.revision_started_at:=case when changed then clock_timestamp() else old.revision_started_at end;
  if changed then new.confirmation_next_at:=null; end if;
+ -- 0441: só fn_appointment_patient_confirm grava a presença confirmada (marca local da
+ -- transação, sem sessão, como na 0401). Única exceção: o SET NULL da FK quando a
+ -- mensagem ou a pessoa é apagada, que é erosão de referência e não nova escrita.
+ if row(new.patient_confirmed_at,new.patient_confirmed_source,new.patient_confirmed_message_id,new.patient_confirmed_user_id)
+    is distinct from row(old.patient_confirmed_at,old.patient_confirmed_source,old.patient_confirmed_message_id,old.patient_confirmed_user_id)
+  and not (auth.uid() is null and current_setting('crm.confirmacao_do_paciente',true)='on')
+  and not (row(new.patient_confirmed_at,new.patient_confirmed_source) is not distinct from row(old.patient_confirmed_at,old.patient_confirmed_source)
+   and (new.patient_confirmed_message_id is not distinct from old.patient_confirmed_message_id
+    or (new.patient_confirmed_message_id is null and not exists(select 1 from public.messages where id=old.patient_confirmed_message_id)))
+   and (new.patient_confirmed_user_id is not distinct from old.patient_confirmed_user_id
+    or (new.patient_confirmed_user_id is null and not exists(select 1 from auth.users where id=old.patient_confirmed_user_id)))) then
+  raise exception 'patient_confirmation_rpc_only' using errcode='42501',
+   detail='A presença confirmada pelo paciente só é gravada por fn_appointment_patient_confirm.'; end if;
  -- 0441: a presença confirmada pelo paciente vale para o horário que ele confirmou.
  if new.starts_at is distinct from old.starts_at then
   new.patient_confirmed_at:=null; new.patient_confirmed_source:=null;
@@ -127,10 +148,13 @@ begin
    and m.organization_id=a.organization_id and m.contact_id=a.contact_id and m.direction='inbound') then
   raise exception 'patient_confirm_message_not_evidence' using errcode='42501'; end if;
  -- Não mexe em starts_at nem em status: fn_appointment_stamp não incrementa a revisão.
+ -- A marca local é a única porta que fn_appointment_stamp abre para estas colunas.
+ perform set_config('crm.confirmacao_do_paciente','on',true);
  update public.calendar_appointments set patient_confirmed_at=now(), patient_confirmed_source=p_source,
   patient_confirmed_message_id=case when p_source='mensagem' then p_message_id end,
   patient_confirmed_user_id=case when p_source='equipe' then p_user_id end
   where id=a.id;
+ perform set_config('crm.confirmacao_do_paciente','',true);
  return 'confirmado';
 end; $$;
 comment on function public.fn_appointment_patient_confirm(uuid,int,text,uuid,uuid) is
