@@ -96,8 +96,15 @@
  * original ele filtra só `id` e `organization_id`. A rodada lê até 200 linhas no
  * começo e espaça cada envio; uma linha cancelada ou remarcada no meio, ou
  * carimbada por uma rodada sobreposta, seria carimbada e enviada assim mesmo.
- * Aqui o UPDATE só pega a linha COMO FOI LIDA (status, `starts_at`, lista e
- * instante do último carimbo) e, sem linha devolvida, a rodada não envia.
+ * Aqui o UPDATE só pega a linha COMO FOI LIDA (status, `starts_at`, revisão,
+ * lista e instante do último carimbo) e, sem linha devolvida, a rodada não envia.
+ *
+ * **O lembrete carimba o compromisso NA MENSAGEM** (0441):
+ * `metadata.agenda_lembrete = {appointment_id, revision}`, em todo lembrete. É
+ * por ele que o SIM do paciente acha o compromisso
+ * (`lib/agenda/confirmacao-do-lembrete.ts`). Com a chave "Pedir confirmação no
+ * lembrete" do tipo, o texto termina com `FRASE_PEDIDO_DE_CONFIRMACAO`, salvo
+ * quando o paciente já confirmou (`patient_confirmed_at`); o carimbo sai igual.
  *
  * ⚠️ **O contato é resolvido DENTRO da organização do compromisso.** É a
  * preocupação literal do handler de agendamentos: "esta linha vira a organização
@@ -132,7 +139,13 @@ import { canalAceitaTextoLivreAgora } from "@/lib/channels/janela";
 import { espacarEnvio } from "@/lib/automation/throttle";
 import { providersDeEnvioAutomatico } from "@/lib/channels";
 import { env } from "@/lib/env";
-import { aplicarMoldeDoLembrete, montarLembrete, variaveisDoMolde } from "@/lib/agenda/texto-do-lembrete";
+import {
+  aplicarMoldeDoLembrete,
+  comPedidoDeConfirmacao,
+  montarLembrete,
+  variaveisDoMolde,
+} from "@/lib/agenda/texto-do-lembrete";
+import { CHAVE_DO_CARIMBO_DO_LEMBRETE, type CarimboDoLembrete } from "@/lib/agenda/confirmacao-do-lembrete";
 import { lerCanalDoLembrete } from "@/lib/agenda/canal-do-lembrete";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
@@ -156,6 +169,8 @@ interface TipoDoCompromisso {
   reminder_template_name: string | null;
   /** Texto próprio do lembrete (0323). Nulo = a frase padrão. */
   reminder_body: string | null;
+  /** "Pedir confirmação no lembrete" (0441): o texto ganha `FRASE_PEDIDO_DE_CONFIRMACAO`. */
+  reminder_asks_confirmation: boolean;
   location_details: string | null;
 }
 
@@ -185,6 +200,12 @@ interface CompromissoAVencer {
    * sem ela, vale `created_at`.
    */
   starts_at_marked_at: string | null;
+  /**
+   * A revisão do compromisso LIDA nesta rodada (0441). Vai no carimbo da
+   * mensagem, e o SIM do paciente só confirma esta revisão: remarcou depois do
+   * lembrete, o SIM responde a um horário que não existe mais.
+   */
+  revision: number;
   location_details: string | null;
   reminder_sent_offsets_minutes: number[] | null;
   /**
@@ -195,6 +216,8 @@ interface CompromissoAVencer {
    * proíbe. `null` = a limpeza fica de fora.
    */
   reminder_sent_at: string | null;
+  /** Presença já confirmada (0441): o lembrete não pede o SIM de novo, mas carimba igual. */
+  patient_confirmed_at: string | null;
   calendar_event_types: TipoDoCompromisso | TipoDoCompromisso[] | null;
 }
 
@@ -511,8 +534,8 @@ async function handle(req: NextRequest): Promise<Response> {
   const { data, error } = await admin
     .from("calendar_appointments")
     .select(
-      "id, organization_id, contact_id, conversation_id, title, starts_at, time_zone, owner_user_id, created_at, starts_at_marked_at, location_details, reminder_sent_offsets_minutes, reminder_sent_at, " +
-        "calendar_event_types!inner(name, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_template_name, reminder_body, location_details), " +
+      "id, organization_id, contact_id, conversation_id, title, starts_at, time_zone, owner_user_id, created_at, starts_at_marked_at, revision, location_details, reminder_sent_offsets_minutes, reminder_sent_at, patient_confirmed_at, " +
+        "calendar_event_types!inner(name, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_template_name, reminder_body, reminder_asks_confirmation, location_details), " +
         // A unidade pela FK composta `(organization_id, unit_id)`: só casa
         // unidade da MESMA organização, e poupa uma consulta por linha.
         "calendar_units!calendar_appointments_unit_fk(name)",
@@ -696,7 +719,10 @@ async function handle(req: NextRequest): Promise<Response> {
 
     // O texto próprio do tipo vence; sem ele, o modelo legado
     // (`reminder_template_name`) sai CRU, como sempre saiu; sem os dois, a
-    // frase padrão.
+    // frase padrão. Com a chave "Pedir confirmação no lembrete", os três
+    // terminam com `FRASE_PEDIDO_DE_CONFIRMACAO` — salvo se o paciente já
+    // confirmou: pedir de novo a quem já disse SIM é ruído.
+    const pedir = tipo.reminder_asks_confirmation && !linha.patient_confirmed_at;
     const molde = tipo.reminder_body?.trim() || null;
     // O GoTrue custa uma chamada HTTP por pessoa: só quando o molde usa a
     // variável, e pela MESMA extração da validação (sem diferenciar
@@ -719,6 +745,7 @@ async function handle(req: NextRequest): Promise<Response> {
       unidade: unidade?.name ?? null,
       profissional,
       agora,
+      pedirConfirmacao: pedir,
     });
 
     if (!molde && tipo.reminder_template_name) {
@@ -729,7 +756,12 @@ async function handle(req: NextRequest): Promise<Response> {
         .or(`shortcut.eq.${tipo.reminder_template_name},title.eq.${tipo.reminder_template_name}`)
         .limit(1)
         .maybeSingle();
-      if (modelo?.body) corpo = modelo.body;
+      if (modelo?.body) {
+        corpo = modelo.body;
+        // Cru continua cru: as variáveis não são trocadas. Com a frase, o fim do
+        // modelo perde os espaços e quebras de linha (`trimEnd`) antes dela.
+        if (pedir) corpo = comPedidoDeConfirmacao(corpo);
+      }
     }
 
     // ─── O CARIMBO ANTES DO ENVIO (issue #2223) ────────────────────────────
@@ -753,10 +785,13 @@ async function handle(req: NextRequest): Promise<Response> {
     // um update recusado em silêncio é a outra forma de o mesmo degrau sair
     // toda varredura.
     //
-    // E só carimba a linha COMO FOI LIDA (spec 3.9): status, horário, lista e
-    // instante do último carimbo. `.eq` no instante só quando ele existe — o
-    // `.is` nulo é o filtro que o teste do cron proíbe; sem carimbo anterior
-    // não há rearme, e a lista, que sempre cresce, basta.
+    // E só carimba a linha COMO FOI LIDA (spec 3.9): status, horário, revisão,
+    // lista e instante do último carimbo. A revisão (0441) cobre o que muda a
+    // linha sem mexer em status nem horário (`ends_at`, contato, conversa): é
+    // ela que a mensagem leva no carimbo, e ela não pode estar velha.
+    // `.eq` no instante só quando ele existe — o `.is` nulo é o filtro que o
+    // teste do cron proíbe; sem carimbo anterior não há rearme, e a lista, que
+    // sempre cresce, basta.
     const lidos = linha.reminder_sent_offsets_minutes ?? [];
     let carimbo = admin
       .from("calendar_appointments")
@@ -768,6 +803,7 @@ async function handle(req: NextRequest): Promise<Response> {
       .eq("organization_id", org)
       .eq("status", "confirmed")
       .eq("starts_at", linha.starts_at)
+      .eq("revision", linha.revision)
       .filter("reminder_sent_offsets_minutes", "eq", `{${lidos.join(",")}}`);
     if (linha.reminder_sent_at) carimbo = carimbo.eq("reminder_sent_at", linha.reminder_sent_at);
     const { data: carimbada, error: erroCarimbo } = await carimbo.select("id");
@@ -798,6 +834,13 @@ async function handle(req: NextRequest): Promise<Response> {
       // o mesmo que `lib/followup/enviar-texto-fixo.ts` usa. O `id` é o
       // compromisso, para o audit da mensagem correlacionar com a linha que a
       // originou.
+      //
+      // O carimbo do compromisso vai NA MENSAGEM, em todo lembrete, com ou sem
+      // a chave (é barato, e ligar a chave depois não perde o elo). É a linha
+      // cujo `status` o handler atualiza: o leitor
+      // (`lib/agenda/confirmacao-do-lembrete.ts`) não lê lembrete `queued` nem
+      // `failed`. O handler só acrescenta chaves suas ao `metadata` do chamador.
+      const carimboDaMensagem: CarimboDoLembrete = { appointment_id: linha.id, revision: linha.revision };
       await sendMessageHandler(
         admin,
         {
@@ -805,9 +848,12 @@ async function handle(req: NextRequest): Promise<Response> {
           actor: { type: "webhook_source", id: linha.id },
           requestId: `agenda-reminder:${linha.id}`,
         },
-        { conversation_id: conversaId, type: "text", body: corpo } as Parameters<
-          typeof sendMessageHandler
-        >[2],
+        {
+          conversation_id: conversaId,
+          type: "text",
+          body: corpo,
+          metadata: { [CHAVE_DO_CARIMBO_DO_LEMBRETE]: carimboDaMensagem },
+        } as Parameters<typeof sendMessageHandler>[2],
       );
       enviados += 1;
     } catch (err) {

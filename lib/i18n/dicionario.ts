@@ -8338,6 +8338,11 @@ export const DICIONARIO: Traducoes = {
   },
   "Variável que não existe: use só as da lista.": { es: "Variable inexistente: use solo las de la lista." },
   "texto próprio": { es: "texto propio" },
+  "pede confirmação": { es: "pide confirmación" },
+  "Pedir confirmação no lembrete": { es: "Pedir confirmación en el recordatorio" },
+  "A mensagem termina pedindo SIM, e a resposta marca a presença confirmada.": {
+    es: "El mensaje termina pidiendo SIM, y la respuesta marca la asistencia confirmada.",
+  },
   "A mensagem do lembrete usa uma variável que não existe. Use só as da lista.": { es: "El mensaje del recordatorio usa una variable que no existe. Use solo las de la lista." },
   "O lembrete não pode sair mais de 7 dias (10080 minutos) antes.": { es: "El recordatorio no puede salir más de 7 días (10080 minutos) antes." },
   "Ação contém": { es: "La acción contiene" },
@@ -13004,6 +13009,14 @@ export const DICIONARIO: Traducoes = {
   "Consulta cancelada": { es: "Consulta cancelada" },
   "Marcado como falta — o horário volta a ficar livre": { es: "Marcado como ausencia — el horario vuelve a quedar libre" },
   "Presença registrada": { es: "Asistencia registrada" },
+  // 0441: o paciente confirma a presença respondendo ao lembrete (ou a recepção marca).
+  "Presença confirmada": { es: "Asistencia confirmada" },
+  "presença confirmada": { es: "asistencia confirmada" },
+  "Sem confirmação": { es: "Sin confirmación" },
+  "sem confirmação": { es: "sin confirmación" },
+  "pelo WhatsApp em {data} às {hora}": { es: "por WhatsApp el {data} a las {hora}" },
+  "pela equipe em {data} às {hora}": { es: "por el equipo el {data} a las {hora}" },
+  "Paciente confirmou": { es: "El paciente confirmó" },
 };
 
 /**

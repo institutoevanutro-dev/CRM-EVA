@@ -322,6 +322,13 @@ const PARES: Array<{
     simbolo: "QUEM_CONVERTEU",
   },
   {
+    tabela: "calendar_appointments",
+    coluna: "patient_confirmed_source",
+    // lib/agenda/tipos.ts → ORIGENS_DA_CONFIRMACAO_DO_PACIENTE. Nasce com o par, migration 0441.
+    arquivo: "lib/agenda/tipos.ts",
+    simbolo: "ORIGENS_DA_CONFIRMACAO_DO_PACIENTE",
+  },
+  {
     tabela: "team_invites",
     coluna: "role",
     // lib/schemas/team.ts → ROLES (tupla `as const`). O `z.enum(ROLES)` das

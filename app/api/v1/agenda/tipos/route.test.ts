@@ -222,6 +222,7 @@ describe("POST /api/v1/agenda/tipos — o lembrete no nascimento do tipo", () =>
 
     expect(Object.keys(db.escritas[0]?.campos ?? {})).not.toContain("reminder_enabled");
     expect(Object.keys(db.escritas[0]?.campos ?? {})).not.toContain("reminder_minutes_before");
+    expect(Object.keys(db.escritas[0]?.campos ?? {})).not.toContain("reminder_asks_confirmation");
   });
 });
 
@@ -468,6 +469,7 @@ describe("GET /api/v1/agenda/tipos", () => {
           lembreteAntecedenciaMin: 180,
           lembreteDegrausExtras: [],
           lembreteMensagem: "Oi {{primeiro_nome}}, até {{quando}} às {{hora}}.",
+          lembretePedeConfirmacao: true,
         },
       ],
     });
@@ -477,11 +479,60 @@ describe("GET /api/v1/agenda/tipos", () => {
 
     expect(res.status).toBe(200);
     const corpo = (await res.json()) as {
-      data: Array<{ reminder_enabled: boolean; reminder_minutes_before: number; reminder_body: string | null }>;
+      data: Array<{
+        reminder_enabled: boolean;
+        reminder_minutes_before: number;
+        reminder_body: string | null;
+        reminder_asks_confirmation: boolean;
+      }>;
     };
     expect(corpo.data[0]?.reminder_enabled).toBe(true);
     expect(corpo.data[0]?.reminder_minutes_before).toBe(180);
     expect(corpo.data[0]?.reminder_body).toBe("Oi {{primeiro_nome}}, até {{quando}} às {{hora}}.");
+    expect(corpo.data[0]?.reminder_asks_confirmation).toBe(true);
+  });
+});
+
+describe("PATCH /api/v1/agenda/tipos — \"Pedir confirmação no lembrete\" (0441)", () => {
+  it("liga e desliga a chave, e o valor CHEGA ao banco", async () => {
+    authOk();
+    const linhas = [linha({ id: TIPO_DA_ORG, organization_id: ORG, reminder_asks_confirmation: false })];
+    makeAdmin(linhas);
+    const { PATCH } = await import("./route");
+
+    const ligou = await PATCH(req("PATCH", { id: TIPO_DA_ORG, reminder_asks_confirmation: true }));
+    expect(ligou.status).toBe(200);
+    expect(linhas[0]?.reminder_asks_confirmation).toBe(true);
+
+    await PATCH(req("PATCH", { id: TIPO_DA_ORG, reminder_asks_confirmation: false }));
+    expect(linhas[0]?.reminder_asks_confirmation).toBe(false);
+  });
+
+  it("valor que não é booleano é recusado sem escrever", async () => {
+    authOk();
+    const linhas = [linha({ id: TIPO_DA_ORG, organization_id: ORG, reminder_asks_confirmation: false })];
+    const db = makeAdmin(linhas);
+    const { PATCH } = await import("./route");
+
+    const res = await PATCH(req("PATCH", { id: TIPO_DA_ORG, reminder_asks_confirmation: "sim" }));
+
+    expect(res.status).toBe(422);
+    expect(db.escritas).toEqual([]);
+  });
+
+  it("exige manager, como os outros campos do lembrete", async () => {
+    vi.mocked(requireRole).mockResolvedValue({
+      ok: false,
+      response: fail("forbidden", "sem permissão", 403, {}),
+    });
+    const db = makeAdmin([linha({ id: TIPO_DA_ORG, organization_id: ORG })]);
+    const { PATCH } = await import("./route");
+
+    const res = await PATCH(req("PATCH", { id: TIPO_DA_ORG, reminder_asks_confirmation: true }));
+
+    expect(res.status).toBe(403);
+    expect(db.escritas).toEqual([]);
+    expect(vi.mocked(requireRole).mock.calls[0]?.[0]).toBe("manager");
   });
 });
 
@@ -550,6 +601,7 @@ describe("o passo da grade (`slot_interval_minutes`)", () => {
       lembreteAntecedenciaMin: 1440,
       lembreteDegrausExtras: [],
       lembreteMensagem: null,
+      lembretePedeConfirmacao: false,
     };
     vi.mocked(listaTiposDeAtendimento).mockResolvedValue({
       ok: true,

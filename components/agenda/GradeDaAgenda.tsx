@@ -32,14 +32,20 @@ import {
 import { inicioDaGradeDoMes, SEMANAS_DA_GRADE_DO_MES } from "@/lib/agenda/recorte-da-grade";
 import type { FechamentoDaGrade } from "@/lib/agenda/fechamentos-na-grade";
 import { dataDeParede, diaLocalISO, instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
-import { BellSlash, CheckCircle, Clock, Lock, Warning, XCircle } from "@/lib/ui/icons";
+import { Bell, BellSlash, CheckCircle, Checks, Clock, Lock, Warning, XCircle } from "@/lib/ui/icons";
 import { ROTULO_DA_SITUACAO } from "@/lib/agenda/tipos";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
 
 import { corDaTrilha, fundoDaTrilha } from "./paleta";
 import { nomeCurto, rotuloDoBloco } from "./rotulo-do-bloco";
-import { conflitosDaGrade, formaDaSituacao, type IconeDaSituacao } from "./situacao-do-bloco";
+import {
+  conflitosDaGrade,
+  formaDaSituacao,
+  lembreteSemResposta,
+  mostraPresencaConfirmada,
+  type IconeDaSituacao,
+} from "./situacao-do-bloco";
 import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
 
 /**
@@ -698,9 +704,12 @@ function BlocoDeAgendamento({
   arraste,
   borda,
   conflito = false,
+  agora,
 }: {
   agendamento: Agendamento;
   pessoa: Pessoa | undefined;
+  /** O instante injetado da grade: "Sem confirmação" só vale antes do horário. */
+  agora: Date;
   /** Cai em cima de bloqueio, "Ocupado" do Google ou outro compromisso do mesmo profissional (A2). */
   conflito?: boolean;
   onAbrir?: (id: string) => void;
@@ -776,15 +785,24 @@ function BlocoDeAgendamento({
   // A10: pediu para não receber mensagens — o lembrete não sai, e a recepção
   // precisa confirmar por telefone.
   const semLembrete = agendamento.naoRecebeMensagens === true && !doGoogle && !cancelado;
+  // 0441: o paciente disse que vem (só enquanto Agendado), ou recebeu o
+  // lembrete que pede SIM e não respondeu — a recepção liga. A legenda usa as
+  // MESMAS regras para só explicar o que algum bloco mostra.
+  const presencaConfirmada = mostraPresencaConfirmada(agendamento);
+  const semResposta = lembreteSemResposta(agendamento, agora);
   const avisos = [
     situacao,
+    presencaConfirmada ? t("Presença confirmada") : null,
+    semResposta ? t("Sem confirmação") : null,
     conflito ? t("Conflito de horário") : null,
     semLembrete ? t("Sem lembrete") : null,
     faltaNome ? t("Falta o nome completo") : null,
   ].filter(Boolean);
 
   if (baseMin <= topoMin) return null;
-  const nosCantos = [faltaNome, conflito, Boolean(forma.icone), semLembrete].filter(Boolean).length;
+  const nosCantos = [faltaNome, conflito, Boolean(forma.icone), presencaConfirmada, semResposta, semLembrete].filter(
+    Boolean,
+  ).length;
 
   return (
     <button
@@ -831,7 +849,9 @@ function BlocoDeAgendamento({
         pessoa ? `, ${t("atendido por")} ${pessoa.nome}` : ""
       }${
         doGoogle && !agendamento.bloqueio && !agendamento.fonteExterna ? `, ${t("ocupado na agenda do Google")}` : ""
-      }${situacao ? `, ${situacao}` : ""}${conflito ? `, ${t("conflito de horário")}` : ""}${
+      }${situacao ? `, ${situacao}` : ""}${presencaConfirmada ? `, ${t("presença confirmada")}` : ""}${
+        semResposta ? `, ${t("sem confirmação")}` : ""
+      }${conflito ? `, ${t("conflito de horário")}` : ""}${
         semLembrete ? `, ${t("sem lembrete")}` : ""
       }${
         faltaNome ? `, ${t("falta o nome completo")}` : ""
@@ -910,6 +930,29 @@ function BlocoDeAgendamento({
           <Warning aria-hidden data-testid={`conflito-${agendamento.id}`} size={12} weight="fill" className="text-error" />
         ) : null}
         <IconeDeSituacao icone={forma.icone} id={agendamento.id} />
+        {/* Forma própria, e não só cor (check duplo e sino): o nome vai no
+            próprio ícone também, para quem passa o mouse nele. */}
+        {presencaConfirmada ? (
+          <Checks
+            role="img"
+            aria-label={t("Presença confirmada")}
+            alt={t("Presença confirmada")}
+            data-testid={`presenca-confirmada-${agendamento.id}`}
+            size={12}
+            weight="bold"
+            className="shrink-0 text-success-fg"
+          />
+        ) : null}
+        {semResposta ? (
+          <Bell
+            role="img"
+            aria-label={t("Sem confirmação")}
+            alt={t("Sem confirmação")}
+            data-testid={`lembrete-sem-resposta-${agendamento.id}`}
+            size={12}
+            className="shrink-0 text-text-muted"
+          />
+        ) : null}
         {semLembrete ? (
           <BellSlash aria-hidden data-testid={`sem-lembrete-${agendamento.id}`} size={12} className="text-text-muted" />
         ) : null}
@@ -1258,6 +1301,7 @@ function ColunaDeDia({
             coluna={coluna}
             colunas={colunas}
             visao={visao}
+            agora={agora}
             conflito={conflitos.has(agendamento.id)}
             arraste={
               arrasteDoCard
@@ -2147,7 +2191,7 @@ export function GradeDaAgenda({
         </div>
         </JanelaContexto.Provider>
       )}
-      {visao !== "mes" ? <LegendaDaGrade /> : null}
+      {visao !== "mes" ? <LegendaDaGrade agendamentos={cartoes} agora={agora} /> : null}
     </div>
   );
 }
@@ -2157,9 +2201,13 @@ export function GradeDaAgenda({
  * eles querem dizer. Sem ela, o ícone só se explica passando o mouse — e o
  * toque não passa o mouse.
  */
-function LegendaDaGrade() {
+function LegendaDaGrade({ agendamentos, agora }: { agendamentos: Agendamento[]; agora: Date }) {
   const t = useT();
   const item = "inline-flex items-center gap-1 whitespace-nowrap";
+  // 0441: os dois ícones da confirmação só entram quando algum bloco os mostra.
+  // Com a chave do tipo desligada eles nunca aparecem, e a legenda fica como era.
+  const comPresenca = agendamentos.some(mostraPresencaConfirmada);
+  const comSemConfirmacao = agendamentos.some((a) => lembreteSemResposta(a, agora));
   return (
     <p
       data-testid="legenda-da-grade"
@@ -2178,6 +2226,18 @@ function LegendaDaGrade() {
         <XCircle aria-hidden size={12} weight="fill" className="text-error" />
         {t(ROTULO_DA_SITUACAO.no_show)}
       </span>
+      {comPresenca ? (
+        <span className={item}>
+          <Checks aria-hidden size={12} weight="bold" className="text-success-fg" />
+          {t("Presença confirmada")}
+        </span>
+      ) : null}
+      {comSemConfirmacao ? (
+        <span className={item}>
+          <Bell aria-hidden size={12} />
+          {t("Sem confirmação")}
+        </span>
+      ) : null}
       <span className={item}>
         <Warning aria-hidden size={12} weight="fill" className="text-error" />
         {t("Conflito de horário")}

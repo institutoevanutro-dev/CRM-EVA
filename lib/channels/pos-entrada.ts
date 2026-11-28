@@ -21,6 +21,8 @@
  * Os três rodam em sequência e a sequência carrega significado:
  *
  *   1. opt-out  — grava `is_blocked` ANTES do lead;
+ *      1b. o "SIM" ao lembrete — lido logo depois, SEM `await`: nunca segura
+ *          os passos seguintes (migration 0441);
  *   2. lead     — `garantirLeadDaConversa` RELÊ o contato e recusa criar card
  *                 para bloqueado. Inverter 1 e 2 faz quem acabou de pedir para
  *                 sair virar oportunidade nova no funil;
@@ -49,6 +51,7 @@ import { ehPedidoDeOptOut } from "@/lib/opt-out/deteccao";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 import { autorizarContatoParaIA } from "@/lib/ai/elegibilidade/autorizacao";
 import { casarCampanha, lerCampanhas } from "@/lib/ai/elegibilidade/campanha";
+import { lerConfirmacaoDoLembrete } from "@/lib/agenda/confirmacao-do-lembrete";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -119,6 +122,7 @@ export async function aplicarEfeitosPosEntrada(
   entrada: EntradaDeMensagem,
 ): Promise<void> {
   await aplicarOptOut(admin, entrada);
+  lerConfirmacaoDePresenca(admin, entrada);
   // CONTATO OCULTO DO INBOX (migration 0372): a mensagem já foi gravada e fica;
   // o que não acontece é o resto — card no funil, autorização por campanha e o
   // despacho do agente. Este é o único freio para a organização em modo
@@ -143,6 +147,34 @@ export async function aplicarEfeitosPosEntrada(
     texto: entrada.texto,
   });
   await pedirDespachoDoAgente(admin, entrada);
+}
+
+/**
+ * 1b · O paciente respondeu SIM ao lembrete? (migration 0441)
+ *
+ * Fire-and-forget e falha aberta: NÃO é aguardado, então nunca segura nem
+ * atrasa o despacho do agente, e o erro fica no log. A regra (o que conta como
+ * "sim" e a que lembrete ele responde) mora em
+ * `lib/agenda/confirmacao-do-lembrete.ts`.
+ */
+function lerConfirmacaoDePresenca(admin: Admin, entrada: EntradaDeMensagem): void {
+  if (!entrada.messageId || !entrada.texto) return;
+  lerConfirmacaoDoLembrete({
+    admin,
+    organizationId: entrada.organizationId,
+    conversationId: entrada.conversationId,
+    contactId: entrada.contactId,
+    messageId: entrada.messageId,
+    body: entrada.texto,
+    requestId: entrada.requestId,
+  }).catch((err) => {
+    logger.warn("pos-entrada: leitura da confirmação de presença falhou (o despacho segue)", {
+      organization_id: entrada.organizationId,
+      conversation_id: entrada.conversationId,
+      message_id: entrada.messageId,
+      detail: err instanceof Error ? err.message.slice(0, 160) : "desconhecido",
+    });
+  });
 }
 
 /**
