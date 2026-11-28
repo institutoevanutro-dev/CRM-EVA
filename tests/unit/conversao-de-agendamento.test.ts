@@ -502,6 +502,13 @@ describe("o handler", () => {
     expect(JSON.stringify(banco.avisos)).not.toContain("5511988887777");
   });
 
+  it("compromisso marcado pela integração (as datas do tratamento já pago) não é conversão", async () => {
+    banco.compromisso = { ...banco.compromisso!, created_by_kind: "system" } as typeof banco.compromisso;
+    const rede = redeQueResponde();
+    expect((await conversaoDeAgendamentoHandler.handle(evento())).detail).toBe("pela_integracao");
+    expect(rede).not.toHaveBeenCalled();
+  });
+
   it("compromisso importado não é agendamento novo", async () => {
     banco.compromisso = { ...banco.compromisso!, source: "historical_import" };
     const rede = redeQueResponde();

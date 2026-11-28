@@ -1223,6 +1223,9 @@ export async function quemConverteu(
   ctx: HandlerCtx,
   input: MarcarInput,
 ): Promise<{ kind: QuemConverteu | null; userId: string | null }> {
+  // Chave de integração (o Prontuário marcando as datas de um tratamento já pago): o paciente converteu antes, na
+  // consulta em que fechou. Não é conversão nova nem da IA (revisão do CRM-EVA#604, 28/11/2026).
+  if (ctx.actor.type === "api_token") return { kind: null, userId: null };
   if (ctx.actor.type !== "user") return { kind: "ai", userId: null };
   // Paciente antigo: a conversão foi na primeira consulta, não nesta marcação.
   if (input.converted_by_kind === null) return { kind: null, userId: null };
@@ -1249,9 +1252,13 @@ export async function quemConverteu(
   return { kind: "user", userId };
 }
 
-/** `Actor` → o vocabulário de `calendar_appointments.created_by_kind`. */
-function autorParaCriacao(actor: Actor): string {
-  return actor.type === "user" ? "user" : "ai";
+/**
+ * `Actor` → o vocabulário de `calendar_appointments.created_by_kind`. Chave de integração vira `system` ("o próprio
+ * produto", já no CHECK): não é IA, e a conversão "Agendou" não conta o que ela marca.
+ */
+export function autorParaCriacao(actor: Actor): string {
+  if (actor.type === "user") return "user";
+  return actor.type === "api_token" ? "system" : "ai";
 }
 
 /**

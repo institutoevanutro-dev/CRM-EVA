@@ -230,7 +230,7 @@ export function ApiTokensClient() {
               </div>
               {faltaOperador && (
                 <p className="text-xs text-warning-fg" role="alert">
-                  {t("Remarcar e marcar como realizado só funcionam com a permissão Operador de agenda (role:ai_operator). Marque-a também.")}
+                  {t("Remarcar, marcar as datas do tratamento e marcar como realizado só funcionam com a permissão Operador de agenda (role:ai_operator). Marque-a também.")}
                 </p>
               )}
             </div>

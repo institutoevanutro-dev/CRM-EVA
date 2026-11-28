@@ -5196,7 +5196,7 @@ export const DICIONARIO: Traducoes = {
   "Inglês (Reino Unido)": { es: "Inglés (Reino Unido)" },
   // ─── Configurações: API Tokens ───
   "Escolha ao menos uma permissão.": { es: "Elige al menos un permiso." },
-  "Remarcar e marcar como realizado só funcionam com a permissão Operador de agenda (role:ai_operator). Marque-a também.": { es: "Reprogramar y marcar como realizado solo funcionan con el permiso Operador de agenda (role:ai_operator). Márcalo también." },
+  "Remarcar, marcar as datas do tratamento e marcar como realizado só funcionam com a permissão Operador de agenda (role:ai_operator). Marque-a também.": { es: "Reprogramar, programar las fechas del tratamiento y marcar como realizado solo funcionan con el permiso Operador de agenda (role:ai_operator). Márcalo también." },
   "Criar chave": { es: "Crear clave" },
   "Nenhuma chave criada ainda.": { es: "Todavía no hay ninguna clave." },
   Prefixo: { es: "Prefijo" },
