@@ -939,6 +939,8 @@ export interface TipoDeAtendimento {
   lembreteDegrausExtras: number[];
   /** Texto próprio do lembrete. null = a frase padrão do cron. */
   lembreteMensagem: string | null;
+  /** "Pedir confirmação no lembrete" (0441): o lembrete termina pedindo SIM. */
+  lembretePedeConfirmacao: boolean;
 }
 
 export type ResultadoDosTipos =
@@ -968,7 +970,7 @@ export async function listaTiposDeAtendimento(
   let q = supabase
     .from("calendar_event_types")
     .select(
-      "id, name, slug, description, category, duration_minutes, catalog_product_id, required_room_kind, concurrency_key, location_kind, location_details, requires_confirmation, requires_patient, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, slot_interval_minutes, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body",
+      "id, name, slug, description, category, duration_minutes, catalog_product_id, required_room_kind, concurrency_key, location_kind, location_details, requires_confirmation, requires_patient, is_active, default_owner_user_id, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, booking_window_days, slot_interval_minutes, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_body, reminder_asks_confirmation",
     )
     // Service role bypassa a RLS: este filtro é a única proteção no caminho da
     // ferramenta MCP (ver o cabeçalho do arquivo).
@@ -1016,6 +1018,7 @@ export async function listaTiposDeAtendimento(
         : [],
       lembreteMensagem:
         t.reminder_body === null || t.reminder_body === undefined ? null : String(t.reminder_body),
+      lembretePedeConfirmacao: Boolean(t.reminder_asks_confirmation),
     })),
   };
 }

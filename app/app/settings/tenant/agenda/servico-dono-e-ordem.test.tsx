@@ -51,6 +51,7 @@ const TIPO: TipoRow = {
   reminder_minutes_before: 60,
   reminder_extra_offsets_minutes: [],
   reminder_body: null,
+  reminder_asks_confirmation: false,
   catalog_product_id: SERVICO,
   required_room_kind: null,
   concurrency_key: null,

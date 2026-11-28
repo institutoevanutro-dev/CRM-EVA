@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { LembreteDoCompromisso, type TipoRow } from "@/app/app/settings/tenant/agenda/_client";
+import { FRASE_PEDIDO_DE_CONFIRMACAO } from "@/lib/agenda/texto-do-lembrete";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 
 /**
@@ -39,6 +40,7 @@ const TIPO: TipoRow = {
   reminder_minutes_before: 1440,
   reminder_extra_offsets_minutes: [],
   reminder_body: "Oi {{nome}}",
+  reminder_asks_confirmation: false,
 };
 
 function montar(tipo: TipoRow = TIPO, locale = "pt-BR") {
@@ -112,6 +114,38 @@ describe("o campo do texto do lembrete", () => {
     montar({ ...TIPO, reminder_body: "{{quando}}" }, "es");
     expect(screen.getByTestId("previa-lembrete-t1").textContent).toContain("mañana");
     expect(screen.getByText("Mensaje del recordatorio")).toBeTruthy();
+  });
+});
+
+describe("a chave \"Pedir confirmação no lembrete\"", () => {
+  const chave = () => screen.getByTestId("editar-lembrete-confirmacao-t1") as HTMLInputElement;
+  const previa = () => screen.getByTestId("previa-lembrete-t1").textContent ?? "";
+
+  it("existe com o nome do PATCH e nasce com o que está gravado", () => {
+    montar({ ...TIPO, reminder_asks_confirmation: true });
+    expect(chave().name).toBe("reminder_asks_confirmation");
+    expect(chave().type).toBe("checkbox");
+    expect(chave().checked).toBe(true);
+    expect(screen.getByText("Pedir confirmação no lembrete")).toBeTruthy();
+  });
+
+  it("com o aviso desligado, a chave fica desabilitada — e o valor guardado não é sobrescrito", () => {
+    montar({ ...TIPO, reminder_enabled: false, reminder_asks_confirmation: true });
+    expect(chave().disabled).toBe(true);
+  });
+
+  it("a prévia mostra a mensagem final: ligada, com a frase num parágrafo só dela; desligada, sem", () => {
+    montar();
+    expect(previa()).not.toContain(FRASE_PEDIDO_DE_CONFIRMACAO);
+    fireEvent.click(chave());
+    expect(previa()).toBe(`Oi Maria Silva\n\n${FRASE_PEDIDO_DE_CONFIRMACAO}`);
+    fireEvent.click(chave());
+    expect(previa()).toBe("Oi Maria Silva");
+  });
+
+  it("em espanhol, o rótulo sai em espanhol", () => {
+    montar(TIPO, "es");
+    expect(screen.getByText("Pedir confirmación en el recordatorio")).toBeTruthy();
   });
 });
 

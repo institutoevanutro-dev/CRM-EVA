@@ -8338,6 +8338,11 @@ export const DICIONARIO: Traducoes = {
   },
   "Variável que não existe: use só as da lista.": { es: "Variable inexistente: use solo las de la lista." },
   "texto próprio": { es: "texto propio" },
+  "pede confirmação": { es: "pide confirmación" },
+  "Pedir confirmação no lembrete": { es: "Pedir confirmación en el recordatorio" },
+  "A mensagem termina pedindo SIM, e a resposta marca a presença confirmada.": {
+    es: "El mensaje termina pidiendo SIM, y la respuesta marca la asistencia confirmada.",
+  },
   "A mensagem do lembrete usa uma variável que não existe. Use só as da lista.": { es: "El mensaje del recordatorio usa una variable que no existe. Use solo las de la lista." },
   "O lembrete não pode sair mais de 7 dias (10080 minutos) antes.": { es: "El recordatorio no puede salir más de 7 días (10080 minutos) antes." },
   "Ação contém": { es: "La acción contiene" },

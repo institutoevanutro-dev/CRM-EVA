@@ -84,6 +84,7 @@ function tipo(over: Partial<TipoDeAtendimento> = {}): TipoDeAtendimento {
     lembreteAntecedenciaMin: 1440,
     lembreteDegrausExtras: [],
     lembreteMensagem: null,
+    lembretePedeConfirmacao: false,
     ...over,
   };
 }
