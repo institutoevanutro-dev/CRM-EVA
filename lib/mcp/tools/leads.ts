@@ -353,6 +353,8 @@ const moveInputShape = {
   to_stage_id: z.string().uuid(),
   position_in_stage: z.number().finite().optional(),
   reason: z.string().max(500).optional(),
+  /** Motivo da perda (código do vocabulário do funil, ex.: "other") — obrigatório quando a etapa de destino é de perda. */
+  lost_reason: z.string().max(500).optional(),
 };
 
 export const crmMoveLeadStage: McpToolDefinition<typeof moveInputShape> = {
@@ -383,6 +385,7 @@ export const crmMoveLeadStage: McpToolDefinition<typeof moveInputShape> = {
         to_stage_id: input.to_stage_id,
         position_in_stage: input.position_in_stage,
         reason: input.reason,
+        lost_reason: input.lost_reason,
       },
     );
     return { lead: await recortarUmParaOTurno(ctx, lead) };
