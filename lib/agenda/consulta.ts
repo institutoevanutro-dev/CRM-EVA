@@ -81,7 +81,7 @@ import {
   type LinhaDeEventoExterno,
   type OQueOcupa,
 } from "./ocupados";
-import type { SituacaoDaConexao, SituacaoDoAgendamento } from "./tipos";
+import type { OrigemDaConfirmacaoDoPaciente, SituacaoDaConexao, SituacaoDoAgendamento } from "./tipos";
 
 /** Teto de dias por consulta: uma varredura de ano inteiro é erro de chamada, não pedido. */
 export const MAXIMO_DE_DIAS = 62;
@@ -608,6 +608,16 @@ export interface AgendamentoListado {
    */
   tipoId?: string | null;
   tipoNome?: string | null;
+  /**
+   * Presença confirmada pelo paciente (migration 0441): quando e por onde
+   * (`mensagem` ou `equipe`). Marca separada da situação. Quem da equipe marcou
+   * NÃO vem aqui: é dado do painel (o GET de detalhe). Da TELA; a ferramenta da
+   * IA não o repassa (o bloco de compromissos do agente lê o banco).
+   */
+  presencaConfirmadaEm?: string | null;
+  presencaConfirmadaOrigem?: OrigemDaConfirmacaoDoPaciente | null;
+  /** Quando o lembrete saiu (`reminder_sent_at`): com ele e sem confirmação, a grade mostra "Lembrete sem resposta". */
+  lembreteEnviadoEm?: string | null;
 }
 
 export interface ParametrosDaLista {
@@ -768,7 +778,7 @@ export async function listaAgendamentos(
   let q = supabase
     .from("calendar_appointments")
     .select(
-      "id, title, starts_at, ends_at, time_zone, status, revision, meeting_state, meeting_url, owner_user_id, contact_id, event_type_id, calendar_event_types(name), contacts(name, display_name, is_blocked)",
+      "id, title, starts_at, ends_at, time_zone, status, revision, meeting_state, meeting_url, owner_user_id, contact_id, event_type_id, patient_confirmed_at, patient_confirmed_source, reminder_sent_at, calendar_event_types(name), contacts(name, display_name, is_blocked)",
     )
     .eq("organization_id", organizationId)
     // Lançado por engano ou de teste (migration 0364): não é compromisso de
@@ -843,6 +853,9 @@ export async function listaAgendamentos(
       contatoNaoRecebeMensagens: l.contact_id ? bloqueadoNoEmbed(l.contacts) : false,
       tipoId: l.event_type_id ? String(l.event_type_id) : null,
       tipoNome: nomeDoTipoNoEmbed(l.calendar_event_types),
+      presencaConfirmadaEm: l.patient_confirmed_at ? String(l.patient_confirmed_at) : null,
+      presencaConfirmadaOrigem: (l.patient_confirmed_source as OrigemDaConfirmacaoDoPaciente | null) ?? null,
+      lembreteEnviadoEm: l.reminder_sent_at ? String(l.reminder_sent_at) : null,
     })),
   };
 }

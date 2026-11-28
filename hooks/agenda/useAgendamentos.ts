@@ -6,6 +6,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { apiClient } from "@/lib/api/client";
 
 import type { Agendamento } from "@/components/agenda/tipos";
+import type { OrigemDaConfirmacaoDoPaciente } from "@/lib/agenda/tipos";
 
 /**
  * A forma que a rota devolve — lida do CÓDIGO dela, não da descrição.
@@ -30,6 +31,9 @@ interface AgendamentoListado {
   contatoNaoRecebeMensagens?: boolean;
   tipoId?: string | null;
   tipoNome?: string | null;
+  presencaConfirmadaEm?: string | null;
+  presencaConfirmadaOrigem?: OrigemDaConfirmacaoDoPaciente | null;
+  lembreteEnviadoEm?: string | null;
 }
 
 export interface RecorteDaGrade {
@@ -114,6 +118,11 @@ export function useAgendamentos(recorte: RecorteDaGrade | null) {
           // o nome dele (achados 1 e 18 da auditoria de 16/11).
           tipoId: a.tipoId ?? undefined,
           tipo: a.tipoNome ?? undefined,
+          // Presença confirmada e lembrete (0441): a grade desenha o check e o
+          // "Lembrete sem resposta". Mesma tolerância a servidor mais velho.
+          presencaConfirmadaEm: a.presencaConfirmadaEm ?? undefined,
+          presencaConfirmadaOrigem: a.presencaConfirmadaOrigem ?? undefined,
+          lembreteEnviadoEm: a.lembreteEnviadoEm ?? undefined,
         }));
       } catch (err) {
         showApiError(err);

@@ -171,6 +171,34 @@ describe("o compromisso atravessa a rota até a grade", () => {
     ).toBe("Maria Ferraz");
   });
 
+  it("presença confirmada e lembrete (0441): a grade sabe quem confirmou e quem não respondeu", async () => {
+    const bloco = unico(
+      await oQueAGradeRecebe(
+        await corpoDaRota([
+          {
+            ...MARIA,
+            presencaConfirmadaEm: "2026-09-01T17:32:00.000Z",
+            presencaConfirmadaOrigem: "mensagem",
+            lembreteEnviadoEm: "2026-09-01T12:00:00.000Z",
+          },
+        ]),
+      ),
+    );
+    expect(bloco.presencaConfirmadaEm, "sem ele o card não mostra o check de presença confirmada").toBe(
+      "2026-09-01T17:32:00.000Z",
+    );
+    expect(bloco.presencaConfirmadaOrigem).toBe("mensagem");
+    expect(bloco.lembreteEnviadoEm, "sem ele a grade não sabe quem recebeu o lembrete e não respondeu").toBe(
+      "2026-09-01T12:00:00.000Z",
+    );
+
+    // O par: sem confirmação nem lembrete (ou servidor mais velho), ausentes.
+    const semNada = unico(await oQueAGradeRecebe(await corpoDaRota([MARIA])));
+    expect(semNada.presencaConfirmadaEm).toBeUndefined();
+    expect(semNada.presencaConfirmadaOrigem).toBeUndefined();
+    expect(semNada.lembreteEnviadoEm).toBeUndefined();
+  });
+
   it("...e o PAR: sem contato, o campo fica AUSENTE — nunca 'null' escrito na tela", async () => {
     // O outro lado. Sem ele, um `quemSeraAtendido` cravado passaria no caso
     // acima e a cerca não valeria nada.
