@@ -180,10 +180,12 @@ describe("o compromisso atravessa a rota até a grade", () => {
             presencaConfirmadaEm: "2026-09-01T17:32:00.000Z",
             presencaConfirmadaOrigem: "mensagem",
             lembreteEnviadoEm: "2026-09-01T12:00:00.000Z",
+            lembretePedeConfirmacao: true,
           },
         ]),
       ),
     );
+    expect(bloco.lembretePedeConfirmacao, "sem ele o 'Lembrete sem resposta' aparece em tipo que não pediu SIM").toBe(true);
     expect(bloco.presencaConfirmadaEm, "sem ele o card não mostra o check de presença confirmada").toBe(
       "2026-09-01T17:32:00.000Z",
     );
@@ -197,6 +199,7 @@ describe("o compromisso atravessa a rota até a grade", () => {
     expect(semNada.presencaConfirmadaEm).toBeUndefined();
     expect(semNada.presencaConfirmadaOrigem).toBeUndefined();
     expect(semNada.lembreteEnviadoEm).toBeUndefined();
+    expect(semNada.lembretePedeConfirmacao).toBe(false);
   });
 
   it("...e o PAR: sem contato, o campo fica AUSENTE — nunca 'null' escrito na tela", async () => {

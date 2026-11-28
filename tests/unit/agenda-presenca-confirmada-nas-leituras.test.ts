@@ -134,6 +134,45 @@ describe("a lista traz a presença confirmada e o lembrete", () => {
   });
 });
 
+describe("o lembrete que a grade mostra é o do horário atual e do tipo que pede confirmação", () => {
+  const ler = async (extra: Record<string, unknown>, colunas: string[] = []) => {
+    const r = await listaAgendamentos(agendaCom(extra, colunas), "org", { ownerUserId: "u-bia", limite: 20 });
+    if (!r.ok) throw new Error(r.codigo);
+    return r.agendamentos[0]!;
+  };
+
+  it("lembretePedeConfirmacao vem da chave do tipo, nas duas formas do embed", async () => {
+    const colunas: string[] = [];
+    for (const embed of [{ name: "Retorno", reminder_asks_confirmation: true }, [{ name: "Retorno", reminder_asks_confirmation: true }]]) {
+      expect((await ler({ calendar_event_types: embed }, colunas)).lembretePedeConfirmacao).toBe(true);
+    }
+    expect(colunas[0]).toContain("calendar_event_types(name, reminder_asks_confirmation)");
+    expect((await ler({ calendar_event_types: { name: "Retorno", reminder_asks_confirmation: false } })).lembretePedeConfirmacao).toBe(false);
+    // Tipo apagado (FK set null): não pede, sem inventar.
+    expect((await ler({ calendar_event_types: null })).lembretePedeConfirmacao).toBe(false);
+  });
+
+  it("lembrete ANTERIOR à remarcação não vale para o horário atual: chega nulo", async () => {
+    const colunas: string[] = [];
+    const a = await ler(
+      { reminder_sent_at: "2026-11-26T12:00:00.000Z", starts_at_marked_at: "2026-11-26T15:00:00.000Z" },
+      colunas,
+    );
+    expect(colunas[0]).toContain("starts_at_marked_at");
+    expect(a.lembreteEnviadoEm).toBeNull();
+  });
+
+  it("lembrete DEPOIS da remarcação, ou compromisso nunca remarcado: vale", async () => {
+    expect(
+      (await ler({ reminder_sent_at: "2026-11-27T12:00:00.000Z", starts_at_marked_at: "2026-11-26T15:00:00.000Z" }))
+        .lembreteEnviadoEm,
+    ).toBe("2026-11-27T12:00:00.000Z");
+    expect((await ler({ reminder_sent_at: "2026-11-27T12:00:00.000Z", starts_at_marked_at: null })).lembreteEnviadoEm).toBe(
+      "2026-11-27T12:00:00.000Z",
+    );
+  });
+});
+
 describe("o detalhe traz a presença confirmada e o lembrete", () => {
   it("lê as quatro colunas e as devolve como estão", async () => {
     const { GET } = await import("@/app/api/v1/agenda/agendamentos/[id]/route");

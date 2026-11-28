@@ -730,18 +730,20 @@ async function pacienteConfirmouPelaEquipe(
   const desfecho = data as "confirmado" | "ja_confirmado" | "nao_se_aplica";
   if (desfecho === "nao_se_aplica") throw naoSeAplica();
 
+  // Os efeitos ANTES da releitura: se ela falhar, a confirmação já gravada não
+  // fica sem auditoria nem timeline (o retry cairia em `ja_confirmado`, que não grava).
+  if (desfecho === "confirmado") {
+    await registrarPresencaConfirmada(supabase, {
+      organizationId: ctx.organization_id,
+      appointmentId: id,
+      contactId: atual.contact_id as string,
+      source: "equipe",
+      actor: ctx.actor,
+      requestId: ctx.requestId,
+    });
+  }
   const salvo = await exigeAgendamento(supabase, ctx, id, CAMPOS_DA_PRESENCA);
-  if (desfecho === "ja_confirmado") return { ...salvo, ja_estava: true };
-
-  await registrarPresencaConfirmada(supabase, {
-    organizationId: ctx.organization_id,
-    appointmentId: id,
-    contactId: atual.contact_id as string,
-    source: "equipe",
-    actor: ctx.actor,
-    requestId: ctx.requestId,
-  });
-  return salvo;
+  return desfecho === "ja_confirmado" ? { ...salvo, ja_estava: true } : salvo;
 }
 
 /**

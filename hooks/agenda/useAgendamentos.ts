@@ -34,6 +34,7 @@ interface AgendamentoListado {
   presencaConfirmadaEm?: string | null;
   presencaConfirmadaOrigem?: OrigemDaConfirmacaoDoPaciente | null;
   lembreteEnviadoEm?: string | null;
+  lembretePedeConfirmacao?: boolean;
 }
 
 export interface RecorteDaGrade {
@@ -123,6 +124,7 @@ export function useAgendamentos(recorte: RecorteDaGrade | null) {
           presencaConfirmadaEm: a.presencaConfirmadaEm ?? undefined,
           presencaConfirmadaOrigem: a.presencaConfirmadaOrigem ?? undefined,
           lembreteEnviadoEm: a.lembreteEnviadoEm ?? undefined,
+          lembretePedeConfirmacao: a.lembretePedeConfirmacao === true,
         }));
       } catch (err) {
         showApiError(err);

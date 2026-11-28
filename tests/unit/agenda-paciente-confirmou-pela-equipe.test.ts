@@ -38,6 +38,8 @@ const estado = vi.hoisted(() => ({
   rpcDeServico: [] as Array<{ fn: string; args: Record<string, unknown> }>,
   rpcDaSessao: [] as Array<{ fn: string; args: Record<string, unknown> }>,
   inserido: {} as Record<string, Record<string, unknown>[]>,
+  /** A releitura de `calendar_appointments` falha DEPOIS que o RPC já gravou. */
+  releituraQuebra: false,
 }));
 
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
@@ -72,7 +74,10 @@ function sessao() {
           filtros.push([coluna, valor]);
           return cadeia;
         },
-        maybeSingle: async () => ({ data: daTabela(), error: null }),
+        maybeSingle: async () =>
+          estado.releituraQuebra && tabela === "calendar_appointments" && estado.rpcDeServico.length > 0
+            ? { data: null, error: { message: "boom na releitura" } }
+            : { data: daTabela(), error: null },
         then: (r: (v: unknown) => unknown) =>
           r({ data: tabela === "crm_leads" ? estado.leads : daTabela(), error: null }),
         insert: (linha: Linha) => {
@@ -146,6 +151,7 @@ beforeEach(() => {
   estado.rpcDeServico = [];
   estado.rpcDaSessao = [];
   estado.inserido = {};
+  estado.releituraQuebra = false;
 });
 
 describe("a equipe marca 'Paciente confirmou'", () => {
@@ -200,6 +206,17 @@ describe("a equipe marca 'Paciente confirmou'", () => {
         actor_kind: "user",
       }),
     ]);
+  });
+
+  it("confirmado e a releitura falha: a auditoria e a atividade saem mesmo assim", async () => {
+    // Sem isto, a confirmação ficava gravada sem rastro, e o retry da tela cai em
+    // `ja_confirmado`, que não grava nada: a perda seria permanente.
+    estado.releituraQuebra = true;
+    const r = await marcar({ id: ID, revision: 4, patient_confirmed: true });
+    expect(r.status).toBe(500);
+    expect(confirmacoes()).toHaveLength(1);
+    expect(auditorias()).toEqual([expect.objectContaining({ action: "agenda.paciente_confirmou", resourceId: ID })]);
+    expect(atividades()).toEqual([expect.objectContaining({ type: "appointment_patient_confirmed", source_id: ID })]);
   });
 
   it("já confirmado: 200 idempotente, sem segunda auditoria nem atividade", async () => {

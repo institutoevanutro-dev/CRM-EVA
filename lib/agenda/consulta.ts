@@ -616,8 +616,17 @@ export interface AgendamentoListado {
    */
   presencaConfirmadaEm?: string | null;
   presencaConfirmadaOrigem?: OrigemDaConfirmacaoDoPaciente | null;
-  /** Quando o lembrete saiu (`reminder_sent_at`): com ele e sem confirmação, a grade mostra "Lembrete sem resposta". */
+  /**
+   * Quando o lembrete DO HORÁRIO ATUAL saiu (`reminder_sent_at`), ou `null`.
+   * Lembrete anterior à última remarcação (`starts_at_marked_at`, migration 0323)
+   * era do horário antigo e chega `null` (`lembreteDoHorarioAtual`).
+   */
   lembreteEnviadoEm?: string | null;
+  /**
+   * O tipo pede SIM no lembrete (`reminder_asks_confirmation`). Sem isso o
+   * paciente não foi convidado a responder, e "Lembrete sem resposta" não se aplica.
+   */
+  lembretePedeConfirmacao?: boolean;
 }
 
 export interface ParametrosDaLista {
@@ -688,6 +697,28 @@ function bloqueadoNoEmbed(c: { is_blocked?: boolean | null } | Array<{ is_blocke
 function nomeDoTipoNoEmbed(t: { name?: string | null } | Array<{ name?: string | null }> | null | undefined): string | null {
   const nome = (Array.isArray(t) ? t[0] : t)?.name;
   return nome ? String(nome) : null;
+}
+
+/** O mesmo embed, para a pergunta da 0441: o tipo pede SIM no lembrete? */
+export function tipoPedeConfirmacaoNoEmbed(
+  t: { reminder_asks_confirmation?: boolean | null } | Array<{ reminder_asks_confirmation?: boolean | null }> | null | undefined,
+): boolean {
+  return (Array.isArray(t) ? t[0] : t)?.reminder_asks_confirmation === true;
+}
+
+/**
+ * O lembrete que vale para o horário ATUAL: `reminder_sent_at` sobrevive à
+ * remarcação, e o lembrete de antes dela era do horário antigo. A régua é
+ * `starts_at_marked_at` (migration 0323), gravada a cada mudança real de
+ * `starts_at`; nula = nunca remarcado, e o lembrete vale.
+ */
+export function lembreteDoHorarioAtual(
+  reminderSentAt: string | null | undefined,
+  startsAtMarkedAt: string | null | undefined,
+): string | null {
+  if (!reminderSentAt) return null;
+  if (startsAtMarkedAt && new Date(reminderSentAt).getTime() < new Date(startsAtMarkedAt).getTime()) return null;
+  return String(reminderSentAt);
 }
 
 /** O mesmo embed, para a pergunta do prontuário: o cadastro tem nome completo? */
@@ -778,7 +809,7 @@ export async function listaAgendamentos(
   let q = supabase
     .from("calendar_appointments")
     .select(
-      "id, title, starts_at, ends_at, time_zone, status, revision, meeting_state, meeting_url, owner_user_id, contact_id, event_type_id, patient_confirmed_at, patient_confirmed_source, reminder_sent_at, calendar_event_types(name), contacts(name, display_name, is_blocked)",
+      "id, title, starts_at, ends_at, time_zone, status, revision, meeting_state, meeting_url, owner_user_id, contact_id, event_type_id, patient_confirmed_at, patient_confirmed_source, reminder_sent_at, starts_at_marked_at, calendar_event_types(name, reminder_asks_confirmation), contacts(name, display_name, is_blocked)",
     )
     .eq("organization_id", organizationId)
     // Lançado por engano ou de teste (migration 0364): não é compromisso de
@@ -855,7 +886,8 @@ export async function listaAgendamentos(
       tipoNome: nomeDoTipoNoEmbed(l.calendar_event_types),
       presencaConfirmadaEm: l.patient_confirmed_at ? String(l.patient_confirmed_at) : null,
       presencaConfirmadaOrigem: (l.patient_confirmed_source as OrigemDaConfirmacaoDoPaciente | null) ?? null,
-      lembreteEnviadoEm: l.reminder_sent_at ? String(l.reminder_sent_at) : null,
+      lembreteEnviadoEm: lembreteDoHorarioAtual(l.reminder_sent_at, l.starts_at_marked_at),
+      lembretePedeConfirmacao: tipoPedeConfirmacaoNoEmbed(l.calendar_event_types),
     })),
   };
 }

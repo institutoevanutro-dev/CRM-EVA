@@ -117,8 +117,10 @@ export type Agendamento = {
   /** Presença confirmada pelo paciente (migration 0441): quando e por onde. Marca separada da situação. */
   presencaConfirmadaEm?: string;
   presencaConfirmadaOrigem?: OrigemDaConfirmacaoDoPaciente;
-  /** Quando o lembrete saiu. Com ele e sem confirmação, o card mostra "Lembrete sem resposta". */
+  /** Quando o lembrete do horário ATUAL saiu (o de antes de uma remarcação não conta). */
   lembreteEnviadoEm?: string;
+  /** O tipo pede SIM no lembrete. Sem isso, "Lembrete sem resposta" não se aplica. */
+  lembretePedeConfirmacao?: boolean;
 };
 
 /** Um horário oferecido pelo painel de marcação. */
