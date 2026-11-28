@@ -32,7 +32,7 @@ Este documento foi escrito à noite, enquanto o André dormia. As decisões marc
 | 7 | Remarcou? | A confirmação vale para o horário confirmado. Se `starts_at` mudar, a marca é apagada (no banco, junto da troca de horário), e o próximo lembrete pede de novo. |
 | 8 | Confirmação por telefone **(a confirmar)** | O painel do paciente ganha o botão **"Paciente confirmou"** (só em "Agendado" e antes do horário), para a recepção marcar quando o paciente confirma por ligação. A origem fica gravada: mensagem ou equipe. |
 | 9 | Onde aparece | **Cartão da grade:** ícone de check no canto ("Presença confirmada"), mais um item na legenda. **Painel:** etiqueta "Presença confirmada · pelo WhatsApp 26/11 14:32" ou "· pela equipe". **Timeline do lead:** atividade "Paciente confirmou presença". **Auditoria:** `agenda.paciente_confirmou`. |
-| 10 | Quem não respondeu **(a confirmar)** | No cartão de quem recebeu o lembrete e não confirmou, aparece um ícone discreto "Lembrete sem resposta". É calculado (lembrete enviado + sem confirmação), sem coluna nova. A recepção vê na véspera quem precisa de ligação. |
+| 10 | Quem não respondeu **(a confirmar)** | No cartão de quem recebeu o lembrete e não confirmou, aparece um ícone discreto "Sem confirmação". É calculado (lembrete enviado + sem confirmação), sem coluna nova. A recepção vê na véspera quem precisa de ligação. |
 
 ## Banco (uma migration, reservada: **0441**)
 
@@ -60,11 +60,12 @@ Coluna nova em `calendar_event_types`: `reminder_asks_confirmation boolean not n
    - É fire-and-forget e falha aberta: nunca bloqueia nem atrasa o despacho do agente.
    - A ordem dos efeitos é vigiada por `tests/unit/pos-entrada-efeitos-do-canal.test.ts`, que é atualizado.
 3. **Lembrete:** o cron `agenda-reminder` passa a acrescentar a frase quando o tipo tem a chave e a carimbar o `metadata` da mensagem.
+   - A frase não entra no lembrete de quem já confirmou (o degrau seguinte, por exemplo); o carimbo entra igual.
    - O `montarLembrete` ganha o parâmetro da frase.
    - O carimbo vai em todo lembrete, porque é barato e permite ligar a chave depois sem perder o elo.
 4. **Equipe:** o PATCH `/api/v1/agenda/agendamentos` aceita a ação `paciente_confirmou` (papel `agent` ou acima) e chama o mesmo RPC com `source='equipe'`.
 5. **Telas:**
-   - `GradeDaAgenda` mostra o ícone no canto e a legenda.
+   - `GradeDaAgenda` mostra o ícone no canto e a legenda. Cada ícone novo só entra na legenda quando algum bloco da tela o mostra: com a chave desligada, a legenda fica como era.
    - `DetalheDoCompromisso` mostra a etiqueta e o botão "Paciente confirmou".
    - A configuração do tipo, em Configurações › Agenda, ganha a chave "Pedir confirmação no lembrete", com prévia do texto final.
    - O GET de detalhe e o hook da lista passam a trazer as colunas novas.
@@ -105,4 +106,4 @@ Coluna nova em `calendar_event_types`: `reminder_asks_confirmation boolean not n
 
 1. A frase "Para confirmar sua presença, responda SIM." serve?
 2. O botão "Paciente confirmou" para confirmações por telefone pode entrar?
-3. O ícone "Lembrete sem resposta" no cartão ajuda ou polui?
+3. O ícone "Sem confirmação" no cartão ajuda ou polui?

@@ -119,7 +119,7 @@ export type Agendamento = {
   presencaConfirmadaOrigem?: OrigemDaConfirmacaoDoPaciente;
   /** Quando o lembrete do horário ATUAL saiu (o de antes de uma remarcação não conta). */
   lembreteEnviadoEm?: string;
-  /** O tipo pede SIM no lembrete. Sem isso, "Lembrete sem resposta" não se aplica. */
+  /** O tipo pede SIM no lembrete. Sem isso, "Sem confirmação" não se aplica. */
   lembretePedeConfirmacao?: boolean;
 };
 

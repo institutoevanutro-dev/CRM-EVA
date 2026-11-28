@@ -69,21 +69,33 @@ export function conflitosDaGrade(agendamentos: readonly Agendamento[]): Set<stri
 }
 
 /**
- * "Lembrete sem resposta" (migration 0441): o lembrete do tipo que pede SIM
+ * "Sem confirmação" (migration 0441): o lembrete do tipo que pede SIM
  * saiu, o paciente ainda não confirmou, e o compromisso segue Agendado e por
  * vir. É a lista de quem a recepção liga na véspera. Calculado, sem coluna:
  * `lembreteEnviadoEm` já chega nulo quando o lembrete é de antes da última
  * remarcação (`lembreteDoHorarioAtual`, em `lib/agenda/consulta.ts`).
  */
 export function lembreteSemResposta(
-  a: Pick<Agendamento, "lembretePedeConfirmacao" | "lembreteEnviadoEm" | "presencaConfirmadaEm" | "situacao" | "comeca">,
+  a: Pick<Agendamento, "lembretePedeConfirmacao" | "lembreteEnviadoEm" | "presencaConfirmadaEm" | "situacao" | "comeca" | "origem">,
   agora: Date,
 ): boolean {
   return (
+    a.origem !== "google_sync" &&
     a.lembretePedeConfirmacao === true &&
     Boolean(a.lembreteEnviadoEm) &&
     !a.presencaConfirmadaEm &&
     a.situacao === "confirmed" &&
     new Date(a.comeca).getTime() > agora.getTime()
   );
+}
+
+/**
+ * "Presença confirmada" no bloco (migration 0441): só enquanto Agendado —
+ * depois, o ícone da situação diz o que houve, e dois "check" lado a lado se
+ * confundiriam. A ocupação do Google nunca tem paciente.
+ */
+export function mostraPresencaConfirmada(
+  a: Pick<Agendamento, "presencaConfirmadaEm" | "situacao" | "origem">,
+): boolean {
+  return Boolean(a.presencaConfirmadaEm) && a.situacao === "confirmed" && a.origem !== "google_sync";
 }

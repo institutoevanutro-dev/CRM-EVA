@@ -185,7 +185,7 @@ describe("o compromisso atravessa a rota até a grade", () => {
         ]),
       ),
     );
-    expect(bloco.lembretePedeConfirmacao, "sem ele o 'Lembrete sem resposta' aparece em tipo que não pediu SIM").toBe(true);
+    expect(bloco.lembretePedeConfirmacao, "sem ele o 'Sem confirmação' aparece em tipo que não pediu SIM").toBe(true);
     expect(bloco.presencaConfirmadaEm, "sem ele o card não mostra o check de presença confirmada").toBe(
       "2026-09-01T17:32:00.000Z",
     );

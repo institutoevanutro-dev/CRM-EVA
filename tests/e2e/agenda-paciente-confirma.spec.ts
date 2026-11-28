@@ -18,7 +18,7 @@ import { esperarAgenda, esperarTela } from "./helpers/tela-agenda";
  *   2. o cron do lembrete, chamado pelo endpoint com o segredo do e2e, manda a
  *      mensagem — e o RECEPTOR (o "WAHA" desta spec) prova que o texto que saiu
  *      termina com a frase;
- *   3. a grade mostra "Lembrete sem resposta" no cartão;
+ *   3. a grade mostra "Sem confirmação" no cartão;
  *   4. o paciente responde "SIM" pelo CAMINHO DE PRODUÇÃO
  *      (`POST /api/v1/webhooks/waha/[token]`, o de `conversa-vira-lead`);
  *   5. o cartão troca o sino pelo check de "Presença confirmada", e o painel diz
@@ -354,16 +354,16 @@ test("o paciente responde SIM ao lembrete e a Agenda mostra a presença confirma
       });
     });
 
-    await test.step("3 · antes da resposta, o cartão diz 'Lembrete sem resposta'", async () => {
+    await test.step("3 · antes da resposta, o cartão diz 'Sem confirmação'", async () => {
       const cartao = await cartaoNaGrade(page, f.lembrado);
       await expect(page.getByTestId(`lembrete-sem-resposta-${f.lembrado}`)).toBeVisible({ timeout: 20_000 });
       await expect(page.getByTestId(`lembrete-sem-resposta-${f.lembrado}`)).toHaveAttribute(
         "aria-label",
-        "Lembrete sem resposta",
+        "Sem confirmação",
       );
       await expect(page.getByTestId(`presenca-confirmada-${f.lembrado}`)).toHaveCount(0);
-      expect(await cartao.getAttribute("aria-label")).toContain("lembrete sem resposta");
-      await expect(page.getByTestId("legenda-da-grade")).toContainText("Lembrete sem resposta");
+      expect(await cartao.getAttribute("aria-label")).toContain("sem confirmação");
+      await expect(page.getByTestId("legenda-da-grade")).toContainText("Sem confirmação");
       await evidencia(page, info, "2-lembrete-sem-resposta");
     });
 

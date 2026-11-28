@@ -1,7 +1,7 @@
 /**
  * A PRESENÇA CONFIRMADA E O LEMBRETE CHEGAM ÀS LEITURAS DA TELA (migration 0441).
  *
- * A grade (ícone "Presença confirmada" e "Lembrete sem resposta") e o painel do
+ * A grade (ícone "Presença confirmada" e "Sem confirmação") e o painel do
  * compromisso (etiqueta "pelo WhatsApp" / "pela equipe") só desenham o que as
  * leituras trazem. As duas consultas escolhem colunas à mão, então coluna nova
  * que não entra no `select` simplesmente não existe para a tela.

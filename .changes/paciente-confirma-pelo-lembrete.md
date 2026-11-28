@@ -9,9 +9,10 @@ responda SIM.", e a prévia já mostra o texto final. Quando o paciente responde
 "confirmo", "👍"…) logo depois do lembrete, o compromisso continua "Agendado" e ganha a marca
 "Presença confirmada". O CRM não responde nada: só lê. Qualquer outra resposta ("sim, mas…",
 "não", "remarcar") segue para o agente ou a equipe como antes, e um "sim" depois de outra mensagem
-da clínica não conta. Remarcar o horário apaga a confirmação, e o lembrete seguinte pede de novo.
-Na Agenda, o cartão mostra um check duplo para quem confirmou e um sino "Lembrete sem resposta"
-para quem recebeu o pedido e não respondeu, os dois explicados na legenda. O painel do paciente
+da clínica não conta. Quem já confirmou não recebe o pedido de novo nos lembretes seguintes. Remarcar o horário apaga a
+confirmação, e o lembrete seguinte pede de novo.
+Na Agenda, o cartão mostra um check duplo para quem confirmou e um sino "Sem confirmação"
+para quem recebeu o pedido e não respondeu; cada um entra na legenda quando aparece na tela. O painel do paciente
 diz "Presença confirmada · pelo WhatsApp em 26/11 às 14:32" ou "· pela equipe", com o nome de quem
 marcou, e ganhou o botão "Paciente confirmou" para a confirmação por telefone, que aparece só em
 compromisso agendado, com paciente e antes do horário. A confirmação entra na timeline do negócio

@@ -624,7 +624,7 @@ export interface AgendamentoListado {
   lembreteEnviadoEm?: string | null;
   /**
    * O tipo pede SIM no lembrete (`reminder_asks_confirmation`). Sem isso o
-   * paciente não foi convidado a responder, e "Lembrete sem resposta" não se aplica.
+   * paciente não foi convidado a responder, e "Sem confirmação" não se aplica.
    */
   lembretePedeConfirmacao?: boolean;
 }

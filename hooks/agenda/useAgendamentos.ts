@@ -120,7 +120,7 @@ export function useAgendamentos(recorte: RecorteDaGrade | null) {
           tipoId: a.tipoId ?? undefined,
           tipo: a.tipoNome ?? undefined,
           // Presença confirmada e lembrete (0441): a grade desenha o check e o
-          // "Lembrete sem resposta". Mesma tolerância a servidor mais velho.
+          // "Sem confirmação". Mesma tolerância a servidor mais velho.
           presencaConfirmadaEm: a.presencaConfirmadaEm ?? undefined,
           presencaConfirmadaOrigem: a.presencaConfirmadaOrigem ?? undefined,
           lembreteEnviadoEm: a.lembreteEnviadoEm ?? undefined,

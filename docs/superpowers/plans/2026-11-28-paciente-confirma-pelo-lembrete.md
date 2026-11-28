@@ -110,7 +110,7 @@
 **Arquivos:**
 - `components/agenda/GradeDaAgenda.tsx` e `situacao-do-bloco.ts`, se for o lugar:
   - ícone de check (Phosphor, mesmo kit dos outros ícones de canto) com `aria-label` e `title` "Presença confirmada";
-  - ícone "Lembrete sem resposta" quando `reminder_sent_at` existe, não há confirmação e o compromisso é futuro e `confirmed`;
+  - ícone "Sem confirmação" quando `reminder_sent_at` existe, não há confirmação e o compromisso é futuro e `confirmed`;
   - os dois entram na legenda.
 - `components/agenda/DetalheDoCompromisso.tsx`:
   - etiqueta abaixo do estado: "Presença confirmada · pelo WhatsApp em 26/11 às 14:32" ou "· pela equipe";

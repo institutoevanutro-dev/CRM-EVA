@@ -13012,8 +13012,8 @@ export const DICIONARIO: Traducoes = {
   // 0441: o paciente confirma a presença respondendo ao lembrete (ou a recepção marca).
   "Presença confirmada": { es: "Asistencia confirmada" },
   "presença confirmada": { es: "asistencia confirmada" },
-  "Lembrete sem resposta": { es: "Recordatorio sin respuesta" },
-  "lembrete sem resposta": { es: "recordatorio sin respuesta" },
+  "Sem confirmação": { es: "Sin confirmación" },
+  "sem confirmação": { es: "sin confirmación" },
   "pelo WhatsApp em {data} às {hora}": { es: "por WhatsApp el {data} a las {hora}" },
   "pela equipe em {data} às {hora}": { es: "por el equipo el {data} a las {hora}" },
   "Paciente confirmou": { es: "El paciente confirmó" },
