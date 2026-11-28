@@ -40843,14 +40843,21 @@ alter table public.calendar_event_types
 create or replace function public.fn_appointment_patient_confirm(
  p_appointment_id uuid, p_expected_revision int, p_source text, p_message_id uuid, p_user_id uuid)
 returns text language plpgsql security definer set search_path=public as $$
-declare a public.calendar_appointments;
+declare a public.calendar_appointments; v_org uuid; v_contact uuid;
 begin
  if p_source is null or p_source not in ('mensagem','equipe')
   or (p_source='mensagem' and p_message_id is null) or (p_source='equipe' and p_user_id is null) then
   raise exception 'patient_confirm_invalid_source' using errcode='22023'; end if;
+ -- A ordem de trava de fn_appointment_change_core: o mutex do contato PRIMEIRO, a linha depois.
+ -- O UPDATE abaixo dispara fn_meet_delivery_enqueue, que pega o mutex do contato; com a linha
+ -- travada antes dele, as duas ordens se cruzam com a remarcação (deadlock 40P01).
+ select organization_id, contact_id into v_org, v_contact from public.calendar_appointments where id=p_appointment_id;
+ if not found then return 'nao_se_aplica'; end if;
+ if v_contact is not null then perform public.fn_service_lock(v_org,v_contact); end if;
  -- Trava a linha: dois "SIM" seguidos, ou o SIM e o botão da recepção, gravam uma vez só.
  select * into a from public.calendar_appointments where id=p_appointment_id for update;
- if not found or a.status<>'confirmed' or a.starts_at<=now() or a.revision is distinct from p_expected_revision then
+ if not found or a.contact_id is distinct from v_contact or a.status<>'confirmed' or a.starts_at<=now()
+  or a.revision is distinct from p_expected_revision then
   return 'nao_se_aplica'; end if;
  if a.patient_confirmed_at is not null then return 'ja_confirmado'; end if;
  -- Sem organização no argumento: a prova da mensagem é amarrada à organização e ao paciente do compromisso.
