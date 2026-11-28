@@ -10,6 +10,7 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DetalheDoCompromisso, type RemarcacaoDoPainel } from "@/components/agenda/DetalheDoCompromisso";
+import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { HorarioLivre } from "@/components/agenda/tipos";
 import { ApiError } from "@/lib/api/types";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
@@ -577,6 +578,10 @@ describe("presença confirmada no painel", () => {
     const botao = await screen.findByTestId("acao-paciente-confirmou");
     expect(botao).toHaveTextContent("Paciente confirmou");
     expect(within(screen.getByTestId("acoes-do-compromisso")).getByTestId("acao-paciente-confirmou")).toBe(botao);
+    // Sem desfazer: o botão não tem a cara da ação principal (contorno, não preenchido nem largo).
+    expect(botao.className).toContain("bg-transparent");
+    expect(botao.className).not.toMatch(/(^|\s)bg-accent(\s|$)/);
+    expect(botao.className).not.toContain("flex-1");
     fireEvent.click(botao);
     await waitFor(() =>
       expect(api.patch).toHaveBeenCalledWith("/api/v1/agenda/agendamentos", {
@@ -598,6 +603,7 @@ describe("presença confirmada no painel", () => {
     abrir();
     fireEvent.click(await screen.findByTestId("acao-paciente-confirmou"));
     await screen.findByRole("alert");
+    expect(showApiError).toHaveBeenCalledWith(expect.objectContaining({ status: 409 }));
     expect(avisos.success).not.toHaveBeenCalled();
   });
 

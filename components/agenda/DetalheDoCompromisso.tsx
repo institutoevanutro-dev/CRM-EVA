@@ -484,9 +484,12 @@ export function DetalheDoCompromisso({
               {podeAgir ? (
                 <div className="flex flex-wrap gap-2" data-testid="acoes-do-compromisso">
                   {podeMarcarPresenca ? (
+                    // Contorno e largura própria: não há desfazer, então não
+                    // pode ter a cara da ação principal.
                     <Button
                       data-testid="acao-paciente-confirmou"
-                      className="h-12 min-w-[8rem] flex-1"
+                      variant="outline"
+                      className="h-12"
                       disabled={mutation.isPending || staleDraft}
                       onClick={() => decide({ patient_confirmed: true }, t("Presença confirmada"))}
                     >
