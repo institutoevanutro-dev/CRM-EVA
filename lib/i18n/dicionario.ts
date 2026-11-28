@@ -13009,6 +13009,14 @@ export const DICIONARIO: Traducoes = {
   "Consulta cancelada": { es: "Consulta cancelada" },
   "Marcado como falta — o horário volta a ficar livre": { es: "Marcado como ausencia — el horario vuelve a quedar libre" },
   "Presença registrada": { es: "Asistencia registrada" },
+  // 0441: o paciente confirma a presença respondendo ao lembrete (ou a recepção marca).
+  "Presença confirmada": { es: "Asistencia confirmada" },
+  "presença confirmada": { es: "asistencia confirmada" },
+  "Lembrete sem resposta": { es: "Recordatorio sin respuesta" },
+  "lembrete sem resposta": { es: "recordatorio sin respuesta" },
+  "pelo WhatsApp em {data} às {hora}": { es: "por WhatsApp el {data} a las {hora}" },
+  "pela equipe em {data} às {hora}": { es: "por el equipo el {data} a las {hora}" },
+  "Paciente confirmou": { es: "El paciente confirmó" },
 };
 
 /**

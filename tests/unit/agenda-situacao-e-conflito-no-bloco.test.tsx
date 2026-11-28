@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (s: string) => s }));
 
 import { GradeDaAgenda } from "@/components/agenda/GradeDaAgenda";
-import { conflitosDaGrade, formaDaSituacao } from "@/components/agenda/situacao-do-bloco";
+import { conflitosDaGrade, formaDaSituacao, lembreteSemResposta } from "@/components/agenda/situacao-do-bloco";
 import type { Agendamento, Pessoa } from "@/components/agenda/tipos";
 
 afterEach(cleanup);
@@ -144,5 +144,70 @@ describe("o bloco na grade", () => {
     grade([ag("a"), ag("b", { responsavelId: BIA })]);
     expect(screen.queryByTestId("faixa-de-conflito")).toBeNull();
     expect(screen.getByTestId("legenda-da-grade").textContent).toContain("Aguardando confirmação");
+  });
+});
+
+/**
+ * 0441: o paciente confirma a presença respondendo ao lembrete. A grade mostra
+ * quem confirmou e, na véspera, quem recebeu o lembrete que pede SIM e não
+ * respondeu (a recepção liga para esses). As duas marcas têm forma própria, não
+ * só cor, e entram na legenda.
+ */
+describe("presença confirmada e lembrete sem resposta", () => {
+  const AGORA = new Date("2026-09-16T08:00:00-03:00");
+  const semResposta = (extra: Partial<Agendamento> = {}) =>
+    ag("a", { lembretePedeConfirmacao: true, lembreteEnviadoEm: "2026-09-15T13:00:00Z", ...extra });
+
+  it("a regra do 'sem resposta': chave do tipo, lembrete saído, sem confirmação, Agendado e por vir", () => {
+    expect(lembreteSemResposta(semResposta(), AGORA)).toBe(true);
+    expect(lembreteSemResposta(semResposta({ lembretePedeConfirmacao: false }), AGORA)).toBe(false);
+    expect(lembreteSemResposta(semResposta({ lembretePedeConfirmacao: undefined }), AGORA)).toBe(false);
+    expect(lembreteSemResposta(semResposta({ lembreteEnviadoEm: undefined }), AGORA)).toBe(false);
+    expect(lembreteSemResposta(semResposta({ presencaConfirmadaEm: "2026-09-15T14:00:00Z" }), AGORA)).toBe(false);
+    for (const situacao of ["pending", "completed", "no_show", "cancelled"] as const) {
+      expect(lembreteSemResposta(semResposta({ situacao }), AGORA), situacao).toBe(false);
+    }
+    // Já começou: não há mais o que confirmar.
+    expect(lembreteSemResposta(semResposta(), new Date("2026-09-16T13:00:00-03:00"))).toBe(false);
+  });
+
+  it("presença confirmada: ícone de check duplo no canto, com nome no title e no aria-label do cartão", () => {
+    grade([ag("a", { presencaConfirmadaEm: "2026-09-15T14:00:00Z", presencaConfirmadaOrigem: "mensagem" })]);
+    const icone = screen.getByTestId("presenca-confirmada-a");
+    expect(icone).toHaveAttribute("aria-label", "Presença confirmada");
+    expect(icone.querySelector("title")?.textContent).toBe("Presença confirmada");
+    const bloco = screen.getByTestId("agendamento-a");
+    expect(bloco.getAttribute("title")).toContain("Presença confirmada");
+    expect(bloco.getAttribute("aria-label")).toContain(", presença confirmada");
+    expect(screen.queryByTestId("lembrete-sem-resposta-a")).toBeNull();
+  });
+
+  it("presença confirmada some do cartão que já não está Agendado (o ícone da situação diz o que houve)", () => {
+    grade([ag("a", { situacao: "completed", presencaConfirmadaEm: "2026-09-15T14:00:00Z" })]);
+    expect(screen.queryByTestId("presenca-confirmada-a")).toBeNull();
+    expect(screen.getByTestId("situacao-a")).toHaveAttribute("data-icone", "realizado");
+  });
+
+  it("lembrete sem resposta: sino no canto, com nome; some depois do horário e com a confirmação", () => {
+    grade([semResposta()]);
+    const sino = screen.getByTestId("lembrete-sem-resposta-a");
+    expect(sino).toHaveAttribute("aria-label", "Lembrete sem resposta");
+    expect(sino.querySelector("title")?.textContent).toBe("Lembrete sem resposta");
+    expect(screen.getByTestId("agendamento-a").getAttribute("aria-label")).toContain(", lembrete sem resposta");
+    cleanup();
+
+    grade([semResposta({ comeca: "2026-09-16T07:00:00-03:00", termina: "2026-09-16T07:30:00-03:00" })]);
+    expect(screen.queryByTestId("lembrete-sem-resposta-a")).toBeNull();
+    cleanup();
+
+    grade([semResposta({ lembretePedeConfirmacao: false })]);
+    expect(screen.queryByTestId("lembrete-sem-resposta-a")).toBeNull();
+  });
+
+  it("a legenda explica as duas marcas", () => {
+    grade([ag("a")]);
+    const legenda = screen.getByTestId("legenda-da-grade").textContent ?? "";
+    expect(legenda).toContain("Presença confirmada");
+    expect(legenda).toContain("Lembrete sem resposta");
   });
 });

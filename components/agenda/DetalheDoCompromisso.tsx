@@ -24,7 +24,8 @@ import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { ApiError } from "@/lib/api/types";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
-import { CaretRight } from "@/lib/ui/icons";
+import { CaretRight, Checks } from "@/lib/ui/icons";
+import type { OrigemDaConfirmacaoDoPaciente } from "@/lib/agenda/tipos";
 import { AvisoSemLembrete } from "./AvisoSemLembrete";
 import { CAMPO } from "./CampoDaMarcacao";
 import { ExcluirCompromisso } from "./ExcluirCompromisso";
@@ -65,6 +66,10 @@ type Detalhe = {
   /** Quem converteu o lead (0422). Nula = legado ou integração. */
   converted_by_kind?: "user" | "ai" | null;
   converted_by_user_id?: string | null;
+  /** Presença confirmada pelo paciente (0441): quando, por onde e, pela equipe, quem marcou. */
+  patient_confirmed_at?: string | null;
+  patient_confirmed_source?: OrigemDaConfirmacaoDoPaciente | null;
+  patient_confirmed_user_id?: string | null;
   contact_id: string | null;
   /** Os dois nomes do contato: o do cadastro e o do WhatsApp. */
   contato?: { name: string | null; display_name: string | null } | null;
@@ -275,6 +280,18 @@ export function DetalheDoCompromisso({
   const podeAgir = Boolean(
     a && !query.isError && podeEditar && (a.status === "pending" || a.status === "confirmed") && !a.excluded_at,
   );
+  // "Paciente confirmou" (0441): a recepção marca a confirmação por telefone. Só
+  // onde a rota aceita — com paciente, Agendado, antes do horário, sem
+  // confirmação; fora disso o PATCH é 409. O "agora" é o da última leitura,
+  // como o Compareceu/Faltou abaixo.
+  const podeMarcarPresenca = Boolean(
+    podeAgir &&
+      a &&
+      a.status === "confirmed" &&
+      a.contact_id &&
+      !a.patient_confirmed_at &&
+      Date.parse(a.starts_at) > query.dataUpdatedAt,
+  );
   const mostraRemarcar = podeAgir && Boolean(remarcacao?.aberta);
   const mostraCancelar = podeAgir && cancelando;
   // "MAIS DETALHES" NASCE FECHADO (decisão 6), mas falha do Google ou do Meet
@@ -291,6 +308,22 @@ export function DetalheDoCompromisso({
   const nome = paciente ?? a?.title ?? t("Compromisso");
   const estado = a ? ESTADO[a.status] : undefined;
   const local = a ? rotuloDoLocal(a.location_kind, a.location_details) : null;
+  const presenca = a?.patient_confirmed_at
+    ? (() => {
+        const quando = new Date(a.patient_confirmed_at);
+        const data = new Intl.DateTimeFormat(tagDoIdioma, { timeZone: a.time_zone, day: "2-digit", month: "2-digit" }).format(quando);
+        const hora = new Intl.DateTimeFormat(tagDoIdioma, {
+          timeZone: a.time_zone,
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        }).format(quando);
+        if (a.patient_confirmed_source !== "equipe")
+          return t("pelo WhatsApp em {data} às {hora}").replace("{data}", data).replace("{hora}", hora);
+        const quem = pessoas.data?.find((p) => p.id === a.patient_confirmed_user_id)?.nome ?? t("Alguém da equipe");
+        return `${t("pela equipe em {data} às {hora}").replace("{data}", data).replace("{hora}", hora)} (${quem})`;
+      })()
+    : null;
   const linha =
     a && formatoDeData
       ? [
@@ -360,6 +393,14 @@ export function DetalheDoCompromisso({
                   </Badge>
                 ) : null}
               </div>
+              {presenca ? (
+                <p data-testid="presenca-confirmada" className="mt-1 flex items-center gap-1 text-sm text-success-fg">
+                  <Checks aria-hidden size={14} weight="bold" className="shrink-0" />
+                  <span>
+                    {t("Presença confirmada")} · {presenca}
+                  </span>
+                </p>
+              ) : null}
               <DialogDescription className="mt-1 text-sm text-text-muted">
                 {linha.length > 0
                   ? linha.map((item, i) => (
@@ -442,6 +483,16 @@ export function DetalheDoCompromisso({
 
               {podeAgir ? (
                 <div className="flex flex-wrap gap-2" data-testid="acoes-do-compromisso">
+                  {podeMarcarPresenca ? (
+                    <Button
+                      data-testid="acao-paciente-confirmou"
+                      className="h-12 min-w-[8rem] flex-1"
+                      disabled={mutation.isPending || staleDraft}
+                      onClick={() => decide({ patient_confirmed: true }, t("Presença confirmada"))}
+                    >
+                      {t("Paciente confirmou")}
+                    </Button>
+                  ) : null}
                   {a.status === "pending" ? (
                     <Button
                       data-testid="acao-confirmar"

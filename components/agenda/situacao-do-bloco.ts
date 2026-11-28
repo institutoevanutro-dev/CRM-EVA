@@ -67,3 +67,23 @@ export function conflitosDaGrade(agendamentos: readonly Agendamento[]): Set<stri
   }
   return conflitos;
 }
+
+/**
+ * "Lembrete sem resposta" (migration 0441): o lembrete do tipo que pede SIM
+ * saiu, o paciente ainda não confirmou, e o compromisso segue Agendado e por
+ * vir. É a lista de quem a recepção liga na véspera. Calculado, sem coluna:
+ * `lembreteEnviadoEm` já chega nulo quando o lembrete é de antes da última
+ * remarcação (`lembreteDoHorarioAtual`, em `lib/agenda/consulta.ts`).
+ */
+export function lembreteSemResposta(
+  a: Pick<Agendamento, "lembretePedeConfirmacao" | "lembreteEnviadoEm" | "presencaConfirmadaEm" | "situacao" | "comeca">,
+  agora: Date,
+): boolean {
+  return (
+    a.lembretePedeConfirmacao === true &&
+    Boolean(a.lembreteEnviadoEm) &&
+    !a.presencaConfirmadaEm &&
+    a.situacao === "confirmed" &&
+    new Date(a.comeca).getTime() > agora.getTime()
+  );
+}

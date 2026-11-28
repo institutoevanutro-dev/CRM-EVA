@@ -503,3 +503,120 @@ describe("painel do paciente", () => {
     expect(onClose2).toHaveBeenCalledOnce();
   });
 });
+
+/**
+ * 0441: a presença confirmada pelo paciente, no painel. A etiqueta fica logo
+ * abaixo do estado ("Agendado" continua sendo o estado: a marca é separada), e
+ * o botão "Paciente confirmou" é para a recepção marcar a confirmação por
+ * telefone. Ele só aparece quando a rota aceitaria: com paciente, Agendado,
+ * antes do horário e ainda sem confirmação.
+ */
+describe("presença confirmada no painel", () => {
+  // 05/03/2030 17:32 UTC = 14:32 em São Paulo (sem horário de verão).
+  const CONFIRMADO_EM = "2030-03-05T17:32:00Z";
+
+  function comEquipe(dados: Record<string, unknown>) {
+    api.get.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.includes("/pessoas")
+          ? { data: [{ user_id: "u-rita", role: "agent", full_name: "Rita Recepção Teste" }] }
+          : { data: dados },
+      ),
+    );
+  }
+
+  it("pelo WhatsApp: etiqueta abaixo do estado, no fuso do compromisso", async () => {
+    detalhe({ ...BASE, patient_confirmed_at: CONFIRMADO_EM, patient_confirmed_source: "mensagem" });
+    abrir();
+    const etiqueta = await screen.findByTestId("presenca-confirmada");
+    expect(etiqueta).toHaveTextContent("Presença confirmada · pelo WhatsApp em 05/03 às 14:32");
+    expect(screen.getByTestId("estado-do-compromisso")).toHaveTextContent("Agendado");
+    expect(screen.queryByTestId("acao-paciente-confirmou")).toBeNull();
+  });
+
+  it("pela equipe: diz quem marcou, com o nome da equipe (e um rótulo neutro sem ele)", async () => {
+    comEquipe({
+      ...BASE,
+      patient_confirmed_at: CONFIRMADO_EM,
+      patient_confirmed_source: "equipe",
+      patient_confirmed_user_id: "u-rita",
+    });
+    abrir();
+    await waitFor(() =>
+      expect(screen.getByTestId("presenca-confirmada")).toHaveTextContent(
+        "Presença confirmada · pela equipe em 05/03 às 14:32 (Rita Recepção Teste)",
+      ),
+    );
+    cleanup();
+    client.clear();
+
+    comEquipe({
+      ...BASE,
+      patient_confirmed_at: CONFIRMADO_EM,
+      patient_confirmed_source: "equipe",
+      patient_confirmed_user_id: "u-saiu",
+    });
+    abrir();
+    expect(await screen.findByTestId("presenca-confirmada")).toHaveTextContent("(Alguém da equipe)");
+  });
+
+  it("sem confirmação, sem etiqueta", async () => {
+    detalhe(BASE);
+    abrir();
+    await screen.findByTestId("acao-cancelar");
+    expect(screen.queryByTestId("presenca-confirmada")).toBeNull();
+  });
+
+  it("'Paciente confirmou' manda só id, revision e patient_confirmed, avisa e relê o compromisso", async () => {
+    detalhe(BASE);
+    api.patch.mockImplementation(async () => {
+      detalhe({ ...BASE, patient_confirmed_at: CONFIRMADO_EM, patient_confirmed_source: "equipe" });
+      return { data: { id: ID, revision: 1, patient_confirmed_at: CONFIRMADO_EM, patient_confirmed_source: "equipe" } };
+    });
+    abrir();
+    const botao = await screen.findByTestId("acao-paciente-confirmou");
+    expect(botao).toHaveTextContent("Paciente confirmou");
+    expect(within(screen.getByTestId("acoes-do-compromisso")).getByTestId("acao-paciente-confirmou")).toBe(botao);
+    fireEvent.click(botao);
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith("/api/v1/agenda/agendamentos", {
+        id: ID,
+        revision: 1,
+        patient_confirmed: true,
+      }),
+    );
+    await waitFor(() => expect(avisos.success).toHaveBeenCalledWith("Presença confirmada"));
+    expect(await screen.findByTestId("presenca-confirmada")).toHaveTextContent("pela equipe");
+    await waitFor(() => expect(screen.queryByTestId("acao-paciente-confirmou")).toBeNull());
+  });
+
+  it("a recusa da rota (409) mostra o erro e relê, sem toast de sucesso", async () => {
+    detalhe(BASE);
+    api.patch.mockRejectedValue(
+      new ApiError(409, "appointment_patient_confirmation_not_applicable", undefined, "req", "Não dá para marcar."),
+    );
+    abrir();
+    fireEvent.click(await screen.findByTestId("acao-paciente-confirmou"));
+    await screen.findByRole("alert");
+    expect(avisos.success).not.toHaveBeenCalled();
+  });
+
+  it("o botão só aparece quando a rota aceitaria", async () => {
+    const casos: Array<[string, Record<string, unknown>, boolean?]> = [
+      ["sem paciente", { contact_id: null, contato: null }],
+      ["aguardando confirmação", { status: "pending" }],
+      ["já começou", { starts_at: "2020-01-01T12:00:00Z", ends_at: "2020-01-01T12:30:00Z" }],
+      ["já confirmado", { patient_confirmed_at: CONFIRMADO_EM, patient_confirmed_source: "mensagem" }],
+      ["excluído", { excluded_at: "2030-03-01T12:00:00Z" }],
+      ["quem não pode editar", {}, false],
+    ];
+    for (const [caso, extra, podeEditar] of casos) {
+      detalhe({ ...BASE, ...extra });
+      abrir(<Painel podeEditar={podeEditar ?? true} />);
+      await screen.findByTestId("estado-do-compromisso");
+      expect(screen.queryByTestId("acao-paciente-confirmou"), caso).toBeNull();
+      cleanup();
+      client.clear();
+    }
+  });
+});

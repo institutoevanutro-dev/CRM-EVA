@@ -32,14 +32,14 @@ import {
 import { inicioDaGradeDoMes, SEMANAS_DA_GRADE_DO_MES } from "@/lib/agenda/recorte-da-grade";
 import type { FechamentoDaGrade } from "@/lib/agenda/fechamentos-na-grade";
 import { dataDeParede, diaLocalISO, instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
-import { BellSlash, CheckCircle, Clock, Lock, Warning, XCircle } from "@/lib/ui/icons";
+import { Bell, BellSlash, CheckCircle, Checks, Clock, Lock, Warning, XCircle } from "@/lib/ui/icons";
 import { ROTULO_DA_SITUACAO } from "@/lib/agenda/tipos";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
 
 import { corDaTrilha, fundoDaTrilha } from "./paleta";
 import { nomeCurto, rotuloDoBloco } from "./rotulo-do-bloco";
-import { conflitosDaGrade, formaDaSituacao, type IconeDaSituacao } from "./situacao-do-bloco";
+import { conflitosDaGrade, formaDaSituacao, lembreteSemResposta, type IconeDaSituacao } from "./situacao-do-bloco";
 import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
 
 /**
@@ -698,9 +698,12 @@ function BlocoDeAgendamento({
   arraste,
   borda,
   conflito = false,
+  agora,
 }: {
   agendamento: Agendamento;
   pessoa: Pessoa | undefined;
+  /** O instante injetado da grade: "Lembrete sem resposta" só vale antes do horário. */
+  agora: Date;
   /** Cai em cima de bloqueio, "Ocupado" do Google ou outro compromisso do mesmo profissional (A2). */
   conflito?: boolean;
   onAbrir?: (id: string) => void;
@@ -776,15 +779,24 @@ function BlocoDeAgendamento({
   // A10: pediu para não receber mensagens — o lembrete não sai, e a recepção
   // precisa confirmar por telefone.
   const semLembrete = agendamento.naoRecebeMensagens === true && !doGoogle && !cancelado;
+  // 0441: o paciente disse que vem. Só enquanto Agendado: depois, o ícone da
+  // situação diz o que houve, e dois "check" lado a lado se confundiriam.
+  const presencaConfirmada = Boolean(agendamento.presencaConfirmadaEm) && agendamento.situacao === "confirmed" && !doGoogle;
+  // 0441: recebeu o lembrete que pede SIM e não respondeu — a recepção liga.
+  const semResposta = !doGoogle && lembreteSemResposta(agendamento, agora);
   const avisos = [
     situacao,
+    presencaConfirmada ? t("Presença confirmada") : null,
+    semResposta ? t("Lembrete sem resposta") : null,
     conflito ? t("Conflito de horário") : null,
     semLembrete ? t("Sem lembrete") : null,
     faltaNome ? t("Falta o nome completo") : null,
   ].filter(Boolean);
 
   if (baseMin <= topoMin) return null;
-  const nosCantos = [faltaNome, conflito, Boolean(forma.icone), semLembrete].filter(Boolean).length;
+  const nosCantos = [faltaNome, conflito, Boolean(forma.icone), presencaConfirmada, semResposta, semLembrete].filter(
+    Boolean,
+  ).length;
 
   return (
     <button
@@ -831,7 +843,9 @@ function BlocoDeAgendamento({
         pessoa ? `, ${t("atendido por")} ${pessoa.nome}` : ""
       }${
         doGoogle && !agendamento.bloqueio && !agendamento.fonteExterna ? `, ${t("ocupado na agenda do Google")}` : ""
-      }${situacao ? `, ${situacao}` : ""}${conflito ? `, ${t("conflito de horário")}` : ""}${
+      }${situacao ? `, ${situacao}` : ""}${presencaConfirmada ? `, ${t("presença confirmada")}` : ""}${
+        semResposta ? `, ${t("lembrete sem resposta")}` : ""
+      }${conflito ? `, ${t("conflito de horário")}` : ""}${
         semLembrete ? `, ${t("sem lembrete")}` : ""
       }${
         faltaNome ? `, ${t("falta o nome completo")}` : ""
@@ -910,6 +924,29 @@ function BlocoDeAgendamento({
           <Warning aria-hidden data-testid={`conflito-${agendamento.id}`} size={12} weight="fill" className="text-error" />
         ) : null}
         <IconeDeSituacao icone={forma.icone} id={agendamento.id} />
+        {/* Forma própria, e não só cor (check duplo e sino): o nome vai no
+            próprio ícone também, para quem passa o mouse nele. */}
+        {presencaConfirmada ? (
+          <Checks
+            role="img"
+            aria-label={t("Presença confirmada")}
+            alt={t("Presença confirmada")}
+            data-testid={`presenca-confirmada-${agendamento.id}`}
+            size={12}
+            weight="bold"
+            className="shrink-0 text-success-fg"
+          />
+        ) : null}
+        {semResposta ? (
+          <Bell
+            role="img"
+            aria-label={t("Lembrete sem resposta")}
+            alt={t("Lembrete sem resposta")}
+            data-testid={`lembrete-sem-resposta-${agendamento.id}`}
+            size={12}
+            className="shrink-0 text-text-muted"
+          />
+        ) : null}
         {semLembrete ? (
           <BellSlash aria-hidden data-testid={`sem-lembrete-${agendamento.id}`} size={12} className="text-text-muted" />
         ) : null}
@@ -1258,6 +1295,7 @@ function ColunaDeDia({
             coluna={coluna}
             colunas={colunas}
             visao={visao}
+            agora={agora}
             conflito={conflitos.has(agendamento.id)}
             arraste={
               arrasteDoCard
@@ -2177,6 +2215,14 @@ function LegendaDaGrade() {
       <span className={item}>
         <XCircle aria-hidden size={12} weight="fill" className="text-error" />
         {t(ROTULO_DA_SITUACAO.no_show)}
+      </span>
+      <span className={item}>
+        <Checks aria-hidden size={12} weight="bold" className="text-success-fg" />
+        {t("Presença confirmada")}
+      </span>
+      <span className={item}>
+        <Bell aria-hidden size={12} />
+        {t("Lembrete sem resposta")}
       </span>
       <span className={item}>
         <Warning aria-hidden size={12} weight="fill" className="text-error" />
