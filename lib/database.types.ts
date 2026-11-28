@@ -2287,6 +2287,10 @@ export type Database = {
           booking_channel: string | null
           converted_by_kind: string | null
           converted_by_user_id: string | null
+          patient_confirmed_at: string | null
+          patient_confirmed_source: string | null
+          patient_confirmed_message_id: string | null
+          patient_confirmed_user_id: string | null
           id: string
           location_details: string | null
           location_kind: string
@@ -2364,6 +2368,10 @@ export type Database = {
           booking_channel?: string | null
           converted_by_kind?: string | null
           converted_by_user_id?: string | null
+          patient_confirmed_at?: string | null
+          patient_confirmed_source?: string | null
+          patient_confirmed_message_id?: string | null
+          patient_confirmed_user_id?: string | null
           id?: string
           location_details?: string | null
           location_kind?: string
@@ -2441,6 +2449,10 @@ export type Database = {
           booking_channel?: string | null
           converted_by_kind?: string | null
           converted_by_user_id?: string | null
+          patient_confirmed_at?: string | null
+          patient_confirmed_source?: string | null
+          patient_confirmed_message_id?: string | null
+          patient_confirmed_user_id?: string | null
           id?: string
           location_details?: string | null
           location_kind?: string
@@ -2949,6 +2961,7 @@ export type Database = {
           position: number
           reminder_body: string | null
           reminder_enabled: boolean
+          reminder_asks_confirmation: boolean
           reminder_minutes_before: number
           reminder_extra_offsets_minutes: number[]
           reminder_template_name: string | null
@@ -2980,6 +2993,7 @@ export type Database = {
           position?: number
           reminder_body?: string | null
           reminder_enabled?: boolean
+          reminder_asks_confirmation?: boolean
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
           reminder_template_name?: string | null
@@ -3011,6 +3025,7 @@ export type Database = {
           position?: number
           reminder_body?: string | null
           reminder_enabled?: boolean
+          reminder_asks_confirmation?: boolean
           reminder_minutes_before?: number
           reminder_extra_offsets_minutes?: number[]
           reminder_template_name?: string | null
@@ -8523,6 +8538,7 @@ export type Database = {
       fn_agenda_minutes: { Args: { p_settings: Json; p_key: string; p_default: number }; Returns: number }
       fn_followup_claim_current: { Args: { p_org: string; p_job: string; p_worker: string; p_acquired_at: string }; Returns: boolean }
       fn_appointment_change: { Args: { p_org: string; p_id: string; p_revision: number; p_patch: Json }; Returns: Json }
+      fn_appointment_patient_confirm: { Args: { p_appointment_id: string; p_expected_revision: number; p_source: string; p_message_id: string | null; p_user_id: string | null }; Returns: string }
       fn_appointment_exclude: { Args: { p_org: string; p_id: string; p_reason: string }; Returns: Json }
       fn_appointment_recover: { Args: { p_org: string; p_event: string }; Returns: Json }
       fn_appointment_confirmation_sweep: { Args: { p_limit?: number; p_now?: string }; Returns: number }

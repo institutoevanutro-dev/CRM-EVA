@@ -110,6 +110,16 @@ export type CanalDaMarcacao = (typeof CANAIS_DA_MARCACAO)[number];
 export const QUEM_CONVERTEU = ["user", "ai"] as const;
 export type QuemConverteu = (typeof QUEM_CONVERTEU)[number];
 
+/**
+ * Por onde veio a presença confirmada pelo paciente
+ * (`calendar_appointments.patient_confirmed_source`, migration 0441): a resposta
+ * dele ao lembrete (`mensagem`) ou a recepção marcando, ex.: por telefone
+ * (`equipe`). Nula no banco = ainda não confirmou. A forma `as const` é
+ * requisito de `tests/invariants/vocabulario-banco-x-typescript.test.ts`.
+ */
+export const ORIGENS_DA_CONFIRMACAO_DO_PACIENTE = ["mensagem", "equipe"] as const;
+export type OrigemDaConfirmacaoDoPaciente = (typeof ORIGENS_DA_CONFIRMACAO_DO_PACIENTE)[number];
+
 export const ROTULO_DA_SITUACAO: Record<SituacaoDoAgendamento, string> = {
   pending: "Aguardando confirmação",
   confirmed: "Confirmado",

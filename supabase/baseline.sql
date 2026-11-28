@@ -20095,6 +20095,27 @@ alter table public.agent_inbox_items add column if not exists appointment_revisi
 create unique index if not exists inbox_appointment_revision_unique
  on public.agent_inbox_items(organization_id,ref_id,appointment_revision,kind)
  where ref_kind='appointment' and appointment_revision is not null;
+-- ---- as colunas da presença confirmada pelo paciente (migration 0441), AQUI e não no
+-- bloco dela: fn_appointment_stamp, logo abaixo, já nasce com o corpo FINAL, que as
+-- zera ao remarcar. Reaplicar o arquivo num banco antigo não passa por um trecho em
+-- que o gatilho conhece colunas que ainda não existem. O resto da 0441 está no bloco dela.
+alter table public.calendar_appointments
+ add column if not exists patient_confirmed_at timestamptz,
+ add column if not exists patient_confirmed_source text,
+ add column if not exists patient_confirmed_message_id uuid references public.messages(id) on delete set null,
+ add column if not exists patient_confirmed_user_id uuid references auth.users(id) on delete set null;
+do $$
+begin
+ if not exists (
+  select 1 from pg_constraint
+   where conname = 'calendar_appointments_patient_confirmed_source_check'
+     and conrelid = 'public.calendar_appointments'::regclass
+ ) then
+  alter table public.calendar_appointments
+   add constraint calendar_appointments_patient_confirmed_source_check
+   check (patient_confirmed_source in ('mensagem', 'equipe'));
+ end if;
+end $$;
 create or replace function public.fn_appointment_stamp()
 returns trigger language plpgsql security definer set search_path=public as $$
 declare changed boolean; actor uuid;
@@ -20114,6 +20135,11 @@ begin
  new.revision:=old.revision+case when changed then 1 else 0 end;
  new.revision_started_at:=case when changed then clock_timestamp() else old.revision_started_at end;
  if changed then new.confirmation_next_at:=null; end if;
+ -- 0441: a presença confirmada pelo paciente vale para o horário que ele confirmou.
+ if new.starts_at is distinct from old.starts_at then
+  new.patient_confirmed_at:=null; new.patient_confirmed_source:=null;
+  new.patient_confirmed_message_id:=null; new.patient_confirmed_user_id:=null;
+ end if;
  if new.status is distinct from old.status and new.status in ('completed','no_show') then
   actor:=auth.uid();
   -- 0401: "Realizado" informado pela integração do prontuário. Só chega aqui por
@@ -40787,6 +40813,56 @@ begin
     where status = 'open' and source_metadata ? 'clonado_de';
 end $clone_aberto_unico$;
 -- ---- fim: uma só cópia aberta por origem e destino vira índice único (migration 0440) ----
+
+-- ---- paciente confirma a presença (migration 0441) ----
+-- Derivado de supabase/migrations/20261128090000_0441_paciente_confirma_presenca.sql.
+-- As 4 colunas de calendar_appointments e o corpo novo de fn_appointment_stamp
+-- (zera a confirmação quando starts_at muda) estão no bloco da 0224, e a razão
+-- está escrita lá. Aqui: a chave do tipo, o RPC e os comentários. Cria função:
+-- entra ANTES da VARREDURA anon. Idempotente.
+alter table public.calendar_event_types
+ add column if not exists reminder_asks_confirmation boolean not null default false;
+
+create or replace function public.fn_appointment_patient_confirm(
+ p_appointment_id uuid, p_expected_revision int, p_source text, p_message_id uuid, p_user_id uuid)
+returns text language plpgsql security definer set search_path=public as $$
+declare a public.calendar_appointments;
+begin
+ if p_source is null or p_source not in ('mensagem','equipe')
+  or (p_source='mensagem' and p_message_id is null) or (p_source='equipe' and p_user_id is null) then
+  raise exception 'patient_confirm_invalid_source' using errcode='22023'; end if;
+ -- Trava a linha: dois "SIM" seguidos, ou o SIM e o botão da recepção, gravam uma vez só.
+ select * into a from public.calendar_appointments where id=p_appointment_id for update;
+ if not found or a.status<>'confirmed' or a.starts_at<=now() or a.revision is distinct from p_expected_revision then
+  return 'nao_se_aplica'; end if;
+ if a.patient_confirmed_at is not null then return 'ja_confirmado'; end if;
+ -- Sem organização no argumento: a prova da mensagem é amarrada à organização e ao paciente do compromisso.
+ if p_source='mensagem' and not exists(select 1 from public.messages m where m.id=p_message_id
+   and m.organization_id=a.organization_id and m.contact_id=a.contact_id and m.direction='inbound') then
+  raise exception 'patient_confirm_message_not_evidence' using errcode='42501'; end if;
+ -- Não mexe em starts_at nem em status: fn_appointment_stamp não incrementa a revisão.
+ update public.calendar_appointments set patient_confirmed_at=now(), patient_confirmed_source=p_source,
+  patient_confirmed_message_id=case when p_source='mensagem' then p_message_id end,
+  patient_confirmed_user_id=case when p_source='equipe' then p_user_id end
+  where id=a.id;
+ return 'confirmado';
+end; $$;
+comment on function public.fn_appointment_patient_confirm(uuid,int,text,uuid,uuid) is
+ 'Grava "Presença confirmada" pelo paciente (migration 0441): source mensagem (resposta ao lembrete, com a mensagem inbound do paciente) ou equipe (a recepção marcou, com a pessoa). Só em compromisso confirmed, futuro e na revisão esperada. Devolve confirmado, ja_confirmado ou nao_se_aplica. Só service_role.';
+revoke execute on function public.fn_appointment_patient_confirm(uuid,int,text,uuid,uuid) from public,anon,authenticated;
+grant execute on function public.fn_appointment_patient_confirm(uuid,int,text,uuid,uuid) to service_role;
+
+comment on column public.calendar_appointments.patient_confirmed_at is
+ 'Quando o paciente confirmou que vem. Marca separada do status (o compromisso segue confirmed, "Agendado"). Gravada só por fn_appointment_patient_confirm; zerada por fn_appointment_stamp quando starts_at muda. Migration 0441.';
+comment on column public.calendar_appointments.patient_confirmed_source is
+ 'Por onde veio a confirmação do paciente: mensagem (resposta ao lembrete) ou equipe (a recepção marcou, ex.: por telefone). Vocabulário em lib/agenda/tipos.ts. Migration 0441.';
+comment on column public.calendar_appointments.patient_confirmed_message_id is
+ 'A mensagem do paciente que confirmou, quando patient_confirmed_source = mensagem. Migration 0441.';
+comment on column public.calendar_appointments.patient_confirmed_user_id is
+ 'Quem da equipe marcou a confirmação, quando patient_confirmed_source = equipe. Migration 0441.';
+comment on column public.calendar_event_types.reminder_asks_confirmation is
+ 'Com a chave ligada, o lembrete deste tipo termina pedindo ao paciente que responda SIM para confirmar a presença. Desligada por padrão. Migration 0441.';
+-- ---- fim: paciente confirma a presença (migration 0441) ----
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
