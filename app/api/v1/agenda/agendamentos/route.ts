@@ -130,6 +130,12 @@ const alterarSchema = z
     guest_email: emailDoConvidado.optional(),
     /** Corrigir o canal da marcação (bônus); não remarca nem muda a revisão. */
     booking_channel: z.enum(CANAIS_DA_MARCACAO).optional(),
+    /**
+     * "Paciente confirmou" (migration 0441): a recepção marca a presença
+     * confirmada, por exemplo por telefone. Ação própria, e não mais um campo:
+     * vem SÓ com `id` e `revision` (veja o refine abaixo).
+     */
+    patient_confirmed: z.literal(true).optional(),
   })
   .refine(
     (c) =>
@@ -139,9 +145,32 @@ const alterarSchema = z
       c.status !== undefined ||
       c.notes !== undefined ||
       c.guest_email !== undefined ||
-      c.booking_channel !== undefined,
+      c.booking_channel !== undefined ||
+      c.patient_confirmed !== undefined,
     {
       message: "Informe pelo menos um campo para alterar.",
+    },
+  )
+  // A confirmação vale para o horário que a tela mostrou: exige a revisão e não
+  // se mistura com remarcar, mudar a situação ou editar. Misturar faria o
+  // "confirmado" cair num horário que o paciente não confirmou.
+  .refine(
+    (c) =>
+      c.patient_confirmed === undefined ||
+      (c.revision !== undefined &&
+        [
+          c.outcome_message_id,
+          c.confirmation_next_at,
+          c.starts_at,
+          c.duration_minutes,
+          c.status,
+          c.notes,
+          c.guest_email,
+          c.booking_channel,
+        ].every((v) => v === undefined)),
+    {
+      message: "\"Paciente confirmou\" vem sozinho, com a revisão do compromisso.",
+      path: ["patient_confirmed"],
     },
   );
 

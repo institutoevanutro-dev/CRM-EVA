@@ -69,6 +69,10 @@ export const ApiErrorCodes = {
 
   // 409 — conflito
   idempotency_conflict: "idempotency_conflict",
+  // PATCH /api/v1/agenda/agendamentos com `patient_confirmed: true` (migration
+  // 0441): o compromisso não aceita "Paciente confirmou" — sem paciente, fora de
+  // "Agendado", já começou ou mudou de revisão desde que a tela o leu.
+  appointment_patient_confirmation_not_applicable: "appointment_patient_confirmation_not_applicable",
   state_conflict: "state_conflict",
   invalid_state: "invalid_state", // resposta a um agent_case que saiu de awaiting_human (spec 15 §7)
   tenant_already_exists: "tenant_already_exists",

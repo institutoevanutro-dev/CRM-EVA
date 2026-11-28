@@ -29,8 +29,10 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
+import type { Actor } from "@/lib/api/handlers/types";
 import { normalizarTexto } from "@/lib/opt-out/deteccao";
 import type { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { leadAtivoDoContato } from "./lead-ativo-do-contato";
 import type { AtividadeDaAgenda, OrigemDaConfirmacaoDoPaciente } from "./tipos";
@@ -182,33 +184,53 @@ export async function lerConfirmacaoDoLembrete(e: {
   const resultado = data as "confirmado" | "ja_confirmado" | "nao_se_aplica";
   if (resultado !== "confirmado") return resultado;
 
-  // A auditoria antes da timeline: ela não lança, e a linha dela não pode depender da outra.
-  void audit({
-    action: "agenda.paciente_confirmou",
-    actorUserId: null,
+  await registrarPresencaConfirmada(admin, {
     organizationId: e.organizationId,
-    resourceType: "calendar_appointment",
-    resourceId: carimbo.appointmentId,
+    appointmentId: carimbo.appointmentId,
+    contactId: e.contactId,
+    source: ORIGEM,
+    actor: ATOR,
+    messageId: e.messageId,
     requestId: e.requestId,
-    metadata: { appointment_id: carimbo.appointmentId, source: ORIGEM },
   });
-  await registrarNaTimeline(e, carimbo.appointmentId);
   return "confirmado";
 }
 
 /**
- * A linha na timeline do negócio ativo do contato, pela mesma régua das outras
+ * Os efeitos da presença já gravada, pelos dois caminhos (a resposta ao lembrete
+ * e o botão "Paciente confirmou" da equipe): a auditoria `agenda.paciente_confirmou`
+ * e a linha na timeline do negócio ativo do contato, pela mesma régua das outras
  * atividades da agenda (`leadAtivoDoContato`). Sem negócio, ou com a escrita
  * falhando, o rastro vira `event_log` por `registraFalhaDeAtividade`, com o id
  * do negócio quando há um e o do contato quando não há.
  * Nunca lança: a confirmação já está gravada.
  */
-async function registrarNaTimeline(
-  e: Parameters<typeof lerConfirmacaoDoLembrete>[0],
-  appointmentId: string,
+export async function registrarPresencaConfirmada(
+  db: SupabaseClient,
+  e: {
+    organizationId: string;
+    appointmentId: string;
+    contactId: string;
+    source: OrigemDaConfirmacaoDoPaciente;
+    actor: Actor;
+    /** A resposta do paciente, quando a origem é a mensagem. */
+    messageId?: string;
+    requestId?: string;
+  },
 ): Promise<void> {
+  // A auditoria antes da timeline: ela não lança, e a linha dela não pode depender da outra.
+  void audit({
+    action: "agenda.paciente_confirmou",
+    actorUserId: e.actor.type === "user" ? e.actor.id : null,
+    organizationId: e.organizationId,
+    resourceType: "calendar_appointment",
+    resourceId: e.appointmentId,
+    requestId: e.requestId,
+    metadata: { appointment_id: e.appointmentId, source: e.source },
+  });
+
   const falha = (ancora: string, erro: string | undefined, origem = "agenda (confirmação do paciente)") =>
-    registraFalhaDeAtividade(e.admin, {
+    registraFalhaDeAtividade(db, {
       organizationId: e.organizationId,
       leadId: ancora,
       tipo: ATIVIDADE_DA_PRESENCA_CONFIRMADA,
@@ -218,19 +240,22 @@ async function registrarNaTimeline(
     });
   let leadId: string | null = null;
   try {
-    leadId = await leadAtivoDoContato(e.admin, e.organizationId, e.contactId);
+    leadId = await leadAtivoDoContato(db, e.organizationId, e.contactId);
     if (!leadId) return await falha(e.contactId, undefined, "agenda (sem negócio aberto para ancorar)");
 
-    const { ok, error } = await emitLeadActivity(e.admin, {
+    const { ok, error } = await emitLeadActivity(db, {
       organizationId: e.organizationId,
       leadId,
       contactId: e.contactId,
       type: ATIVIDADE_DA_PRESENCA_CONFIRMADA,
       sourceModule: "agenda",
-      sourceId: appointmentId,
-      actor: ATOR,
-      reason: "O paciente confirmou a presença respondendo ao lembrete",
-      payload: { source: ORIGEM, message_id: e.messageId },
+      sourceId: e.appointmentId,
+      actor: e.actor,
+      reason:
+        e.source === "mensagem"
+          ? "O paciente confirmou a presença respondendo ao lembrete"
+          : "A equipe registrou que o paciente confirmou a presença",
+      payload: e.messageId ? { source: e.source, message_id: e.messageId } : { source: e.source },
     });
     if (!ok) await falha(leadId, error);
   } catch (err) {

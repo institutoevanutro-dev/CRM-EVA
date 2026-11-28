@@ -41,6 +41,7 @@ import { lerJornadaDoBanco } from "@/lib/agenda/jornada";
 import { atendeOProcedimento, unidadesDaJornada } from "@/lib/agenda/marcacao-simples";
 import { diaLocalISO } from "@/lib/agenda/fuso";
 import { leadAtivoDoContato } from "@/lib/agenda/lead-ativo-do-contato";
+import { registrarPresencaConfirmada } from "@/lib/agenda/confirmacao-do-lembrete";
 import { idsForaDaOrg } from "@/lib/tenancy/pertence-a-org";
 import {
   atividadeDaTransicao,
@@ -55,6 +56,7 @@ import {
   ENTIDADE_DO_AGENDAMENTO,
   type QuemConverteu,
   NOME_GENERICO_DO_TIPO,
+  type OrigemDaConfirmacaoDoPaciente,
   VINCULO_DE_AGENDAMENTO,
 } from "@/lib/agenda/tipos";
 import { ApiError } from "@/lib/api/types";
@@ -65,6 +67,7 @@ import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import { leadParaEspelharNaAgenda, moverLeadParaEtapaDeAgendamento } from "@/lib/leads/appointment-stage-move";
 import { logger } from "@/lib/logger";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type SB = SupabaseClient;
@@ -146,6 +149,12 @@ export interface AlterarInput {
   guest_email?: string;
   /** Correção do canal da marcação (só pessoa). Não é remarcação nem muda a revisão. */
   booking_channel?: CanalDaMarcacao;
+  /**
+   * "Paciente confirmou" (migration 0441): a recepção marca que o paciente
+   * confirmou a presença, por exemplo por telefone. Ação própria: vem só com
+   * `id` e `revision` (a rota recusa misturar), e não muda status nem horário.
+   */
+  patient_confirmed?: true;
 }
 
 export interface CancelarInput {
@@ -457,6 +466,8 @@ export async function alterarAgendamentoHandler(
   ctx: HandlerCtx,
   input: AlterarInput,
 ): Promise<Record<string, unknown>> {
+  if (input.patient_confirmed) return pacienteConfirmouPelaEquipe(supabase, ctx, input.id, input.revision);
+
   const atual = await exigeAgendamento(supabase, ctx, input.id, [
     "id",
     "revision",
@@ -662,6 +673,75 @@ export async function alterarAgendamentoHandler(
     organizationId:ctx.organization_id,resourceType:"calendar_appointment",resourceId:input.id,requestId:ctx.requestId,
     metadata:{revision:salvo.revision,confirmation_next_at:salvo.confirmation_next_at}});
   return salvo as Record<string, unknown>;
+}
+
+/** Os campos da presença confirmada que a resposta devolve (o id da pessoa fica no detalhe). */
+const CAMPOS_DA_PRESENCA = ["id", "revision", "patient_confirmed_at", "patient_confirmed_source"];
+
+/**
+ * "Paciente confirmou", marcado pela equipe (migration 0441, decisão 8 da spec).
+ *
+ * O RPC `fn_appointment_patient_confirm` NÃO recebe a organização e só
+ * `service_role` o executa. Por isso a ordem importa: primeiro o compromisso é
+ * lido pela SESSÃO com a organização do contexto (cookie validado, nunca o
+ * corpo) — outra organização é 404 aqui e o RPC nem é chamado —, e só então o
+ * RPC roda pelo client de serviço.
+ *
+ * Quem decide se ainda dá para confirmar (status `confirmed`, antes do início,
+ * revisão do pedido, já confirmado) é o banco. A revisão vem do pedido: se o
+ * compromisso foi remarcado depois que a recepção abriu o painel, a marca não
+ * cai no horário novo, que o paciente não confirmou. A chave "Pedir confirmação
+ * no lembrete" do tipo não é consultada: o botão vale com ela desligada.
+ */
+async function pacienteConfirmouPelaEquipe(
+  supabase: SB,
+  ctx: HandlerCtx,
+  id: string,
+  revision: number | undefined,
+): Promise<Record<string, unknown>> {
+  if (ctx.actor.type !== "user") {
+    throw new ApiError(403, "forbidden", undefined, ctx.requestId, "Só alguém da equipe marca que o paciente confirmou.");
+  }
+  if (revision === undefined) {
+    throw new ApiError(422, "validation_failed", undefined, ctx.requestId, "Informe a revisão do compromisso.");
+  }
+  const naoSeAplica = () =>
+    new ApiError(
+      409,
+      "appointment_patient_confirmation_not_applicable",
+      undefined,
+      ctx.requestId,
+      "Não dá para marcar a presença: o compromisso precisa ter paciente, estar Agendado, ainda não ter começado " +
+        "e não ter mudado desde que você o abriu. Recarregue e confira.",
+    );
+
+  const atual = await exigeAgendamento(supabase, ctx, id, ["id", "contact_id"]);
+  if (!atual.contact_id) throw naoSeAplica();
+
+  await guardServiceEffect();
+  const { data, error } = await createAdminClient().rpc("fn_appointment_patient_confirm", {
+    p_appointment_id: id,
+    p_expected_revision: revision,
+    p_source: "equipe" satisfies OrigemDaConfirmacaoDoPaciente,
+    p_message_id: null,
+    p_user_id: ctx.actor.id,
+  });
+  if (error) throw new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
+  const desfecho = data as "confirmado" | "ja_confirmado" | "nao_se_aplica";
+  if (desfecho === "nao_se_aplica") throw naoSeAplica();
+
+  const salvo = await exigeAgendamento(supabase, ctx, id, CAMPOS_DA_PRESENCA);
+  if (desfecho === "ja_confirmado") return { ...salvo, ja_estava: true };
+
+  await registrarPresencaConfirmada(supabase, {
+    organizationId: ctx.organization_id,
+    appointmentId: id,
+    contactId: atual.contact_id as string,
+    source: "equipe",
+    actor: ctx.actor,
+    requestId: ctx.requestId,
+  });
+  return salvo;
 }
 
 /**
