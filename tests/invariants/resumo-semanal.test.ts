@@ -65,5 +65,18 @@ describe("resumo semanal (0431)", () => {
     expect(j.agenda.criados).toBe(1);
     expect(j.agenda.realizados).toBe(1);
   });
+
+  it("datas do tratamento que o Prontuário marca (created_by_kind system) não são agendamento novo, mas acontecem (0442)", () => {
+    const j = JSON.parse(lastLine(
+      sql(`delete from calendar_appointments where organization_id='${GOV_ORG}' and title like 'resumo-%';
+           insert into calendar_appointments(organization_id,title,starts_at,ends_at,status,source)
+             values ('${GOV_ORG}','resumo-normal',now(),now()+interval '30 min','completed','ui');
+           insert into calendar_appointments(organization_id,title,starts_at,ends_at,status,source,created_by_kind)
+             values ('${GOV_ORG}','resumo-sessao-do-tratamento',now()+interval '1 hour',now()+interval '90 min','completed','mcp','system');
+           select public.fn_marketing_semana('${GOV_ORG}', now() - interval '3 hours', now() + interval '2 days');`),
+    ));
+    expect(j.agenda.criados).toBe(1);
+    expect(j.agenda.realizados).toBe(2);
+  });
 });
 
