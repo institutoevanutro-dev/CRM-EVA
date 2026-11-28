@@ -2,8 +2,10 @@ import { readFileSync } from "node:fs";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { lerConfirmacaoDoLembrete } from "@/lib/agenda/confirmacao-do-lembrete";
 import type { EntradaDeMensagem } from "@/lib/channels/pos-entrada";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
+import { logger } from "@/lib/logger";
 
 /**
  * OS EFEITOS QUE TRANSFORMAM UMA MENSAGEM EM TRABALHO.
@@ -45,6 +47,9 @@ vi.mock("@/lib/logger", () => ({
 vi.mock("@/lib/dev/kick-local-pipeline", () => ({
   acelerarPipelineDeEventos: vi.fn(async () => {}),
   kickLocalPipeline: vi.fn(async () => {}),
+}));
+vi.mock("@/lib/agenda/confirmacao-do-lembrete", () => ({
+  lerConfirmacaoDoLembrete: vi.fn(async () => "nao_e_confirmacao"),
 }));
 
 /** A sequência do que ACONTECEU — é o que os casos de ordem inspecionam. */
@@ -159,6 +164,9 @@ beforeEach(() => {
   garantirLeadDaConversa.mockClear();
   garantirLeadDaConversa.mockResolvedValue({ criado: true, leadId: "lead-1" } as never);
   vi.mocked(acelerarPipelineDeEventos).mockClear();
+  vi.mocked(lerConfirmacaoDoLembrete).mockReset();
+  vi.mocked(lerConfirmacaoDoLembrete).mockResolvedValue("nao_e_confirmacao");
+  vi.mocked(logger.warn).mockClear();
 });
 
 describe("a ordem dos três efeitos", () => {
@@ -533,6 +541,67 @@ describe("opt-out encerra as demandas abertas do contato (#3288)", () => {
 
     expect(encerramentos()).toHaveLength(1);
     expect(audit).not.toHaveBeenCalledWith(expect.objectContaining({ action: "demanda.encerrada" }));
+  });
+});
+
+describe("o paciente confirma a presença respondendo ao lembrete", () => {
+  it("lê a resposta DEPOIS do opt-out e antes do lead, com a mensagem que chegou", async () => {
+    vi.mocked(lerConfirmacaoDoLembrete).mockImplementation(async () => {
+      sequencia.push("ler-confirmacao");
+      return "nao_e_confirmacao";
+    });
+    garantirLeadDaConversa.mockImplementation(async () => {
+      sequencia.push("lead-nasce");
+      return { criado: true, leadId: "lead-1" } as never;
+    });
+
+    await rodar({ texto: "PARAR" });
+
+    const optOut = sequencia.indexOf("update:contacts");
+    const leitura = sequencia.indexOf("ler-confirmacao");
+    expect(leitura, "a leitura rodou antes do opt-out").toBeGreaterThan(optOut);
+    expect(sequencia.indexOf("lead-nasce")).toBeGreaterThan(leitura);
+    expect(lerConfirmacaoDoLembrete).toHaveBeenCalledWith({
+      admin,
+      organizationId: "org-1",
+      conversationId: "conversa-1",
+      contactId: "contato-1",
+      messageId: "msg-1",
+      body: "PARAR",
+      requestId: "req-1",
+    });
+  });
+
+  it("uma leitura que não termina NÃO segura o despacho do agente (Foco 5)", async () => {
+    vi.mocked(lerConfirmacaoDoLembrete).mockImplementation(() => new Promise(() => {}));
+
+    await Promise.race([
+      rodar({ texto: "SIM" }),
+      new Promise((_, falha) => setTimeout(() => falha(new Error("o despacho esperou a leitura")), 500)),
+    ]);
+
+    expect(sequencia).toContain("rpc:ai_agent.dispatch_requested");
+  });
+
+  it("uma leitura que falha NÃO derruba a ingestão e fica no log", async () => {
+    vi.mocked(lerConfirmacaoDoLembrete).mockRejectedValue(new Error("banco indisponível"));
+
+    await expect(rodar({ texto: "SIM" })).resolves.toBeUndefined();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(sequencia).toContain("rpc:ai_agent.dispatch_requested");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("confirmação"),
+      expect.objectContaining({ organization_id: "org-1", message_id: "msg-1" }),
+    );
+  });
+
+  it.each<[string, Partial<EntradaDeMensagem>]>([
+    ["sem id (reentrega)", { messageId: null, texto: "SIM" }],
+    ["sem texto", { texto: null }],
+  ])("%s: não há o que ler", async (_rotulo, over) => {
+    await rodar(over);
+    expect(lerConfirmacaoDoLembrete).not.toHaveBeenCalled();
   });
 });
 
