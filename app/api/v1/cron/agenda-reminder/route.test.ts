@@ -241,6 +241,24 @@ describe("o carimbo vem ANTES do envio e é condicional (#2223, spec 3.9)", () =
   });
 });
 
+describe("o carimbo da mensagem leva a revisão LIDA (pedido de confirmação, 0441)", () => {
+  const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
+  const consulta = fonte.slice(fonte.indexOf(".select("), fonte.indexOf('.eq("status"'));
+
+  it("a consulta traz a revisão do compromisso e a chave do tipo", () => {
+    expect(consulta).toMatch(/[ ,"]revision[ ,"]/);
+    expect(consulta).toContain("reminder_asks_confirmation");
+  });
+
+  it("o carimbo da linha só pega a revisão lida — a mensagem nunca leva revisão velha", () => {
+    // Sem isto, um `ends_at` mudado no meio da rodada (que vira a revisão sem
+    // mexer em status nem horário) faria o lembrete sair com a revisão de
+    // antes, e o SIM do paciente seria recusado pelo RPC em silêncio.
+    const update = fonte.slice(fonte.indexOf("reminder_sent_at: new Date()")).slice(0, 1600);
+    expect(update).toContain('.eq("revision", linha.revision)');
+  });
+});
+
 describe("a rota lê a régua da remarcação (#2230)", () => {
   const fonte = readFileSync(join(__dirname, "route.ts"), "utf8");
 

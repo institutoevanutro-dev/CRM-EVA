@@ -707,3 +707,34 @@ describe('sendMessageHandler — autoria gravada na linha', () => {
     expect(metadataDa(msg)).toMatchObject({ texto_fixo_do_fluxo: 'true', ai_actor_id: 'agente-1' });
   });
 });
+
+/**
+ * O carimbo do lembrete (0441) mora no `metadata` que o cron PASSA, e o leitor
+ * da confirmação o procura na MESMA linha cujo `status` o handler atualiza. Se
+ * algum desfecho regravasse `metadata` sem espalhar o anterior, o SIM do
+ * paciente deixaria de achar o compromisso em silêncio.
+ */
+describe('sendMessageHandler — o metadata do chamador sobrevive aos desfechos', () => {
+  const carimbo = { agenda_lembrete: { appointment_id: '66666666-6666-4666-8666-666666666666', revision: 2 } };
+  const cron: HandlerCtx = { ...ctx, actor: { type: 'webhook_source', id: 'compromisso' } };
+
+  it('queued (canal não configurado): o carimbo fica ao lado do queued_reason', async () => {
+    wahaConfigured(false);
+    vi.stubGlobal('fetch', vi.fn());
+
+    const msg = await sendMessageHandler(makeSupabase(conversationRow()), cron, textInput({ metadata: carimbo }));
+
+    expect(msg.status).toBe('queued');
+    expect(msg.metadata).toMatchObject({ ...carimbo, queued_reason: 'waha_not_configured' });
+  });
+
+  it('sent: o carimbo continua na linha enviada', async () => {
+    wahaConfigured(true);
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ key: { id: 'TEXT1' } })));
+
+    const msg = await sendMessageHandler(makeSupabase(conversationRow()), cron, textInput({ metadata: carimbo }));
+
+    expect(msg.status).toBe('sent');
+    expect(msg.metadata).toMatchObject(carimbo);
+  });
+});

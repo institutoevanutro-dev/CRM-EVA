@@ -35,8 +35,12 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { leadAtivoDoContato } from "./lead-ativo-do-contato";
 import type { AtividadeDaAgenda, OrigemDaConfirmacaoDoPaciente } from "./tipos";
 
-/** Acrescentada pelo sistema ao lembrete do tipo com a chave ligada, para nunca faltar a palavra que o leitor sabe ler. */
-export const FRASE_PEDIDO_DE_CONFIRMACAO = "Para confirmar sua presença, responda SIM.";
+/**
+ * Acrescentada pelo sistema ao lembrete do tipo com a chave ligada, para nunca
+ * faltar a palavra que este leitor sabe ler. Definida no módulo puro do texto
+ * (a prévia da tela a usa, e este arquivo puxa servidor) e reexportada aqui.
+ */
+export { FRASE_PEDIDO_DE_CONFIRMACAO } from "./texto-do-lembrete";
 
 /** A linha "Paciente confirmou presença" na timeline do negócio. */
 export const ATIVIDADE_DA_PRESENCA_CONFIRMADA = "appointment_patient_confirmed" satisfies AtividadeDaAgenda;

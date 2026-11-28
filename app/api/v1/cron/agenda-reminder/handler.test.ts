@@ -30,6 +30,8 @@ import { providersDeEnvioAutomatico } from "@/lib/channels";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { CHAVE_DO_CARIMBO_DO_LEMBRETE, FRASE_PEDIDO_DE_CONFIRMACAO } from "@/lib/agenda/confirmacao-do-lembrete";
+
 import { GET } from "./route";
 
 const AGORA = new Date("2026-10-12T15:00:00Z"); // 11:00 em Manaus, 12:00 em São Paulo
@@ -109,6 +111,7 @@ function linhaDoCompromisso(tipo: Record<string, unknown>): Linha {
     owner_user_id: null,
     created_at: "2026-10-10T10:00:00.000Z",
     starts_at_marked_at: null,
+    revision: 3,
     location_details: null,
     reminder_sent_offsets_minutes: null,
     reminder_sent_at: null,
@@ -120,6 +123,7 @@ function linhaDoCompromisso(tipo: Record<string, unknown>): Linha {
       reminder_extra_offsets_minutes: null,
       reminder_template_name: null,
       reminder_body: null,
+      reminder_asks_confirmation: false,
       location_details: null,
       ...tipo,
     },
@@ -241,5 +245,45 @@ describe("o número fixo do lembrete (settings.agenda_lembrete.channel_session_i
       expect.stringContaining("número fixo"),
       expect.objectContaining({ motivo: "canal_fixo_desconectado_ou_inexistente", organizationId: ORG }),
     );
+  });
+});
+
+describe("o lembrete carimba o compromisso e, com a chave do tipo, pede confirmação", () => {
+  const FIM = `\n\n${FRASE_PEDIDO_DE_CONFIRMACAO}`;
+  const metadataEnviada = () =>
+    (vi.mocked(sendMessageHandler).mock.calls[0]?.[2] as { metadata?: Record<string, unknown> } | undefined)
+      ?.metadata;
+
+  it.each([
+    ["texto próprio", { reminder_body: "Oi {{primeiro_nome}}" }, undefined, `Oi Maria${FIM}`],
+    ["modelo legado cru", { reminder_template_name: "lembrete" }, "Modelo {{nome}} cru", `Modelo {{nome}} cru${FIM}`],
+  ])("chave ligada, %s: a frase sai no fim, num parágrafo só dela", async (_caso, tipo, modeloLegado, esperado) => {
+    const { resposta } = rodar({
+      linha: linhaDoCompromisso({ ...tipo, reminder_asks_confirmation: true }),
+      modeloLegado,
+    });
+    await resposta;
+    expect(corpoEnviado()).toBe(esperado);
+  });
+
+  it("chave ligada, frase padrão: a frase sai no fim", async () => {
+    const { resposta } = rodar({ linha: linhaDoCompromisso({ reminder_asks_confirmation: true }) });
+    await resposta;
+    expect(corpoEnviado()).toContain("Passando pra lembrar");
+    expect(corpoEnviado()?.endsWith(FIM)).toBe(true);
+  });
+
+  it("chave desligada: o texto não ganha frase nenhuma", async () => {
+    const { resposta } = rodar({ linha: linhaDoCompromisso({ reminder_body: "Oi {{primeiro_nome}}" }) });
+    await resposta;
+    expect(corpoEnviado()).toBe("Oi Maria");
+  });
+
+  it.each([true, false])("chave %s: a mensagem leva o carimbo {appointment_id, revision} da linha lida", async (chave) => {
+    const { resposta } = rodar({ linha: linhaDoCompromisso({ reminder_asks_confirmation: chave }) });
+    await resposta;
+    expect(metadataEnviada()).toEqual({
+      [CHAVE_DO_CARIMBO_DO_LEMBRETE]: { appointment_id: "compromisso-1", revision: 3 },
+    });
   });
 });
