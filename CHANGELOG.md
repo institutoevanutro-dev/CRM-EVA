@@ -8,6 +8,19 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.46.0] — 2026-11-28
+
+### Adicionado
+
+- **Chave de integração que só marca as datas do tratamento** Em Configurações › Chaves de API há um escopo novo, `agenda:book`. Ele deixa uma integração
+  (o Prontuário) marcar compromissos e ler os tipos de atendimento e a equipe, e nada além disso.
+  Ele também exige o Operador de agenda. Até agora, marcar pela integração pedia `mcp:write`, que
+  libera todas as escritas. Uma chave que já existe não muda.
+
+  O compromisso marcado por uma chave de integração aparece como "do sistema", não da IA, e fica sem "quem converteu".
+  Ele também não dispara a conversão "Agendou" para Meta e Google: o paciente já converteu antes, na consulta em que
+  fechou o tratamento.
+
 ## [5.45.0] — 2026-11-28
 
 ### Adicionado
@@ -10297,7 +10310,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.45.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.46.0...HEAD
+[5.46.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.45.0...v5.46.0
 [5.45.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.44.1...v5.45.0
 [5.44.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.44.0...v5.44.1
 [5.44.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.3...v5.44.0
