@@ -110,7 +110,8 @@ const CONVERSA = "conversa-1";
 const CONTATO = "contato-1";
 const RESPOSTA = "msg-paciente";
 const COMPROMISSO = "6f1c2c1e-2b8a-4d6e-9a3b-1f2e3d4c5b6a";
-const ENVIADA_EM = "2026-11-28T14:32:00.000Z";
+/** `created_at` da resposta: quando ela chegou a NÓS. */
+const CHEGOU_EM = "2026-11-28T14:32:00.000Z";
 
 type Filtro = [string, string, unknown];
 interface Consulta {
@@ -125,6 +126,8 @@ let rpcs: Array<{ nome: string; args: Record<string, unknown> }> = [];
 let mensagemDoPaciente: Record<string, unknown> | null = null;
 /** A última mensagem da clínica antes do "sim". */
 let ultimaDaClinica: Record<string, unknown> | null = null;
+/** O compromisso do carimbo com o tipo embutido, como a leitura da chave o devolve. */
+let compromissoDoCarimbo: Record<string, unknown> | null = null;
 let resultadoDoRpc: { data: unknown; error: { message: string; code?: string } | null } = {
   data: "confirmado",
   error: null,
@@ -141,6 +144,7 @@ function responder(c: Consulta): { data: unknown; error: unknown } {
       ? { data: ultimaDaClinica, error: null }
       : { data: mensagemDoPaciente, error: null };
   }
+  if (c.tabela === "calendar_appointments") return { data: compromissoDoCarimbo, error: null };
   if (c.tabela === "crm_leads") return { data: leadsDoContato, error: null };
   if (c.tabela === "crm_pipelines") return { data: { id: "funil-1" }, error: null };
   if (c.tabela === "crm_lead_activities") return { data: null, error: erroDaAtividade };
@@ -158,7 +162,7 @@ const admin = {
         return q;
       },
       eq: (col: string, v: unknown) => (c.filtros.push(["eq", col, v]), q),
-      lte: (col: string, v: unknown) => (c.filtros.push(["lte", col, v]), q),
+      lt: (col: string, v: unknown) => (c.filtros.push(["lt", col, v]), q),
       order: (col: string, o?: { ascending?: boolean }) => (c.filtros.push(["order", col, o?.ascending]), q),
       limit: () => q,
       maybeSingle: () => q,
@@ -190,8 +194,12 @@ const confirmacoes = () => rpcs.filter((r) => r.nome === "fn_appointment_patient
 beforeEach(() => {
   consultas = [];
   rpcs = [];
-  mensagemDoPaciente = { sent_at: ENVIADA_EM };
-  ultimaDaClinica = { metadata: { agenda_lembrete: { appointment_id: COMPROMISSO, revision: 4 } } };
+  mensagemDoPaciente = { created_at: CHEGOU_EM };
+  ultimaDaClinica = {
+    metadata: { agenda_lembrete: { appointment_id: COMPROMISSO, revision: 4 } },
+    status: "delivered",
+  };
+  compromissoDoCarimbo = { tipo: { reminder_asks_confirmation: true } };
   resultadoDoRpc = { data: "confirmado", error: null };
   leadsDoContato = [
     {
@@ -199,8 +207,8 @@ beforeEach(() => {
       organization_id: ORG,
       pipeline_id: "funil-1",
       status: "open",
-      last_activity_at: ENVIADA_EM,
-      created_at: ENVIADA_EM,
+      last_activity_at: CHEGOU_EM,
+      created_at: CHEGOU_EM,
     },
   ];
   erroDaAtividade = null;
@@ -237,8 +245,11 @@ describe("lerConfirmacaoDoLembrete", () => {
     const ultima = consultas.find((c) => c.tabela === "messages" && tem(c, "eq", "direction", "outbound"));
     expect(ultima, "não procurou a última mensagem da clínica").toBeDefined();
     expect(tem(ultima!, "eq", "conversation_id", CONVERSA)).toBe(true);
-    expect(tem(ultima!, "lte", "sent_at", ENVIADA_EM), "não limitou ao que veio antes do 'sim'").toBe(true);
-    expect(tem(ultima!, "order", "sent_at", false), "não pegou a MAIS RECENTE").toBe(true);
+    // Um relógio só, o nosso: o `sent_at` do inbound é o do aparelho.
+    expect(tem(ultima!, "lt", "created_at", CHEGOU_EM), "não limitou ao que chegou antes do 'sim'").toBe(true);
+    expect(tem(ultima!, "order", "created_at", false), "não pegou a MAIS RECENTE").toBe(true);
+    expect(tem(ultima!, "order", "id", false), "sem desempate estável").toBe(true);
+    expect(ultima!.filtros.some(([, col]) => col === "sent_at"), "voltou a misturar o relógio do aparelho").toBe(false);
   });
 
   it("SIM depois de OUTRA mensagem da clínica, posterior ao lembrete, NÃO confirma (Foco 1)", async () => {
@@ -249,6 +260,45 @@ describe("lerConfirmacaoDoLembrete", () => {
     await expect(ler()).resolves.toBe("sem_lembrete");
     expect(confirmacoes()).toHaveLength(0);
     expect(audit).not.toHaveBeenCalled();
+  });
+
+  it.each(["queued", "failed"])("lembrete carimbado que não saiu (%s) não confirma", async (status) => {
+    ultimaDaClinica = { ...ultimaDaClinica, status };
+    await expect(ler()).resolves.toBe("sem_lembrete");
+    expect(confirmacoes()).toHaveLength(0);
+  });
+
+  it.each(["queued", "failed", "sent"])(
+    "outra mensagem da clínica depois do lembrete conta em qualquer status (%s)",
+    async (status) => {
+      // A pergunta que falhou ou ainda não saiu também é o assunto da vez: na
+      // dúvida, não se lê o "sim".
+      ultimaDaClinica = { metadata: {}, status };
+      await expect(ler()).resolves.toBe("sem_lembrete");
+      expect(confirmacoes()).toHaveLength(0);
+    },
+  );
+
+  it.each([
+    ["desligada", { tipo: { reminder_asks_confirmation: false } }],
+    ["nula", { tipo: { reminder_asks_confirmation: null } }],
+    ["sem tipo (ou tipo de outra organização)", { tipo: null }],
+    ["compromisso fora da organização", null],
+  ])("chave do tipo %s: o SIM ao lembrete carimbado NÃO confirma", async (_rotulo, linha) => {
+    // Decisão 2: desligada por padrão, nada muda em clínica nenhuma até alguém ligar.
+    compromissoDoCarimbo = linha;
+    await expect(ler()).resolves.toBe("chave_desligada");
+    expect(confirmacoes()).toHaveLength(0);
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it("a chave é lida do compromisso do carimbo, com a organização filtrada nos dois lados", async () => {
+    await ler();
+    const leitura = consultas.find((c) => c.tabela === "calendar_appointments");
+    expect(leitura, "não leu a chave do tipo").toBeDefined();
+    expect(tem(leitura!, "eq", "id", COMPROMISSO)).toBe(true);
+    expect(tem(leitura!, "eq", "organization_id", ORG)).toBe(true);
+    expect(tem(leitura!, "eq", "tipo.organization_id", ORG)).toBe(true);
   });
 
   it("conversa sem nenhuma mensagem da clínica não confirma nada", async () => {
@@ -316,24 +366,25 @@ describe("lerConfirmacaoDoLembrete", () => {
     expect(audit).not.toHaveBeenCalled();
   });
 
-  it("contato sem negócio aberto: a confirmação vale, a auditoria sai, e a falta de âncora vira aviso", async () => {
+  const avisos = () =>
+    rpcs.filter((r) => r.nome === "emit_event" && r.args.p_event_type === "crm.activity_write_failed");
+
+  it("contato sem negócio aberto: a confirmação vale, a auditoria sai, e o aviso aponta o contato", async () => {
     leadsDoContato = [];
 
     await expect(ler()).resolves.toBe("confirmado");
     expect(consultas.some((c) => c.tabela === "crm_lead_activities")).toBe(false);
-    expect(rpcs.some((r) => r.nome === "emit_event" && r.args.p_event_type === "crm.activity_write_failed")).toBe(
-      true,
-    );
+    expect(avisos()).toHaveLength(1);
+    expect(avisos()[0]?.args.p_entity_id).toBe(CONTATO);
     expect(audit).toHaveBeenCalledTimes(1);
   });
 
-  it("atividade que não grava vira aviso e não apaga a auditoria", async () => {
+  it("atividade que não grava vira aviso no NEGÓCIO e não apaga a auditoria", async () => {
     erroDaAtividade = { message: "boom" };
 
     await expect(ler()).resolves.toBe("confirmado");
-    expect(rpcs.some((r) => r.nome === "emit_event" && r.args.p_event_type === "crm.activity_write_failed")).toBe(
-      true,
-    );
+    expect(avisos()).toHaveLength(1);
+    expect(avisos()[0]?.args.p_entity_id).toBe("lead-1");
     expect(audit).toHaveBeenCalledTimes(1);
   });
 

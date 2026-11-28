@@ -40,6 +40,7 @@ import { colide, type Slot } from "@/lib/agenda/horarios-livres";
 import { lerJornadaDoBanco } from "@/lib/agenda/jornada";
 import { atendeOProcedimento, unidadesDaJornada } from "@/lib/agenda/marcacao-simples";
 import { diaLocalISO } from "@/lib/agenda/fuso";
+import { leadAtivoDoContato } from "@/lib/agenda/lead-ativo-do-contato";
 import { idsForaDaOrg } from "@/lib/tenancy/pertence-a-org";
 import {
   atividadeDaTransicao,
@@ -60,7 +61,6 @@ import { ApiError } from "@/lib/api/types";
 import { comIdempotencia, hashDoCorpo } from "@/lib/api/idempotency";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
-import { resolveActiveLeadForContact, type LeadCandidate } from "@/lib/leads/active-lead";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import { leadParaEspelharNaAgenda, moverLeadParaEtapaDeAgendamento } from "@/lib/leads/appointment-stage-move";
@@ -1307,7 +1307,7 @@ async function fecharOLaco(
   // abaixo já emite assim. A organização vem do contexto autenticado.
   // O negócio do contato, lido ANTES do emit: é o mesmo que a timeline ancora
   // logo abaixo, e `lead_ids` no corpo do aviso quer exatamente ele.
-  const leadId = args.contactId ? await leadAtivoDoContato(supabase, ctx, args.contactId) : null;
+  const leadId = args.contactId ? await leadAtivoDoContato(supabase, ctx.organization_id, args.contactId) : null;
 
   if (args.gatilho) {
     // O corpo do aviso carrega horário, situação, tipo e negócios (porte de
@@ -1421,14 +1421,6 @@ async function fecharOLaco(
 }
 
 /**
- * O negócio ativo do contato — pela MESMA régua do resto do produto.
- *
- * `resolveActiveLeadForContact` distingue três desfechos que um `limit(2)` não
- * distingue: roteou, `no_open_lead` e `ambiguous_open_leads`. Os dois últimos
- * NÃO são erro: o agendamento existe e a atividade não nasce, porque não há
- * negócio a que ancorar.
- */
-/**
  * O recorte da linha que o corpo do aviso carrega — lido DEPOIS da gravação.
  * Falha não é erro: os campos novos saem `null` e o evento sai mesmo assim.
  */
@@ -1484,32 +1476,6 @@ async function leadIdsDoCompromisso(
     .filter((id): id is string => typeof id === "string" && !!id);
   const todos = leadAtivo ? [...vinculados, leadAtivo] : vinculados;
   return todos.filter((id, i) => todos.indexOf(id) === i);
-}
-
-async function leadAtivoDoContato(
-  supabase: SB,
-  ctx: HandlerCtx,
-  contactId: string,
-): Promise<string | null> {
-  const [{ data: candidatos }, { data: padrao }] = await Promise.all([
-    supabase
-      .from("crm_leads")
-      .select("id, organization_id, pipeline_id, status, last_activity_at, created_at")
-      .eq("organization_id", ctx.organization_id)
-      .eq("contact_id", contactId),
-    supabase
-      .from("crm_pipelines")
-      .select("id")
-      .eq("organization_id", ctx.organization_id)
-      .eq("is_default", true)
-      .eq("is_archived", false)
-      .maybeSingle(),
-  ]);
-
-  const rota = resolveActiveLeadForContact((candidatos ?? []) as LeadCandidate[], {
-    defaultPipelineId: (padrao as { id: string } | null)?.id ?? null,
-  });
-  return rota.routed ? rota.leadId : null;
 }
 
 async function alteraComRevisao(supabase:SB,ctx:HandlerCtx,id:string,revision:number,patch:Record<string,unknown>):Promise<Record<string,unknown>> {

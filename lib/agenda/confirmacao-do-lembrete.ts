@@ -12,8 +12,13 @@
  *
  *   1. a mensagem INTEIRA tem de ser a confirmação ("sim, mas…" não é);
  *   2. a última mensagem da clínica antes do "sim" tem de ser o lembrete
- *      carimbado. Se a IA ou a recepção mandou outra coisa depois dele, o "sim"
- *      responde àquilo, e nada é lido.
+ *      carimbado, e ter saído. Se a IA ou a recepção mandou outra coisa depois
+ *      dele, o "sim" responde àquilo, e nada é lido.
+ *
+ * E só lê no tipo de compromisso com a chave "Pedir confirmação no lembrete"
+ * ligada (`reminder_asks_confirmation`, desligada por padrão: nada muda em
+ * clínica nenhuma até alguém ligar). A checagem mora AQUI e não no RPC porque o
+ * botão da equipe confirma com a chave desligada.
  *
  * Quem decide se o compromisso ainda aceita a confirmação (status, horário
  * futuro, revisão, já confirmado) é o banco, em `fn_appointment_patient_confirm`
@@ -24,10 +29,10 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
-import { resolveActiveLeadForContact, type LeadCandidate } from "@/lib/leads/active-lead";
 import { normalizarTexto } from "@/lib/opt-out/deteccao";
 import type { createAdminClient } from "@/lib/supabase/admin";
 
+import { leadAtivoDoContato } from "./lead-ativo-do-contato";
 import type { AtividadeDaAgenda, OrigemDaConfirmacaoDoPaciente } from "./tipos";
 
 /** Acrescentada pelo sistema ao lembrete do tipo com a chave ligada, para nunca faltar a palavra que o leitor sabe ler. */
@@ -88,7 +93,16 @@ const ORIGEM: OrigemDaConfirmacaoDoPaciente = "mensagem";
 /** A mensagem chegou pelo canal e o produto agiu: o mesmo ator do opt-out em `pos-entrada.ts`. */
 const ATOR = { type: "webhook_source", id: "canal-inbound" } as const;
 
-export type ResultadoDaLeitura = "nao_e_confirmacao" | "sem_lembrete" | "confirmado" | "ja_confirmado" | "nao_se_aplica";
+/** O lembrete carimbado que ainda não saiu (ou não saiu nunca): o paciente não o viu. */
+const LEMBRETE_NAO_ENTREGUE: ReadonlySet<string> = new Set(["queued", "failed"]);
+
+export type ResultadoDaLeitura =
+  | "nao_e_confirmacao"
+  | "sem_lembrete"
+  | "chave_desligada"
+  | "confirmado"
+  | "ja_confirmado"
+  | "nao_se_aplica";
 
 /**
  * Lê a resposta do paciente e, se ela confirma o último lembrete, grava a
@@ -113,7 +127,7 @@ export async function lerConfirmacaoDoLembrete(e: {
 
   const { data: resposta, error: erroDaResposta } = await admin
     .from("messages")
-    .select("sent_at")
+    .select("created_at")
     .eq("organization_id", e.organizationId)
     .eq("conversation_id", e.conversationId)
     .eq("id", e.messageId)
@@ -122,20 +136,36 @@ export async function lerConfirmacaoDoLembrete(e: {
   if (!resposta) return "sem_lembrete";
 
   // A última da clínica antes do "sim", seja de quem for (IA, equipe, automação).
+  // Um relógio só, o nosso: `created_at` é quando cada mensagem chegou a NÓS. O
+  // `sent_at` do inbound é o relógio do aparelho (ver o porquê em
+  // `lib/agent-engine/edge/crm/drain.ts`, na espera pela mídia).
   const { data: ultima, error: erroDaUltima } = await admin
     .from("messages")
-    .select("metadata")
+    .select("metadata, status")
     .eq("organization_id", e.organizationId)
     .eq("conversation_id", e.conversationId)
     .eq("direction", "outbound")
-    .lte("sent_at", resposta.sent_at)
-    .order("sent_at", { ascending: false })
+    .lt("created_at", resposta.created_at)
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (erroDaUltima) throw new Error(`ultima_da_clinica_nao_lida: ${erroDaUltima.message}`);
   const carimbo = lerCarimboDoLembrete(ultima?.metadata);
-  if (!carimbo) return "sem_lembrete";
+  if (!carimbo || LEMBRETE_NAO_ENTREGUE.has(ultima?.status ?? "")) return "sem_lembrete";
+
+  // A chave do tipo. O tipo é embutido pela única FK que leva a ele, com a
+  // organização filtrada nos dois lados: tipo de outra organização vale "desligada".
+  const { data: compromisso, error: erroDoTipo } = await admin
+    .from("calendar_appointments")
+    .select("tipo:calendar_event_types!calendar_appointments_event_type_id_fkey(reminder_asks_confirmation)")
+    .eq("organization_id", e.organizationId)
+    .eq("id", carimbo.appointmentId)
+    .eq("tipo.organization_id", e.organizationId)
+    .maybeSingle();
+  if (erroDoTipo) throw new Error(`tipo_do_compromisso_nao_lido: ${erroDoTipo.message}`);
+  const tipo = (compromisso as { tipo: { reminder_asks_confirmation: boolean } | null } | null)?.tipo;
+  if (tipo?.reminder_asks_confirmation !== true) return "chave_desligada";
 
   const { data, error } = await admin.rpc("fn_appointment_patient_confirm", {
     p_appointment_id: carimbo.appointmentId,
@@ -164,47 +194,32 @@ export async function lerConfirmacaoDoLembrete(e: {
 
 /**
  * A linha na timeline do negócio ativo do contato, pela mesma régua das outras
- * atividades da agenda (`leadAtivoDoContato` no handler). Sem negócio, ou com
- * a escrita falhando, o rastro vira `event_log` por `registraFalhaDeAtividade`.
+ * atividades da agenda (`leadAtivoDoContato`). Sem negócio, ou com a escrita
+ * falhando, o rastro vira `event_log` por `registraFalhaDeAtividade`, com o id
+ * do negócio quando há um e o do contato quando não há.
  * Nunca lança: a confirmação já está gravada.
  */
 async function registrarNaTimeline(
   e: Parameters<typeof lerConfirmacaoDoLembrete>[0],
   appointmentId: string,
 ): Promise<void> {
-  const falha = (erro: string | undefined, origem = "agenda (confirmação do paciente)") =>
+  const falha = (ancora: string, erro: string | undefined, origem = "agenda (confirmação do paciente)") =>
     registraFalhaDeAtividade(e.admin, {
       organizationId: e.organizationId,
-      leadId: e.contactId,
+      leadId: ancora,
       tipo: ATIVIDADE_DA_PRESENCA_CONFIRMADA,
       origem,
       erro,
       requestId: e.requestId,
     });
+  let leadId: string | null = null;
   try {
-    const [{ data: candidatos }, { data: padrao }] = await Promise.all([
-      e.admin
-        .from("crm_leads")
-        .select("id, organization_id, pipeline_id, status, last_activity_at, created_at")
-        .eq("organization_id", e.organizationId)
-        .eq("contact_id", e.contactId),
-      e.admin
-        .from("crm_pipelines")
-        .select("id")
-        .eq("organization_id", e.organizationId)
-        .eq("is_default", true)
-        .eq("is_archived", false)
-        .limit(1)
-        .maybeSingle(),
-    ]);
-    const rota = resolveActiveLeadForContact((candidatos ?? []) as LeadCandidate[], {
-      defaultPipelineId: (padrao as { id: string } | null)?.id ?? null,
-    });
-    if (!rota.routed) return await falha(undefined, "agenda (sem negócio aberto para ancorar)");
+    leadId = await leadAtivoDoContato(e.admin, e.organizationId, e.contactId);
+    if (!leadId) return await falha(e.contactId, undefined, "agenda (sem negócio aberto para ancorar)");
 
     const { ok, error } = await emitLeadActivity(e.admin, {
       organizationId: e.organizationId,
-      leadId: rota.leadId,
+      leadId,
       contactId: e.contactId,
       type: ATIVIDADE_DA_PRESENCA_CONFIRMADA,
       sourceModule: "agenda",
@@ -213,8 +228,8 @@ async function registrarNaTimeline(
       reason: "O paciente confirmou a presença respondendo ao lembrete",
       payload: { source: ORIGEM, message_id: e.messageId },
     });
-    if (!ok) await falha(error);
+    if (!ok) await falha(leadId, error);
   } catch (err) {
-    await falha(err instanceof Error ? err.message.slice(0, 160) : "desconhecido");
+    await falha(leadId ?? e.contactId, err instanceof Error ? err.message.slice(0, 160) : "desconhecido");
   }
 }
