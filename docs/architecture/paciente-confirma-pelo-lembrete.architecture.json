@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Paciente confirma a presença pelo lembrete (0441)",
+    "output": "paciente-confirma-pelo-lembrete.html"
+  },
+  "lanes": [
+    {
+      "id": "envio",
+      "label": "Lembrete que pede SIM"
+    },
+    {
+      "id": "leitura",
+      "label": "Leitura da resposta e da equipe"
+    },
+    {
+      "id": "tela",
+      "label": "Onde aparece"
+    }
+  ],
+  "mainPath": [
+    "chave",
+    "cron",
+    "whatsapp",
+    "leitor",
+    "rpc",
+    "compromisso",
+    "grade"
+  ],
+  "nodes": [
+    {
+      "id": "chave",
+      "lane": "envio",
+      "col": 1,
+      "type": "service",
+      "label": "Configurações › Tipos de agendamento (reminder_asks_confirmation)"
+    },
+    {
+      "id": "cron",
+      "lane": "envio",
+      "col": 2,
+      "type": "service",
+      "label": "app/api/v1/cron/agenda-reminder (frase + carimbo agenda_lembrete)"
+    },
+    {
+      "id": "whatsapp",
+      "lane": "envio",
+      "col": 3,
+      "type": "service",
+      "label": "WhatsApp do paciente (webhook WAHA)"
+    },
+    {
+      "id": "leitor",
+      "lane": "leitura",
+      "col": 3,
+      "type": "service",
+      "label": "lib/agenda/confirmacao-do-lembrete.ts (pos-entrada, passo 1b)"
+    },
+    {
+      "id": "botao",
+      "lane": "leitura",
+      "col": 1,
+      "type": "service",
+      "label": "Painel › Paciente confirmou (PATCH /api/v1/agenda/agendamentos)"
+    },
+    {
+      "id": "rpc",
+      "lane": "leitura",
+      "col": 2,
+      "type": "service",
+      "label": "fn_appointment_patient_confirm (migration 0441)"
+    },
+    {
+      "id": "compromisso",
+      "lane": "leitura",
+      "col": 4,
+      "type": "service",
+      "label": "calendar_appointments.patient_confirmed_*"
+    },
+    {
+      "id": "rastro",
+      "lane": "tela",
+      "col": 1,
+      "type": "service",
+      "label": "Timeline do negócio + api_audit_log (agenda.paciente_confirmou)"
+    },
+    {
+      "id": "grade",
+      "lane": "tela",
+      "col": 2,
+      "type": "service",
+      "label": "Agenda: cartão, legenda e etiqueta do painel"
+    },
+    {
+      "id": "agente",
+      "lane": "tela",
+      "col": 3,
+      "type": "service",
+      "label": "Bloco de compromissos do agente (compromissos-do-contato.ts)"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "from": "chave",
+      "to": "cron",
+      "label": "chave ligada no tipo"
+    },
+    {
+      "id": "e1",
+      "from": "cron",
+      "to": "whatsapp",
+      "label": "lembrete termina pedindo SIM"
+    },
+    {
+      "id": "e2",
+      "from": "whatsapp",
+      "to": "leitor",
+      "label": "SIM inteiro, logo depois do lembrete"
+    },
+    {
+      "id": "e3",
+      "from": "leitor",
+      "to": "rpc",
+      "label": "origem mensagem"
+    },
+    {
+      "id": "e4",
+      "from": "botao",
+      "to": "rpc",
+      "label": "origem equipe"
+    },
+    {
+      "id": "e5",
+      "from": "rpc",
+      "to": "compromisso",
+      "label": "só Agendado, futuro e na mesma revisão"
+    },
+    {
+      "id": "e6",
+      "from": "leitor",
+      "to": "rastro",
+      "label": "atividade e auditoria"
+    },
+    {
+      "id": "e7",
+      "from": "botao",
+      "to": "rastro",
+      "label": "atividade e auditoria"
+    },
+    {
+      "id": "e8",
+      "from": "compromisso",
+      "to": "grade",
+      "label": "Presença confirmada / Lembrete sem resposta"
+    },
+    {
+      "id": "e9",
+      "from": "compromisso",
+      "to": "agente",
+      "label": "não pede confirmação de novo"
+    },
+    {
+      "id": "e10",
+      "from": "grade",
+      "to": "botao",
+      "label": "a recepção liga para quem não respondeu"
+    },
+    {
+      "id": "e11",
+      "from": "compromisso",
+      "to": "cron",
+      "label": "remarcou: a marca cai e o próximo lembrete pede de novo"
+    }
+  ]
+}
