@@ -279,6 +279,32 @@ describe("o lembrete carimba o compromisso e, com a chave do tipo, pede confirma
     expect(corpoEnviado()).toBe("Oi Maria");
   });
 
+  it("chave ligada e paciente já confirmou: sem a frase, mas com o carimbo", async () => {
+    const { resposta } = rodar({
+      linha: {
+        ...linhaDoCompromisso({ reminder_body: "Oi {{primeiro_nome}}", reminder_asks_confirmation: true }),
+        patient_confirmed_at: "2026-10-12T09:00:00.000Z",
+      },
+    });
+    await resposta;
+    expect(corpoEnviado()).toBe("Oi Maria");
+    expect(metadataEnviada()).toEqual({
+      [CHAVE_DO_CARIMBO_DO_LEMBRETE]: { appointment_id: "compromisso-1", revision: 3 },
+    });
+  });
+
+  it("chave ligada, modelo legado e paciente já confirmou: o modelo sai sem a frase", async () => {
+    const { resposta } = rodar({
+      linha: {
+        ...linhaDoCompromisso({ reminder_template_name: "lembrete", reminder_asks_confirmation: true }),
+        patient_confirmed_at: "2026-10-12T09:00:00.000Z",
+      },
+      modeloLegado: "Modelo {{nome}} cru",
+    });
+    await resposta;
+    expect(corpoEnviado()).toBe("Modelo {{nome}} cru");
+  });
+
   it.each([true, false])("chave %s: a mensagem leva o carimbo {appointment_id, revision} da linha lida", async (chave) => {
     const { resposta } = rodar({ linha: linhaDoCompromisso({ reminder_asks_confirmation: chave }) });
     await resposta;

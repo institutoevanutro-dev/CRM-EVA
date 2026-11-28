@@ -103,7 +103,8 @@
  * `metadata.agenda_lembrete = {appointment_id, revision}`, em todo lembrete. É
  * por ele que o SIM do paciente acha o compromisso
  * (`lib/agenda/confirmacao-do-lembrete.ts`). Com a chave "Pedir confirmação no
- * lembrete" do tipo, o texto termina com `FRASE_PEDIDO_DE_CONFIRMACAO`.
+ * lembrete" do tipo, o texto termina com `FRASE_PEDIDO_DE_CONFIRMACAO`, salvo
+ * quando o paciente já confirmou (`patient_confirmed_at`); o carimbo sai igual.
  *
  * ⚠️ **O contato é resolvido DENTRO da organização do compromisso.** É a
  * preocupação literal do handler de agendamentos: "esta linha vira a organização
@@ -215,6 +216,8 @@ interface CompromissoAVencer {
    * proíbe. `null` = a limpeza fica de fora.
    */
   reminder_sent_at: string | null;
+  /** Presença já confirmada (0441): o lembrete não pede o SIM de novo, mas carimba igual. */
+  patient_confirmed_at: string | null;
   calendar_event_types: TipoDoCompromisso | TipoDoCompromisso[] | null;
 }
 
@@ -531,7 +534,7 @@ async function handle(req: NextRequest): Promise<Response> {
   const { data, error } = await admin
     .from("calendar_appointments")
     .select(
-      "id, organization_id, contact_id, conversation_id, title, starts_at, time_zone, owner_user_id, created_at, starts_at_marked_at, revision, location_details, reminder_sent_offsets_minutes, reminder_sent_at, " +
+      "id, organization_id, contact_id, conversation_id, title, starts_at, time_zone, owner_user_id, created_at, starts_at_marked_at, revision, location_details, reminder_sent_offsets_minutes, reminder_sent_at, patient_confirmed_at, " +
         "calendar_event_types!inner(name, reminder_enabled, reminder_minutes_before, reminder_extra_offsets_minutes, reminder_template_name, reminder_body, reminder_asks_confirmation, location_details), " +
         // A unidade pela FK composta `(organization_id, unit_id)`: só casa
         // unidade da MESMA organização, e poupa uma consulta por linha.
@@ -717,7 +720,9 @@ async function handle(req: NextRequest): Promise<Response> {
     // O texto próprio do tipo vence; sem ele, o modelo legado
     // (`reminder_template_name`) sai CRU, como sempre saiu; sem os dois, a
     // frase padrão. Com a chave "Pedir confirmação no lembrete", os três
-    // terminam com `FRASE_PEDIDO_DE_CONFIRMACAO`.
+    // terminam com `FRASE_PEDIDO_DE_CONFIRMACAO` — salvo se o paciente já
+    // confirmou: pedir de novo a quem já disse SIM é ruído.
+    const pedir = tipo.reminder_asks_confirmation && !linha.patient_confirmed_at;
     const molde = tipo.reminder_body?.trim() || null;
     // O GoTrue custa uma chamada HTTP por pessoa: só quando o molde usa a
     // variável, e pela MESMA extração da validação (sem diferenciar
@@ -740,7 +745,7 @@ async function handle(req: NextRequest): Promise<Response> {
       unidade: unidade?.name ?? null,
       profissional,
       agora,
-      pedirConfirmacao: tipo.reminder_asks_confirmation,
+      pedirConfirmacao: pedir,
     });
 
     if (!molde && tipo.reminder_template_name) {
@@ -753,8 +758,9 @@ async function handle(req: NextRequest): Promise<Response> {
         .maybeSingle();
       if (modelo?.body) {
         corpo = modelo.body;
-        // Cru continua cru: a frase só entra no fim, sem tocar no modelo.
-        if (tipo.reminder_asks_confirmation) corpo = comPedidoDeConfirmacao(corpo);
+        // Cru continua cru: as variáveis não são trocadas. Com a frase, o fim do
+        // modelo perde os espaços e quebras de linha (`trimEnd`) antes dela.
+        if (pedir) corpo = comPedidoDeConfirmacao(corpo);
       }
     }
 
