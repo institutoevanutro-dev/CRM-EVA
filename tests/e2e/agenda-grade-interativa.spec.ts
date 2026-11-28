@@ -139,10 +139,17 @@ function blocoEncaixe(page: Page) {
 /**
  * Um bloco SEM horário publicado e que não é do passado: alvo de arraste que a
  * remarcação recusa (arrastar segue preso ao publicado; o encaixe é só do clique).
+ *
+ * De OUTRO DIA que o do card. Desde 27/11/2026 a semana começa na segunda (o
+ * domingo, sem jornada, só aparece com compromisso), e o primeiro bloco não
+ * livre da segunda passou a ser a célula do próprio card: o ponteiro saía e
+ * chegava no mesmo lugar, sem os 4px que começam o arraste.
  */
-function blocoBloqueado(page: Page) {
+function blocoBloqueado(page: Page, foraDoDia: string) {
   return page
-    .locator('[data-testid^="bloco-"][data-livre="false"]:not([aria-label*="já passou"])')
+    .locator(
+      `[data-testid^="bloco-"][data-livre="false"]:not([data-testid^="bloco-${foraDoDia}-"]):not([aria-label*="já passou"])`,
+    )
     .first();
 }
 
@@ -457,9 +464,10 @@ test("arrastar para fora da disponibilidade é RECUSADO e o card volta", async (
       .catch(() => undefined);
   });
 
-  const origem = blocoLivre(page);
-  const testidOrigem = (await origem.getAttribute("data-testid"))!;
-  await origem.click();
+  const testidOrigem = (await blocoLivre(page).getAttribute("data-testid"))!;
+  // Preso pelo testid: o `.first()` é relido a cada ação, e o card tem de nascer
+  // no dia que `blocoBloqueado` vai evitar.
+  await page.getByTestId(testidOrigem).click();
   await expect(page.getByTestId("painel-de-marcacao")).toBeVisible({ timeout: 15_000 });
   // Bônus (0417): a marcação nova exige o canal; remarcar não pede.
   if (await page.getByTestId("canal-mensagem").isVisible()) await page.getByTestId("canal-mensagem").click();
@@ -491,7 +499,7 @@ test("arrastar para fora da disponibilidade é RECUSADO e o card volta", async (
     (await card.boundingBox())!.y - (await blocoDaHoraOriginal.boundingBox())!.y;
   const distanciaAntes = await distanciaAoBloco();
 
-  const bloqueado = blocoBloqueado(page);
+  const bloqueado = blocoBloqueado(page, horarioDoBloco(testidOrigem).dia);
   // ⚠️ QUEM TEM DE ESTAR NA TELA AO APERTAR É O CARD, não o bloqueado.
   //
   // A primeira versão rolava só o `bloqueado` e depois lia a caixa do card

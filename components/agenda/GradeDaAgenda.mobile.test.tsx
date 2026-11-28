@@ -35,15 +35,14 @@ function escondeNoCelular(dia: string) {
 }
 
 describe("grade da semana no celular", () => {
-  it("mostra só o dia âncora (quarta) e esconde os outros seis da semana", () => {
+  it("mostra só o dia âncora (quarta) e esconde os outros cinco da semana", () => {
     grade("semana");
 
     // a âncora fica
     expect(escondeNoCelular("2026-09-16")).toBe(false);
 
-    // os demais sete-menos-um somem abaixo de md
+    // os outros cinco somem abaixo de md
     for (const outro of [
-      "2026-09-13",
       "2026-09-14",
       "2026-09-15",
       "2026-09-17",
@@ -61,9 +60,9 @@ describe("grade da semana no celular", () => {
 
   it("o desktop continua com a semana inteira", () => {
     grade("semana");
-    // Todas as sete colunas existem no DOM: o que muda é só a classe de
+    // As seis colunas (segunda a sábado) existem no DOM: o que muda é só a classe de
     // visibilidade. Esconder por desmontagem quebraria a rolagem e o arraste.
     const colunas = screen.getAllByTestId(/^coluna-dia-/);
-    expect(colunas).toHaveLength(7);
+    expect(colunas).toHaveLength(6);
   });
 });

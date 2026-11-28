@@ -10,7 +10,6 @@ import { AgendaCarregando, AgendaComErro } from "@/components/agenda/estados";
 import { ANCORA, AGENDAMENTOS, HORARIOS_POR_DIA, PESSOAS } from "@/components/agenda/dados-de-mentira";
 import { FiltroDePessoas } from "@/components/agenda/FiltroDePessoas";
 import { GradeDaAgenda } from "@/components/agenda/GradeDaAgenda";
-import { HistoricoDaAgenda } from "@/components/agenda/HistoricoDaAgenda";
 import { MarcacaoSimples } from "@/components/agenda/MarcacaoSimples";
 import { PainelDeMarcacao } from "@/components/agenda/PainelDeMarcacao";
 import { corDaTrilha, TRILHAS } from "@/components/agenda/paleta";
@@ -264,20 +263,6 @@ export function VitrineDaAgenda() {
           responsavel={PESSOAS[2]!}
           horariosPorDia={HORARIOS_POR_DIA}
           quemSeraAtendido={{ nome: "Pedro Lima", aceitaMensagem: false }}
-        />
-      </Secao>
-
-      <Secao
-        id="historico"
-        titulo="O histórico"
-        descricao="Lista, não grade: a grade responde “como está meu dia”, a lista responde “o que aconteceu com esta pessoa”. Quatro divisões na ordem em que quem atende precisa delas, e ações só onde fazem sentido — remarcar o que já passou seria oferta falsa."
-      >
-        <HistoricoDaAgenda
-          agendamentos={AGENDAMENTOS}
-          pessoas={PESSOAS}
-          agora={ANCORA}
-          fuso={Intl.DateTimeFormat().resolvedOptions().timeZone}
-          className="h-[420px]"
         />
       </Secao>
 

@@ -7,46 +7,36 @@ import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 
 import { useT } from "@/hooks/i18n/useT";
 
-import { addDays, format, startOfDay, startOfMonth, startOfWeek } from "date-fns";
+import { addDays, format, startOfDay, startOfMonth } from "date-fns";
 import * as React from "react";
 
 import { AvisoDaConexaoGoogle } from "./_components/AvisoDaConexaoGoogle";
 import { CartaoDaConexaoGoogle } from "./_components/CartaoDaConexaoGoogle";
 
 import { AgendaInterativa } from "@/components/agenda/AgendaInterativa";
+import { diasDaSemanaDe } from "@/components/agenda/GradeDaAgenda";
 import { FiltroDePessoas } from "@/components/agenda/FiltroDePessoas";
 import { recorteDaVisao } from "@/lib/agenda/recorte-da-grade";
-import { HistoricoDaAgenda } from "@/components/agenda/HistoricoDaAgenda";
 import type { Agendamento, HorarioLivre, VisaoDaAgenda } from "@/components/agenda/tipos";
 import { EmptyAgenda } from "@/components/empty";
-import { rotuloDoLocal } from "@/lib/agenda/locais";
 import { ancoraAoFecharPainel } from "@/lib/agenda/ancora-depois-de-marcar";
 import { duracaoDoBloco, duracaoDoCampo } from "@/lib/agenda/duracao-escolhida";
 import { dataDeParede, diaLocalISO, partesNoFuso } from "@/lib/agenda/fuso";
 import { janelaDoMesVisivel } from "@/lib/agenda/janela-do-mes-visivel";
 import { atendeOProcedimento } from "@/lib/agenda/marcacao-simples";
-import { resolverResponsavelDoPainel } from "@/lib/agenda/responsavel-do-painel";
 import { tipoDaRemarcacao } from "@/lib/agenda/tipo-da-remarcacao";
 import { ancoraLocalDoDia } from "@/lib/agenda/semana-semente";
 import { useVinculoDaMarcacao } from "@/lib/agenda/vinculo-da-marcacao";
-import { gravarPessoasDaGrade, lerPessoasDaGrade, selecaoValida } from "@/lib/agenda/pessoas-da-grade";
+import { gravarPessoasDaGrade, lerPessoasDaGrade, pessoasComAtendimento, selecaoValida } from "@/lib/agenda/pessoas-da-grade";
 import { Button } from "@/components/ui/button";
-import { PainelDeMarcacao } from "@/components/agenda/PainelDeMarcacao";
 import { MarcacaoSimples } from "@/components/agenda/MarcacaoSimples";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { quandoCurto } from "@/components/agenda/rotulo-do-bloco";
 import { useAgendamentos } from "@/hooks/agenda/useAgendamentos";
 import { useAgendaAoVivo } from "@/hooks/agenda/useAgendaAoVivo";
 import { useAgora } from "@/hooks/agenda/useAgora";
 import { useFechamentosDaGrade } from "@/hooks/agenda/useFechamentosDaGrade";
 import { useHorariosLivres } from "@/hooks/agenda/useHorariosLivres";
 import { useMarcarAgendamento } from "@/hooks/agenda/useMarcarAgendamento";
-import {
-  useCancelarAgendamento,
-  useRegistrarDesfecho,
-  useRemarcarAgendamento,
-} from "@/hooks/agenda/useRemarcarAgendamento";
 import { usePessoasDaAgenda } from "@/hooks/agenda/usePessoasDaAgenda";
 import { CalendarPlus, CaretLeft, CaretRight } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
@@ -132,6 +122,8 @@ export function AgendaClient({
     localKind: string | null;
     localDetalhes: string | null;
     exigePaciente: boolean;
+    /** `calendar_event_types.category` — decide o "Paciente novo / antigo" padrão. */
+    categoria?: string | null;
   }>;
   /** A semana corrente, resolvida no servidor: `GET /agendamentos` não existe. */
   agendamentosIniciais: Agendamento[];
@@ -141,7 +133,8 @@ export function AgendaClient({
    *
    * É a MESMA porta, com o MESMO piso, em todos os gestos de escrita desta tela:
    * o botão "Novo agendamento", o clique num bloco livre da grade, o encaixe
-   * ("Outro horário") do painel e o "Marcar compromisso" que chega por
+   * (a hora digitada fora dos horários livres, em `QuandoDaMarcacao`) e o
+   * "Marcar compromisso" que chega por
    * `?contato=`. Oferecer qualquer uma delas a quem só lê é oferecer um 403 —
    * com a recusa chegando DEPOIS do gesto, que é o defeito que este nome veio
    * fechar. Esconder aqui é cortesia: quem decide segue sendo a rota.
@@ -154,6 +147,8 @@ export function AgendaClient({
   const t = useT();
   const router = useRouter();
   const telaRef = React.useRef<HTMLDivElement>(null);
+  // Para onde vai o foco quando a fileira de profissionais some inteira.
+  const hojeRef = React.useRef<HTMLButtonElement>(null);
   React.useEffect(() => {
     // O HTML pode aparecer antes de o React ligar os eventos. Este marcador
     // permite que jornadas automatizadas esperem o botão estar realmente ativo.
@@ -206,27 +201,13 @@ export function AgendaClient({
   const [formTipoId, setFormTipoId] = React.useState("");
   // O texto do campo "Duração (min)" da marcação nova; `null` = a do procedimento.
   const [duracaoEditada, setDuracaoEditada] = React.useState<string | null>(null);
-  // REMARCAR reusa o painel de marcação: escolher horário novo é o MESMO gesto
-  // de escolher o primeiro, e uma segunda tela para a mesma pergunta seria duas
-  // coisas para manter em sincronia. Quando `remarcandoId` está preenchido, a
-  // confirmação vira PATCH em vez de POST.
+  // REMARCAR acontece no PAINEL DO PACIENTE (`DetalheDoCompromisso`, decisão 6
+  // do André, 27/11/2026), com o mesmo "quando" da marcação. Este id diz qual
+  // compromisso pediu a remarcação; ela só vale enquanto o painel aberto
+  // (`?compromisso=`) é o dele.
   const [remarcandoId, setRemarcandoId] = React.useState<string | null>(null);
-  // CANCELAR pede motivo, e o motivo é obrigatório na rota. Não é burocracia: é
-  // o que a equipe lê ao ver o horário vago.
-  const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
-  const [motivo, setMotivo] = React.useState("");
-  // O CONVIDADO, opcional. Vazio mantém o comportamento de sempre: evento no
-  // Google do atendente, sem `attendees` e sem convite saindo para ninguém.
-  const [emailConvidado, setEmailConvidado] = React.useState("");
   const [unidades, setUnidades] = React.useState<UnidadeDaAgenda[]>([]);
   const [unidadeId, setUnidadeId] = React.useState("");
-  const emailConvidadoLimpo = emailConvidado.trim();
-  // A MESMA pergunta que a rota faz, feita aqui só para não gastar um 422 com
-  // uma letra faltando no domínio. A rota continua sendo a dona da recusa — esta
-  // checagem é conveniência, não autoridade, e por isso é deliberadamente frouxa
-  // (o e-mail de verdade se prova entregando, não com regex).
-  const emailConvidadoInvalido =
-    emailConvidadoLimpo.length > 0 && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailConvidadoLimpo);
 
   React.useEffect(() => {
     if (!marcando) return;
@@ -236,9 +217,6 @@ export function AgendaClient({
       .catch(() => setUnidades([]));
   }, [marcando]);
   const marcar = useMarcarAgendamento();
-  const remarcar = useRemarcarAgendamento();
-  const cancelar = useCancelarAgendamento();
-  const desfecho = useRegistrarDesfecho();
   // ⚠️ ERA `tiposIniciais[0] ?? null` — uma constante, sem seletor em lugar
   // nenhum. `page.tsx` ordena os tipos por NOME, então a tela marcava sempre o
   // primeiro em ordem alfabética e não havia como marcar outro: numa org com
@@ -289,6 +267,32 @@ export function AgendaClient({
     },
     [busca, caminho],
   );
+  // O PAINEL ABERTO — o mesmo `?compromisso=` que a Central, o Radar e o Inbox linkam.
+  const idAberto = busca.get("compromisso");
+  /**
+   * Abre o painel de um compromisso, já no Remarcar quando pedido. `push`, e não
+   * `replace`: é o voltar do celular que fecha o painel. O `?tipo=` vai junto,
+   * senão o F5 depois de fechar voltava ao primeiro tipo (#1657).
+   */
+  const abrirCompromisso = React.useCallback(
+    (id: string, remarcando = false) => {
+      setRemarcandoId(remarcando ? id : null);
+      const parametros = new URLSearchParams();
+      if (tipo) parametros.set("tipo", tipo.id);
+      parametros.set("compromisso", id);
+      router.push(`/app/agenda?${parametros.toString()}`);
+    },
+    [router, tipo],
+  );
+  // Fechar pelo VOLTAR do navegador não passa pelo `onOpenChange` do painel: a
+  // remarcação pedida morre quando o painel aberto muda ou fecha, senão o mesmo
+  // compromisso reabriria já no Remarcar. Ajuste durante o render, o padrão do
+  // React para estado que segue a URL.
+  const [idVisto, setIdVisto] = React.useState(idAberto);
+  if (idVisto !== idAberto) {
+    setIdVisto(idAberto);
+    if (remarcandoId !== idAberto) setRemarcandoId(null);
+  }
   const [visao, setVisao] = React.useState<VisaoDaAgenda>("semana");
   /**
    * No CELULAR a agenda abre no DIA, não na semana.
@@ -336,7 +340,7 @@ export function AgendaClient({
    * discordava sempre.
    *
    * O que atravessa a fronteira é a DATA (`hojeNaOrganizacao`), nunca o
-   * instante: `domingo 00:00` em São Paulo é `sábado 22:00` em UTC-5, e
+   * instante: `segunda 00:00` em São Paulo é `domingo 22:00` em UTC-5, e
    * `startOfWeek` sobre esse instante, em hora local, cairia na semana anterior.
    * `ancoraLocalDoDia` transforma a data numa `Date` local ao meio-dia — a doze
    * horas de qualquer borda de horário de verão.
@@ -351,15 +355,14 @@ export function AgendaClient({
   const [diaDaAbertura] = React.useState(diaDeAgora);
   const hoje = diaDeAgora === diaDaAbertura ? hojeNaOrganizacao : diaDeAgora;
 
-  // AS PESSOAS SÃO REAIS: vêm de `/api/v1/agenda/pessoas`, com a trilha de cor derivada do
-  // `user_id`. Até esta linha o filtro por pessoa era invisível na tela do
-  // produto — `FiltroDePessoas` devolve `null` com menos de duas pessoas, e a
-  // lista estava vazia. Ele existia, estava provado na vitrine, e ninguém o via
-  // aqui.
+  // AS PESSOAS SÃO REAIS: vêm de `/api/v1/agenda/pessoas`, com a trilha de cor
+  // derivada do `user_id`. Servem para nome e cor; quem entra na FILEIRA de
+  // profissionais é decidido abaixo (`pessoasDaFileira`).
   const { data: pessoas = [] } = usePessoasDaAgenda();
-  // Só vale quem o servidor devolveu a ESTA pessoa: um id guardado de alguém que
-  // ela não enxerga (ou que saiu da equipe) cai fora, e a grade volta a "todos".
-  const selecionadas = React.useMemo(() => selecaoValida(pedidas, pessoas), [pedidas, pessoas]);
+  // Só vale quem o servidor devolveu a ESTA pessoa, e só UMA (decisão 3 do
+  // André, 27/11/2026): uma escolha antiga de várias pessoas, guardada quando o
+  // filtro era múltiplo, vale pela primeira.
+  const selecionadas = React.useMemo(() => selecaoValida(pedidas, pessoas).slice(0, 1), [pedidas, pessoas]);
   // OS AGENDAMENTOS SÃO REAIS, e agora TAMBÉM se atualizam sem recarregar.
   //
   // ⚠️ O comentário que estava aqui dizia que `GET /api/v1/agenda/agendamentos`
@@ -398,31 +401,57 @@ export function AgendaClient({
   const naJanelaDoServidor =
     recorteDaGrade.de === recorteDoServidor.de && recorteDaGrade.ate === recorteDoServidor.ate;
 
-  const { data: agendamentosVivos } = useAgendamentos(recorteDaGrade);
+  const { data: agendamentosVivos, isError: agendamentosFalharam } = useAgendamentos(recorteDaGrade);
   // Marcado pela IA ou por um colega aparece sem recarregar (achado 2, 16/11).
   useAgendaAoVivo(recorteDaGrade);
   const todos: Agendamento[] = React.useMemo(
     () => agendamentosVivos ?? (naJanelaDoServidor ? agendamentosIniciais : []),
     [agendamentosVivos, naJanelaDoServidor, agendamentosIniciais],
   );
+  // O PERÍODO NOVO AINDA NÃO CHEGOU: sem resposta e fora da janela que o
+  // servidor pintou. Com ERRO não há o que esperar, e a tela volta a dizer a
+  // verdade do que tem (nada).
+  const carregandoPeriodo = agendamentosVivos === undefined && !naJanelaDoServidor && !agendamentosFalharam;
+  // A ÚLTIMA LISTA QUE CHEGOU, para a fileira não piscar enquanto o período novo
+  // carrega: até a resposta, `todos` é vazio, e com "Todos" marcado a fileira
+  // sumia e o topo pulava (no celular, linhas de 44 px). Guarda-se o DADO, e não
+  // a fileira pronta: nome, cor e escolha seguem as de agora. Comparada item a
+  // item: uma lista nova com os mesmos itens não é mudança, e o ajuste durante
+  // o render não pode virar laço.
+  const [ultimosCarregados, setUltimosCarregados] = React.useState(todos);
+  if (
+    !carregandoPeriodo &&
+    (todos.length !== ultimosCarregados.length || todos.some((a, i) => a !== ultimosCarregados[i]))
+  ) {
+    setUltimosCarregados(todos);
+  }
+  // A FILEIRA mostra só quem tem atendimento no período carregado — e quem está
+  // escolhido, para a escolha nunca sumir sem um jeito de desfazê-la.
+  const pessoasDaFileira = React.useMemo(
+    () => pessoasComAtendimento(pessoas, carregandoPeriodo ? ultimosCarregados : todos, selecionadas),
+    [pessoas, carregandoPeriodo, ultimosCarregados, todos, selecionadas],
+  );
 
   // Uma pessoa só selecionada é o CONTEXTO da marcação: os horários livres da
   // grade, o "com quem" do painel e o dono do compromisso passam a ser dela.
   const profissional = selecionadas.length === 1 ? (pessoas.find((p) => p.id === selecionadas[0]) ?? null) : null;
-  // REMARCAR pergunta pelo procedimento e pelo dono DO COMPROMISSO (a rota não
-  // troca nenhum dos dois), nunca pelo tipo escolhido na grade nem pelo dono
-  // padrão dele — ver `lib/agenda/tipo-da-remarcacao.ts` (achado 1, 16/11).
-  const alvoDaRemarcacao = remarcandoId ? todos.find((a) => a.id === remarcandoId) : undefined;
-  const remarcacao = remarcandoId ? tipoDaRemarcacao(alvoDaRemarcacao, tiposIniciais, tipo) : null;
-  const donoDaMarcacao = remarcacao ? remarcacao.donoId : profissional?.id;
+  // Os horários da remarcação perguntam pelo procedimento e pelo dono DO
+  // COMPROMISSO (a rota não troca nenhum dos dois), nunca pelo tipo da grade —
+  // `lib/agenda/tipo-da-remarcacao.ts` (achado 1, 16/11). Fora da lista
+  // carregada não pergunta nada: a grade vai até a semana dele primeiro.
+  const remarcandoAtivo = remarcandoId !== null && remarcandoId === idAberto ? remarcandoId : null;
+  const abertoNaGrade = idAberto ? todos.find((a) => a.id === idAberto) : undefined;
+  const alvoDaRemarcacao = remarcandoAtivo ? abertoNaGrade : undefined;
+  const remarcacao = alvoDaRemarcacao ? tipoDaRemarcacao(alvoDaRemarcacao, tiposIniciais, tipo) : null;
   // O que a consulta de horários pergunta: na marcação NOVA, o profissional e o
-  // procedimento escolhidos no modal; ao REMARCAR, os do compromisso.
-  const tipoDaMarcacao = remarcacao
-    ? remarcacao.tipo
+  // procedimento escolhidos no modal; ao REMARCAR, os do compromisso — e só
+  // eles: enquanto o compromisso não chega à lista, nenhum (nem o do modal).
+  const tipoDaMarcacao = remarcandoAtivo
+    ? (remarcacao?.tipo ?? null)
     : formDonoId
       ? (tiposIniciais.find((t) => t.id === formTipoId) ?? null)
       : null;
-  const donoDaConsulta = remarcacao ? remarcacao.donoId : formDonoId || undefined;
+  const donoDaConsulta = remarcandoAtivo ? remarcacao?.donoId : formDonoId || undefined;
 
   // A JANELA ACOMPANHA O MÊS QUE O PAINEL MOSTRA — e continua ESTÁVEL.
   //
@@ -463,10 +492,9 @@ export function AgendaClient({
 
   // A duração do compromisso sendo REMARCADO (upstream #3714): o PATCH preserva
   // o comprimento do bloco, e a lista de horários tem de ser do mesmo tamanho.
-  const duracaoDoCompromisso = React.useMemo(() => {
-    const alvo = remarcandoId ? agendamentos.find((a) => a.id === remarcandoId) : undefined;
-    return alvo ? duracaoDoBloco(alvo.comeca, alvo.termina, 0) || null : null;
-  }, [remarcandoId, agendamentos]);
+  const duracaoDoCompromisso = alvoDaRemarcacao
+    ? duracaoDoBloco(alvoDaRemarcacao.comeca, alvoDaRemarcacao.termina, 0) || null
+    : null;
   // A duração ESCOLHIDA na marcação nova: `null` = a do procedimento. Texto
   // inválido também não viaja; a tela trava o Confirmar.
   const duracaoEscolhida =
@@ -480,7 +508,7 @@ export function AgendaClient({
   // nenhum, que é exatamente o que uma instalação fresca produz (a rota devolve
   // 422 porque ninguém está em `attendant_availability`).
   const { data: horarios, isError: horariosFalharam } = useHorariosLivres(
-    marcando && tipoDaMarcacao
+    (marcando || remarcandoAtivo !== null) && tipoDaMarcacao
       ? {
           event_type_id: tipoDaMarcacao.id,
           owner_user_id: donoDaConsulta,
@@ -491,7 +519,7 @@ export function AgendaClient({
           // comprimento do bloco que vai ser movido; marcando, a escolhida na
           // tela. Sem escolha não vai nada, e vale a do procedimento (que pode
           // vir do catálogo, por isso a tela não manda o número dela).
-          duracao_minutos: remarcandoId ? (duracaoDoCompromisso ?? undefined) : (duracaoEscolhida ?? undefined),
+          duracao_minutos: remarcandoAtivo ? (duracaoDoCompromisso ?? undefined) : (duracaoEscolhida ?? undefined),
         }
       : null,
   );
@@ -502,7 +530,7 @@ export function AgendaClient({
       const d = new Date(s.inicio);
       // A CHAVE E O RÓTULO SAEM DO FUSO DA ORGANIZAÇÃO: o slot das 09:00 da
       // clínica é daquele dia e daquela hora PARA ELA, não para quem está
-      // olhando (issue #1362). O lookup em `PainelDeMarcacao` continua batendo,
+      // olhando (issue #1362). O lookup em `QuandoDaMarcacao` continua batendo,
       // porque ele indexa pela data de calendário da mesma âncora.
       const chave = diaLocalISO(d, fusoDaAgenda);
       const p = partesNoFuso(d, fusoDaAgenda);
@@ -515,10 +543,9 @@ export function AgendaClient({
     return mapa;
   }, [horarios, fusoDaAgenda]);
 
-  // A GRADE não mostra cancelado — ele fica só na aba "Cancelados" do
-  // histórico, que lê `agendamentos` (cheio) e o separa sozinha em `separar()`.
-  // Mesma fonte, dois recortes: a grade responde "o que está de pé", o
-  // histórico responde "o que aconteceu", cancelado incluso.
+  // A GRADE não mostra cancelado: ela responde "o que está de pé". O que
+  // aconteceu com um cancelado fica na linha do tempo do lead e se abre pelos
+  // links da Central (`?compromisso=`), no painel dele.
   const agendamentosDaGrade = React.useMemo(
     () => agendamentos.filter((a) => a.situacao !== "cancelled"),
     [agendamentos],
@@ -536,22 +563,6 @@ export function AgendaClient({
     [fechamentosVivos, selecionadas],
   );
 
-  /**
-   * O que é ACIONÁVEL — o que a lista "Próximos" pode oferecer botão para fazer.
-   *
-   * Ocupação vinda do Google fica de fora: ela é bloco de terceiro, o id é de
-   * `calendar_external_events`, e as rotas de remarcar/cancelar procuram em
-   * `calendar_appointments`. Ver o comentário longo no `HistoricoDaAgenda`
-   * abaixo, com o 404 medido.
-   *
-   * A GRADE recebe `agendamentosDaGrade` (tudo menos cancelado) — é lá que a ocupação
-   * precisa aparecer, e é lá que ela já é desenhada inerte.
-   */
-  const agendamentosAcionaveis = React.useMemo(
-    () => agendamentos.filter((a) => a.origem !== "google_sync"),
-    [agendamentos],
-  );
-
   const passo = visao === "mes" ? 30 : visao === "semana" ? 7 : 1;
   // O PADRÃO de formato também muda de idioma, não só o locale: em português
   // "d 'de' MMMM" tem a preposição escrita à mão dentro do padrão, e em
@@ -562,24 +573,24 @@ export function AgendaClient({
     visao === "mes"
       ? format(ancora, t("MMMM 'de' yyyy"), { locale: localeDaData })
       : visao === "semana"
-        ? `${format(startOfWeek(ancora, { weekStartsOn: 0 }), t("d 'de' MMM"), { locale: localeDaData })} — ${format(addDays(startOfWeek(ancora, { weekStartsOn: 0 }), 6), t("d 'de' MMM"), { locale: localeDaData })}`
+        ? (() => {
+            // Os MESMOS dias que a grade desenha: segunda a sábado, domingo só
+            // quando tem compromisso ou quando é hoje (o hoje DA ORGANIZAÇÃO).
+            const dias = diasDaSemanaDe(ancora, agendamentosDaGrade, fusoDaAgenda, hoje);
+            const primeiro = dias[0] ?? ancora;
+            const ultimo = dias[dias.length - 1] ?? ancora;
+            return `${format(primeiro, t("d 'de' MMM"), { locale: localeDaData })} — ${format(ultimo, t("d 'de' MMM"), { locale: localeDaData })}`;
+          })()
         : format(ancora, t("EEEE, d 'de' MMMM"), { locale: localeDaData });
 
-  // Fechar o modal de marcar OU o painel de remarcar: os dois limpam o mesmo
-  // estado (ver os porquês linha a linha abaixo).
+  // Fechar o modal de marcar limpa o estado da marcação (ver os porquês linha a
+  // linha abaixo). REMARCAR mora no painel do paciente e não passa por aqui.
   const aoMudarAbertura = (aberto: boolean) => {
           setMarcando(aberto);
-          // Fechar sem confirmar volta ao modo normal — senão o próximo "Novo
-          // agendamento" remarcaria o compromisso anterior em silêncio. O
-          // horário vindo da grade some pela mesma razão: abrir o painel pelo
-          // botão depois de fechar um bloco reabriria no horário do bloco.
+          // O horário vindo da grade some ao fechar: abrir o painel pelo botão
+          // depois de fechar um bloco reabriria no horário do bloco.
           if (!aberto) {
-            setRemarcandoId(null);
             setHorarioEscolhido(null);
-            // Pelo mesmo motivo das duas linhas acima: um convidado digitado e
-            // não usado reapareceria na PRÓXIMA marcação, que é de outro
-            // cliente — convite para a pessoa errada, sem ninguém ter pedido.
-            setEmailConvidado("");
             setFormDonoId("");
             setFormTipoId("");
             setDuracaoEditada(null);
@@ -632,28 +643,130 @@ export function AgendaClient({
       */}
       <React.Suspense fallback={null}>
         <AvisoDaConexaoGoogle />
-        <EntradaDaAgenda onContext={onContext} />
+        <EntradaDaAgenda
+          onContext={onContext}
+          profissional={
+            abertoNaGrade ? pessoas.find((p) => p.id === abertoNaGrade.responsavelId)?.nome : undefined
+          }
+          remarcacao={
+            podeMarcar && idAberto
+              ? {
+                  aberta: remarcandoAtivo !== null,
+                  onAbrir: (comecaEm) => {
+                    setRemarcandoId(idAberto);
+                    // Aberto por link (Central, Radar) e fora da semana
+                    // carregada: a grade vai até ele, e os horários esperam o
+                    // compromisso aparecer na lista.
+                    if (!abertoNaGrade) setAncora(ancoraLocalDoDia(diaLocalISO(new Date(comecaEm), fusoDaAgenda)));
+                  },
+                  onFechar: () => setRemarcandoId(null),
+                  semLembrete: abertoNaGrade?.naoRecebeMensagens
+                    ? (abertoNaGrade.quemSeraAtendido ?? t("O paciente"))
+                    : undefined,
+                  quando: {
+                    ancora: ancoraLocalDoDia(hoje),
+                    agora,
+                    fuso: horarios?.fuso_da_regra,
+                    horariosPorDia,
+                    publicouHorarios: horarios?.publicou_horarios ?? true,
+                    erroAoCarregar: horariosFalharam,
+                    fusoSuposto: horarios?.fuso_suposto ?? false,
+                    fontesDefasadas: horarios?.fontes_defasadas,
+                    googleCoberturaParcial: horarios?.google_cobertura_parcial,
+                    onMesVisivel,
+                    mesCarregado: horarios ? mesDoPainel : null,
+                    temTipo: Boolean(remarcacao?.tipo),
+                    avisoSemTipo: t("Carregando…"),
+                    // Remarcar fora da lista vale como na marcação: a rota
+                    // aplica a mesma regra de encaixe no PATCH.
+                    permiteEncaixe: podeMarcar,
+                    abriuComHorario: false,
+                  },
+                }
+              : undefined
+          }
+        />
       </React.Suspense>
 
 
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <div className="min-w-0">
-          <h1 className="titulo-tela">{t("Agenda")}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t("O que está marcado, com quem, e quem atende — seu e da equipe.")}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {/* "Hoje" é o hoje DA ORGANIZAÇÃO. Com `new Date()` o botão desfazia a
-              âncora do servidor e devolvia a semana do navegador — o defeito que
-              a tela acabou de fechar, a um clique de distância. */}
+      {/* O TOPO NUMA LINHA SÓ (decisão 7 do André, 27/11/2026): ‹ › período,
+          Hoje, Dia/Semana/Mês e Novo agendamento. A fileira de profissionais
+          vem logo abaixo, ao lado de "Horários livres de" (`AgendaInterativa`). */}
+      <header data-testid="topo-da-agenda" className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h1 className="titulo-tela mr-1">{t("Agenda")}</h1>
+        <div className="flex items-center gap-0.5">
           <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAncora(ancoraLocalDoDia(hoje))}
+            variant="ghost"
+            size="icon"
+            aria-label={t("Período anterior")}
+            data-testid="periodo-anterior"
+            onClick={() => setAncora((d) => addDays(d, -passo))}
           >
-            {t("Hoje")}
+            <CaretLeft size={16} weight="bold" aria-hidden />
           </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t("Próximo período")}
+            data-testid="periodo-seguinte"
+            onClick={() => setAncora((d) => addDays(d, passo))}
+          >
+            <CaretRight size={16} weight="bold" aria-hidden />
+          </Button>
+        </div>
+        {/*
+          `first-letter:uppercase` e NÃO `capitalize`: o `capitalize` do CSS
+          maiúscula toda palavra, e o date-fns em pt-br devolve "23 de ago" —
+          virava "23 De Ago". Preposição com maiúscula é o detalhe que faz o
+          produto parecer traduzido em vez de escrito, e fica no topo, ao
+          lado do título.
+        */}
+        <span
+          data-testid="periodo"
+          className="truncate text-sm font-semibold first-letter:uppercase"
+        >
+          {periodo}
+        </span>
+        {/* "Hoje" é o hoje DA ORGANIZAÇÃO. Com `new Date()` o botão desfazia a
+            âncora do servidor e devolvia a semana do navegador — o defeito que
+            a tela acabou de fechar, a um clique de distância. */}
+        <Button
+          ref={hojeRef}
+          variant="outline"
+          size="sm"
+          onClick={() => setAncora(ancoraLocalDoDia(hoje))}
+        >
+          {t("Hoje")}
+        </Button>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div
+            data-testid="alternador-de-visao"
+            className="flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5"
+          >
+            {VISOES.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                data-testid={`visao-${v.id}`}
+                aria-pressed={visao === v.id}
+                onClick={() => setVisao(v.id)}
+                className={cn(
+                  // 44 px no toque, como os botões (item 135).
+                  "rounded-sm px-2.5 py-1 text-xs transition-colors duration-fast ease-out max-lg:min-h-11",
+                  // No celular a grade da semana mostra UM dia: o botão
+                  // prometia a semana e as setas pulavam 7 dias (item 133). A
+                  // tela já abre no Dia abaixo de `md`.
+                  v.id === "semana" && "max-md:hidden",
+                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
+                  visao === v.id
+                    ? "bg-accent font-semibold text-accent-foreground"
+                    : "text-text-muted hover:bg-surface-elevated hover:text-text",
+                )}
+              >
+                {t(v.rotulo)}
+              </button>
+            ))}
+          </div>
           {/*
             DESABILITADO COM O MOTIVO À VISTA, e não ligado a um `onClick` vazio.
             Enquanto a frente 1 não expõe `/api/v1/agenda` não há o que marcar, e
@@ -713,106 +826,13 @@ export function AgendaClient({
         </div>
       </header>
 
-      {/* O cartão do Google vem DEPOIS do título: a tela começava por uma caixa
-          de integração, antes até de dizer que era a Agenda (print de 08/10). */}
-      {/* Sem as credenciais da instalação, o cartão só aparece a quem
-          administra (item 131): para a equipe ele era um aviso sobre algo que
-          ela não resolve, com nomes de chave e endereço do servidor. */}
-      {(googleConfigurado || administra) && <CartaoDaConexaoGoogle
-        configurado={googleConfigurado}
-        falta={faltaNoGoogle}
-        linkDeConfiguracao={linkDeConfiguracaoDoGoogle}
-        contaConectada={contaConectada}
-        enderecoDeRetorno={enderecoDeRetorno}
-      />}
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="flex items-center gap-0.5">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("Período anterior")}
-              data-testid="periodo-anterior"
-              onClick={() => setAncora((d) => addDays(d, -passo))}
-            >
-              <CaretLeft size={16} weight="bold" aria-hidden />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("Próximo período")}
-              data-testid="periodo-seguinte"
-              onClick={() => setAncora((d) => addDays(d, passo))}
-            >
-              <CaretRight size={16} weight="bold" aria-hidden />
-            </Button>
-          </div>
-          {/*
-            `first-letter:uppercase` e NÃO `capitalize`: o `capitalize` do CSS
-            maiúscula toda palavra, e o date-fns em pt-br devolve "23 de ago" —
-            virava "23 De Ago". Preposição com maiúscula é o detalhe que faz o
-            produto parecer traduzido em vez de escrito, e fica na primeira
-            linha abaixo do título.
-          */}
-          <span
-            data-testid="periodo"
-            className="truncate text-sm font-semibold first-letter:uppercase"
-          >
-            {periodo}
-          </span>
-        </div>
-
-        {/* `flex-wrap` pelo mesmo motivo da vitrine, e aqui é conserto de CLASSE e
-            não de instância: esta linha passou no gate por sorte de largura (a
-            organização de teste tem cinco pessoas), não por estar certa. Com mais
-            gente no filtro, ela estoura igual — e o `overflow-x: hidden` corta o
-            alternador de visão em silêncio. */}
-        <div className="flex flex-wrap items-center gap-3">
-          <FiltroDePessoas pessoas={pessoas} selecionadas={selecionadas} onMudar={mudarPessoas} />
-          <div
-            data-testid="alternador-de-visao"
-            className="flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5"
-          >
-            {VISOES.map((v) => (
-              <button
-                key={v.id}
-                type="button"
-                data-testid={`visao-${v.id}`}
-                aria-pressed={visao === v.id}
-                onClick={() => setVisao(v.id)}
-                className={cn(
-                  // 44 px no toque, como os botões (item 135).
-                  "rounded-sm px-2.5 py-1 text-xs transition-colors duration-fast ease-out max-lg:min-h-11",
-                  // No celular a grade da semana mostra UM dia: o botão
-                  // prometia a semana e as setas pulavam 7 dias (item 133). A
-                  // tela já abre no Dia abaixo de `md`.
-                  v.id === "semana" && "max-md:hidden",
-                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
-                  visao === v.id
-                    ? "bg-accent font-semibold text-accent-foreground"
-                    : "text-text-muted hover:bg-surface-elevated hover:text-text",
-                )}
-              >
-                {t(v.rotulo)}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/*
-        O HISTÓRICO na tela do produto, e não só na vitrine. Ele aparece mesmo
-        sem dado: as quatro abas com contador zero respondem "não há nada" sem
-        gastar um clique, e some-lo faria a tela parecer menor do que é.
-      */}
       {/*
         A MARCAÇÃO NOVA é um modal no centro, em duas abas ("Novo agendamento" e
         "Bloquear horário"), no molde do sistema que a clínica já usava: o painel
-        longo em três colunas fazia rolar muito para marcar uma consulta. REMARCAR
-        continua no painel lateral de sempre, que é só "escolha o novo horário".
+        longo em três colunas fazia rolar muito para marcar uma consulta.
+        REMARCAR acontece no painel do paciente.
       */}
-      <Dialog open={marcando && !remarcandoId} onOpenChange={aoMudarAbertura}>
+      <Dialog open={marcando} onOpenChange={aoMudarAbertura}>
         <DialogContent
           className="flex max-w-[1040px] flex-col gap-0 overflow-x-hidden bg-surface p-0"
           // Escape com a lista de pacientes aberta fecha só a lista.
@@ -822,7 +842,7 @@ export function AgendaClient({
               e.preventDefault();
           }}
         >
-          <DialogHeader className="px-5 pb-2 pt-5 text-left">
+          <DialogHeader className="px-5 pb-2 pt-4 text-left">
             <DialogTitle>{t("Agenda")}</DialogTitle>
             <DialogDescription className="sr-only">
               {t("Marque um atendimento ou bloqueie um horário da agenda.")}
@@ -882,8 +902,9 @@ export function AgendaClient({
                   location_details: m.endereco,
                   description: m.observacao || undefined,
                   booking_channel: m.canal,
-                  converted_by_kind: m.quemConverteu.kind,
-                  converted_by_user_id: m.quemConverteu.kind === "user" ? m.quemConverteu.userId : undefined,
+                  // `null` explícito (paciente antigo) grava sem conversão; ausente seria quem marca.
+                  converted_by_kind: m.quemConverteu?.kind ?? null,
+                  converted_by_user_id: m.quemConverteu?.kind === "user" ? m.quemConverteu.userId : undefined,
                 })
                 .then((r) => {
                   // Guardado para o fechamento saber para onde levar a grade.
@@ -902,314 +923,6 @@ export function AgendaClient({
         </DialogContent>
       </Dialog>
 
-      <Sheet open={marcando && Boolean(remarcandoId)} onOpenChange={aoMudarAbertura}>
-        <SheetContent
-          side="right"
-          className="flex w-full flex-col overflow-x-hidden overflow-y-auto sm:max-w-3xl lg:max-w-[1040px] lg:px-3"
-        >
-          <SheetHeader>
-            <SheetTitle>{t("Remarcar agendamento")}</SheetTitle>
-            {/* A8: o painel começa dizendo QUEM está sendo remarcado. Antes
-                ele abria pelo e-mail do convidado, sem nome nem horário. */}
-            {(() => {
-              const alvo = todos.find((a) => a.id === remarcandoId);
-              if (!alvo) return null;
-              const quando = quandoCurto(
-                new Date(alvo.comeca),
-                fusoDaAgenda,
-                agora,
-                localeDaData,
-                t("hoje"),
-              );
-              return (
-                <SheetDescription data-testid="remarcando-quem">
-                  {t("Remarcando")}{" "}
-                  <span className="font-semibold text-text">
-                    {alvo.quemSeraAtendido ?? alvo.titulo}
-                  </span>
-                  {alvo.quemSeraAtendido ? ` · ${alvo.titulo}` : ""} · {quando}
-                </SheetDescription>
-              );
-            })()}
-          </SheetHeader>
-          {/* O convite do Google é exceção, não o caminho: fica recolhido (A8).
-              Quem digita já o abriu, então o aviso de e-mail inválido aparece. */}
-          <details className="mt-4">
-            <summary className="cursor-pointer text-xs font-medium text-text-muted hover:text-text">
-              {t("Mais opções")}
-            </summary>
-            <div className="mt-2">
-              <label
-                className="block text-xs font-medium text-text-muted"
-                htmlFor="email-do-convidado"
-              >
-                {t("E-mail do convidado")}{" "}
-                <span className="font-normal opacity-70">({t("opcional")})</span>
-              </label>
-              <input
-                id="email-do-convidado"
-                data-testid="email-do-convidado"
-                type="email"
-                inputMode="email"
-                autoComplete="off"
-                value={emailConvidado}
-                onChange={(e) => setEmailConvidado(e.target.value)}
-                className={cn(
-                  // `outline-hidden`, não `outline-none`: no Tailwind 4 os dois
-                  // trocaram de significado, e o `outline-none` do v4 apaga o
-                  // contorno que o modo de alto contraste do sistema usa.
-                  "mt-1 w-full rounded-md border bg-surface p-2 text-sm outline-hidden",
-                  emailConvidadoInvalido
-                    ? "border-danger focus:border-danger"
-                    : "border-border focus:border-border-strong",
-                )}
-                placeholder={t("cliente@empresa.com")}
-                aria-invalid={emailConvidadoInvalido || undefined}
-                aria-describedby="ajuda-do-convidado"
-              />
-              <p id="ajuda-do-convidado" className="mt-1 text-xs text-text-muted">
-                {emailConvidadoInvalido
-                  ? t("Endereço inválido — confira antes de marcar.")
-                  : t("Preenchido, o Google envia o convite por e-mail para esta pessoa.")}
-              </p>
-            </div>
-          </details>
-          {tipoDaMarcacao && (
-            <div className="mt-4 shrink-0">
-              <PainelDeMarcacao
-                // O mês que abre é o da organização, como a grade ao lado.
-                ancora={ancoraLocalDoDia(hoje)}
-                agora={agora}
-                responsavel={
-                  // O DONO DO TIPO, não o primeiro da lista. A tela dizia "com
-                  // <primeira pessoa>" enquanto oferecia a jornada de outra —
-                  // e marcava na agenda da primeira, que não tinha jornada.
-                  //
-                  // "Você" só quando o dono da agenda É quem está logado: com a
-                  // lista vazia, o fallback fixo dizia "Você" para a jornada da
-                  // médica (porte de melgarafael/DeskcommCRM d7d18345b, #896).
-                  resolverResponsavelDoPainel({
-                    pessoas,
-                    donoId: donoDaMarcacao ?? tipoDaMarcacao.donoId,
-                    usuarioId,
-                  })
-                }
-                tipo={tipoDaMarcacao.nome}
-                // Remarcar preserva o comprimento do bloco (upstream #3714).
-                duracaoMin={duracaoDoCompromisso ?? tipoDaMarcacao.duracaoMin}
-                // A10: quem pediu para não receber mensagens não recebe o
-                // lembrete do novo horário — o painel avisa para confirmar por
-                // telefone, como a marcação simples.
-                quemSeraAtendido={(() => {
-                  const alvo = todos.find((a) => a.id === remarcandoId);
-                  return alvo?.quemSeraAtendido
-                    ? { nome: alvo.quemSeraAtendido, aceitaMensagem: alvo.naoRecebeMensagens !== true }
-                    : undefined;
-                })()}
-                // O LOCAL e o FUSO de verdade, que a tela tinha e não passava.
-                //
-                // `PainelDeMarcacao` trazia `local = "Presencial · Sala 2"` e
-                // `fuso = "America/Sao_Paulo"` como defaults de parâmetro, e
-                // estas duas props nunca eram passadas: os defaults venciam em
-                // 100% das marcações do produto. É o que o cabeçalho deste
-                // arquivo proíbe — dado falso plausível numa tela multi-tenant é
-                // indistinguível de vazamento.
-                //
-                // `fuso_da_regra` já vinha da rota e já era tipado pelo hook;
-                // ninguém em tela o lia. Chutar São Paulo para quem atende em
-                // Manaus é uma hora de diferença no horário oferecido ao cliente.
-                local={rotuloDoLocal(tipoDaMarcacao.localKind, tipoDaMarcacao.localDetalhes)}
-                fuso={horarios?.fuso_da_regra}
-                horariosPorDia={horariosPorDia}
-                publicouHorarios={horarios?.publicou_horarios ?? true}
-                erroAoCarregar={horariosFalharam}
-                fusoSuposto={horarios?.fuso_suposto ?? false}
-                fontesDefasadas={horarios?.fontes_defasadas}
-                googleCoberturaParcial={horarios?.google_cobertura_parcial}
-                onMesVisivel={onMesVisivel}
-                // `data` do React Query é da chave ATUAL (sem `placeholderData`),
-                // então chegou = é do `mesDoPainel`: é o que deixa o painel saber
-                // "este mês acabou" em vez de "ainda carregando".
-                mesCarregado={horarios ? mesDoPainel : null}
-                horarioInicial={horarioEscolhido ?? undefined}
-                // O ENCAIXE é desta tela, e só dela: aqui quem marca é uma
-                // pessoa da equipe com sessão, que é exatamente o ator a quem a
-                // rota permite sair da grade. Vale também para REMARCAR, que é
-                // este mesmo painel com PATCH — e a rota aplica a mesma regra lá.
-                permiteEncaixe={podeMarcar}
-                // ESTE é o fio que faltava. Sem ele o "Marcado ✓" era estado
-                // local do React e nenhuma linha nascia no banco.
-                // REMARCAR é este painel com PATCH; a marcação nova mora no modal
-                // simples abaixo (`MarcacaoSimples`).
-                onConfirmar={(instante) => {
-                  if (emailConvidadoInvalido) {
-                    return Promise.reject(new Error("e-mail do convidado inválido"));
-                  }
-                  // `|| undefined` e não a string vazia: campo em branco tem de
-                  // ficar FORA do corpo, senão o PATCH leria "" como "apague o
-                  // convidado" e desconvidaria alguém a cada remarcação.
-                  const convidado = emailConvidadoLimpo || undefined;
-                  if (!remarcandoId) return Promise.reject(new Error("nada a remarcar"));
-                  return remarcar
-                    .mutateAsync({
-                      id: remarcandoId,
-                      revision: agendamentos.find((a) => a.id === remarcandoId)?.revision,
-                      starts_at: instante,
-                      guest_email: convidado,
-                    })
-                    .then((r) => {
-                      aoMudarAbertura(false);
-                      return r;
-                    });
-                }}
-                // "VER NA AGENDA" — o botão que não fazia nada.
-                //
-                // Ele não tinha `onClick`: parecia ativo e o clique era mudo. E
-                // fechar o painel sozinho não bastaria — o compromisso recém
-                // marcado costuma ser de OUTRA semana (o do relato era 8 de
-                // setembro), e a grade abre na semana corrente. Voltar para uma
-                // grade que não mostra o que acabou de nascer é o mesmo "nada
-                // acontece" com um passo a mais.
-                //
-                // Por isso a âncora vai junto: fecha o painel E leva a grade até
-                // o dia do compromisso. `startOfDay` porque a âncora é o DIA de
-                // referência da visão — mandar o instante exato funcionaria por
-                // acidente na visão de semana e escolheria a hora errada na de
-                // dia.
-                onVerNaAgenda={(instante) => {
-                  aoMudarAbertura(false);
-                  setAncora(startOfDay(new Date(instante)));
-                }}
-              />
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
-
-      {/* CANCELAR pede motivo, e o motivo é OBRIGATÓRIO na rota (mínimo 3).
-          Não é burocracia: é o que a equipe lê ao ver o horário vago. "Cancelado"
-          sem motivo faz alguém ligar para o cliente perguntando o que houve — ou,
-          pior, não ligar. */}
-      <Sheet
-        open={cancelandoId !== null}
-        onOpenChange={(aberto) => {
-          if (!aberto) setCancelandoId(null);
-        }}
-      >
-        <SheetContent side="right" className="w-full sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>{t("Cancelar agendamento")}</SheetTitle>
-          </SheetHeader>
-          <div className="mt-4 space-y-3" data-testid="painel-de-cancelamento">
-            <p className="text-sm text-text-muted">
-              {(() => {
-                const alvo = todos.find((a) => a.id === cancelandoId);
-                if (!alvo) return t("Este agendamento não está mais na lista.");
-                const quem = alvo.quemSeraAtendido ? ` ${t("de")} ${alvo.quemSeraAtendido}` : "";
-                return `${alvo.titulo}${quem}, ${format(
-                  dataDeParede(new Date(alvo.comeca), fusoDaAgenda),
-                  t("d 'de' MMMM 'às' HH:mm"),
-                  { locale: localeDaData },
-                )}.`;
-              })()}
-            </p>
-            <label
-              className="block text-xs font-medium text-text-muted"
-              htmlFor="motivo-do-cancelamento"
-            >
-              {t("Por que está cancelando?")}
-            </label>
-            <textarea
-              id="motivo-do-cancelamento"
-              data-testid="motivo-do-cancelamento"
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              rows={3}
-              className="w-full rounded-md border border-border bg-surface p-2 text-sm outline-hidden focus:border-border-strong"
-              placeholder={t("O paciente pediu para remarcar por telefone")}
-            />
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setCancelandoId(null)}>
-                {t("Voltar")}
-              </Button>
-              <Button
-                size="sm"
-                data-testid="confirmar-cancelamento"
-                // O mínimo de 3 é o da rota. Desabilitar aqui evita um 422 que a
-                // pessoa não tem como prever — o botão diz o que falta pelo estado.
-                disabled={motivo.trim().length < 3 || cancelar.isPending}
-                onClick={() => {
-                  const id = cancelandoId;
-                  if (!id) return;
-                  void cancelar
-                    .mutateAsync({
-                      id,
-                      revision: agendamentos.find((a) => a.id === id)?.revision,
-                      reason: motivo.trim(),
-                    })
-                    .then(
-                      () => setCancelandoId(null),
-                      () => undefined,
-                    );
-                }}
-              >
-                {cancelar.isPending ? t("Cancelando…") : t("Cancelar agendamento")}
-              </Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/*
-        ⚠️ A LISTA DAQUI NÃO É A MESMA DA GRADE, e a diferença é uma linha.
-
-        `GradeDaAgenda` conhece `origem` e desenha o bloco do Google inerte
-        (`disabled`, sem arraste, rótulo "Ocupado"). `HistoricoDaAgenda` NÃO
-        conhece origem: ela decide o botão por `disabled={!onRemarcar}`, que é
-        uma prop do componente inteiro e não da linha. Passar a mesma lista aos
-        dois faz a ocupação do Google chegar em "Próximos" com **Remarcar e
-        Cancelar habilitados** — e cancelar responde 404, porque o id é de
-        `calendar_external_events` e a rota procura em `calendar_appointments`.
-
-        Medido pela tela em 2026-09-03, na triagem do PR #474:
-
-          DELETE /api/v1/agenda/agendamentos
-          → 404 {"error":{"code":"not_found","message":"Agendamento não encontrado."}}
-          toast vermelho aos 1,5s, o painel continua aberto, a linha continua na
-          lista, e `calendar_external_events.status` segue `confirmed`.
-
-        É o "controle decorativo" que o comentário de `GradeDaAgenda` diz que
-        esta base já pagou uma vez, replantado no componente irmão — e o #474 o
-        tornou PERMANENTE: antes dele a linha só existia no primeiro frame da
-        semana corrente (a semente do servidor) e sumia no primeiro refetch.
-
-        Filtrar é o conserto certo, e não é escolha estética: bloco anônimo do
-        Google não é um compromisso NOSSO. Não há o que remarcar, não há o que
-        cancelar, e "Ocupado · 15:00–16:00" numa lista de próximos atendimentos
-        não informa nada que a grade — que O DESENHA no horário — já não diga
-        melhor. A ocupação continua inteira onde ela serve.
-      */}
-
-      {/* ⚠️ O VAZIO NÃO ESCONDE MAIS A GRADE, e o achado veio do CI.
-          Isto era um ternário: com zero agendamentos, `EmptyAgenda` entrava NO
-          LUGAR de `GradeDaAgenda`. Numa instalação nova — que é o estado de
-          primeira impressão — a pessoa abria a Agenda e não via calendário
-          NENHUM: sem semana, sem horários, e com o alternador de visão ligado a
-          nada, que é controle decorativo.
-
-          A mensagem continua, porque ela é boa: diz de ONDE vem o próximo
-          agendamento em vez de constatar a ausência. Ela virou aviso ACIMA da
-          grade, e a grade fica.
-
-          Achado porque a cerca nova das três visões passou aqui (banco com
-          dados de execuções anteriores) e reprovou no CI, onde o banco nasce
-          limpo. O mesmo formato do defeito que `agenda-tela-do-produto` já
-          tinha pago: verde por banco sujo. */}
-      {agendamentos.length === 0 ? (
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <EmptyAgenda />
-        </div>
-      ) : null}
       {/* A GRADE INTERATIVA — clicar num bloco livre marca ali, arrastar um card
           remarca. Toda a fiação (a consulta de horários da janela desenhada, a
           proposta de remarcação, o otimismo com volta atrás) mora em
@@ -1225,6 +938,57 @@ export function AgendaClient({
         // A janela de horas sai do período INTEIRO: com o filtro de pessoas ela
         // pulava a cada troca (item 136). Cancelado não alarga.
         janelaSobre={todos}
+        fileira={
+          <FiltroDePessoas
+            pessoas={pessoasDaFileira}
+            selecionadas={selecionadas}
+            onMudar={mudarPessoas}
+            focoDeReserva={hojeRef}
+          />
+        }
+        // OS AVISOS vêm DEPOIS da fileira de profissionais e antes da grade
+        // (decisão 7 do André, 27/11/2026): navegação em cima, conteúdo embaixo.
+        // Com uma pessoa escolhida e o período vazio, o aviso de vazio aparecia
+        // ACIMA do filtro que o causou.
+        aviso={
+          <>
+            {/* O cartão do Google vem DEPOIS do topo e da fileira: a tela começava
+                por uma caixa de integração, antes até de dizer que era a Agenda
+                (print de 08/10). */}
+            {/* Sem as credenciais da instalação, o cartão só aparece a quem
+                administra (item 131): para a equipe ele era um aviso sobre algo que
+                ela não resolve, com nomes de chave e endereço do servidor. */}
+            {(googleConfigurado || administra) && <CartaoDaConexaoGoogle
+              configurado={googleConfigurado}
+              falta={faltaNoGoogle}
+              linkDeConfiguracao={linkDeConfiguracaoDoGoogle}
+              contaConectada={contaConectada}
+              enderecoDeRetorno={enderecoDeRetorno}
+            />}
+            {/* ⚠️ O VAZIO NÃO ESCONDE MAIS A GRADE, e o achado veio do CI.
+                Isto era um ternário: com zero agendamentos, `EmptyAgenda` entrava NO
+                LUGAR de `GradeDaAgenda`. Numa instalação nova — que é o estado de
+                primeira impressão — a pessoa abria a Agenda e não via calendário
+                NENHUM: sem semana, sem horários, e com o alternador de visão ligado a
+                nada, que é controle decorativo.
+
+                A mensagem continua, porque ela é boa: diz de ONDE vem o próximo
+                agendamento em vez de constatar a ausência. Ela virou aviso ACIMA da
+                grade, e a grade fica.
+
+                Achado porque a cerca nova das três visões passou aqui (banco com
+                dados de execuções anteriores) e reprovou no CI, onde o banco nasce
+                limpo. O mesmo formato do defeito que `agenda-tela-do-produto` já
+                tinha pago: verde por banco sujo. */}
+            {/* Só com o período CHEGADO: enquanto carrega, a lista é vazia por
+                falta de resposta, não por falta de agendamento. */}
+            {!carregandoPeriodo && agendamentos.length === 0 ? (
+              <div className="rounded-lg border border-border bg-surface p-4">
+                <EmptyAgenda />
+              </div>
+            ) : null}
+          </>
+        }
         recorte={recorteDaGrade}
         tipos={tiposIniciais.map((t) => ({ id: t.id, nome: t.nome, duracaoMin: t.duracaoMin }))}
         tipo={tipo ? { id: tipo.id, duracaoMin: tipo.duracaoMin, donoId: tipo.donoId } : null}
@@ -1260,24 +1024,16 @@ export function AgendaClient({
         }
         /* Tocar num card abre o detalhe. A prop já atravessava `AgendaInterativa`
            e `GradeDaAgenda` e chegava `undefined` aqui: o toque não fazia nada, e
-           o detalhe só abria por `?compromisso=`, que apenas o Histórico e o Radar
-           linkavam. Reusa o MESMO parâmetro que `EntradaDaAgenda` já lê — e `push`,
-           não `replace`, porque é o que o Histórico faz com `<Link>` e é o que faz
+           o detalhe só abria por `?compromisso=`, que apenas o Radar (e a lista de
+           baixo, removida em 27/11/2026) linkavam. Reusa o MESMO parâmetro que
+           `EntradaDaAgenda` já lê — e `push`, não `replace`, porque é o que faz
            o botão voltar do celular fechar o detalhe. E o `?tipo=` vai JUNTO:
            sem ele, abrir um card trocava a URL por só `?compromisso=`, o fecho
            não achava tipo nenhum para manter e o F5 seguinte voltava ao
            primeiro (#1657). */
-        onAbrirAgendamento={(id) => {
-          const parametros = new URLSearchParams();
-          if (tipo) parametros.set("tipo", tipo.id);
-          parametros.set("compromisso", id);
-          router.push(`/app/agenda?${parametros.toString()}`);
-        }}
+        onAbrirAgendamento={(id) => abrirCompromisso(id)}
         // A recusa do arraste oferece o Remarcar do próprio compromisso (item 137).
-        onRemarcar={(id) => {
-          setRemarcandoId(id);
-          setMarcando(true);
-        }}
+        onRemarcar={(id) => abrirCompromisso(id, true)}
         // A7: no Mês, tocar no dia abre aquele dia. A data da célula já é do
         // calendário da grade; `ancoraLocalDoDia` a põe ao meio-dia, como a
         // âncora nasce.
@@ -1286,63 +1042,6 @@ export function AgendaClient({
           setVisao("dia");
         }}
         className="min-h-0 flex-1"
-      />
-
-      {/* O histórico vem DEPOIS da grade: com ele em cima, o calendário — que é
-          o que se abre a Agenda para ver — ficava abaixo da dobra. */}
-      <HistoricoDaAgenda
-        agendamentos={agendamentosAcionaveis}
-        pessoas={pessoas}
-        agora={agora}
-        // Mesma régua da grade ao lado (upstream #1831): sem isto a lista
-        // imprime o relógio do navegador.
-        fuso={fusoDaAgenda}
-        className="max-h-[320px]"
-        // ⚠️ ESTAS DUAS PROPS FALTAVAM, e a ausência tinha cara de permissão.
-        // `HistoricoDaAgenda` usa `disabled={!onRemarcar}`; sem elas os botões
-        // nasciam cinzas em toda linha, de toda organização — e o `title` dizia
-        // "Disponível quando a agenda estiver conectada", que é falso: PATCH e
-        // DELETE não tocam o Google. Só a IA conseguia remarcar ou cancelar.
-        onRemarcar={(id) => {
-          setRemarcandoId(id);
-          setMarcando(true);
-        }}
-        onCancelar={(id) => {
-          setMotivo("");
-          setCancelandoId(id);
-        }}
-        // E ESTAS DUAS TAMBÉM FALTAVAM — o conserto acima alcançou 2 dos 4
-        // botões do MESMO componente, e "Realizado"/"Faltou" ficaram cinzas,
-        // com a mesma frase falsa, por mais tempo ainda. Conserto por instância
-        // custa a segunda passada; a varredura custaria um `grep`.
-        //
-        // Sem cerimônia de confirmação, ao contrário de cancelar: registrar
-        // desfecho não avisa ninguém e se desfaz voltando o status. Cancelar
-        // exige motivo porque é o que a equipe lê ao ver o horário vago.
-        // CONFIRMAR usa o mesmo `desfecho` que realizado/faltou: os três são o
-        // mesmo PATCH com outro `status`. Criar um hook próprio duplicaria a
-        // invalidação de cache e o tratamento de erro por nada.
-        onConfirmar={(id) =>
-          desfecho.mutate({
-            id,
-            revision: agendamentos.find((a) => a.id === id)?.revision,
-            status: "confirmed",
-          })
-        }
-        onRealizado={(id) =>
-          desfecho.mutate({
-            id,
-            revision: agendamentos.find((a) => a.id === id)?.revision,
-            status: "completed",
-          })
-        }
-        onFaltou={(id) =>
-          desfecho.mutate({
-            id,
-            revision: agendamentos.find((a) => a.id === id)?.revision,
-            status: "no_show",
-          })
-        }
       />
     </div>
   );

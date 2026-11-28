@@ -12,7 +12,8 @@
  *   3. um fechamento noutro fuso é RECORTADO pelas bordas do dia da grade, e um
  *      "dia todo" em Tóquio vira dois pedaços em São Paulo;
  *   4. a faixa não intercepta o ponteiro e fica ABAIXO dos cards;
- *   5. com duas pessoas, ela diz de quem é;
+ *   5. com duas pessoas, ela diz de quem é — À VISTA, com o nome curto: com
+ *      "Todos" na grade, um "Bloqueado" sem dono parecia a clínica inteira fechada;
  *   6. a visão de mês também diz que o dia (ou a faixa) está fechado.
  */
 import { render, screen, within } from "@testing-library/react";
@@ -118,6 +119,10 @@ describe("a faixa fechada na semana", () => {
     const faixa = coluna("2026-11-03").getByTestId("fechamento-parcial");
     const bloco = coluna("2026-11-03").getByTestId("agendamento-c1");
     expect(faixa.className).toContain("pointer-events-none");
+    // Nem um pedaço dela volta a receber o ponteiro: um rótulo `pointer-events-auto`
+    // cobria horários que ainda se marcam (várias pessoas na grade, modo encaixe).
+    expect(faixa.querySelectorAll('[class*="pointer-events-auto"]')).toHaveLength(0);
+    expect(faixa.querySelector("[title]")).toBeNull();
     // Mesmo contexto, sem z-index: quem vem DEPOIS no DOM pinta por cima.
     expect(faixa.compareDocumentPosition(bloco) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -143,6 +148,27 @@ describe("a faixa fechada na semana", () => {
   it("com uma pessoa só, o nome não aparece (todo fechamento é dela)", () => {
     grade([PARCIAL]);
     expect(coluna("2026-11-03").getByTestId("fechamento-parcial")).not.toHaveTextContent("Ana");
+  });
+
+  it("numa linha só, com DE QUEM à vista; o motivo vai só para o leitor de tela (decisão 7, 27/11/2026)", () => {
+    grade([PARCIAL], { pessoas: [ANA, BRUNO] });
+    const faixa = coluna("2026-11-03").getByTestId("fechamento-parcial");
+    const visiveis = [...faixa.children].filter((el) => !el.classList.contains("sr-only"));
+    expect(visiveis.map((el) => el.textContent)).toEqual(["Bloqueado · Ana"]);
+    expect(faixa.querySelector(".sr-only")?.textContent).toBe(" · 14:00–15:30 · Ana · Banco");
+  });
+
+  it("o nome à vista é o curto, cortado na largura; com uma pessoa só, só 'Bloqueado'", () => {
+    const anaPrado: Pessoa = { ...ANA, nome: "Ana Maria Prado" };
+    const { unmount } = grade([PARCIAL], { pessoas: [anaPrado, BRUNO] });
+    const faixa = coluna("2026-11-03").getByTestId("fechamento-parcial");
+    const rotulo = [...faixa.children].find((el) => !el.classList.contains("sr-only"));
+    expect(rotulo?.textContent).toBe("Bloqueado · Ana P.");
+    expect(rotulo?.querySelector(".truncate")?.textContent).toBe("Bloqueado · Ana P.");
+    unmount();
+    grade([PARCIAL], { pessoas: [anaPrado] });
+    const sozinha = coluna("2026-11-03").getByTestId("fechamento-parcial");
+    expect([...sozinha.children].find((el) => !el.classList.contains("sr-only"))?.textContent).toBe("Bloqueado");
   });
 });
 

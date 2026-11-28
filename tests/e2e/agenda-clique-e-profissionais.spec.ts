@@ -10,11 +10,12 @@ import { esperarAgenda } from "./helpers/tela-agenda";
 /**
  * O PEDIDO DO DONO DA CLÍNICA (15/10), pela tela, como a recepção faria:
  *
- *   1. escolher UMA profissional nos avatares do topo;
- *   2. clicar num horário vazio da semana;
- *   3. ver o "Novo agendamento" abrir já no dia, na hora e com a profissional;
- *   4. confirmar e ver o compromisso na grade, sem recarregar;
- *   5. "Todos" devolve a equipe inteira, e a escolha sobrevive ao F5.
+ *   1. clicar num horário vazio da semana seguinte;
+ *   2. ver o "Novo agendamento" abrir já no dia, na hora e com a profissional;
+ *   3. confirmar e ver o compromisso na grade, sem recarregar;
+ *   4. a fileira de profissionais aparece com ela (27/11/2026: só quem tem
+ *      atendimento na semana), e um clique isola a agenda dela;
+ *   5. a escolha sobrevive ao F5, e "Todos" devolve a equipe inteira.
  *
  * O horário clicado é um ENCAIXE (sem horário publicado) de propósito: é o
  * caso que não existia antes deste pedido. A seed publica jornada seg–sex
@@ -50,7 +51,12 @@ async function entrar(page: Page, creds: Creds) {
   await page.getByLabel(/senha/i).fill(creds.password);
   await page.getByRole("button", { name: /entrar/i }).click();
   await page.waitForURL(/\/app(\/|$)/, { timeout: 20_000 });
+  // A janela de horas da grade sai da jornada da equipe: até `/agenda/pessoas`
+  // responder, a grade desenha o padrão 07–21, e as linhas de antes da jornada
+  // somem quando ela chega.
+  const pessoas = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/v1/agenda/pessoas");
   await page.goto("/app/agenda");
+  await pessoas;
   await esperarAgenda(page, 20_000);
 }
 
@@ -82,35 +88,37 @@ test("uma profissional, um clique no horário vazio, o compromisso na grade", as
   await entrar(page, creds);
   await escolherOTipoDoSeed(page, creds.agenda!.tipo_nome);
 
-  // ── 1. só a profissional ────────────────────────────────────────────────
-  const filtro = page.getByTestId("filtro-de-pessoas");
-  await expect(filtro).toBeVisible({ timeout: 20_000 });
-  const pedidoDela = page.waitForRequest(
-    (r) => r.url().includes("/api/v1/agenda/horarios-livres") && r.url().includes(`owner_user_id=${donoId}`),
-  );
-  await page.getByTestId(`botao-pessoa-${donoId}`).click();
-  await expect(page.getByTestId(`botao-pessoa-${donoId}`)).toHaveAttribute("aria-pressed", "true");
-  await expect(filtro).toHaveAttribute("data-selecionadas", donoId);
-  // A dica "Horários livres de" passou a perguntar pela agenda DELA.
-  await pedidoDela;
-
+  // ── 1. a semana seguinte ────────────────────────────────────────────────
+  // A fileira de profissionais mostra só quem TEM atendimento na semana (decisão
+  // 3 do André, 27/11/2026). Num banco limpo ela começa vazia; quem a faz
+  // aparecer é o compromisso que esta spec marca no passo 4.
   await irParaASemanaSeguinte(page);
 
   // ── 2. o horário vazio ──────────────────────────────────────────────────
-  const bloco = page.locator('[data-testid^="bloco-"][data-encaixe="true"]').first();
-  await expect(bloco, "nenhum horário vazio clicável na semana").toBeAttached({ timeout: 25_000 });
-  const testid = (await bloco.getAttribute("data-testid"))!;
+  // Só com a grade ASSENTADA, e o bloco preso pelo testid. Até os horários da
+  // semana chegarem, todo bloco vazio é encaixe; e um `.first()` é relido a
+  // cada ação — o CI de 27/11/2026 leu o das 07:00 e deu Enter no das 09:00,
+  // e a falha acusava o painel de trocar a hora. Com um bloco livre à vista,
+  // encaixe é só onde não há vaga publicada.
+  await expect(
+    page.locator('[data-testid^="bloco-"][data-livre="true"]').first(),
+    "os horários livres da semana não chegaram à grade",
+  ).toBeAttached({ timeout: 25_000 });
+  const primeiroEncaixe = page.locator('[data-testid^="bloco-"][data-encaixe="true"]').first();
+  await expect(primeiroEncaixe, "nenhum horário vazio clicável na semana").toBeAttached({ timeout: 25_000 });
+  const testid = (await primeiroEncaixe.getAttribute("data-testid"))!;
+  const bloco = page.getByTestId(testid);
   const [, dia, hora] = /^bloco-(\d{4}-\d{2}-\d{2})-(\d{2}:\d{2})$/.exec(testid)!;
   const [, mes, d] = dia!.split("-");
   await expect(bloco).toHaveAttribute("aria-label", `Marcar ${d}/${mes} às ${hora}`);
   await bloco.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: path.join(EVIDENCIA, "1-filtro-uma-profissional.png") });
+  await page.screenshot({ path: path.join(EVIDENCIA, "1-horario-vazio.png") });
 
   // Pelo TECLADO: foco no bloco e Enter, o caminho de quem não usa mouse.
   await bloco.focus();
   await page.keyboard.press("Enter");
 
-  // ── 3. o painel de sempre, já preenchido ────────────────────────────────
+  // ── 3. o painel de sempre, já preenchido com a dona do tipo ─────────────
   const painel = page.getByTestId("painel-de-marcacao");
   await expect(painel).toHaveAttribute("data-tempo", "confirmando", { timeout: 15_000 });
   await expect(page.getByTestId("confirmacao")).toContainText(hora!);
@@ -141,17 +149,38 @@ test("uma profissional, um clique no horário vazio, o compromisso na grade", as
   await cartao.scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(EVIDENCIA, "3-compromisso-na-grade.png") });
 
-  // ── 5. a escolha sobrevive ao F5; "Todos" zera ──────────────────────────
+  // ── 5. a fileira aparece com ela, e um clique isola a agenda dela ───────
+  const filtro = page.getByTestId("filtro-de-pessoas");
+  await expect(filtro).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("botao-todos")).toHaveAttribute("aria-pressed", "true");
+  const pedidoDela = page.waitForRequest(
+    (r) => r.url().includes("/api/v1/agenda/horarios-livres") && r.url().includes(`owner_user_id=${donoId}`),
+  );
+  await page.getByTestId(`botao-pessoa-${donoId}`).click();
+  await expect(page.getByTestId(`botao-pessoa-${donoId}`)).toHaveAttribute("aria-pressed", "true");
+  // Escolher alguém solta o "Todos". Que é UMA pessoa por vez (A e depois B
+  // deixa só B) o seed não prova, porque só tem uma profissional: quem prova é
+  // `components/agenda/FiltroDePessoas.test.tsx`.
+  await expect(page.getByTestId("botao-todos")).toHaveAttribute("aria-pressed", "false");
+  await expect(filtro).toHaveAttribute("data-selecionadas", donoId);
+  // A dica "Horários livres de" passou a perguntar pela agenda DELA.
+  await pedidoDela;
+  await page.screenshot({ path: path.join(EVIDENCIA, "4-fileira-uma-profissional.png") });
+
+  // ── 6. a escolha sobrevive ao F5; "Todos" zera ──────────────────────────
   await page.reload();
   await esperarAgenda(page, 20_000);
+  // Na semana de hoje ela pode não ter nada — e continua na fileira, escolhida,
+  // senão não haveria como desfazer a escolha.
   await expect(page.getByTestId("filtro-de-pessoas")).toHaveAttribute("data-selecionadas", donoId, {
     timeout: 20_000,
   });
+  await irParaASemanaSeguinte(page);
   await page.getByTestId("botao-todos").click();
   await expect(page.getByTestId("filtro-de-pessoas")).toHaveAttribute("data-selecionadas", "todos");
-  await expect(page.getByTestId("botao-todos")).toHaveCount(0);
+  await expect(page.getByTestId("botao-todos")).toHaveAttribute("aria-pressed", "true");
 
-  // Celular: o filtro cabe sem rolagem horizontal da página.
+  // Celular: a fileira cabe sem rolagem horizontal da página.
   await page.setViewportSize({ width: 375, height: 812 });
   await page.getByTestId(`botao-pessoa-${donoId}`).click();
   const larguras = await page.evaluate(() => ({
@@ -159,7 +188,7 @@ test("uma profissional, um clique no horário vazio, o compromisso na grade", as
     janela: window.innerWidth,
   }));
   expect(larguras.pagina).toBeLessThanOrEqual(larguras.janela);
-  await page.screenshot({ path: path.join(EVIDENCIA, "4-celular.png") });
+  await page.screenshot({ path: path.join(EVIDENCIA, "5-celular.png") });
   await page.getByTestId("botao-todos").click();
 
   const apagou = await page.request.delete("/api/v1/agenda/agendamentos", {

@@ -7,11 +7,12 @@ import { ApiError } from "@/lib/api/types";
 const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), delete: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ apiClient: api }));
 vi.mock("@/components/feedback/ApiErrorToast", () => ({ showApiError: vi.fn() }));
-vi.mock("@/components/ui/sheet", () => ({
-  Sheet: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SheetContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SheetHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  SheetTitle: ({ children }: { children: React.ReactNode }) => <h1>{children}</h1>,
+vi.mock("@/components/ui/dialog", () => ({
+  Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: React.ReactNode }) => <h1>{children}</h1>,
+  DialogDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
 }));
 const initial = {
   id: "appointment",
@@ -41,7 +42,7 @@ afterEach(() => {
   cleanup();
   client.clear();
 });
-function open(locale = "pt-BR") {
+async function open(locale = "pt-BR") {
   render(
     <IdiomaProvider locale={locale}>
       <QueryClientProvider client={client}>
@@ -49,9 +50,8 @@ function open(locale = "pt-BR") {
       </QueryClientProvider>
     </IdiomaProvider>,
   );
-  return screen.findByLabelText(
-    locale === "es" ? "Motivo de cancelación" : "Motivo do cancelamento",
-  );
+  fireEvent.click(await screen.findByTestId("acao-cancelar"));
+  return screen.getByLabelText(locale === "es" ? "Motivo de cancelación" : "Motivo do cancelamento");
 }
 it.each([
   {

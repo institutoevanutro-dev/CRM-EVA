@@ -87,8 +87,8 @@ export function VinculoDaMarcacao({
   onContato?: (contato: ContatoDaMarcacao | null) => void;
   /**
    * A versão do modal simples de marcação: sem caixa em volta, rótulo
-   * "Paciente" e a lista de resultados flutuando sobre o formulário em vez de
-   * empurrá-lo para baixo.
+   * "Paciente" só para o leitor de tela (o modal o mostra no título do grupo) e
+   * a lista de resultados flutuando sobre o formulário em vez de empurrá-lo.
    */
   compacto?: boolean;
 }) {
@@ -165,11 +165,13 @@ export function VinculoDaMarcacao({
 
   return (
     <div className={compacto ? "relative" : "space-y-3 rounded-lg border p-3"}>
-      {buscaEscondida ? (
-        <span className="mb-1.5 block text-xs font-medium text-text-muted">{t("Paciente")}</span>
-      ) : (
+      {/* No modal o rótulo "Paciente" da busca fica só para o leitor de tela: o
+          título do grupo, logo acima e com o "Paciente novo / antigo", já o diz à
+          vista, e os dois juntos repetiam a palavra e empurravam o modal para a
+          rolagem. Com o cartão (busca escondida), o título basta. */}
+      {buscaEscondida ? null : (
       <label className="block">
-        <span className={compacto ? "mb-1.5 block text-xs font-medium text-text-muted" : "block"}>
+        <span className={compacto ? "sr-only" : "block"}>
           {compacto ? t("Paciente") : t("Buscar cliente")}
         </span>
         <span className="relative block">

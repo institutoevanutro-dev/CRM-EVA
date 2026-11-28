@@ -30,7 +30,8 @@ import { esperarAgenda, telaAgenda } from "./tela-agenda";
  *     semana +1     90   90   90   90   90   90   90
  *
  * Duas leituras, e a segunda é a que assusta: **no sábado é zero o dia
- * inteiro**, porque a semana desenhada (dom→sáb) só tem dias úteis já passados.
+ * inteiro**, porque a semana desenhada (dom→sáb na época da medição; hoje
+ * seg→sáb) só tem dias úteis já passados.
  * Não é "o teste fica frágil à tarde"; é "o teste não pode passar no fim de
  * semana". E entre 15h e 17h o bolso ainda tem 2 a 4 vagas — que as specs
  * ANTERIORES do mesmo job consomem marcando —, o que explica o corte ter caído
@@ -54,8 +55,8 @@ import { esperarAgenda, telaAgenda } from "./tela-agenda";
  * procurava o cartão na semana de sexta — e a falha lia "a grade não repinta".
  */
 
-/** O passo da visão "semana" — o botão avança sete dias por clique. */
-const DIAS_POR_SEMANA = 7;
+/** A semana desenha segunda a sábado; o domingo só entra quando tem compromisso ou é hoje (27/11/2026). */
+const DIAS_DA_SEMANA_DESENHADA = [6, 7];
 
 /**
  * Leva a agenda para a semana seguinte e devolve os dias que ela passou a
@@ -91,9 +92,9 @@ export async function irParaASemanaSeguinte(page: Page): Promise<string[]> {
 
   const depois = await diasDesenhados(page);
   expect(
-    depois.length,
-    "a semana desenhada não tem sete dias — o recorte da grade mudou de forma",
-  ).toBe(DIAS_POR_SEMANA);
+    DIAS_DA_SEMANA_DESENHADA,
+    "a semana desenhada não tem seis nem sete dias — o recorte da grade mudou de forma",
+  ).toContain(depois.length);
   return depois;
 }
 

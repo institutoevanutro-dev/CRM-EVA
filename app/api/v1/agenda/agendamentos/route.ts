@@ -103,10 +103,11 @@ const marcarSchema = z.object({
   booking_channel: z.enum(CANAIS_DA_MARCACAO).optional(),
   /**
    * Quem converteu o lead (migration 0422): pessoa da equipe ou a IA. Ausente =
-   * quem está marcando. `converted_by_user_id` só com `user`; a rota confere que
-   * a pessoa é da organização.
+   * quem está marcando; `null` = não houve conversão (paciente antigo).
+   * `converted_by_user_id` só com `user`; a rota confere que a pessoa é da
+   * organização.
    */
-  converted_by_kind: z.enum(QUEM_CONVERTEU).optional(),
+  converted_by_kind: z.enum(QUEM_CONVERTEU).nullable().optional(),
   converted_by_user_id: z.string().uuid().optional(),
 });
 

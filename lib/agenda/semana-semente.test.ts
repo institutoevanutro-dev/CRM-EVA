@@ -1,5 +1,5 @@
 /**
- * A borda que este teste prende é a das 21h de sábado em São Paulo — e ela
+ * A borda que este teste prende é a das 21h de domingo em São Paulo — e ela
  * vira uma linha porque o instante é parâmetro.
  */
 import { describe, expect, it } from "vitest";
@@ -10,49 +10,43 @@ import { diaLocalISO } from "./fuso";
 const SP = "America/Sao_Paulo";
 
 describe("a semana que a agenda abre", () => {
-  it("no sábado à noite em São Paulo, é a semana do SÁBADO — mesmo com UTC já em domingo", () => {
-    // 2026-09-20T00:30Z: UTC já é DOMINGO, São Paulo ainda é sábado, 21:30.
-    const { de } = semanaSemente(new Date("2026-09-20T00:30:00Z"), SP);
-    expect(diaLocalISO(de, SP)).toBe("2026-09-13");
+  it("no domingo à noite em São Paulo, é a semana do DOMINGO — mesmo com UTC já em segunda", () => {
+    // 2026-09-21T00:30Z: UTC já é SEGUNDA, São Paulo ainda é domingo, 21:30.
+    const { de } = semanaSemente(new Date("2026-09-21T00:30:00Z"), SP);
+    expect(diaLocalISO(de, SP)).toBe("2026-09-14");
   });
 
   it("no fuso do SERVIDOR (UTC), o mesmo instante cai na semana seguinte — a divergência existe", () => {
-    // O controle que dá sentido ao caso acima: sem ele, "2026-09-13" poderia
-    // ser o resultado de qualquer fuso, e o teste não mediria o parâmetro.
-    const { de } = semanaSemente(new Date("2026-09-20T00:30:00Z"), "UTC");
-    expect(diaLocalISO(de, "UTC")).toBe("2026-09-20");
+    const { de } = semanaSemente(new Date("2026-09-21T00:30:00Z"), "UTC");
+    expect(diaLocalISO(de, "UTC")).toBe("2026-09-21");
   });
 
   it("depois da meia-noite de São Paulo, as duas réguas voltam a concordar", () => {
-    const instante = new Date("2026-09-20T03:30:00Z"); // 00:30 de domingo em SP
-    expect(diaLocalISO(semanaSemente(instante, SP).de, SP)).toBe("2026-09-20");
-    expect(diaLocalISO(semanaSemente(instante, "UTC").de, "UTC")).toBe("2026-09-20");
+    const instante = new Date("2026-09-21T03:30:00Z"); // 00:30 de segunda em SP
+    expect(diaLocalISO(semanaSemente(instante, SP).de, SP)).toBe("2026-09-21");
+    expect(diaLocalISO(semanaSemente(instante, "UTC").de, "UTC")).toBe("2026-09-21");
   });
 
-  it("começa no domingo e termina no domingo seguinte, exclusivo", () => {
+  it("começa na segunda e termina na segunda seguinte, exclusivo", () => {
     const { de, ate } = semanaSemente(new Date("2026-09-16T15:00:00Z"), SP);
-    expect(diaLocalISO(de, SP)).toBe("2026-09-13");
-    expect(diaLocalISO(ate, SP)).toBe("2026-09-20");
+    expect(diaLocalISO(de, SP)).toBe("2026-09-14");
+    expect(diaLocalISO(ate, SP)).toBe("2026-09-21");
     expect(de.getTime()).toBeLessThan(ate.getTime());
   });
 
   it("a semana começa à MEIA-NOITE local, não à meia-noite de UTC", () => {
-    // Sem isto, um `startOfWeek` em UTC passaria nos casos acima por acidente:
-    // o dia bateria e a hora não, e o compromisso das 21h de sábado cairia fora
-    // da janela que o servidor adianta.
     const { de } = semanaSemente(new Date("2026-09-16T15:00:00Z"), SP);
-    expect(de.toISOString()).toBe("2026-09-13T03:00:00.000Z"); // 00:00 em SP (GMT-3)
+    expect(de.toISOString()).toBe("2026-09-14T03:00:00.000Z"); // 00:00 em SP (GMT-3)
   });
 
   it("atravessa a virada do horário de verão sem perder nem inventar hora", () => {
-    // Sydney adianta o relógio às 2h de domingo 2026-10-04, então a semana que
-    // COMEÇA nele tem 167 horas (04/10 00:00 → 11/10 00:00).
+    // Sydney adianta o relógio às 2h de domingo 2026-10-04, o último dia da
+    // semana que começa na segunda 28/09: ela tem 167 horas.
     const fuso = "Australia/Sydney";
-    const { de, ate } = semanaSemente(new Date("2026-10-06T12:00:00Z"), fuso);
-    expect(diaLocalISO(de, fuso)).toBe("2026-10-04");
-    expect(diaLocalISO(ate, fuso)).toBe("2026-10-11");
-    const horas = (ate.getTime() - de.getTime()) / 3_600_000;
-    expect(horas).toBe(167);
+    const { de, ate } = semanaSemente(new Date("2026-10-01T12:00:00Z"), fuso);
+    expect(diaLocalISO(de, fuso)).toBe("2026-09-28");
+    expect(diaLocalISO(ate, fuso)).toBe("2026-10-05");
+    expect((ate.getTime() - de.getTime()) / 3_600_000).toBe(167);
   });
 });
 

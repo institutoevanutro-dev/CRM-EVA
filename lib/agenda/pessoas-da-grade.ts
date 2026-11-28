@@ -38,3 +38,24 @@ export function selecaoValida(
 ): string[] {
   return selecionadas.filter((id) => pessoas.some((p) => p.id === id));
 }
+
+/**
+ * Quem a fileira de profissionais mostra: quem é DONO de ao menos um
+ * compromisso nosso no período carregado (decisão 3 do André, 27/11/2026) —
+ * mais quem está escolhido, para a escolha nunca sumir da tela sem um jeito de
+ * desfazê-la. Ocupação externa (`google_sync`, que inclui bloqueio e Clinicorp)
+ * e cancelado não contam. A ordem é a da equipe: a fileira não pula de semana
+ * para semana.
+ */
+export function pessoasComAtendimento<P extends { id: string }>(
+  pessoas: readonly P[],
+  agendamentos: ReadonlyArray<{ responsavelId: string; origem: string; situacao: string }>,
+  selecionadas: readonly string[],
+): P[] {
+  const donos = new Set(
+    agendamentos
+      .filter((a) => a.origem !== "google_sync" && a.situacao !== "cancelled")
+      .map((a) => a.responsavelId),
+  );
+  return pessoas.filter((p) => donos.has(p.id) || selecionadas.includes(p.id));
+}

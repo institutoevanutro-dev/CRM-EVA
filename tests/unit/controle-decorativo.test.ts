@@ -24,9 +24,10 @@ import { describe, expect, it } from "vitest";
  * arquivo.
  *
  * ─── Por que a cerca é ESTÁTICA e não um teste de tela ───────────────────────
- * `tests/e2e/agenda-kit-visual.spec.ts` já assere `toBeDisabled()` nesses
- * botões, e passa: ele roda contra a VITRINE, que legitimamente não passa
- * callback nenhuma. Um teste de tela sobre a vitrine nunca vai enxergar a
+ * `tests/e2e/agenda-kit-visual.spec.ts` assertia `toBeDisabled()` nesses
+ * botões (até a lista sair, em 27/11/2026), e passava: ele rodava contra a
+ * VITRINE, que legitimamente não passa callback nenhuma. Um teste de tela
+ * sobre a vitrine nunca vai enxergar a
  * fiação faltando no produto — foi por isso que o defeito ficou verde por tempo
  * indeterminado.
  *
@@ -87,13 +88,16 @@ interface Controle {
   prop: string;
 }
 
+/** `disabled={!onAlgo}` — o padrão que a varredura procura. */
+const PADRAO_DO_CONTROLE = /disabled=\{!\s*(on[A-Z][A-Za-z0-9]*)\s*\}/g;
+
 /** `disabled={!onAlgo}` dentro de `components/**`. */
 function controlesQueDependemDeCallback(): Controle[] {
   const out: Controle[] = [];
   for (const arquivo of arquivos(path.join(RAIZ, "components"), /\.tsx$/)) {
     const fonte = fs.readFileSync(arquivo, "utf8");
     const rel = path.relative(RAIZ, arquivo);
-    for (const m of fonte.matchAll(/disabled=\{!\s*(on[A-Z][A-Za-z0-9]*)\s*\}/g)) {
+    for (const m of fonte.matchAll(PADRAO_DO_CONTROLE)) {
       const prop = m[1] as string;
       const linha = fonte.slice(0, m.index ?? 0).split("\n").length;
       // A prop tem de ser OPCIONAL para o padrão existir; obrigatória nunca fica
@@ -164,10 +168,15 @@ const JUSTIFICADOS: Record<string, string> = {};
 
 describe("nenhum botão fica cinza por falta de fiação", () => {
   it("a varredura enxerga os dois lados (senão ela mede o vazio)", () => {
-    // Controle do instrumento. Sem isto, mover `components/` ou quebrar o
-    // extrator deixaria o gate verde por não conhecer controle nenhum — e ele
-    // afirmaria o que não mediu.
-    expect(CONTROLES.length, "nenhum `disabled={!onAlgo}` encontrado").toBeGreaterThanOrEqual(4);
+    // O último `disabled={!onAlgo}` do produto saiu com o `HistoricoDaAgenda`
+    // (27/11/2026). A sonda segue valendo para o próximo — provada numa
+    // amostra, já que o conjunto real hoje é vazio de propósito.
+    const amostra = [..."<Button disabled={!onRemarcar}>".matchAll(PADRAO_DO_CONTROLE)].map((m) => m[1]);
+    expect(amostra).toEqual(["onRemarcar"]);
+    // Com o conjunto vazio, só isto prova que o percurso ainda LÊ `components/`:
+    // mover a pasta ou quebrar `arquivos()` deixaria a varredura verde no vazio.
+    const lidos = arquivos(path.join(RAIZ, "components"), /\.tsx$/).length;
+    expect(lidos, "a varredura não achou os .tsx de components/").toBeGreaterThan(100);
     expect(LIGADAS.size, "nenhuma callback encontrada em app/app").toBeGreaterThanOrEqual(20);
   });
 

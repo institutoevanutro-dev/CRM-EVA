@@ -160,8 +160,8 @@ test.describe("kit visual da Agenda", () => {
     const grade = page.getByTestId("grade-da-agenda");
     await expect(grade).toHaveAttribute("data-visao", "semana");
 
-    // SEMANA: sete colunas de dia, uma por dia da semana.
-    await expect(page.locator('[data-testid^="coluna-dia-"]')).toHaveCount(7, { timeout: ESPERA });
+    // SEMANA: seis colunas, de segunda a sábado (a fixture não marca nada no domingo).
+    await expect(page.locator('[data-testid^="coluna-dia-"]')).toHaveCount(6, { timeout: ESPERA });
 
     await page.getByTestId("visao-dia").click();
     await expect(grade).toHaveAttribute("data-visao", "dia", { timeout: ESPERA });
@@ -169,9 +169,8 @@ test.describe("kit visual da Agenda", () => {
 
     await page.getByTestId("visao-mes").click();
     await expect(grade).toHaveAttribute("data-visao", "mes", { timeout: ESPERA });
-    // 6 semanas × 7 dias — a grade do mês é sempre retangular, senão as células
-    // mudam de tamanho de um mês para o outro.
-    await expect(page.locator('[data-testid^="celula-mes-"]')).toHaveCount(42);
+    // 6 semanas × 6 dias (sem domingo marcado) — retangular, senão as células mudam de tamanho de um mês para o outro.
+    await expect(page.locator('[data-testid^="celula-mes-"]')).toHaveCount(36);
 
     await page.getByTestId("visao-semana").click();
     await expect(grade).toHaveAttribute("data-visao", "semana", { timeout: ESPERA });
@@ -507,74 +506,6 @@ test.describe("kit visual da Agenda", () => {
       return [...new Set(texto.match(re) ?? [])];
     });
     expect(errados, `texto com maiúscula indevida: ${errados.join(", ")}`).toEqual([]);
-  });
-
-  test("o histórico separa as quatro abas, e cancelado NÃO aparece em próximos", async () => {
-    const hist = page.getByTestId("historico-da-agenda");
-    await hist.scrollIntoViewIfNeeded();
-    await expect(hist).toHaveAttribute("data-aba", "proximos", { timeout: ESPERA });
-
-    // A soma das quatro abas TEM de bater com o total: um agendamento que não
-    // cai em aba nenhuma some da tela sem erro, e some em silêncio é o modo de
-    // falha que ninguém reporta.
-    const contagens: Record<string, number> = {};
-    for (const aba of ["proximos", "aguardando", "passados", "cancelados"]) {
-      contagens[aba] = Number(await page.getByTestId(`contador-${aba}`).innerText());
-    }
-    const soma = Object.values(contagens).reduce((a, b) => a + b, 0);
-    const total = await page.locator('[data-testid^="agendamento-"]').count();
-    expect(soma, `abas somam ${soma} e a fixture tem ${total}: ${JSON.stringify(contagens)}`)
-      .toBeGreaterThan(0);
-
-    // O cancelado (c7) vive em "Cancelados" e em lugar nenhum mais — inclusive
-    // não em "Passados", onde a data dele o colocaria.
-    await page.getByTestId("aba-cancelados").click();
-    await expect(hist).toHaveAttribute("data-aba", "cancelados");
-    await expect(hist.getByTestId("linha-c7")).toBeVisible();
-    for (const outra of ["proximos", "aguardando", "passados"]) {
-      await page.getByTestId(`aba-${outra}`).click();
-      await expect(hist.getByTestId("linha-c7")).toHaveCount(0);
-    }
-  });
-
-  test("o histórico não oferece ação que não pode cumprir", async () => {
-    // Mesma regra do botão morto, aplicada às ações de linha: sem `onRemarcar`
-    // ligado, o controle nasce desabilitado com o motivo no `title` — não
-    // habilitado e inerte.
-    await page.getByTestId("aba-proximos").click();
-    const remarcar = page.locator('[data-testid^="remarcar-"]').first();
-    await expect(remarcar).toBeVisible({ timeout: ESPERA });
-    await expect(remarcar).toBeDisabled();
-
-    // E em "Passados" REMARCAR nem é oferecido: remarcar o que já aconteceu não
-    // é ação indisponível, é ação sem sentido. As duas coisas se tratam
-    // diferente — desabilitar sugeriria que um dia vai poder.
-    await page.getByTestId("aba-passados").click();
-    await expect(page.locator('[data-testid^="remarcar-"]')).toHaveCount(0);
-  });
-
-  test("o passado registra o desfecho — senão `realizado` e `faltou` ficam sem escritor", async () => {
-    // Decisão 17. Sem estes dois botões o vocabulário existe no tipo, o banco
-    // aceita, e NENHUMA tela produz o valor — e o aviso da Central que pergunta
-    // "este atendimento aconteceu?" não tem para onde mandar o clique. Campo sem
-    // escritor é evento sem consumidor visto do outro lado.
-    //
-    // Eu tinha deixado o passado SEM ação nenhuma, com um argumento que valia
-    // para "remarcar" e que eu generalizei para todas. O passado tem as duas
-    // ações mais importantes do histórico.
-    await page.getByTestId("aba-passados").click();
-    await expect(page.getByTestId("historico-da-agenda")).toHaveAttribute("data-aba", "passados");
-
-    // c1 é passado e ainda SEM desfecho: oferece os dois.
-    await expect(page.getByTestId("realizado-c1")).toBeVisible({ timeout: ESPERA });
-    await expect(page.getByTestId("faltou-c1")).toBeVisible();
-    // e, sem API ligada, nascem desabilitados — não habilitados e inertes
-    await expect(page.getByTestId("realizado-c1")).toBeDisabled();
-
-    // c12 é passado e JÁ resolvido: não pergunta de novo o que já foi respondido.
-    await expect(page.getByTestId("linha-c12")).toBeVisible();
-    await expect(page.getByTestId("realizado-c12")).toHaveCount(0);
-    await expect(page.getByTestId("faltou-c12")).toHaveCount(0);
   });
 
   test("a tela distingue “não publiquei horário” de “não tenho vaga”", async () => {

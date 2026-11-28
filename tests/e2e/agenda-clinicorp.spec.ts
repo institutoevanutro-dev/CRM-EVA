@@ -215,12 +215,12 @@ test("o gestor liga a Clinicorp pela tela e a agenda passa a descontar o que est
   await test.step("a semana seguinte: segunda (ocupação), quarta e sexta (dias avulsos)", async () => {
     await page.goto("/app/agenda");
     dias = await irParaASemanaSeguinte(page);
-    // A grade começa no domingo: [dom, seg, ter, qua, qui, sex, sáb].
+    // A grade começa na segunda: [seg, ter, qua, qui, sex, sáb] (+dom só com compromisso).
     agendaDaClinicorp = [
       {
         ItemType: "APPOINTMENT",
         id: 7700001,
-        AtomicDate: Number(dias[1]!.replaceAll("-", "")),
+        AtomicDate: Number(dias[0]!.replaceAll("-", "")),
         fromTime: "10:00",
         toTime: "11:30",
         Dentist_PersonId: PROFISSIONAL.id,
@@ -252,7 +252,7 @@ test("o gestor liga a Clinicorp pela tela e a agenda passa a descontar o que est
   });
 
   await test.step("sem pessoa ligada, a ocupação ainda não tira horário", async () => {
-    expect(await horariosDoDia(page, creds, dias[1]!)).toEqual(expect.arrayContaining(["10:00", "10:30", "11:00"]));
+    expect(await horariosDoDia(page, creds, dias[0]!)).toEqual(expect.arrayContaining(["10:00", "10:30", "11:00"]));
   });
 
   await test.step("liga o profissional da Clinicorp ao atendente", async () => {
@@ -263,7 +263,7 @@ test("o gestor liga a Clinicorp pela tela e a agenda passa a descontar o que est
   });
 
   await test.step("a segunda deixa de oferecer 10:00–11:30, e o resto do dia segue", async () => {
-    const horarios = await horariosDoDia(page, creds, dias[1]!);
+    const horarios = await horariosDoDia(page, creds, dias[0]!);
     for (const ocupado of ["10:00", "10:30", "11:00"]) expect(horarios).not.toContain(ocupado);
     expect(horarios).toEqual(expect.arrayContaining(["09:00", "09:30", "11:30", "12:00"]));
   });
@@ -286,9 +286,9 @@ test("o gestor liga a Clinicorp pela tela e a agenda passa a descontar o que est
     const tela = sanfona.getByTestId("dias-bloqueados");
     await tela.getByTestId("dono-do-bloqueio").selectOption(creds.agenda!.dono_user_id);
     await tela.getByTestId("modo-do-dia").selectOption("abrir");
-    await tela.getByLabel("Dia", { exact: true }).fill(dias[3]!);
+    await tela.getByLabel("Dia", { exact: true }).fill(dias[2]!);
     await tela.getByTestId("adicionar-data").click();
-    await tela.getByLabel("Dia", { exact: true }).fill(dias[5]!);
+    await tela.getByLabel("Dia", { exact: true }).fill(dias[4]!);
     await tela.getByTestId("unidade-do-dia").selectOption({ label: UNIDADE });
     await expect(tela.getByTestId("aviso-do-dia-aberto")).toBeVisible();
     await tela.getByLabel("Das", { exact: true }).fill("07:00");
@@ -303,10 +303,10 @@ test("o gestor liga a Clinicorp pela tela e a agenda passa a descontar o que est
   });
 
   await test.step("nos dias lançados, só a faixa lançada; a jornada de sempre não vale ali", async () => {
-    expect(await horariosDoDia(page, creds, dias[3]!)).toEqual(["07:00", "07:30", "08:00"]);
-    expect(await horariosDoDia(page, creds, dias[5]!)).toEqual(["07:00", "07:30", "08:00"]);
+    expect(await horariosDoDia(page, creds, dias[2]!)).toEqual(["07:00", "07:30", "08:00"]);
+    expect(await horariosDoDia(page, creds, dias[4]!)).toEqual(["07:00", "07:30", "08:00"]);
     // CONTROLE: a quinta, sem data lançada, segue a jornada (09:00 em diante).
-    expect((await horariosDoDia(page, creds, dias[4]!))[0]).toBe("09:00");
+    expect((await horariosDoDia(page, creds, dias[3]!))[0]).toBe("09:00");
     await evidencia(page, info, "horarios-do-dia-avulso");
   });
 });
@@ -392,7 +392,7 @@ test("o que já está marcado entra pela importação do relatório, lido no nav
   await db.from("calendar_clinicorp_integrations").insert({ organization_id: creds.org_id } as never);
   await entrar(page, creds);
 
-  const terca = dias[2]!.split("-").reverse().join("/");
+  const terca = dias[1]!.split("-").reverse().join("/");
   const arquivo = gerarXlsx([
     {
       nome: "Agendamentos",
@@ -427,7 +427,7 @@ test("o que já está marcado entra pela importação do relatório, lido no nav
       expect(corpo).not.toContain(proibido);
     }
     expect(JSON.parse(corpo)).toEqual({
-      horarios: [{ dia: dias[2], de: "10:00", ate: "11:30", user_id: creds.agenda!.dono_user_id }],
+      horarios: [{ dia: dias[1], de: "10:00", ate: "11:30", user_id: creds.agenda!.dono_user_id }],
     });
     await expect(page.getByText("1 horário(s) importado(s).")).toBeVisible({ timeout: 15_000 });
     await expect(secao.getByTestId("situacao-da-importacao")).toContainText("1 horário(s) daqui para a frente", { timeout: 15_000 });
@@ -435,7 +435,7 @@ test("o que já está marcado entra pela importação do relatório, lido no nav
   });
 
   await test.step("a terça deixa de oferecer 10:00–11:30; o horário sem pessoa ligada segue livre", async () => {
-    const horarios = await horariosDoDia(page, creds, dias[2]!);
+    const horarios = await horariosDoDia(page, creds, dias[1]!);
     for (const ocupado of ["10:00", "10:30", "11:00"]) expect(horarios).not.toContain(ocupado);
     expect(horarios).toEqual(expect.arrayContaining(["09:30", "11:30", "14:00", "16:00"]));
   });
@@ -445,7 +445,7 @@ test("o webhook grava a ocupação, substitui o horário importado e libera o de
   // Continua da importação acima: a foto tem a terça 10:00–11:30 do atendente.
   const db = admin();
   await entrar(page, creds);
-  const terca = dias[2]!;
+  const terca = dias[1]!;
   const documento = {
     Name: PACIENTE.nome,
     PatientName: PACIENTE.nome,

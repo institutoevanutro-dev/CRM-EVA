@@ -1,6 +1,6 @@
 "use client";
 
-import { addDays, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek } from "date-fns";
+import { format } from "date-fns";
 import Link from "next/link";
 import * as React from "react";
 
@@ -11,10 +11,11 @@ import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { useT } from "@/hooks/i18n/useT";
 import { DURACAO_MAXIMA_MIN, DURACAO_MINIMA_MIN, duracaoDoCampo } from "@/lib/agenda/duracao-escolhida";
-import { dataDeParede, instanteDe } from "@/lib/agenda/fuso";
+import { dataDeParede } from "@/lib/agenda/fuso";
 import {
   fimDoHorario,
   ofertaDeUnidades,
+  pacienteNovoPeloTipo,
   procedimentosDoProfissional,
   profissionaisComProcedimento,
   unidadeDaMarcacao,
@@ -35,13 +36,14 @@ import {
   nomeDoContato,
   sugestaoDeNomeCompleto,
 } from "@/lib/contacts/rotulo-do-contato";
-import { CaretLeft, CaretRight, CheckCircle, Plus, Warning } from "@/lib/ui/icons";
+import { CaretRight, CheckCircle, Warning } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 
 import { AvisoSemLembrete } from "./AvisoSemLembrete";
 import { BloqueioDeHorario } from "./BloqueioDeHorario";
-import { CAMPO, ROTULO, Seletor } from "./CampoDaMarcacao";
+import { CAMPO, ROTULO, Seletor, TITULO_DO_GRUPO } from "./CampoDaMarcacao";
 import { NomeCompletoDoPaciente } from "./NomeCompletoDoPaciente";
+import { QuandoDaMarcacao } from "./QuandoDaMarcacao";
 import type { HorarioLivre, Pessoa } from "./tipos";
 import { type ContatoDaMarcacao, VinculoDaMarcacao } from "./VinculoDaMarcacao";
 
@@ -59,8 +61,8 @@ import { type ContatoDaMarcacao, VinculoDaMarcacao } from "./VinculoDaMarcacao";
  * 1280×800): à esquerda quem, o quê e para quem; à direita quando. No celular
  * vira uma coluna só, na mesma ordem. Os horários vêm da MESMA rota que a IA usa
  * (`useHorariosLivres`, montada em `_client.tsx`), então tela e agente oferecem
- * as mesmas vagas. O painel antigo, em três colunas, continua existindo para
- * REMARCAR e na vitrine; aqui é só a marcação nova.
+ * as mesmas vagas. O painel antigo, em três colunas, ficou só na vitrine;
+ * remarcar usa o mesmo `QuandoDaMarcacao` no painel do paciente.
  */
 
 type Tipo = {
@@ -71,6 +73,8 @@ type Tipo = {
   localDetalhes: string | null;
   /** `requires_patient` (0411): sem paciente, a tela nem envia. */
   exigePaciente: boolean;
+  /** `calendar_event_types.category`: decide o "Paciente novo / antigo" padrão. */
+  categoria?: string | null;
 };
 
 type Unidade = { id: string; name: string; active: boolean };
@@ -85,8 +89,12 @@ export type MarcacaoConfirmada = {
   observacao: string;
   /** Mensagem ou ligação: obrigatório na tela, é a base do bônus por comparecimento. */
   canal: CanalDaMarcacao;
-  /** Quem converteu o lead (migration 0422): alguém da equipe ou a IA do atendimento. */
-  quemConverteu: { kind: "user"; userId: string } | { kind: "ai" };
+  /**
+   * Quem converteu o lead (migration 0422). `null` = PACIENTE ANTIGO, sem
+   * conversão: o POST manda `converted_by_kind: null` e a linha fica com as duas
+   * colunas nulas (27/11/2026). Ausente não serve: a rota gravaria quem marca.
+   */
+  quemConverteu: { kind: "user"; userId: string } | { kind: "ai" } | null;
 };
 
 const ROTULO_DO_CANAL: Record<CanalDaMarcacao, string> = { mensagem: "Mensagem", ligacao: "Ligação" };
@@ -156,7 +164,7 @@ export function MarcacaoSimples({
   mesCarregado: Date | null;
   /** O bloco clicado na grade: abre com dia e hora já escolhidos. */
   horarioInicial?: HorarioLivre;
-  /** Encaixe ("Outro horário"): só para quem é da equipe e pode marcar. */
+  /** Hora fora dos horários livres vale (encaixe): só para quem é da equipe e pode marcar. */
   permiteEncaixe: boolean;
   /** manager+ bloqueia a agenda de qualquer pessoa; o resto, só a própria. */
   podeBloquearDeOutros: boolean;
@@ -205,10 +213,6 @@ export function MarcacaoSimples({
   const [dia, setDia] = React.useState<Date>(() =>
     horarioInicial ? new Date(horarioInicial.instante) : ancora,
   );
-  const [mes, setMes] = React.useState(() => startOfMonth(dia));
-  React.useEffect(() => {
-    onMesVisivel(mes);
-  }, [mes, onMesVisivel]);
   const [horario, setHorario] = React.useState<HorarioLivre | null>(horarioInicial ?? null);
   const [marcado, setMarcado] = React.useState<HorarioLivre | null>(null);
   const [recusa, setRecusa] = React.useState<{ instante: string; mensagem: string } | null>(null);
@@ -217,8 +221,6 @@ export function MarcacaoSimples({
   // Some sozinho ao escolher o paciente ou trocar de procedimento.
   const [semPacienteNoTipo, setSemPacienteNoTipo] = React.useState<string | null>(null);
   const faltaPaciente = !contactId && semPacienteNoTipo !== null && semPacienteNoTipo === tipo?.id;
-  const [encaixeAberto, setEncaixeAberto] = React.useState(false);
-  const [horaDoEncaixe, setHoraDoEncaixe] = React.useState("");
   const [observacao, setObservacao] = React.useState("");
   // "Mensagem" já vem escolhida (pedido do dono da clínica em 21/11/2026): é o
   // caso comum, e a recepção só toca em "Ligação" quando foi por telefone.
@@ -276,75 +278,45 @@ export function MarcacaoSimples({
   const origem = origemEditada && origemEditada.contactId === contactId ? origemEditada.valor : origemDaFicha;
   const origemMudou = origem !== null && origemDaFicha !== null && origem !== origemDaFicha;
 
+  // PACIENTE NOVO OU ANTIGO (decisão do André, 27/11/2026). O padrão sai do
+  // procedimento (`pacienteNovoPeloTipo`); a troca da recepção vale só para o
+  // procedimento em que foi feita — escolher outro volta ao padrão dele. O modo
+  // em si não é gravado (DIRC: calcular, não duplicar); o que ele muda na linha
+  // é a conversão: em antigo, `converted_by_kind` e `converted_by_user_id` nulos.
+  const [modoEscolhido, setModoEscolhido] = React.useState<{ tipoId: string; novo: boolean } | null>(null);
+  const pacienteNovo =
+    modoEscolhido !== null && modoEscolhido.tipoId === (tipo?.id ?? "")
+      ? modoEscolhido.novo
+      : pacienteNovoPeloTipo(tipo);
+
   const parede = (iso: string): Date => (fuso ? dataDeParede(new Date(iso), fuso) : new Date(iso));
 
   // Trocar profissional ou procedimento muda as vagas: o horário escolhido
-  // deixa de valer. O DIA fica, que é o que a recepção combinou com o paciente.
+  // deixa de valer e o campo de hora esvazia (regra do dono da clínica), até a
+  // hora digitada que não virou horário — essa o `QuandoDaMarcacao` só solta
+  // remontando, então a troca muda a `key` dele. O DIA fica, que é o que a
+  // recepção combinou com o paciente.
+  const [geracaoDoQuando, setGeracaoDoQuando] = React.useState(0);
+  const esvaziarHora = () => {
+    setHorario(null);
+    setGeracaoDoQuando((g) => g + 1);
+  };
   const trocarProfissional = (id: string) => {
     onProfissional(id);
     if (!id) onTipo("");
     onDuracao?.(null);
-    setHorario(null);
+    esvaziarHora();
   };
   const trocarProcedimento = (id: string) => {
     onTipo(id);
     onDuracao?.(null);
     setEnderecoEditado(null);
-    setHorario(null);
+    esvaziarHora();
   };
   // A lista de horários era de outra duração: o horário escolhido deixa de valer.
   const trocarDuracao = (texto: string) => {
     onDuracao?.(texto);
-    setHorario(null);
-  };
-
-  // ── calendário ──────────────────────────────────────────────────────────
-  const semanas = React.useMemo(() => {
-    const primeiro = startOfWeek(startOfMonth(mes), { weekStartsOn: 0 });
-    return Array.from({ length: 6 }, (_, s) =>
-      Array.from({ length: 7 }, (_, d) => addDays(primeiro, s * 7 + d)),
-    );
-  }, [mes]);
-  const dadosDoMes = mesCarregado !== null && isSameMonth(mesCarregado, mes);
-  const temHorario = (d: Date): boolean =>
-    Boolean(tipo) && dadosDoMes && isSameMonth(d, mes) && (horariosPorDia[format(d, "yyyy-MM-dd")]?.length ?? 0) > 0;
-  const encaixeLigado = permiteEncaixe && Boolean(tipo) && Boolean(fuso) && publicouHorarios && !erroAoCarregar;
-  const inicioDeHoje = startOfDay(agora).getTime();
-  const diaClicavel = (d: Date): boolean =>
-    temHorario(d) || (isSameMonth(d, mes) && encaixeLigado && d.getTime() >= inicioDeHoje);
-
-  // O mês de abertura sem vaga nenhuma passa sozinho ao seguinte, uma vez (a
-  // mesma regra do painel antigo: no fim do mês a próxima vaga é no outro).
-  const aberturaDecidida = React.useRef(false);
-  const aberturaCarregada = Boolean(tipo) && dadosDoMes && isSameMonth(mes, ancora);
-  const aberturaSemVaga = aberturaCarregada && !semanas.flat().some(temHorario);
-  React.useEffect(() => {
-    if (aberturaDecidida.current || !aberturaCarregada || horarioInicial) return;
-    aberturaDecidida.current = true;
-    if (aberturaSemVaga && publicouHorarios && !erroAoCarregar) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- decisão única, tomada quando os horários do mês de abertura chegam.
-      setMes((m) => startOfMonth(addDays(startOfMonth(m), 32)));
-    }
-  }, [aberturaCarregada, aberturaSemVaga, publicouHorarios, erroAoCarregar, horarioInicial]);
-
-  const doDia = tipo ? (horariosPorDia[format(dia, "yyyy-MM-dd")] ?? []) : [];
-
-  const partesDaHora = /^([01]\d|2[0-3]):([0-5]\d)(?::\d{2})?$/.exec(horaDoEncaixe);
-  // "10:30" do dia escolhido, no fuso da regra: NUNCA `new Date(ano, mes, ...)`,
-  // que é o fuso do navegador (ver `PainelDeMarcacao`).
-  const usarHoraDoEncaixe = () => {
-    if (!fuso || !partesDaHora) return;
-    const instante = instanteDe(
-      {
-        ano: dia.getFullYear(),
-        mes: dia.getMonth() + 1,
-        dia: dia.getDate(),
-        hora: Number(partesDaHora[1]),
-        minuto: Number(partesDaHora[2]),
-      },
-      fuso,
-    ).toISOString();
-    setHorario({ instante, rotulo: `${partesDaHora[1]}:${partesDaHora[2]}` });
+    esvaziarHora();
   };
 
   const pronto = Boolean(
@@ -372,10 +344,12 @@ export function MarcacaoSimples({
       // (`PATCH /api/v1/contacts/[id]`, auditado como `contact.updated`). Se a
       // gravação for recusada, nada é marcado: a recusa aparece no rodapé.
       // Nome e origem vão juntos, num PATCH só, e só o que mudou.
-      if (pedeNome || origemMudou) {
+      // Paciente antigo não mexe na origem: os campos nem estão na tela.
+      const origemParaGravar = pacienteNovo && origemMudou ? origem : null;
+      if (pedeNome || origemParaGravar) {
         await gravarContato.mutateAsync({
           ...(pedeNome ? { name: nomeCompletoLimpo(nomeCompleto) } : {}),
-          ...(origemMudou && origem ? { origem_informada: origem } : {}),
+          ...(origemParaGravar ? { origem_informada: origemParaGravar } : {}),
         });
       }
       await onConfirmar({
@@ -385,9 +359,13 @@ export function MarcacaoSimples({
         endereco: endereco.trim(),
         observacao: observacao.trim(),
         canal,
-        quemConverteu: quemConverteu.startsWith("user:")
-          ? { kind: "user", userId: quemConverteu.slice("user:".length) }
-          : { kind: "ai" },
+        // Paciente antigo grava SEM conversão (as duas colunas nulas): ela foi na
+        // primeira consulta, e não é de quem marca a aplicação.
+        quemConverteu: !pacienteNovo
+          ? null
+          : quemConverteu.startsWith("user:")
+            ? { kind: "user", userId: quemConverteu.slice("user:".length) }
+            : { kind: "ai" },
       });
       setRecusa(null);
       setMarcado(horario);
@@ -455,30 +433,9 @@ export function MarcacaoSimples({
     );
   }
 
-  const avisoDosHorarios = !tipo ? (
-    <p className="rounded-md bg-surface px-3 py-2.5 text-xs text-text-muted">
-      {t("Escolha o profissional e o procedimento para ver os horários livres.")}
-    </p>
-  ) : !publicouHorarios ? (
-    <div data-testid="sem-jornada-publicada" className="rounded-md border border-warning/40 bg-warning-bg px-3 py-2.5">
-      <p className="text-xs font-semibold text-text">{t("A jornada de atendimento ainda não foi publicada")}</p>
-      <Link
-        href="/app/team?aba=atendimento"
-        data-testid="ir-configurar-horarios"
-        className="mt-1 inline-block text-xs font-medium text-accent underline underline-offset-2"
-      >
-        {t("Configurar meus horários de atendimento")}
-      </Link>
-    </div>
-  ) : erroAoCarregar ? (
-    <p data-testid="motivo-do-bloqueio" data-motivo="erro" role="alert" className="text-xs text-warning-fg">
-      {t("Não consegui carregar os horários")}
-    </p>
-  ) : null;
-
   return (
     <Tabs value={aba} onValueChange={(v) => setAba(v === "bloquear" ? "bloquear" : "marcar")} className="flex min-h-0 flex-col">
-      <TabsList className="mx-5 mt-1 self-start bg-surface-muted" data-testid="abas-da-marcacao">
+      <TabsList className="mx-5 self-start bg-surface-muted" data-testid="abas-da-marcacao">
         <TabsTrigger value="marcar" data-testid="aba-novo-agendamento">
           {t("Novo agendamento")}
         </TabsTrigger>
@@ -491,9 +448,10 @@ export function MarcacaoSimples({
           foi escolhido para o paciente. */}
       <TabsContent value="marcar" forceMount className="mt-0 data-[state=inactive]:hidden">
         <div data-testid="painel-de-marcacao" data-tempo={tempo} className="flex flex-col">
-          <div className="grid gap-x-6 gap-y-5 px-5 pb-5 pt-4 md:grid-cols-2">
+          <div className="grid gap-x-6 gap-y-4 px-5 pb-4 pt-3 md:grid-cols-2">
             {/* ── esquerda: quem, o quê, onde e para quem ──────────────────── */}
-            <div className="flex min-w-0 flex-col gap-4">
+            <div className="flex min-w-0 flex-col gap-3">
+              <h3 className={cn(TITULO_DO_GRUPO, "-mb-1")}>{t("Quem e o quê")}</h3>
               <div className="grid gap-x-3 gap-y-4 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
                 <div className="min-w-0">
                   <label htmlFor="profissional-da-marcacao" className={ROTULO}>
@@ -565,7 +523,7 @@ export function MarcacaoSimples({
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+              <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-1">
                 <div>
                   <label htmlFor="duracao-da-marcacao" className={ROTULO}>
                     {t("Duração (minutos)")}
@@ -649,6 +607,38 @@ export function MarcacaoSimples({
                 ) : null}
               </div>
 
+              <div className="-mb-1 flex flex-wrap items-center justify-between gap-2">
+                <h3 className={TITULO_DO_GRUPO}>{t("Paciente")}</h3>
+                <fieldset data-testid="tipo-de-paciente" className="flex items-center">
+                  <legend className="sr-only">{t("Tipo de paciente")}</legend>
+                  <span className="inline-flex rounded-md border border-border-input bg-surface p-0.5">
+                    {(
+                      [
+                        ["novo", "Paciente novo"],
+                        ["antigo", "Paciente antigo"],
+                      ] as const
+                    ).map(([valor, rotulo]) => {
+                      const ativo = (valor === "novo") === pacienteNovo;
+                      return (
+                        <button
+                          key={valor}
+                          type="button"
+                          data-testid={`paciente-${valor}`}
+                          aria-pressed={ativo}
+                          onClick={() => setModoEscolhido({ tipoId: tipo?.id ?? "", novo: valor === "novo" })}
+                          className={cn(
+                            "h-6 rounded-sm px-3 text-xs font-medium transition-colors duration-fast toque:h-10",
+                            FOCO,
+                            ativo ? "bg-accent text-accent-foreground shadow-xs" : "text-text-muted hover:text-text",
+                          )}
+                        >
+                          {t(rotulo)}
+                        </button>
+                      );
+                    })}
+                  </span>
+                </fieldset>
+              </div>
               <div>
                 <VinculoDaMarcacao
                   compacto
@@ -672,6 +662,7 @@ export function MarcacaoSimples({
                 />
               ) : null}
 
+              {pacienteNovo ? (
               <div className="grid gap-x-3 gap-y-4 sm:grid-cols-2">
                 <div className="min-w-0">
                   <label htmlFor="quem-converteu" className={ROTULO}>
@@ -726,6 +717,7 @@ export function MarcacaoSimples({
                   ) : null}
                 </div>
               </div>
+              ) : null}
 
               <div>
                 <label htmlFor="observacao-do-compromisso" className={ROTULO}>
@@ -806,187 +798,29 @@ export function MarcacaoSimples({
               </details>
             </div>
 
-            {/* ── direita: dia e horário livre ─────────────────────────────── */}
-            <div className="flex min-w-0 flex-col gap-4 rounded-xl bg-surface-muted/60 p-4 md:self-start">
-              <div>
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className={cn(ROTULO, "mb-0")}>{t("Data")} *</span>
-                  <div className="flex items-center gap-0.5">
-                    <span className="mr-1.5 text-sm font-semibold tracking-tight first-letter:uppercase">
-                      {format(mes, t("MMMM 'de' yyyy"), { locale })}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 toque:size-11"
-                      aria-label={t("Mês anterior")}
-                      data-testid="mes-anterior"
-                      onClick={() => setMes((m) => startOfMonth(addDays(startOfMonth(m), -1)))}
-                    >
-                      <CaretLeft size={14} weight="bold" aria-hidden />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 toque:size-11"
-                      aria-label={t("Próximo mês")}
-                      data-testid="mes-seguinte"
-                      onClick={() => setMes((m) => startOfMonth(addDays(startOfMonth(m), 32)))}
-                    >
-                      <CaretRight size={14} weight="bold" aria-hidden />
-                    </Button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-7 gap-1 text-center">
-                  {semanas[0]?.map((d) => (
-                    <span
-                      key={`c-${d.toISOString()}`}
-                      className="pb-1 text-[11px] font-medium uppercase tracking-wide text-text-subtle"
-                    >
-                      {format(d, "EEEEEE", { locale }).replace(".", "")}
-                    </span>
-                  ))}
-                  {semanas.flat().map((d) => {
-                    const chave = format(d, "yyyy-MM-dd");
-                    const disponivel = temHorario(d);
-                    const clicavel = diaClicavel(d);
-                    const doMes = isSameMonth(d, mes);
-                    const escolhido = isSameDay(d, dia) && doMes;
-                    return (
-                      <button
-                        key={chave}
-                        type="button"
-                        data-testid={`dia-${chave}`}
-                        data-disponivel={disponivel}
-                        disabled={!clicavel}
-                        aria-pressed={escolhido}
-                        aria-label={format(d, t("d 'de' MMMM"), { locale })}
-                        onClick={() => {
-                          setDia(d);
-                          setHorario(null);
-                        }}
-                        className={cn(
-                          "flex h-9 items-center justify-center rounded-md text-sm tabular-nums transition-colors duration-fast",
-                          FOCO,
-                          disponivel && !escolhido &&
-                            "bg-accent-soft font-medium text-accent-strong hover:bg-accent hover:text-accent-foreground",
-                          clicavel && !disponivel && !escolhido && "text-text hover:bg-surface",
-                          escolhido && "bg-accent font-semibold text-accent-foreground shadow-sm",
-                          !clicavel && !escolhido && "cursor-default text-text-subtle",
-                          !doMes && "opacity-40",
-                          isSameDay(d, agora) && !escolhido && "ring-1 ring-inset ring-border-strong",
-                        )}
-                      >
-                        {format(d, "d")}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <p className={ROTULO}>
-                  {t("Horário")} *{" "}
-                  <span className="font-normal text-text-subtle first-letter:uppercase">
-                    · {format(dia, t("EEEE, d 'de' MMM"), { locale })}
-                  </span>
-                </p>
-                <div className="flex flex-col gap-1.5">
-                  {avisoDosHorarios}
-                  {googleCoberturaParcial ? (
-                    <p role="status" className="text-xs text-warning-fg">
-                      {t("Ocupação do Google ainda não verificada neste período.")}
-                    </p>
-                  ) : null}
-                  {fontesDefasadas && fontesDefasadas.length > 0 ? (
-                    <p data-testid="fontes-defasadas" className="text-xs text-warning-fg">
-                      {t("Uma agenda conectada não está atualizando. Os horários dela seguem bloqueados por precaução.")}
-                    </p>
-                  ) : null}
-                  {fusoSuposto && fuso ? (
-                    <p data-testid="fuso-suposto" className="text-[11px] text-text-subtle">
-                      {t("Horários no fuso")} <span className="font-mono">{fuso.replace("_", " ")}</span>.
-                    </p>
-                  ) : null}
-                  {tipo && publicouHorarios && !erroAoCarregar && doDia.length === 0 ? (
-                    <p className="rounded-md bg-surface px-3 py-2.5 text-xs text-text-muted">
-                      {t("Nenhum horário livre neste dia.")}
-                    </p>
-                  ) : null}
-                </div>
-                <div
-                  data-testid="lista-de-horarios"
-                  className={cn(
-                    "grid max-h-[136px] grid-cols-4 gap-1.5 overflow-y-auto pr-0.5 sm:grid-cols-5",
-                    doDia.length > 0 && "mt-1.5",
-                  )}
-                >
-                  {doDia.map((h) => (
-                    <button
-                      key={h.instante}
-                      type="button"
-                      data-testid={`horario-${h.rotulo}`}
-                      aria-pressed={horario?.instante === h.instante}
-                      onClick={() => setHorario(h)}
-                      className={cn(
-                        "h-9 rounded-md border text-sm tabular-nums transition-colors duration-fast toque:h-11",
-                        FOCO,
-                        horario?.instante === h.instante
-                          ? "border-accent bg-accent font-semibold text-accent-foreground shadow-sm"
-                          : "border-border bg-surface text-text hover:border-accent hover:bg-accent-soft",
-                      )}
-                    >
-                      {h.rotulo}
-                    </button>
-                  ))}
-                </div>
-                {encaixeLigado ? (
-                  <div data-testid="encaixe" className="mt-2.5">
-                    {!encaixeAberto ? (
-                      <button
-                        type="button"
-                        data-testid="abrir-encaixe"
-                        onClick={() => setEncaixeAberto(true)}
-                        className={cn(
-                          "inline-flex items-center gap-1 rounded-sm text-xs font-medium text-accent hover:underline hover:underline-offset-2",
-                          FOCO,
-                        )}
-                      >
-                        <Plus size={12} weight="bold" aria-hidden />
-                        {t("Outro horário")}
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <label htmlFor="hora-do-encaixe" className="text-xs font-medium text-text-muted">
-                          {t("Outro horário")}
-                        </label>
-                        <input
-                          id="hora-do-encaixe"
-                          data-testid="hora-do-encaixe"
-                          type="time"
-                          step={60}
-                          value={horaDoEncaixe}
-                          onChange={(e) => setHoraDoEncaixe(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") usarHoraDoEncaixe();
-                          }}
-                          className={cn(CAMPO, "h-9 w-28 tabular-nums")}
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          data-testid="usar-hora-do-encaixe"
-                          disabled={!partesDaHora}
-                          onClick={usarHoraDoEncaixe}
-                        >
-                          {t("Usar")}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            </div>
+            {/* ── direita: quando (o mesmo componente do Remarcar do painel) ── */}
+            <QuandoDaMarcacao
+              key={geracaoDoQuando}
+              ancora={ancora}
+              agora={agora}
+              fuso={fuso}
+              horariosPorDia={horariosPorDia}
+              publicouHorarios={publicouHorarios}
+              erroAoCarregar={erroAoCarregar}
+              fusoSuposto={fusoSuposto}
+              fontesDefasadas={fontesDefasadas}
+              googleCoberturaParcial={googleCoberturaParcial}
+              onMesVisivel={onMesVisivel}
+              mesCarregado={mesCarregado}
+              temTipo={Boolean(tipo)}
+              avisoSemTipo={t("Escolha o profissional e o procedimento para ver os horários livres.")}
+              permiteEncaixe={permiteEncaixe}
+              abriuComHorario={Boolean(horarioInicial)}
+              dia={dia}
+              onDia={setDia}
+              horario={horario}
+              onHorario={setHorario}
+            />
           </div>
 
           {/* ── rodapé: o resumo com o fim calculado e o Confirmar ──────────── */}

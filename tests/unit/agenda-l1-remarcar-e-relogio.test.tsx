@@ -37,7 +37,7 @@ beforeAll(() => {
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     replace: vi.fn(),
-    push: vi.fn(),
+    push: (url: string) => window.history.pushState(null, "", url),
     refresh: vi.fn(),
     prefetch: vi.fn(),
     back: vi.fn(),
@@ -86,8 +86,6 @@ vi.mock("@/hooks/agenda/useMarcarAgendamento", () => ({
 }));
 vi.mock("@/hooks/agenda/useRemarcarAgendamento", () => ({
   useRemarcarAgendamento: () => ({ mutateAsync: remarcarSpy, isPending: false }),
-  useCancelarAgendamento: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useRegistrarDesfecho: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 const PESSOAS = vi.hoisted(() => [
   { id: "p-ana", nome: "Ana", trilha: 1 as const },
@@ -110,24 +108,19 @@ vi.mock("@/lib/api/client", () => ({
   apiClient: { get: vi.fn(async () => ({ data: [] })) },
 }));
 
-/** O painel real tem calendário e rede; aqui só importa o que ele RECEBEU. */
-vi.mock("@/components/agenda/PainelDeMarcacao", () => ({
-  PainelDeMarcacao: (props: {
-    horarioInicial?: { instante: string; rotulo: string };
-    responsavel: { nome: string };
-    onConfirmar?: (instante: string) => unknown;
-  }) => (
-    <div
-      data-testid="painel-dublê"
-      data-instante={props.horarioInicial?.instante ?? ""}
-      data-rotulo={props.horarioInicial?.rotulo ?? ""}
-      data-responsavel={props.responsavel.nome}
-    >
-      <button type="button" onClick={() => props.onConfirmar?.(props.horarioInicial!.instante)}>
-        confirmar
+/** O painel real busca o detalhe na rede; aqui só importa o Remarcar que ele recebe. */
+vi.mock("@/components/agenda/EntradaDaAgenda", () => ({
+  EntradaDaAgenda: (props: { remarcacao?: { aberta: boolean; onAbrir: (comecaEm: string) => void } }) =>
+    props.remarcacao ? (
+      <button
+        type="button"
+        data-testid="abrir-remarcacao-de-fora"
+        data-aberta={String(props.remarcacao.aberta)}
+        onClick={() => props.remarcacao!.onAbrir("2030-02-20T10:00:00-03:00")}
+      >
+        remarcar
       </button>
-    </div>
-  ),
+    ) : null,
 }));
 
 /**
@@ -220,18 +213,7 @@ afterEach(() => {
 });
 
 describe("achado 1: remarcar pergunta pela agenda DO compromisso", () => {
-  it("os horários são do procedimento e da dona dele, e o painel diz 'com Bia'", async () => {
-    compromissos.push(RETORNO_DA_BIA);
-    montar();
-    fireEvent.click(screen.getByTestId("remarcar-c-bia"));
-    const painel = await screen.findByTestId("painel-dublê");
-    // A grade (atrás do painel) segue perguntando pelo tipo dela; o PAINEL não.
-    const doPainel = pedidos.filter((p) => p !== null && "duracao_minutos" in p);
-    expect(doPainel.at(-1)).toMatchObject({ event_type_id: "tipo-2", owner_user_id: "p-bia" });
-    expect(painel).toHaveAttribute("data-responsavel", "Bia");
-  });
-
-  it("arrastar o compromisso de outra agenda para a grade é recusado com o motivo", () => {
+  it("o Remarcar da recusa do arraste pede os horários do procedimento e da dona dele", () => {
     compromissos.push(RETORNO_DA_BIA);
     montar();
     const card = screen.getByTestId("agendamento-c-bia");
@@ -240,12 +222,45 @@ describe("achado 1: remarcar pergunta pela agenda DO compromisso", () => {
     fireEvent.keyDown(card, { key: "Enter" });
     expect(screen.getByTestId("remarcacao-recusada").textContent).toContain("outro profissional ou procedimento");
     expect(remarcarSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("remarcacao-recusada-remarcar"));
+    expect(new URLSearchParams(window.location.search).get("compromisso")).toBe("c-bia");
+    // A grade (atrás do painel) segue perguntando pelo tipo dela; o REMARCAR não.
+    const doRemarcar = pedidos.filter((p) => p !== null && "duracao_minutos" in p);
+    expect(doRemarcar.at(-1)).toMatchObject({ event_type_id: "tipo-2", owner_user_id: "p-bia" });
+  });
+});
+
+describe("remarcar compromisso aberto por link, fora da semana carregada", () => {
+  it("a grade vai até a semana dele, e nenhum horário é pedido com o procedimento da grade", () => {
+    window.history.replaceState(null, "", "/app/agenda?compromisso=c-fora");
+    montar();
+    pedidos.length = 0;
+    fireEvent.click(screen.getByTestId("abrir-remarcacao-de-fora"));
+    expect(screen.getByTestId("periodo").textContent).toContain("fev");
+    expect(pedidos.filter((p) => p !== null && "duracao_minutos" in p)).toEqual([]);
+  });
+});
+
+describe("o voltar do navegador fecha o painel e esquece o Remarcar", () => {
+  it("reabrir o mesmo compromisso depois do voltar não abre já remarcando", () => {
+    window.history.replaceState(null, "", "/app/agenda?compromisso=c-fora");
+    montar();
+    fireEvent.click(screen.getByTestId("abrir-remarcacao-de-fora"));
+    expect(screen.getByTestId("abrir-remarcacao-de-fora")).toHaveAttribute("data-aberta", "true");
+    // O voltar troca a URL sem passar pelo `onOpenChange` do painel; qualquer
+    // renderização seguinte lê a URL nova (o dublê de `useSearchParams` a lê).
+    window.history.pushState(null, "", "/app/agenda");
+    fireEvent.click(screen.getByTestId("visao-dia"));
+    expect(screen.queryByTestId("abrir-remarcacao-de-fora")).toBeNull();
+    window.history.pushState(null, "", "/app/agenda?compromisso=c-fora");
+    fireEvent.click(screen.getByTestId("visao-semana"));
+    expect(screen.getByTestId("abrir-remarcacao-de-fora")).toHaveAttribute("data-aberta", "false");
   });
 });
 
 describe("achado 13: 'Ver na agenda' limpa o horário escolhido", () => {
-  it("a remarcação seguinte não abre com o horário do bloco clicado antes", async () => {
-    compromissos.push(RETORNO_DA_BIA);
+  it("a marcação seguinte não abre com o horário do bloco clicado antes", async () => {
     montar();
     fireEvent.click(screen.getByTestId(`bloco-${QUARTA}-14:30`));
     expect(await screen.findByTestId("painel-dublê")).toHaveAttribute(
@@ -255,7 +270,7 @@ describe("achado 13: 'Ver na agenda' limpa o horário escolhido", () => {
     fireEvent.click(screen.getByRole("button", { name: "ver na agenda" }));
     expect(screen.queryByTestId("painel-dublê")).toBeNull();
 
-    fireEvent.click(screen.getByTestId("remarcar-c-bia"));
+    fireEvent.click(screen.getByTestId("novo-agendamento"));
     expect(await screen.findByTestId("painel-dublê")).toHaveAttribute("data-instante", "");
   });
 });

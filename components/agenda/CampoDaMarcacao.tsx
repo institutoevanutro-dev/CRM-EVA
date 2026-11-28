@@ -17,7 +17,14 @@ import { cn } from "@/lib/utils";
 export const CAMPO =
   "h-10 toque:h-11 w-full rounded-md border border-border-input bg-surface px-3 text-base md:text-sm text-text placeholder:text-text-subtle outline-hidden transition-[border-color,box-shadow] duration-fast ease-out focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent-500/30 disabled:cursor-not-allowed disabled:opacity-55 aria-[invalid=true]:border-error aria-[invalid=true]:focus-visible:ring-error-bg";
 
-export const ROTULO = "mb-1.5 block text-xs font-medium text-text-muted";
+export const ROTULO = "mb-1 block text-xs font-medium text-text-muted";
+
+/**
+ * Título de grupo do modal ("Quem e o quê", "Paciente", "Quando"): menor e mais
+ * calado que o rótulo. SEM caixa-alta: `uppercase` fazia "QUEM E O QUÊ", e o
+ * "E" maiúsculo no meio da frase é o defeito que `agenda-kit-visual` vigia.
+ */
+export const TITULO_DO_GRUPO = "text-[11px] font-semibold text-text-subtle";
 
 /** `select` nativo com a seta do sistema de design no lugar da do navegador. */
 export function Seletor({ className, children, ...props }: ComponentProps<"select">) {

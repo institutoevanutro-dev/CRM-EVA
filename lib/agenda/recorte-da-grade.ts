@@ -15,9 +15,9 @@ import type { VisaoDaAgenda } from "@/components/agenda/tipos";
 // perde a referência.
 export const SEMANAS_DA_GRADE_DO_MES = 6;
 
-/** Domingo da semana do dia 1 — a primeira célula da visão Mês. */
+/** A segunda da semana do dia 1 — a primeira célula da visão Mês (27/11/2026: semana de segunda a sábado). */
 export function inicioDaGradeDoMes(ancora: Date): Date {
-  return startOfWeek(startOfMonth(ancora), { weekStartsOn: 0 });
+  return startOfWeek(startOfMonth(ancora), { weekStartsOn: 1 });
 }
 
 /** `[de, ate)` da grade, em instantes do fuso do browser. */
@@ -27,7 +27,7 @@ export function recorteDaVisao(visao: VisaoDaAgenda, ancora: Date): { de: Date; 
     return { de, ate: addDays(de, SEMANAS_DA_GRADE_DO_MES * 7) };
   }
   if (visao === "semana") {
-    const de = startOfWeek(ancora, { weekStartsOn: 0 });
+    const de = startOfWeek(ancora, { weekStartsOn: 1 });
     return { de, ate: addDays(de, 7) };
   }
   const de = startOfDay(ancora);

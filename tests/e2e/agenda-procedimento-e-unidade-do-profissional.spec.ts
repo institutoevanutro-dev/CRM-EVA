@@ -287,6 +287,9 @@ test("procedimento, unidade e paciente: a tela oferece só o que é do profissio
   // Quem converteu vem com quem marca (a Ana); aqui foi o Bruno. A origem sai da
   // ficha pela regra do funil (cadastro manual, sem etiqueta: Orgânico), e a
   // recepção corrige para Indicação.
+  // "Avaliação facial" não é "Primeira…": a marcação abre em Paciente antigo, e
+  // "Quem converteu"/"Origem" só existem em Paciente novo (27/11/2026).
+  await page.getByTestId("paciente-novo").click();
   await expect(page.getByTestId("quem-converteu")).toHaveValue(`user:${f.ana.id}`);
   await page.getByTestId("quem-converteu").selectOption(`user:${f.bruno.id}`);
   await expect(page.getByTestId("origem-do-lead")).toHaveValue("organico", { timeout: 15_000 });
@@ -454,9 +457,13 @@ test("a grade: só as horas das jornadas, meia hora marcada, cor por profissiona
   // inteiro para os dois na quarta (feriado). Antes, o feriado desenhava a grade
   // da meia-noite às 23h, em colunas estreitas e por cima de outra faixa.
   // A segunda da semana SEGUINTE à de hoje, no calendário de São Paulo (UTC-3):
-  // é a semana que `irParaASemanaSeguinte` desenha (domingo a sábado).
+  // é a semana que `irParaASemanaSeguinte` desenha (segunda a sábado).
   const agoraSP = new Date(Date.now() - 3 * 3_600_000);
-  const segunda = Date.UTC(agoraSP.getUTCFullYear(), agoraSP.getUTCMonth(), agoraSP.getUTCDate() - agoraSP.getUTCDay() + 8);
+  const segunda = Date.UTC(
+    agoraSP.getUTCFullYear(),
+    agoraSP.getUTCMonth(),
+    agoraSP.getUTCDate() - ((agoraSP.getUTCDay() + 6) % 7) + 7,
+  );
   const dia = (n: number, hora: number) => new Date(segunda + n * 86_400_000 + (hora + 3) * 3_600_000);
   for (const [dono, tipo, d] of [
     [f.ana.id, f.avaliacao, dia(0, 9)],
@@ -498,9 +505,10 @@ test("a grade: só as horas das jornadas, meia hora marcada, cor por profissiona
     await irParaASemanaSeguinte(page);
 
     const grade = page.getByTestId("grade-da-agenda");
-    // Jornadas das 08:00 às 18:00: a primeira hora é 08:00, a última 17:30 — sem madrugada.
+    // Jornadas das 08:00 às 18:00: a primeira hora é 08:00, a última 17:00 — sem madrugada.
+    // (Desde 27/11/2026 a coluna de horas mostra só as horas cheias.)
     await expect(grade).toContainText("08:00");
-    await expect(grade).toContainText("17:30");
+    await expect(grade).toContainText("17:00");
     await expect(grade).not.toContainText("00:00");
     await expect(grade).not.toContainText("18:00");
 
@@ -513,9 +521,9 @@ test("a grade: só as horas das jornadas, meia hora marcada, cor por profissiona
     // E não há cartão "Horário bloqueado" desenhado por cima dela.
     await expect(colunaDaQuarta.locator('[data-testid^="agendamento-bloqueio:"]')).toHaveCount(0);
 
-    // A legenda diz de quem é cada cor, e as duas cores são diferentes.
-    await expect(page.getByTestId(`legenda-pessoa-${f.ana.id}`)).toBeVisible();
-    await expect(page.getByTestId(`legenda-pessoa-${f.bruno.id}`)).toBeVisible();
+    // A fileira em cima diz de quem é cada cor (a legenda de pessoas do rodapé saiu em 27/11/2026).
+    await expect(page.getByTestId(`botao-pessoa-${f.ana.id}`)).toBeVisible();
+    await expect(page.getByTestId(`botao-pessoa-${f.bruno.id}`)).toBeVisible();
     const fundos = await page.evaluate(() =>
       [...document.querySelectorAll<HTMLElement>('[data-testid^="agendamento-"][data-trilha]')].map(
         (el) => getComputedStyle(el).backgroundColor,

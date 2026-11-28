@@ -17,27 +17,38 @@ export function nomeCurto(nome: string): string {
 }
 
 /**
+ * O mínimo, em px, para as duas linhas do card: borda 1 + respiro 2 + nome 16 +
+ * apoio 14 + borda 1. O respiro de baixo não conta: o `overflow-hidden` recorta
+ * na borda, e o texto pode ocupar o respiro sem sumir.
+ */
+export const ALTURA_DE_DUAS_LINHAS = 34;
+
+/**
  * O que o bloco da grade escreve — A1 do pacote 2a de design.
  *
  * Quem vem é a primeira coisa que a recepção procura, então o paciente é a linha
  * 1; o procedimento desce para a linha de apoio, junto da hora. Sem paciente
  * (reunião, bloqueio, ocupação do Google) quem fala é o título.
  *
- * 45 min é o corte da segunda linha porque é o que a régua de 48 px por hora
- * comporta: um bloco de 30 min tem 22 px e só cabe uma linha — e aí a hora vai
- * NA FRENTE do nome, numa linha só, em vez de sumir.
+ * Bloco curto é uma linha só, com a hora NA FRENTE do nome (decisão 7 do
+ * André, 27/11/2026: 30 min é curto). Quem decide é a ALTURA DESENHADA, e não
+ * a duração: a duas linhas só cabem a partir de `ALTURA_DE_DUAS_LINHAS`, e um
+ * card recortado no topo da janela tem a duração inteira e só um pedaço na
+ * tela. Com 56 px por hora (altura = min/60 × 56 − 2), 38 min ainda é curto e
+ * 39 min já tem as duas linhas.
  */
 export function rotuloDoBloco(entrada: {
   titulo: string;
   paciente?: string;
   /** "09:30", já no fuso da organização. */
   hora: string;
-  duracaoMin: number;
+  /** A altura do card como desenhada na grade, em px. */
+  alturaPx: number;
   visao: VisaoDaAgenda;
 }): { principal: string; apoio: string | null } {
-  const { titulo, paciente, hora, duracaoMin, visao } = entrada;
+  const { titulo, paciente, hora, alturaPx, visao } = entrada;
   const quem = paciente ? (visao === "semana" ? nomeCurto(paciente) : paciente) : titulo;
-  if (duracaoMin < 45) return { principal: `${hora} ${quem}`, apoio: null };
+  if (alturaPx < ALTURA_DE_DUAS_LINHAS) return { principal: `${hora} ${quem}`, apoio: null };
   return { principal: quem, apoio: paciente ? `${hora} · ${titulo}` : hora };
 }
 

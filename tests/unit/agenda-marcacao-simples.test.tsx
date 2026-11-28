@@ -13,7 +13,7 @@
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { ComponentProps } from "react";
+import { useState, type ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const post = vi.fn((..._a: unknown[]) => Promise.resolve({ data: {} }));
@@ -50,6 +50,7 @@ import {
   fimDoHorario,
   idadeEmAnos,
   ofertaDeUnidades,
+  pacienteNovoPeloTipo,
   procedimentosDoProfissional,
   ultimaEProximaConsulta,
   unidadeDaMarcacao,
@@ -157,9 +158,8 @@ describe("regras puras", () => {
   });
 });
 
-function montarMarcacao(props: Partial<ComponentProps<typeof MarcacaoSimples>> = {}, semCanal = false) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const base: ComponentProps<typeof MarcacaoSimples> = {
+function propsBase(): ComponentProps<typeof MarcacaoSimples> {
+  return {
     ancora: new Date(2026, 9, 22, 12),
     agora: new Date(2026, 9, 22, 8),
     usuarioId: ANA,
@@ -187,9 +187,13 @@ function montarMarcacao(props: Partial<ComponentProps<typeof MarcacaoSimples>> =
     onConfirmar: vi.fn(() => Promise.resolve()),
     onVerNaAgenda: vi.fn(),
   };
+}
+
+function montarMarcacao(props: Partial<ComponentProps<typeof MarcacaoSimples>> = {}, semCanal = false) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const r = render(
     <QueryClientProvider client={qc}>
-      <MarcacaoSimples {...base} {...props} />
+      <MarcacaoSimples {...propsBase()} {...props} />
     </QueryClientProvider>,
   );
   return semCanal ? r : comCanal(r);
@@ -251,6 +255,45 @@ describe("Novo agendamento: profissional antes do procedimento", () => {
     fireEvent.change(screen.getByTestId("profissional-da-marcacao"), { target: { value: "" } });
     expect(onProfissional).toHaveBeenCalledWith("");
     expect(onTipo).toHaveBeenCalledWith("");
+  });
+
+  it("trocar profissional ou procedimento esvazia a hora, até a digitada que não virou horário", () => {
+    // Sem encaixe, 10:30 fica no campo com o aviso, sem virar horário.
+    const horariosPorDia = { "2026-10-22": [{ instante: "2026-10-22T16:00:00.000Z", rotulo: "13:00" }] };
+    montarMarcacao({ profissionalId: ANA, tipoId: "t-livre", permiteEncaixe: false, horariosPorDia });
+    const hora = () => screen.getByTestId("hora-da-marcacao") as HTMLInputElement;
+    fireEvent.change(hora(), { target: { value: "10:30" } });
+    expect(screen.getByTestId("fora-dos-horarios-livres")).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("profissional-da-marcacao"), { target: { value: BETO } });
+    expect(hora().value).toBe("");
+    expect(screen.queryByTestId("fora-dos-horarios-livres")).toBeNull();
+
+    fireEvent.change(hora(), { target: { value: "10:30" } });
+    fireEvent.change(screen.getByTestId("procedimento-da-marcacao"), { target: { value: "t-ana" } });
+    expect(hora().value).toBe("");
+  });
+
+  it("o encaixe clicado na grade fica quando os horários livres chegam: não vira o primeiro livre", () => {
+    // 07:00 em São Paulo = 10:00 UTC, fora dos horários; o primeiro livre do dia é 09:00.
+    const encaixe = { instante: "2026-10-23T10:00:00.000Z", rotulo: "07:00" };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tela = (sobre: Partial<ComponentProps<typeof MarcacaoSimples>>) => (
+      <QueryClientProvider client={qc}>
+        <MarcacaoSimples {...propsBase()} profissionalId={BETO} tipoId="t-beto" horarioInicial={encaixe} {...sobre} />
+      </QueryClientProvider>
+    );
+    // O modal abre ANTES de a consulta de horários responder: sem fuso e sem mês carregado.
+    const { rerender } = render(tela({ fuso: undefined, mesCarregado: null }));
+    expect(screen.getByTestId("faixa-do-horario").textContent).toMatch(/^07:00 às /);
+    rerender(
+      tela({
+        horariosPorDia: { "2026-10-23": [{ instante: "2026-10-23T12:00:00.000Z", rotulo: "09:00" }] },
+        mesCarregado: new Date(2026, 9, 1),
+      }),
+    );
+    expect(screen.getByTestId("faixa-do-horario").textContent).toBe("07:00 às 07:30");
+    expect((screen.getByTestId("hora-da-marcacao") as HTMLInputElement).value).toBe("07:00");
+    expect(screen.getByTestId("painel-de-marcacao").getAttribute("data-tempo")).toBe("confirmando");
   });
 
   it("o horário escolhido mostra o fim calculado pela duração e confirma com o instante", async () => {
@@ -487,9 +530,19 @@ describe("Bloquear horário: o mesmo caminho da tela de dias fora da rotina", ()
 
 describe("quem converteu e a origem do lead (21/11/2026)", () => {
   const instante = "2026-10-22T16:00:00.000Z";
+  const PRIMEIRA = {
+    id: "t-primeira",
+    nome: "Primeira consulta",
+    duracaoMin: 60,
+    donoId: ANA,
+    localDetalhes: null,
+    exigePaciente: false,
+    categoria: "consulta",
+  };
   const comHorario = {
     profissionalId: ANA,
-    tipoId: "t-ana",
+    tipoId: "t-primeira",
+    tipos: [...TIPOS, PRIMEIRA],
     horarioInicial: { instante, rotulo: "13:00" },
     horariosPorDia: { "2026-10-22": [{ instante, rotulo: "13:00" }] },
   };
@@ -559,3 +612,118 @@ describe("quem converteu e a origem do lead (21/11/2026)", () => {
   });
 });
 
+describe("paciente novo ou antigo (decisão do André, 27/11/2026)", () => {
+  const instante = "2026-10-22T16:00:00.000Z";
+  const PRIMEIRA = {
+    id: "t-primeira",
+    nome: "Primeira consulta",
+    duracaoMin: 60,
+    donoId: ANA,
+    localDetalhes: null,
+    exigePaciente: false,
+    categoria: "consulta",
+  };
+  const APLICACAO = {
+    id: "t-aplicacao",
+    nome: "Aplicação de vitamina D",
+    duracaoMin: 15,
+    donoId: ANA,
+    localDetalhes: null,
+    exigePaciente: false,
+    categoria: "procedimento",
+  };
+  const PACIENTE = {
+    id: "c-ficticio-2",
+    name: "Paciente Fictícia Rocha",
+    display_name: null,
+    phone_number: "+5527900000001",
+    tags: ["Meta"],
+    source: "whatsapp",
+    source_metadata: {},
+  };
+  const comHorario = (tipoId: string) => ({
+    profissionalId: ANA,
+    tipoId,
+    tipos: [...TIPOS, PRIMEIRA, APLICACAO],
+    horarioInicial: { instante, rotulo: "13:00" },
+    horariosPorDia: { "2026-10-22": [{ instante, rotulo: "13:00" }] },
+  });
+  afterEach(() => {
+    ficha = null;
+    patch.mockClear();
+  });
+
+  it("regra pura: só a 'Primeira…' de categoria consulta é paciente novo", () => {
+    expect(pacienteNovoPeloTipo({ categoria: "consulta", nome: "Primeira consulta" })).toBe(true);
+    expect(pacienteNovoPeloTipo({ categoria: "consulta", nome: "  primeira vez" })).toBe(true);
+    expect(pacienteNovoPeloTipo({ categoria: "consulta", nome: "Consulta de acompanhamento" })).toBe(false);
+    expect(pacienteNovoPeloTipo({ categoria: "retorno", nome: "Primeira revisão" })).toBe(false);
+    expect(pacienteNovoPeloTipo({ categoria: null, nome: "Primeira consulta" })).toBe(false);
+    expect(pacienteNovoPeloTipo(null)).toBe(false);
+  });
+
+  it("primeira consulta abre em Paciente novo, com Quem converteu e Origem", () => {
+    montarMarcacao(comHorario("t-primeira"));
+    expect(screen.getByTestId("paciente-novo")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("quem-converteu")).toBeInTheDocument();
+    expect(screen.getByTestId("origem-do-lead")).toBeInTheDocument();
+  });
+
+  it("aplicação abre em Paciente antigo: os dois campos somem e o confirmar diz 'sem conversão'", async () => {
+    const onConfirmar = vi.fn((_m: unknown) => Promise.resolve());
+    montarMarcacao({ ...comHorario("t-aplicacao"), onConfirmar });
+    expect(screen.getByTestId("paciente-antigo")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByTestId("quem-converteu")).toBeNull();
+    expect(screen.queryByTestId("origem-do-lead")).toBeNull();
+    fireEvent.click(screen.getByTestId("confirmar-marcacao"));
+    await waitFor(() => expect(onConfirmar).toHaveBeenCalled());
+    // `null` explícito, não ausente: ausente a rota grava quem marca como quem converteu.
+    expect(onConfirmar.mock.calls[0]?.[0]).toHaveProperty("quemConverteu", null);
+  });
+
+  it("antigo e de volta a novo no mesmo procedimento: quem converteu volta a ir", async () => {
+    const onConfirmar = vi.fn((_m: unknown) => Promise.resolve());
+    montarMarcacao({ ...comHorario("t-aplicacao"), onConfirmar });
+    expect(screen.getByTestId("paciente-antigo")).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByTestId("paciente-novo"));
+    expect(screen.getByTestId("quem-converteu")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("confirmar-marcacao"));
+    await waitFor(() => expect(onConfirmar).toHaveBeenCalled());
+    expect(onConfirmar.mock.calls[0]?.[0]).toMatchObject({ quemConverteu: { kind: "user", userId: ANA } });
+  });
+
+  it("mexer na Origem e trocar para antigo: nada é gravado na ficha", async () => {
+    ficha = PACIENTE;
+    const onConfirmar = vi.fn((_m: unknown) => Promise.resolve());
+    montarMarcacao({ ...comHorario("t-primeira"), contactId: PACIENTE.id, onConfirmar });
+    const origem = screen.getByTestId("origem-do-lead") as HTMLSelectElement;
+    await waitFor(() => expect(origem.value).toBe("meta"));
+    fireEvent.change(origem, { target: { value: "indicacao" } });
+    fireEvent.click(screen.getByTestId("paciente-antigo"));
+    expect(screen.queryByTestId("origem-do-lead")).toBeNull();
+    await waitFor(() => expect(screen.getByTestId("confirmar-marcacao")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("confirmar-marcacao"));
+    await waitFor(() => expect(onConfirmar).toHaveBeenCalled());
+    expect(patch).not.toHaveBeenCalled();
+    expect(onConfirmar.mock.calls[0]?.[0]).toHaveProperty("quemConverteu", null);
+  });
+
+  it("a troca vale só para o procedimento em que foi feita: outro procedimento volta ao padrão dele", () => {
+    function ComProcedimento() {
+      const [tipoId, setTipoId] = useState("t-aplicacao");
+      return <MarcacaoSimples {...propsBase()} {...comHorario(tipoId)} onTipo={setTipoId} />;
+    }
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ComProcedimento />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByTestId("paciente-novo"));
+    expect(screen.getByTestId("quem-converteu")).toBeInTheDocument();
+    // "Avaliação facial" (t-ana) não tem categoria: o padrão dela é antigo.
+    fireEvent.change(screen.getByTestId("procedimento-da-marcacao"), { target: { value: "t-ana" } });
+    expect(screen.getByTestId("paciente-antigo")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByTestId("quem-converteu")).toBeNull();
+  });
+});
