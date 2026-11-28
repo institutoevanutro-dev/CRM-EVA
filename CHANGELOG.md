@@ -8,6 +8,14 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [5.44.1] — 2026-11-28
+
+### Corrigido
+
+- **Integrações conseguem mover um negócio para a etapa de perda** A ferramenta MCP `crm_move_lead_stage` não aceitava o motivo da perda, que o CRM exige
+  para etapas de perda. Por isso nenhuma integração conseguia levar um card para "Não comprou".
+  Agora ela aceita `lost_reason` (código do vocabulário do funil, ex.: `other`).
+
 ## [5.44.0] — 2026-11-28
 
 ### Alterado
@@ -10265,7 +10273,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.44.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v5.44.1...HEAD
+[5.44.1]: https://github.com/melgarafael/DeskcommCRM/compare/v5.44.0...v5.44.1
 [5.44.0]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.3...v5.44.0
 [5.43.3]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.2...v5.43.3
 [5.43.2]: https://github.com/melgarafael/DeskcommCRM/compare/v5.43.1...v5.43.2
